@@ -146,6 +146,8 @@ enum _TextPicturePhase { probe, lookup, record, ready, transferred, closed }
 /// Records bounded commands outside visible paint. Dependencies are qualified
 /// current same-owner text/mark leases; private aliases keep them pinned even if a
 /// caller releases its handle. Cancellation drops aliases and unfinished work.
+/// A caller-owned page prefix participates in the same probe and late-growth
+/// classification without being aliased, retained by the result or released.
 final class ForumBodyTextPicturePreparation {
   ForumBodyTextPicturePreparation({
     required ForumBodyParagraphCache cache,
@@ -153,11 +155,14 @@ final class ForumBodyTextPicturePreparation {
     required Iterable<ForumBodyTextLease> text,
     required void Function() ensureOwner,
     Iterable<ForumBodyEmphasisMarkLease> marks = const [],
+    Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
   }) : _input = input,
        _cache = cache,
-       _ensureOwner = ensureOwner {
+       _ensureOwner = ensureOwner,
+       _additionalOwned = additionalOwnedLeases {
     try {
       _guard();
+      _prefixStarted = additionalOwnedLeases == null;
       final wanted = {
         for (final command in input.commands) command._dependency,
       };
@@ -211,6 +216,9 @@ final class ForumBodyTextPicturePreparation {
       _input ?? (throw StateError('Text picture preparation is retired'));
   ForumBodyParagraphCache? _cache;
   void Function()? _ensureOwner;
+  Iterable<ForumBodyNativeParagraphLease> Function()? _additionalOwned;
+  Iterator<ForumBodyNativeParagraphLease>? _prefix;
+  bool _prefixStarted = false;
   final _resources = <_TextPictureDependency, ForumBodyNativeParagraphLease>{};
   List<ForumBodyNativeParagraphLease> _dependencies = const [];
   ForumBodyParagraphBudgetProbe? _probe;
@@ -259,7 +267,20 @@ final class ForumBodyTextPicturePreparation {
         try {
           switch (_phase) {
             case _TextPicturePhase.probe:
-              if (_index < _dependencies.length) {
+              if (!_prefixStarted) {
+                final prefix = _additionalOwned?.call() ?? const [];
+                _guard();
+                _prefix = prefix.iterator;
+                _prefixStarted = true;
+              } else if (_prefix != null) {
+                final hasNext = _prefix!.moveNext();
+                _guard();
+                if (hasNext) {
+                  _probe!.includeLease(_prefix!.current);
+                } else {
+                  _prefix = null;
+                }
+              } else if (_index < _dependencies.length) {
                 _probe!.includeLease(_dependencies[_index++]);
               } else {
                 _probe!.includeTextPicture(input);
@@ -362,14 +383,20 @@ final class ForumBodyTextPicturePreparation {
           _guard();
         } on ForumBodyParagraphBudgetException catch (error) {
           _guard();
-          if (error.failure != ForumBodyParagraphBudgetFailure.pinned ||
-              !cache.isBlockedByExternalPins(error, nativeLeases)) {
+          if (error.failure != ForumBodyParagraphBudgetFailure.pinned) rethrow;
+          final additional = _additionalOwned?.call() ?? const [];
+          _guard();
+          if (!cache.isBlockedByExternalPins(error, [
+            ...nativeLeases,
+            ...additional,
+          ])) {
             throw ForumBodyParagraphBudgetException(
               ForumBodyParagraphBudgetFailure.content,
               requiredEstimatedBytes: error.requiredEstimatedBytes,
               requiredAdditionalEntries: error.requiredAdditionalEntries,
             );
           }
+          _guard();
           _discardRecording();
           _phase = _TextPicturePhase.lookup;
           _index = 0;
@@ -446,6 +473,8 @@ final class ForumBodyTextPicturePreparation {
     _resources.clear();
     _dependencies = const [];
     _ensureOwner = null;
+    _additionalOwned = null;
+    _prefix = null;
     _cache = null;
     _input = null;
     Object? failure;

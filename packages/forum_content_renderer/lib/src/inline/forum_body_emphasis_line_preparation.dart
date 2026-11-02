@@ -4,6 +4,7 @@ enum _LinePhase {
   verifyScales,
   fonts,
   inputs,
+  probePrefix,
   probeBase,
   probeMarks,
   base,
@@ -37,6 +38,8 @@ typedef _RawMark = ({int unit, int mark, Offset offset, Rect bounds});
 
 /// One cooperative transaction over the owner's existing native cache. The
 /// caller's full/half-size scaler samples freeze before any native request.
+/// An optional page prefix is borrowed for admission and pin classification;
+/// cancellation never releases those caller-owned handles.
 final class ForumBodyEmphasisLinePreparation {
   ForumBodyEmphasisLinePreparation({
     required ForumBodyEmphasisTextInput input,
@@ -45,6 +48,7 @@ final class ForumBodyEmphasisLinePreparation {
     ForumBodyTextRequest? baseRequest,
     double width = 16384,
     TextScaler textScaler = TextScaler.noScaling,
+    Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
   }) : this._work(
          input: input,
          cache: cache,
@@ -53,6 +57,7 @@ final class ForumBodyEmphasisLinePreparation {
          width: width,
          textScaler: textScaler,
          measureOnly: false,
+         additionalOwnedLeases: additionalOwnedLeases,
        );
 
   /// Rebind a pure plan to current source/fonts. The current caller supplies
@@ -64,6 +69,7 @@ final class ForumBodyEmphasisLinePreparation {
     required void Function() ensureOwner,
     required double width,
     required TextScaler expectedTextScaler,
+    Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
   }) : this._work(
          input: input,
          cache: cache,
@@ -73,6 +79,7 @@ final class ForumBodyEmphasisLinePreparation {
          textScaler: expectedTextScaler,
          measureOnly: false,
          metrics: metrics,
+         additionalOwnedLeases: additionalOwnedLeases,
        );
 
   ForumBodyEmphasisLinePreparation._work({
@@ -84,12 +91,14 @@ final class ForumBodyEmphasisLinePreparation {
     required bool measureOnly,
     ForumBodyTextRequest? baseRequest,
     ForumBodyEmphasisLineMetrics? metrics,
+    Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
   }) : _input = input,
        _cache = cache,
        _ensureOwner = ensureOwner,
        _callerScaler = textScaler,
        _measureOnly = measureOnly,
        _expected = metrics,
+       _additionalOwned = additionalOwnedLeases,
        _request =
            baseRequest ??
            ForumBodyTextRequest.paragraph(input.glyphInput.glyphs) {
@@ -136,6 +145,9 @@ final class ForumBodyEmphasisLinePreparation {
   final bool _measureOnly;
   ForumBodyEmphasisLineMetrics? _expected;
   Iterator<MapEntry<double, double>>? _scaleChecks;
+  Iterable<ForumBodyNativeParagraphLease> Function()? _additionalOwned;
+  Iterator<ForumBodyNativeParagraphLease>? _prefix;
+  bool _prefixStarted = false;
   ForumBodyEmphasisTextInput? _input;
   ForumBodyParagraphCache? _cache;
   void Function()? _ensureOwner;
@@ -239,7 +251,9 @@ final class ForumBodyEmphasisLinePreparation {
                 _scaleChecks = null;
                 _callerScaler = null;
                 _probe = cache.createBudgetProbe();
-                _phase = _LinePhase.probeBase;
+                _phase = _additionalOwned == null
+                    ? _LinePhase.probeBase
+                    : _LinePhase.probePrefix;
               }
             case _LinePhase.fonts:
               if (_context < _contexts.length) {
@@ -286,6 +300,21 @@ final class ForumBodyEmphasisLinePreparation {
                 _callerScaler = null;
                 _probe = cache.createBudgetProbe();
                 _index = 0;
+                _phase = _additionalOwned == null
+                    ? _LinePhase.probeBase
+                    : _LinePhase.probePrefix;
+              }
+            case _LinePhase.probePrefix:
+              if (!_prefixStarted) {
+                final prefix = _additionalOwned?.call() ?? const [];
+                _guard();
+                _prefix = prefix.iterator;
+                _prefixStarted = true;
+              } else if (_prefix!.moveNext()) {
+                _guard();
+                _probe!.includeLease(_prefix!.current);
+              } else {
+                _prefix = null;
                 _phase = _LinePhase.probeBase;
               }
             case _LinePhase.probeBase:
@@ -303,6 +332,11 @@ final class ForumBodyEmphasisLinePreparation {
                   textScaler: _scaler!,
                 );
               } else {
+                // A measured scene is a pure specification. Include its slot
+                // before reacquiring fonts, without recording or trusting it.
+                if (!_measureOnly && _expected != null) {
+                  _probe!.includeTextPicture(_expected!.pictureInput);
+                }
                 _probe!.close();
                 _probe = null;
                 _index = 0;
@@ -609,6 +643,7 @@ final class ForumBodyEmphasisLinePreparation {
                 text: [_base!],
                 marks: _markLeases,
                 ensureOwner: _guard,
+                additionalOwnedLeases: _additionalOwned,
               );
               _phase = _LinePhase.scene;
             case _LinePhase.scene:
@@ -663,7 +698,15 @@ final class ForumBodyEmphasisLinePreparation {
           _guard();
         } on ForumBodyParagraphBudgetException catch (error) {
           _guard();
-          if (!cache.isBlockedByExternalPins(error, nativeLeases)) {
+          if (error.failure != ForumBodyParagraphBudgetFailure.pinned) rethrow;
+          final additional = _additionalOwned?.call() ?? const [];
+          _guard();
+          final external = cache.isBlockedByExternalPins(error, [
+            ...nativeLeases,
+            ...additional,
+          ]);
+          _guard();
+          if (!external) {
             throw ForumBodyParagraphBudgetException(
               ForumBodyParagraphBudgetFailure.content,
               requiredEstimatedBytes: error.requiredEstimatedBytes,
@@ -781,6 +824,8 @@ final class ForumBodyEmphasisLinePreparation {
     _scaler = null;
     _expected = null;
     _scaleChecks = null;
+    _additionalOwned = null;
+    _prefix = null;
     _numeric = null;
     _contexts = const [];
     _geometry = null;

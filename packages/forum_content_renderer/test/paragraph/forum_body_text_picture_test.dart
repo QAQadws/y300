@@ -69,13 +69,16 @@ final class _Fixture {
   late final ForumBodyParagraphCache cache;
   late final List<ForumBodyTextLease> text;
   late final ForumBodyTextPictureInput input;
-  ForumBodyTextPicturePreparation open({void Function()? owner}) =>
-      ForumBodyTextPicturePreparation(
-        cache: cache,
-        input: input,
-        text: text,
-        ensureOwner: owner ?? () {},
-      );
+  ForumBodyTextPicturePreparation open({
+    void Function()? owner,
+    Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
+  }) => ForumBodyTextPicturePreparation(
+    cache: cache,
+    input: input,
+    text: text,
+    ensureOwner: owner ?? () {},
+    additionalOwnedLeases: additionalOwnedLeases,
+  );
   ForumBodyTextPictureLease finish(
     ForumBodyTextPicturePreparation job, {
     bool cachedOnly = false,
@@ -354,6 +357,199 @@ void main() {
       job.close();
     },
   );
+
+  test('page prefix is included before recording and is never released', () {
+    final f = _Fixture(entries: 3);
+    final prefix = f.cache.acquire(
+      content: ForumBodyParagraphContent.anonymousInline(
+        identity: f.text[0].content.identity,
+        fontRevision: f.text[0].content.fontRevision,
+        styleRevision: f.text[0].content.styleRevision,
+        style: f.text[0].content.style,
+      ),
+      width: 100,
+    );
+    addTearDown(prefix.release);
+    final job = f.open(additionalOwnedLeases: () => [prefix]);
+    expect(
+      () => f.finish(job),
+      throwsA(
+        isA<ForumBodyParagraphBudgetException>().having(
+          (e) => e.failure,
+          'failure',
+          ForumBodyParagraphBudgetFailure.content,
+        ),
+      ),
+    );
+    expect(prefix.isActive, isTrue);
+    expect(f.cache.activeLeases, 3);
+    expect(f.cache.pictureBuildCount, 0);
+  });
+
+  test('prefix aliases deduplicate with scene dependencies', () {
+    final f = _Fixture(entries: 3);
+    final picture = f.finish(
+      f.open(additionalOwnedLeases: () => [f.text[0], f.text[0], f.text[1]]),
+    );
+    expect(f.cache.entryCount, 3);
+    expect(f.cache.activeLeases, 3);
+    picture.release();
+    expect(f.text.every((value) => value.isActive), isTrue);
+  });
+
+  test('external pressure preserves the page prefix and resumes its scene', () {
+    final f = _Fixture(entries: 4);
+    final empty = ForumBodyParagraphContent.anonymousInline(
+      identity: f.text[0].content.identity,
+      fontRevision: f.text[0].content.fontRevision,
+      styleRevision: f.text[0].content.styleRevision,
+      style: f.text[0].content.style,
+    );
+    final prefix = f.cache.acquire(content: empty, width: 100);
+    final external = f.cache.acquire(
+      content: empty,
+      width: 100,
+      textScaler: const TextScaler.linear(1.1),
+    );
+    addTearDown(prefix.release);
+    addTearDown(external.release);
+    final job = f.open(additionalOwnedLeases: () => [prefix]);
+    var waiting = false;
+    for (var i = 0; !waiting && i < 100; i++) {
+      waiting = job.advance(maxParts: 1).waitingForLayoutBudget;
+    }
+    expect(waiting, isTrue);
+    expect(f.cache.pictureBuildCount, 0);
+    final held = job.nativeLeases.toList();
+    expect(job.advance().partsPrepared, 0);
+    external.release();
+    final picture = f.finish(job);
+    expect(held.every((value) => !value.isActive), isTrue);
+    expect(prefix.isActive, isTrue);
+    expect(f.text.every((value) => value.isActive), isTrue);
+    expect(f.cache.activeLeases, 4);
+    picture.release();
+  });
+
+  test('late picture growth counts own prefix rather than waiting for it', () {
+    final source = _Fixture(first: _heavyText());
+    source.finish(source.open()).release();
+    final f = _Fixture(
+      first: _heavyText(),
+      bytes: source.cache.estimatedRetainedBytes + 512,
+    );
+    final prefix = f.cache.acquire(
+      content: ForumBodyParagraphContent.anonymousInline(
+        identity: f.text[0].content.identity,
+        fontRevision: f.text[0].content.fontRevision,
+        styleRevision: f.text[0].content.styleRevision,
+        style: f.text[0].content.style,
+      ),
+      width: 100,
+    );
+    addTearDown(prefix.release);
+    final job = f.open(additionalOwnedLeases: () => [prefix]);
+    var created = 0, disposed = 0;
+    final oldCreate = ui.Picture.onCreate, oldDispose = ui.Picture.onDispose;
+    ui.Picture.onCreate = (_) {
+      created++;
+    };
+    ui.Picture.onDispose = (_) {
+      disposed++;
+    };
+    try {
+      expect(
+        () => f.finish(job),
+        throwsA(
+          isA<ForumBodyParagraphBudgetException>().having(
+            (e) => e.failure,
+            'failure',
+            ForumBodyParagraphBudgetFailure.content,
+          ),
+        ),
+      );
+    } finally {
+      ui.Picture.onCreate = oldCreate;
+      ui.Picture.onDispose = oldDispose;
+      job.close();
+    }
+    expect(created, 1);
+    expect(disposed, 1);
+    expect(f.cache.pictureBuildCount, 0);
+    expect(prefix.isActive, isTrue);
+    expect(f.cache.activeLeases, 3);
+  });
+
+  test(
+    'prefix inspection yields after one handle and cancels only aliases',
+    () {
+      final f = _Fixture();
+      var inspected = 0;
+      Iterable<ForumBodyNativeParagraphLease> prefix() sync* {
+        for (var i = 0; i < 50; i++) {
+          inspected++;
+          yield f.text[0];
+        }
+      }
+
+      final job = f.open(additionalOwnedLeases: prefix);
+      job.advance(maxParts: 1);
+      expect(inspected, 0);
+      for (var i = 1; i <= 3; i++) {
+        final step = job.advance(maxParts: 1);
+        expect(step.partsPrepared, 1);
+        expect(inspected, i);
+        expect(f.cache.pictureBuildCount, 0);
+      }
+      job.close();
+      expect(f.cache.activeLeases, 2);
+    },
+  );
+
+  for (final lazy in [false, true]) {
+    test('prefix callback retirement cannot publish a scene (lazy=$lazy)', () {
+      final f = _Fixture();
+      late ForumBodyTextPicturePreparation job;
+      Iterable<ForumBodyNativeParagraphLease> lazyPrefix() sync* {
+        job.close();
+        yield f.text[0];
+      }
+
+      job = f.open(
+        additionalOwnedLeases: () {
+          if (lazy) return lazyPrefix();
+          job.close();
+          return f.text;
+        },
+      );
+      expect(() => f.finish(job), throwsStateError);
+      expect(f.cache.pictureBuildCount, 0);
+      expect(f.cache.activeLeases, 2);
+    });
+  }
+
+  for (final retired in [false, true]) {
+    test('foreign or retired prefix is not ownership (retired=$retired)', () {
+      final f = _Fixture(), other = _Fixture();
+      final prefix = retired
+          ? f.cache.acquire(
+              content: ForumBodyParagraphContent.anonymousInline(
+                identity: f.text[0].content.identity,
+                fontRevision: f.text[0].content.fontRevision,
+                styleRevision: f.text[0].content.styleRevision,
+                style: f.text[0].content.style,
+              ),
+              width: 100,
+            )
+          : other.text[0];
+      if (retired) prefix.release();
+      final job = f.open(additionalOwnedLeases: () => [prefix]);
+      expect(() => f.finish(job), throwsStateError);
+      expect(f.cache.pictureBuildCount, 0);
+      expect(f.cache.activeLeases, 2);
+      expect(other.cache.activeLeases, 2);
+    });
+  }
 
   test(
     'own complete byte footprint fails without recording and leaves source active',

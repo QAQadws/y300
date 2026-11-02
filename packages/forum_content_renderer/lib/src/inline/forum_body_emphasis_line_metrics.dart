@@ -73,6 +73,7 @@ final class ForumBodyEmphasisLineMetricsPreparation {
     ForumBodyTextRequest? baseRequest,
     double width = 16384,
     TextScaler textScaler = TextScaler.noScaling,
+    Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
   }) : _work = ForumBodyEmphasisLinePreparation._work(
          input: input,
          cache: cache,
@@ -81,6 +82,7 @@ final class ForumBodyEmphasisLineMetricsPreparation {
          width: width,
          textScaler: textScaler,
          measureOnly: true,
+         additionalOwnedLeases: additionalOwnedLeases,
        );
   final ForumBodyEmphasisLinePreparation _work;
   bool get isReady => _work.isReady;
