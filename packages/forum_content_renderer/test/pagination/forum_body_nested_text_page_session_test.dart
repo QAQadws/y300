@@ -400,6 +400,86 @@ void main() {
     );
   }
 
+  for (final ratio in [1, 3]) {
+    test(
+      'actual inner anonymous span widens both original columns DPR$ratio',
+      () async {
+        final f = _Fixture(
+          '<ruby style="color:red"><rb>L<ruby><rb>A</rb><rb>B</rb>'
+          '<rtc style="font-size:10px;color:blue">uvwxyz</rtc></ruby>R</rb>'
+          '<rt style="font-size:10px;color:green">z</rt></ruby>',
+          width: 200,
+        );
+        f.finish();
+        final prepared = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+        final painters = <TextPainter>[];
+        try {
+          expect(prepared.projection.text, 'LABuvwxyzRz');
+          expect(prepared.nativeLeases, hasLength(6));
+          // A 60px annotation spans two 20px bases: both receive 30px columns.
+          // Merely retaining an unparsed rbspan attribute would instead allocate
+          // a 60px first column and a 20px second column, at different positions.
+          final expected = [
+            ('L', 20.0, const Color(0xffff0000), const Offset(0, 20)),
+            ('A', 20.0, const Color(0xffff0000), const Offset(25, 20)),
+            ('B', 20.0, const Color(0xffff0000), const Offset(55, 20)),
+            ('uvwxyz', 10.0, const Color(0xff0000ff), const Offset(20, 10)),
+            ('R', 20.0, const Color(0xffff0000), const Offset(80, 20)),
+            ('z', 10.0, const Color(0xff008000), const Offset(45, 0)),
+          ];
+          for (final (text, size, color, _) in expected) {
+            painters.add(
+              TextPainter(
+                text: TextSpan(
+                  text: text,
+                  style: TextStyle(
+                    fontFamily: 'Ahem',
+                    fontSize: size,
+                    height: 1,
+                    color: color,
+                  ),
+                ),
+                textDirection: TextDirection.ltr,
+              )..layout(),
+            );
+          }
+          final actual = await _pixels(
+            (canvas) => prepared.view.paint(canvas, Offset.zero),
+            ratio,
+          );
+          final reference = await _pixels((canvas) {
+            for (final (i, item) in expected.indexed) {
+              painters[i].paint(canvas, item.$4);
+            }
+          }, ratio);
+          expect(actual, reference);
+          expect(prepared.glyphBoxes(1, 2).single.left, 25);
+          expect(prepared.glyphBoxes(2, 3).single.left, 55);
+          expect(prepared.glyphBoxes(3, 9).single.left, 20);
+          expect(prepared.glyphBoxes(3, 9).single.right, 80);
+          for (var i = 0; i < prepared.projection.text.length; i++) {
+            final box = prepared.glyphBoxes(i, i + 1).single;
+            final hit = prepared.view.sourceAt(
+              Offset(box.left + .1, box.toRect().center.dy),
+            );
+            expect(hit.displayUtf16, i);
+            expect(
+              hit.sourceRune,
+              prepared.projection.sourceAtUtf16(i).sourceRune,
+            );
+            expect(hit.isExact, isTrue);
+          }
+        } finally {
+          prepared.close();
+          for (final painter in painters) {
+            painter.dispose();
+          }
+        }
+        expect(f.cache.activeLeases, 0);
+      },
+    );
+  }
+
   for (final annotation in [false, true]) {
     test('deep mixed original windows remain distinct RT=$annotation', () {
       var html = 'A';
@@ -439,7 +519,7 @@ void main() {
 
   for (final html in [
     '<ruby><rb>L<ruby><rb>A</rb><rb>B</rb>'
-        '<rtc><rt rbspan="2">xy</rt></rtc></ruby>R</rb><rt>z</rt></ruby>',
+        '<rtc>xy</rtc></ruby>R</rb><rt>z</rt></ruby>',
     '<ruby>A<rt>L<ruby>B<rt>b</rt></ruby>R</rt></ruby>',
     '<ruby><rb>L<ruby>A<rt></rt></ruby>R</rb><rt>z</rt></ruby>',
     '<ruby style="line-height:1.35"><rb style="line-height:1.15">'
