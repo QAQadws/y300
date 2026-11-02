@@ -45,6 +45,12 @@ final class ForumBodyParagraphInputAdmission {
     final sizes = <double?>{};
     ForumBodyParagraphLayoutFailure? failure;
     for (final current in [style, ...runStyles]) {
+      // Typed author emphasis must not disappear into a plain TextSpan while
+      // its source-bound mark/line-height preparation is still being built.
+      if (current.textEmphasis.isEnabled) {
+        failure = ForumBodyParagraphLayoutFailure.emphasis;
+        break;
+      }
       if (current.textDirection != style.textDirection) {
         failure = ForumBodyParagraphLayoutFailure.direction;
         break;

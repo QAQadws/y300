@@ -7,8 +7,9 @@ import 'forum_body_length.dart';
 import 'forum_body_language.dart';
 import 'forum_body_box_resolver.dart';
 import 'forum_body_style_options.dart';
+import 'forum_body_text_emphasis_resolver.dart';
 
-const forumBodyStyleRevision = 12;
+const forumBodyStyleRevision = 13;
 ForumBodyLength forumBodyReaderIndent(
   ForumBodyReaderStyle reader,
   double size,
@@ -55,6 +56,10 @@ final class ForumBodyStyleBuilder {
     'word-spacing',
     'text-decoration',
     'text-decoration-line',
+    'text-emphasis',
+    'text-emphasis-style',
+    'text-emphasis-color',
+    'text-emphasis-position',
     'color',
     'background',
     'background-color',
@@ -478,6 +483,13 @@ final class ForumBodyStyleBuilder {
       textDirection: direction,
       whiteSpace: whiteSpace,
       rubyPosition: rubyPosition,
+      textEmphasis: resolveForumBodyTextEmphasis(
+        declarations: declarations,
+        inherited: parent.textEmphasis,
+        parseColor: (raw) =>
+            _colors.putIfAbsent(raw, () => _colorParser.parseValue(raw)),
+        onUnsupported: (property, value) => _issue(node, property, value),
+      ),
       indent: indent,
       margin: _insets(node, 'margin', size, role, parent.margin),
       padding: _insets(node, 'padding', size, role, parent.padding),
