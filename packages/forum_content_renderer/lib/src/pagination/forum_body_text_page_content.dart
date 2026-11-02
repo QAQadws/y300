@@ -2,6 +2,7 @@ import 'package:flutter/painting.dart';
 import '../document/forum_body_document.dart';
 
 import '../inline/forum_body_inline_span_content.dart';
+import '../inline/forum_body_inline_paragraph_request.dart';
 import '../inline/forum_body_ruby_atom_plan.dart';
 import '../inline/forum_body_ruby_column_request.dart';
 import '../inline/forum_body_ruby_group_metrics.dart';
@@ -226,6 +227,15 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
   }
   final ForumBodyInlineSpanContent content;
   final List<PlaceholderDimensions> dimensions;
+
+  /// A composite child must budget this actual native parent in addition to its
+  /// glyph leaves. Source contexts remain in content, never inferred from a
+  /// native handle list. The request owns only this frozen pure geometry.
+  late final parentRequest = ForumBodyInlineParagraphRequest(
+    content: content,
+    dimensions: dimensions,
+    layoutMode: layoutMode,
+  );
   final List<ForumBodyRubyAtomPlan> rubyAtoms;
   final Set<int> trimmedAtomIndices;
   final Map<int, ForumBodyRubyContainerFontBox> containerBackgrounds;

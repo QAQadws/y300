@@ -4,6 +4,7 @@ import '../paragraph/forum_body_paragraph_cache.dart';
 import '../pagination/forum_body_text_page_content.dart';
 import '../paragraph/forum_body_text_request.dart';
 import 'forum_body_inline_plan_input.dart';
+import 'forum_body_inline_paragraph_request.dart';
 import 'forum_body_ruby_atom_plan.dart';
 import 'forum_body_ruby_atom_request.dart';
 import 'forum_body_ruby_group_metrics.dart';
@@ -407,15 +408,19 @@ final class ForumBodyInlinePlanPreparation {
     }
 
     try {
-      parent = cache.acquireInline(
+      final request = ForumBodyInlineParagraphRequest(
         content: _input!.content,
-        width: width,
         dimensions: provisional
             ? alignment.provisionalDimensions
             : alignment.dimensions,
-        textScaler: _textScaler!,
         layoutMode: _input!.layoutMode,
       );
+      parent = request.acquire(
+        cache,
+        width: width,
+        textScaler: _textScaler!,
+        cachedOnly: false,
+      )!;
       _guard();
       if (provisional) {
         _probe = parent;

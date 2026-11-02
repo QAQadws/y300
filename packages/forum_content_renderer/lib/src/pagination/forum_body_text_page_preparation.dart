@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/painting.dart';
 import '../inline/forum_body_ruby_group_preparation.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
+import '../paragraph/forum_body_text_request.dart';
 import 'forum_body_prepared_text_fragment.dart';
 import 'forum_body_inline_page_preparation.dart';
 import 'forum_body_text_page_binding.dart';
@@ -366,21 +367,19 @@ final class ForumBodyTextPagePreparation {
       final fragment = page.fragments[index];
       switch (input) {
         case ForumBodyParagraphPageContent():
-          probe.include(
-            content: input.content,
+          ForumBodyTextRequest.paragraph(input.content).includeBudget(
+            probe,
             width: input.requestWidthFor(fragment),
             minimumLineCount: fragment.endLine,
             textScaler: _textScaler!,
           );
           yield true;
         case ForumBodyInlinePageContent():
-          probe.includeInline(
-            content: input.content,
+          input.parentRequest.includeBudget(
+            probe,
             width: input.requestWidthFor(fragment),
-            dimensions: input.dimensions,
             minimumLineCount: fragment.endLine,
             textScaler: _textScaler!,
-            layoutMode: input.layoutMode,
           );
           yield true;
           for (final atom in input.visibleAtoms(fragment)) {

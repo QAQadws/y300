@@ -91,21 +91,12 @@ final class ForumBodyInlinePagePreparation {
       if (_binding != null) return _advanceBinding(maxParts);
       if (_parent == null) {
         final requestWidth = input.requestWidthFor(fragment);
-        final parent = cachedOnly
-            ? cache.tryAcquireInlineCached(
-                content: input.content,
-                width: requestWidth,
-                dimensions: input.dimensions,
-                textScaler: _textScaler!,
-                layoutMode: input.layoutMode,
-              )
-            : cache.acquireInline(
-                content: input.content,
-                width: requestWidth,
-                dimensions: input.dimensions,
-                textScaler: _textScaler!,
-                layoutMode: input.layoutMode,
-              );
+        final parent = input.parentRequest.acquire(
+          cache,
+          width: requestWidth,
+          textScaler: _textScaler!,
+          cachedOnly: cachedOnly,
+        );
         try {
           _guard();
         } catch (_) {

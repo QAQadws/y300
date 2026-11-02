@@ -1,12 +1,13 @@
 import 'package:flutter/painting.dart';
 
 import '../inline/forum_body_text_band_content.dart';
+import 'forum_body_native_request.dart';
 import 'forum_body_paragraph_cache.dart';
 import 'forum_body_paragraph_content.dart';
 
 /// Immutable input for cooperative text preparation. Requests own no lease or
 /// native resource. Cached acquisition never shapes or prepares child pictures.
-sealed class ForumBodyTextRequest {
+sealed class ForumBodyTextRequest extends ForumBodyNativeRequest {
   const ForumBodyTextRequest._();
   factory ForumBodyTextRequest.paragraph(ForumBodyParagraphContent content) =
       ForumBodyParagraphTextRequest;
@@ -16,16 +17,12 @@ sealed class ForumBodyTextRequest {
     double? gutter,
   }) = ForumBodyTextBandChildRequest;
   ForumBodyParagraphContent get content;
+  @override
   ForumBodyTextLease? acquire(
     ForumBodyParagraphCache cache, {
     required double width,
     required TextScaler textScaler,
     required bool cachedOnly,
-  });
-  void includeBudget(
-    ForumBodyParagraphBudgetProbe probe, {
-    required double width,
-    required TextScaler textScaler,
   });
 }
 
@@ -51,10 +48,11 @@ final class ForumBodyParagraphTextRequest extends ForumBodyTextRequest {
     ForumBodyParagraphBudgetProbe probe, {
     required double width,
     required TextScaler textScaler,
+    int minimumLineCount = 1,
   }) => probe.include(
     content: content,
     width: width,
-    minimumLineCount: 1,
+    minimumLineCount: minimumLineCount,
     textScaler: textScaler,
   );
 }
@@ -96,10 +94,16 @@ final class ForumBodyTextBandChildRequest extends ForumBodyTextRequest {
     ForumBodyParagraphBudgetProbe probe, {
     required double width,
     required TextScaler textScaler,
-  }) => probe.includeBandChild(
-    content: band,
-    childIndex: childIndex,
-    textScaler: textScaler,
-    gutter: gutter,
-  );
+    int minimumLineCount = 1,
+  }) {
+    // One intrinsic child cannot promise more than one line. The probe already
+    // counts the complete shared band rather than undercounting this alias.
+    RangeError.checkValueInInterval(minimumLineCount, 0, 1, 'minimumLineCount');
+    probe.includeBandChild(
+      content: band,
+      childIndex: childIndex,
+      textScaler: textScaler,
+      gutter: gutter,
+    );
+  }
 }
