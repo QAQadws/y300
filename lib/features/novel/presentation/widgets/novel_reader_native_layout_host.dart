@@ -798,6 +798,11 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
           );
         }
       }
+      final layoutHandle = config.owner.acquireCache(
+        layoutKey: scope.paginationKey,
+      );
+      handle.release();
+      handle = layoutHandle;
       session = scope.openSession(
         cache: handle.cache,
         layoutId: 'native-host-$epoch',

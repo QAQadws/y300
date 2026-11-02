@@ -60,7 +60,11 @@ class _Preparation implements NovelReaderNativePreparationService {
 }
 
 class _Reader {
-  _Reader({String? html, this.episodeId = 'episode'}) {
+  _Reader({
+    String? html,
+    this.episodeId = 'episode',
+    this.maxParagraphEntries = 64,
+  }) {
     rawHtml =
         html ?? '<p>${List.filled(20, 'abcdefghijklmnopqrst').join()}</p>';
     semantic =
@@ -92,11 +96,15 @@ class _Reader {
     });
   }
   final String episodeId;
+  final int maxParagraphEntries;
   late final String rawHtml;
   late final NovelReaderDocument semantic;
   late NovelReaderProgressSnapshot snapshot;
   final fonts = ChangeNotifier();
-  late final owner = NovelReaderNativeOwner(fontChanges: fonts);
+  late final owner = NovelReaderNativeOwner(
+    fontChanges: fonts,
+    maxParagraphEntries: maxParagraphEntries,
+  );
   final service = _Preparation();
   final authority = Object();
   final positions = <NovelReaderPaginationPosition>[];
@@ -264,6 +272,50 @@ Future<List<int>> _canvasPixel(WidgetTester tester, {int? x, int? y}) async {
 }
 
 void main() {
+  testWidgets('reflow can replace a mounted page that fills its native cache', (
+    tester,
+  ) async {
+    final reader = _Reader(
+      html: '<p>abcdefghij</p><p>klmnopqrst</p>',
+      maxParagraphEntries: 2,
+    );
+    await _show(tester, reader, startsAtBeginning: true);
+    await tester.pumpAndSettle();
+    final oldController = reader.statuses.last.controller!;
+    final old = reader.owner.acquireCache();
+    expect(old.cache.activeLeases, 2);
+    final oldBuilds = old.cache.layoutBuildCount;
+    await _show(
+      tester,
+      reader,
+      startsAtBeginning: true,
+      preferences: reader.preferences.copyWith(fontSize: 12),
+    );
+    for (var i = 0; i < 100; i++) {
+      await tester.pump(const Duration(milliseconds: 10));
+      if (reader.statuses.last.phase == NovelReaderNativeHostPhase.reading &&
+          !identical(reader.statuses.last.controller, oldController) &&
+          reader.statuses.last.controller!.visiblePageIndex == 0) {
+        break;
+      }
+    }
+    expect(reader.statuses.last.phase, NovelReaderNativeHostPhase.reading);
+    expect(reader.statuses.last.controller, isNot(same(oldController)));
+    expect(reader.statuses.last.controller!.visiblePageIndex, 0);
+    expect(find.byType(ForumBodyParagraphSurface), findsWidgets);
+    expect(
+      tester
+          .widgetList<ForumBodyParagraphSurface>(
+            find.byType(ForumBodyParagraphSurface),
+          )
+          .every((surface) => surface.lease.isActive),
+      isTrue,
+    );
+    expect(old.cache.layoutBuildCount, oldBuilds);
+    old.release();
+    await _unmount(tester, reader);
+  });
+
   testWidgets(
     'color preference canvas reuses moving navigation but a concurrent font change relayouts',
     (tester) async {
@@ -333,7 +385,11 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(reader.statuses.last.controller, isNot(same(controller)));
-      expect(handle.cache.layoutBuildCount, greaterThan(builds));
+      final replacement = reader.owner.acquireCache();
+      expect(replacement.cache, isNot(same(handle.cache)));
+      expect(replacement.cache.layoutBuildCount, greaterThan(0));
+      expect(handle.cache.layoutBuildCount, builds);
+      replacement.release();
       handle.release();
       await _unmount(tester, reader);
     },
@@ -572,7 +628,11 @@ void main() {
         expect(reader.statuses.last.controller, isNot(same(controller)));
         expect(await _canvasPixel(tester, x: 5, y: 5), [18, 52, 86, 255]);
         expect(await _canvasPixel(tester, x: 15, y: 5), [255, 255, 0, 255]);
-        expect(handle.cache.layoutBuildCount, greaterThan(builds));
+        final replacement = reader.owner.acquireCache();
+        expect(replacement.cache, isNot(same(handle.cache)));
+        expect(replacement.cache.layoutBuildCount, greaterThan(0));
+        expect(handle.cache.layoutBuildCount, builds);
+        replacement.release();
         expect(
           tester
               .widget<ForumBodyParagraphSurface>(

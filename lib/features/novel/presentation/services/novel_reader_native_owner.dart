@@ -6,8 +6,9 @@ import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 import 'novel_reader_native_preparation_cache.dart';
 
-/// One reading owner across layouts/mode switches. Font collection changes
-/// invalidate new cache acquisitions, not the old paragraphs still on screen.
+/// One reading owner across layouts/mode switches. Overlapping layouts have
+/// independent budgets so a mounted old page cannot starve its replacement.
+/// Font changes invalidate new acquisitions, not old paragraphs on screen.
 /// Host releases each handle only after its session and mounted views retire.
 final class NovelReaderNativeOwner extends ChangeNotifier {
   NovelReaderNativeOwner({
@@ -38,8 +39,8 @@ final class NovelReaderNativeOwner extends ChangeNotifier {
   int get retainedCacheGenerations =>
       _retired.length + (_current == null ? 0 : 1);
 
-  /// Entry/byte limits apply per cache generation. At handoff, old pinned and
-  /// replacement caches coexist; this total is an estimate, not native memory.
+  /// Entry/byte limits apply per live cache generation. At layout/font handoff,
+  /// referenced old and replacement caches coexist; this is not native memory.
   int get estimatedRetainedBytes =>
       preparationCache.estimatedRetainedBytes +
       (_current?.cache.estimatedRetainedBytes ?? 0) +
@@ -48,19 +49,37 @@ final class NovelReaderNativeOwner extends ChangeNotifier {
         (sum, entry) => sum + entry.cache.estimatedRetainedBytes,
       );
 
-  NovelReaderNativeCacheHandle acquireCache() {
+  NovelReaderNativeCacheHandle acquireCache({String? layoutKey}) {
     if (_closed) throw StateError('Native reading owner is closed');
-    final entry = _current ??= _CacheGeneration(
+    if (layoutKey != null && layoutKey.isEmpty) {
+      throw ArgumentError.value(layoutKey, 'layoutKey');
+    }
+    var entry = _current;
+    if (entry != null &&
+        layoutKey != null &&
+        entry.layoutKey != null &&
+        entry.layoutKey != layoutKey &&
+        entry.handles > 0) {
+      // Old mounted views retain their cache until actual unmount. Waiting for
+      // their pins in this cache would deadlock a dense replacement page.
+      _retired.add(entry);
+      _current = null;
+      entry = null;
+    }
+    entry ??= _CacheGeneration(
       ForumBodyParagraphCache(
         maxEntries: maxParagraphEntries,
         maxEstimatedBytes: maxParagraphEstimatedBytes,
       ),
     );
+    _current = entry;
+    if (layoutKey != null) entry.layoutKey = layoutKey;
+    final selected = entry;
     late final NovelReaderNativeCacheHandle handle;
     handle = NovelReaderNativeCacheHandle._(
       entry.cache,
       _fontGeneration,
-      () => _release(entry, handle),
+      () => _release(selected, handle),
     );
     entry.handles++;
     _handles.add(handle);
@@ -135,6 +154,7 @@ final class NovelReaderNativeOwner extends ChangeNotifier {
 final class _CacheGeneration {
   _CacheGeneration(this.cache);
   final ForumBodyParagraphCache cache;
+  String? layoutKey;
   int handles = 0;
 }
 

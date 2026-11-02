@@ -9,6 +9,71 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
+    'overlapping layout budgets preserve old pins without starving replacement',
+    () {
+      final fonts = ChangeNotifier();
+      final owner = NovelReaderNativeOwner(
+        fontChanges: fonts,
+        maxParagraphEntries: 2,
+      );
+      addTearDown(() {
+        owner.dispose();
+        fonts.dispose();
+      });
+      final old = owner.acquireCache(layoutKey: 'old');
+      final a = NativeReaderTestFixture('<p>ab</p>', cacheOwner: old.cache);
+      final oldLeases = a.session.preparePageLeases(0);
+      final next = owner.acquireCache(layoutKey: 'new');
+      expect(next.cache, isNot(same(old.cache)));
+      expect(old.isCurrent, isTrue);
+      expect(next.fontGeneration, old.fontGeneration);
+      expect(oldLeases.single.isActive, isTrue);
+      final b = NativeReaderTestFixture('<p>cd</p>', cacheOwner: next.cache);
+      final nextLeases = b.session.preparePageLeases(0);
+      expect(nextLeases.single.isActive, isTrue);
+      expect(next.cache.maxEntries, 2);
+      expect(owner.retainedCacheGenerations, 2);
+      final alias = owner.acquireCache(layoutKey: 'new');
+      expect(alias.cache, same(next.cache));
+      alias.release();
+      oldLeases.single.release();
+      a.session.close();
+      old.release();
+      expect(old.cache.isClosed, isTrue);
+      expect(owner.retainedCacheGenerations, 1);
+      nextLeases.single.release();
+      b.session.close();
+      next.release();
+      final warm = owner.acquireCache(layoutKey: 'another-unmounted-layout');
+      expect(warm.cache, same(next.cache));
+      warm.release();
+    },
+  );
+
+  test('cancelled layout rotations retain only referenced old caches', () {
+    final fonts = ChangeNotifier();
+    final owner = NovelReaderNativeOwner(fontChanges: fonts);
+    addTearDown(() {
+      owner.dispose();
+      fonts.dispose();
+    });
+    final old = owner.acquireCache(layoutKey: 'mounted');
+    for (var i = 0; i < 20; i++) {
+      final temporary = owner.acquireCache(layoutKey: 'preview-$i');
+      temporary.release();
+      expect(owner.activeCacheHandles, 1);
+      expect(owner.retainedCacheGenerations, 2);
+    }
+    expect(old.isCurrent, isTrue);
+    fonts.notifyListeners();
+    expect(old.isCurrent, isFalse);
+    old.release();
+    expect(owner.retainedCacheGenerations, 0);
+    expect(() => owner.acquireCache(layoutKey: ''), throwsArgumentError);
+    expect(owner.activeCacheHandles, 0);
+  });
+
+  test(
     'layout and mode changes reuse a warm cache until the reading owner closes',
     () {
       final fonts = ChangeNotifier();
