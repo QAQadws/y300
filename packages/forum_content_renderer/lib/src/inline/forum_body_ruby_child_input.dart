@@ -1,6 +1,7 @@
 import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../document/forum_body_document.dart';
+import '../flow/forum_body_inline_flow_content.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../style/forum_body_style_options.dart';
 import 'forum_body_ruby_content.dart';
@@ -71,6 +72,42 @@ final class ForumBodyRubySequenceChildInput extends ForumBodyRubyChildInput {
   final HtmlSourceTextRange? source;
   final ForumBodyResolvedStyle style;
   final List<ForumBodyRubyInlineContent> parts;
+
+  /// Real intrinsic parent input for this container. Text keeps its original
+  /// projection/runs, and each nested group stays an opaque ruby unit; none of
+  /// its annotation text is shaped into the parent's ordinary text stream.
+  /// The enclosing transaction still owns omissions and whole-tree admission.
+  ForumBodyInlineFlowContent toInlineFlow({
+    required bool trimCollapsibleEdges,
+  }) {
+    final flow = <ForumBodyInlineFlowPart>[];
+    for (final part in parts) {
+      switch (part) {
+        case ForumBodyRubyTextContent(:final content):
+          flow.add(ForumBodyInlineFlowText(content));
+        case ForumBodyRubyNestedContent(:final groups):
+          // An empty root remains a real structured node. Do not silently drop
+          // it merely because this adapter has no native empty-root atom yet.
+          if (groups.isEmpty) _unsupported(part.path);
+          flow.addAll(groups.map(ForumBodyInlineFlowRuby.new));
+        case ForumBodyRubyBaseContent() || ForumBodyRubyAnnotationContent():
+          _unsupported(path);
+      }
+    }
+    return ForumBodyInlineFlowContent(
+      identity: identity,
+      path: path,
+      fontRevision: fontRevision,
+      styleRevision: styleRevision,
+      style: style,
+      layoutMode: ForumBodyParagraphLayoutMode.intrinsicSingleLine,
+      appliesFirstLineIndent: false,
+      trimCollapsibleEdges: trimCollapsibleEdges,
+      parts: flow,
+      ignored: const [],
+      issues: const [],
+    );
+  }
 }
 
 ForumBodyRubyChildInput _resolve(

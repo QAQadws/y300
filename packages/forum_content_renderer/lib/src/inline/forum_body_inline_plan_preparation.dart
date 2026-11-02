@@ -414,6 +414,7 @@ final class ForumBodyInlinePlanPreparation {
             ? alignment.provisionalDimensions
             : alignment.dimensions,
         textScaler: _textScaler!,
+        layoutMode: _input!.layoutMode,
       );
       _guard();
       if (provisional) {
@@ -448,6 +449,7 @@ final class ForumBodyInlinePlanPreparation {
     _guard();
     _result = ForumBodyInlinePageContent.atoms(
       content: _input!.content,
+      layoutMode: _input!.layoutMode,
       dimensions: alignment.dimensions,
       rootFonts: {
         for (final (index, request) in _input!.atoms.indexed)

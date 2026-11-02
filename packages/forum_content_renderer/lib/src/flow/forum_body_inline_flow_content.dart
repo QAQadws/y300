@@ -30,6 +30,7 @@ final class ForumBodyInlineFlowContent {
     required this.style,
     required this.layoutMode,
     this.appliesFirstLineIndent = true,
+    this.trimCollapsibleEdges = true,
     required List<ForumBodyInlineFlowPart> parts,
     required List<ForumBodyRubyIgnoredContent> ignored,
     required List<ForumBodyStyleIssue> issues,
@@ -44,6 +45,11 @@ final class ForumBodyInlineFlowContent {
   final ForumBodyResolvedStyle style;
   final ForumBodyParagraphLayoutMode layoutMode;
   final bool appliesFirstLineIndent;
+
+  /// Formatting-context edges only. A structured RB can preserve its actual
+  /// leading/trailing spaces; RT and block contexts trim collapsible edges.
+  /// Internal adjacent-space collapse and original source fences are unchanged.
+  final bool trimCollapsibleEdges;
   final List<ForumBodyInlineFlowPart> parts;
 
   /// Omissions retain their actual source but do not prove visible coverage.

@@ -28,21 +28,22 @@ final class ForumBodyInlinePlanInput {
     this.atoms,
     this.width,
     List<int> levelIds,
+    this.layoutMode,
   ) : rubyLevelIds = List.unmodifiable(levelIds),
       atomEngineOffsets = List.unmodifiable(
         content
-            .projectionForLayout(ForumBodyParagraphLayoutMode.wrap)
+            .projectionForLayout(layoutMode)
             .atoms
             .map((atom) => atom.engineUtf16),
       );
-  static const revision = 22;
+  static const revision = 23;
 
   factory ForumBodyInlinePlanInput(
     ForumBodyInlineFlowContent input,
     double width, {
     Map<ForumBodyRubyGroupContent, ForumBodyRubyTreeInput> trees = const {},
   }) {
-    if (input.layoutMode != ForumBodyParagraphLayoutMode.wrap) {
+    if (input.layoutMode == ForumBodyParagraphLayoutMode.fitSingleLine) {
       _unsupported(input.path);
     }
     final contexts = <ForumBodyParagraphContent>[];
@@ -54,7 +55,7 @@ final class ForumBodyInlinePlanInput {
     final roots = <String, int>{};
     var offset = 0;
     var previousCollapsibleSpace = false;
-    var atLineStart = true;
+    var atLineStart = input.trimCollapsibleEdges;
     int? lastPlain;
     int append(ForumBodyParagraphContent context) {
       final index = contexts.length;
@@ -580,7 +581,7 @@ final class ForumBodyInlinePlanInput {
     }
     // Empty trailing source contexts must not keep a previous collapsed space
     // alive. Only a final ordinary context is eligible; atomic children are not.
-    trimTrailingPlain();
+    if (input.trimCollapsibleEdges) trimTrailingPlain();
     final content = ForumBodyInlineSpanContent.compose(
       identity: input.identity,
       path: input.path,
@@ -614,11 +615,13 @@ final class ForumBodyInlinePlanInput {
       ],
       width,
       levelIds,
+      input.layoutMode,
     );
   }
 
   final ForumBodyInlineSpanContent content;
   final double width;
+  final ForumBodyParagraphLayoutMode layoutMode;
   final List<int> rubyLevelIds;
   final List<int> atomEngineOffsets;
   // Rebound only before publication when native isolation supplies a new
