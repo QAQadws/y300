@@ -71,7 +71,6 @@ void main() {
   );
 
   for (final html in [
-    '<ruby><rb>A<ruby>B<rt>b</rt></ruby></rb><rt>x</rt></ruby>',
     '<ruby><rb></rb><rt></rt></ruby>',
     '<ruby style="ruby-position:inter-character">A<rt>x</rt></ruby>',
     '<ruby><rb>A</rb><rb>B</rb><rtc style="white-space:pre"><rt>x</rt> <rt>y</rt></rtc></ruby>',

@@ -2270,7 +2270,7 @@ void main() {
     '<ruby> <rt>a</rt></ruby>',
     '<ruby>A<rt>a</rt><rt><ruby>B<rt>b</rt></ruby></rt></ruby>',
     '<ruby><rt> </rt></ruby>',
-    '<ruby>A<ruby>B<rt>b</rt></ruby><rt>a</rt></ruby>',
+    '<ruby style="ruby-position:inter-character">A<rt>a</rt></ruby>',
   ]) {
     test('pending complex format never flattens or loses source: $html', () {
       final f = _Fixture(html);
@@ -2322,23 +2322,27 @@ void main() {
     },
   );
 
-  test('late unsupported input preserves the already published mixed prefix', () {
-    final f = _Fixture(
-      '<span>X<ruby>AB<rt>xy</rt></ruby>Y<br>Z<br><ruby>A<rt>before<ruby>B<rt>b</rt></ruby>after</rt></ruby></span>',
-    );
-    while (f.session.snapshot.isEmpty) {
-      f.advance();
-    }
-    final prefix = f.session.snapshot;
-    final page = prefix.first;
-    expect(f.finish, throwsA(isA<ForumBodyParagraphInputException>()));
-    expect(f.session.snapshot.first, same(page));
-    expect(prefix, hasLength(1));
-    final visible = f.prepare(0);
-    expect(visible.single.isActive, isTrue);
-    visible.single.close();
-    expect(f.cache.activeLeases, 0);
-  });
+  test(
+    'late unsupported input preserves the already published mixed prefix',
+    () {
+      final f = _Fixture(
+        '<span>X<ruby>AB<rt>xy</rt></ruby>Y<br>Z<br>'
+        '<ruby style="ruby-position:inter-character">A<rt>a</rt></ruby></span>',
+      );
+      while (f.session.snapshot.isEmpty) {
+        f.advance();
+      }
+      final prefix = f.session.snapshot;
+      final page = prefix.first;
+      expect(f.finish, throwsA(isA<ForumBodyParagraphInputException>()));
+      expect(f.session.snapshot.first, same(page));
+      expect(prefix, hasLength(1));
+      final visible = f.prepare(0);
+      expect(visible.single.isActive, isTrue);
+      visible.single.close();
+      expect(f.cache.activeLeases, 0);
+    },
+  );
 }
 
 final class _Scaler extends TextScaler {

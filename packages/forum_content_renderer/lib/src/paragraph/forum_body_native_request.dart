@@ -2,6 +2,12 @@ import 'package:flutter/painting.dart';
 
 import 'forum_body_paragraph_cache.dart';
 
+typedef ForumBodyNativeRequestSlot = ({
+  ForumBodyNativeRequest request,
+  double width,
+  int minimumLineCount,
+});
+
 /// One real native layout request. A composite may include ordinary text,
 /// shared-band children and inline parents in the SAME cache footprint.
 /// This port intentionally has no source-context getter: a placeholder parent

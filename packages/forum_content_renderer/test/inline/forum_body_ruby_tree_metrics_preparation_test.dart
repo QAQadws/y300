@@ -149,6 +149,8 @@ void main() {
           case ForumBodyRubyTreeText():
             expect(node.content.identity, parsed.group.identity);
             expect(node.content.styleRevision, parsed.group.styleRevision);
+          case ForumBodyRubyTreeInline():
+            fail('Closed single-child trees do not need a mixed inline parent');
           case ForumBodyRubyTreeFrame():
             expect(node.child, lessThan(id));
           case ForumBodyRubyTreeGroup():
@@ -176,10 +178,9 @@ void main() {
   );
 
   test(
-    'mixed inline contexts, multiple columns and implicit edge spaces are refused',
+    'multiple root columns, implicit edge spaces and empty roots stay explicit',
     () {
       for (final html in [
-        '<ruby>before<ruby>A<rt>a</rt></ruby>after<rt>b</rt></ruby>',
         '<ruby><rb><ruby><rb>A</rb><rb>B</rb><rt>a</rt><rt>b</rt></ruby></rb><rt>x</rt></ruby>',
         '<ruby>A<rt>a</rt><rt>b</rt></ruby>',
         '<ruby> A <rt>a</rt></ruby>',
@@ -267,6 +268,8 @@ void main() {
                           textDirection: TextDirection.ltr,
                         )..layout(),
                       );
+                    case ForumBodyRubyTreeInline():
+                      fail('This reference fixture contains only closed trees');
                     case ForumBodyRubyTreeFrame():
                       final frame =
                           (numeric as ForumBodyRubyTreeContainerMetrics).frame;

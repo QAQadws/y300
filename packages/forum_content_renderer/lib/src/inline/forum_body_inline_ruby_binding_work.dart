@@ -10,12 +10,13 @@ final class _RubyBindingWork {
     ForumBodyRubySegmentLayout? segment,
     ForumBodyRubySoftSpaceLayout? space,
     ForumBodyRubyTreeLayout? tree,
-    required void Function(ForumBodyTextLease) own,
+    required void Function(ForumBodyNativeParagraphLease) own,
   }) : _cursor = content.openAtomicContexts(index),
        _group = group,
        _segment = segment,
        _space = space,
        _tree = tree,
+       _treeLeases = tree?.nativeLeases.iterator,
        _members = segment?.inspectMembers(),
        _own = own;
   ForumBodyInlineAtomicContextCursor? _cursor;
@@ -23,10 +24,12 @@ final class _RubyBindingWork {
   ForumBodyRubySegmentLayout? _segment;
   ForumBodyRubySoftSpaceLayout? _space;
   ForumBodyRubyTreeLayout? _tree;
+  Iterator<ForumBodyNativeParagraphLease>? _treeLeases;
+  bool _treeLeasesDone = false;
   Map<int, ForumBodyInlineContext> _treeWindows = {};
   int _treeMember = 0;
   ForumBodyRubySegmentMemberSnapshot? _members;
-  void Function(ForumBodyTextLease)? _own;
+  void Function(ForumBodyNativeParagraphLease)? _own;
   ForumBodyRubyGroupMemberSnapshot? _current;
   ForumBodyInlineContext? _base;
   List<ForumBodyInlineContext?> _annotations = [];
@@ -47,11 +50,17 @@ final class _RubyBindingWork {
     var work = 0;
     while (work < maxParts && !isComplete) {
       if (_tree != null) {
+        if (!_treeLeasesDone) {
+          if (_treeLeases!.moveNext()) {
+            _own!(_treeLeases!.current);
+          } else {
+            _treeLeasesDone = true;
+          }
+        }
         if (_treeMember < _tree!.members.length) {
           final member = _tree!.members[_treeMember++];
-          if (member.lease != null) _own!(member.lease!);
           _treeWindows[member.nodeIndex] = _cursor!.resolve(member.content);
-        } else {
+        } else if (_treeLeasesDone) {
           _cursor!.finish();
           _result = _RubyTreeBinding(_tree!, UnmodifiableMapView(_treeWindows));
         }
@@ -145,6 +154,7 @@ final class _RubyBindingWork {
     _segment = null;
     _space = null;
     _tree = null;
+    _treeLeases = null;
     _treeWindows = {};
     _members = null;
     _current = null;

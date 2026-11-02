@@ -14,6 +14,7 @@ final class _Fixture {
     TextDirection direction = TextDirection.ltr,
     int maxText = 100000,
     int maxRuns = 10000,
+    int maxIssued = 512,
   }) {
     final document = const ForumBodyParser().parse(
       html: html,
@@ -38,7 +39,7 @@ final class _Fixture {
         maxParagraphs: 10000,
         maxTextCodeUnits: maxText,
         maxRuns: maxRuns,
-        maxIssuedLeases: 512,
+        maxIssuedLeases: maxIssued,
       ),
       layoutId: 'formal-nested',
       width: width,
@@ -104,6 +105,352 @@ void main() {
       'packages/forum_content_renderer/ForumBodyInlineSpace',
     )..addFont(rootBundle.load('assets/fonts/inline_space.ttf'))).load();
   });
+
+  for (final ratio in [1, 3]) {
+    for (final backgrounds in [false, true]) {
+      test(
+        'formal mixed parent paints once and binds every source DPR$ratio backgrounds=$backgrounds',
+        () async {
+          final f = _Fixture(
+            '<ruby style="color:red;${backgrounds ? 'background:rgba(255,0,0,.2)' : ''}">'
+            '<rb>L'
+            '<ruby style="${backgrounds ? 'background:rgba(0,255,0,.4)' : ''}">A'
+            '<rt style="font-size:10px;color:blue">x</rt></ruby>R</rb>'
+            '<rt style="font-size:10px;color:green">z</rt></ruby>',
+          );
+          f.finish();
+          final job = f.session.openPagePreparation(0);
+          expect(job.expectedNativeLeaseCount, 5);
+          job.close();
+          final prepared =
+              f.prepare(0).single as ForumBodyPreparedInlineFragment;
+          final painters = <TextPainter>[];
+          try {
+            expect(prepared.projection.text, 'LAxRz');
+            expect(prepared.nativeLeases, hasLength(5));
+            expect(
+              prepared.nativeLeases.whereType<ForumBodyInlineParagraphLease>(),
+              hasLength(2),
+            );
+            expect(
+              prepared.nativeLeases.whereType<ForumBodyTextLease>().map(
+                (l) => l.content.projection.text,
+              ),
+              unorderedEquals(['A', 'x', 'z']),
+            );
+            for (final (text, size, color) in [
+              ('LAR', 20.0, const Color(0xffff0000)),
+              ('x', 10.0, const Color(0xff0000ff)),
+              ('z', 10.0, const Color(0xff008000)),
+            ]) {
+              painters.add(
+                TextPainter(
+                  text: TextSpan(
+                    text: text,
+                    style: TextStyle(
+                      fontFamily: 'Ahem',
+                      fontSize: size,
+                      height: 1,
+                      color: color,
+                    ),
+                  ),
+                  textDirection: TextDirection.ltr,
+                )..layout(),
+              );
+            }
+            final actual = await _pixels(
+              (canvas) => prepared.view.paint(canvas, Offset.zero),
+              ratio,
+            );
+            if (backgrounds) {
+              expect(prepared.view.containerBackgrounds, [
+                (
+                  rect: const Rect.fromLTWH(0, 20, 60, 20),
+                  color: const Color(0x33ff0000),
+                ),
+                (
+                  rect: const Rect.fromLTWH(20, 20, 20, 20),
+                  color: const Color(0x6600ff00),
+                ),
+              ]);
+            }
+            final expected = await _pixels((canvas) {
+              if (backgrounds) {
+                for (final (rect, color) in [
+                  (const Rect.fromLTWH(0, 20, 60, 20), const Color(0x33ff0000)),
+                  (
+                    const Rect.fromLTWH(20, 20, 20, 20),
+                    const Color(0x6600ff00),
+                  ),
+                ]) {
+                  canvas.drawRect(rect, Paint()..color = color);
+                }
+              }
+              painters[0].paint(canvas, const Offset(0, 20));
+              painters[1].paint(canvas, const Offset(25, 10));
+              painters[2].paint(canvas, const Offset(25, 0));
+            }, ratio);
+            expect(actual, expected);
+            if (backgrounds) {
+              expect(prepared.view.containerBackgrounds, hasLength(2));
+              final surfaces = await _pixels(
+                (canvas) => prepared.view.paintContainerBackgrounds(
+                  canvas,
+                  Offset.zero,
+                ),
+                ratio,
+              );
+              final reference = await _pixels((canvas) {
+                canvas.drawRect(
+                  const Rect.fromLTWH(0, 20, 60, 20),
+                  Paint()..color = const Color(0x33ff0000),
+                );
+                canvas.drawRect(
+                  const Rect.fromLTWH(20, 20, 20, 20),
+                  Paint()..color = const Color(0x6600ff00),
+                );
+              }, ratio);
+              expect(surfaces, reference);
+            }
+            final builds = f.cache.layoutBuildCount;
+            final pictures = f.cache.pictureBuildCount;
+            for (
+              var start = 0;
+              start < prepared.projection.text.length;
+              start++
+            ) {
+              final box = prepared.glyphBoxes(start, start + 1).single;
+              final hit = prepared.view.sourceAt(
+                Offset(box.left + .1, box.toRect().center.dy),
+              );
+              expect(hit.isExact, isTrue);
+              expect(
+                hit.sourceRune,
+                prepared.projection.sourceAtUtf16(start).sourceRune,
+              );
+              expect(hit.displayUtf16, start);
+            }
+            expect(f.cache.layoutBuildCount, builds);
+            expect(f.cache.pictureBuildCount, pictures);
+          } finally {
+            prepared.close();
+            for (final painter in painters) {
+              painter.dispose();
+            }
+          }
+          expect(f.cache.activeLeases, 0);
+        },
+      );
+    }
+  }
+
+  for (final direction in TextDirection.values) {
+    test(
+      'mixed nested multi-column source order remains explicit $direction',
+      () {
+        final f = _Fixture(
+          '<ruby><rb>L<ruby><rb>A</rb><rb>B</rb>'
+          '<rtc><rt>x</rt><rt>y</rt></rtc></ruby>R</rb><rt>z</rt></ruby>',
+          direction: direction,
+          width: 200,
+        );
+        f.finish();
+        final prepared = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+        try {
+          expect(prepared.projection.text, 'LABxyRz');
+          expect(prepared.nativeLeases, hasLength(7));
+          final exactHits = <bool>[];
+          for (var i = 0; i < prepared.projection.text.length; i++) {
+            final box = prepared.glyphBoxes(i, i + 1).single;
+            final hit = prepared.view.sourceAt(
+              Offset(
+                box.left +
+                    (box.right - box.left) *
+                        (box.direction == TextDirection.ltr ? .2 : .8),
+                box.toRect().center.dy,
+              ),
+            );
+            exactHits.add(hit.isExact);
+            expect(
+              hit.sourceRune,
+              prepared.projection.sourceAtUtf16(i).sourceRune,
+            );
+            expect(hit.displayUtf16, i);
+          }
+          // Reordering shares raw endpoints between independent native windows.
+          // Matching a glyph must not promote that ambiguous inverse to exact.
+          expect(exactHits, [true, true, false, false, false, true, true]);
+        } finally {
+          prepared.close();
+        }
+        expect(f.cache.activeLeases, 0);
+      },
+    );
+  }
+
+  for (final annotation in [false, true]) {
+    test('deep mixed original windows remain distinct RT=$annotation', () {
+      var html = 'A';
+      var expected = 'A';
+      for (var depth = 0; depth < 8; depth++) {
+        html = annotation
+            ? '<ruby style="font-size:20px">B<rt style="font-size:20px">'
+                  'L${html}R</rt></ruby>'
+            : '<ruby style="font-size:20px"><rb>L${html}R</rb>'
+                  '<rt style="font-size:10px">x</rt></ruby>';
+        expected = annotation ? 'BL${expected}R' : 'L${expected}Rx';
+      }
+      final f = _Fixture(html, width: 500, height: 500);
+      f.finish();
+      final prepared = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+      try {
+        expect(prepared.projection.text, expected);
+        expect(prepared.nativeLeases, hasLength(17));
+        for (var i = 0; i < expected.length; i++) {
+          final box = prepared.glyphBoxes(i, i + 1).single;
+          final hit = prepared.view.sourceAt(
+            Offset(box.left + .1, box.toRect().center.dy),
+          );
+          expect(hit.isExact, isTrue, reason: 'depth source $i');
+          expect(hit.displayUtf16, i);
+          expect(
+            hit.sourceRune,
+            prepared.projection.sourceAtUtf16(i).sourceRune,
+          );
+        }
+      } finally {
+        prepared.close();
+      }
+      expect(f.cache.activeLeases, 0);
+    });
+  }
+
+  for (final html in [
+    '<ruby><rb>L<ruby><rb>A</rb><rb>B</rb>'
+        '<rtc><rt rbspan="2">xy</rt></rtc></ruby>R</rb><rt>z</rt></ruby>',
+    '<ruby>A<rt>L<ruby>B<rt>b</rt></ruby>R</rt></ruby>',
+    '<ruby><rb>L<ruby>A<rt></rt></ruby>R</rb><rt>z</rt></ruby>',
+    '<ruby style="line-height:1.35"><rb style="line-height:1.15">'
+        'L<ruby>A<rt style="font-size:7.5px">x</rt></ruby>R</rb>'
+        '<rt style="font-size:9.5px">z</rt></ruby>',
+  ]) {
+    test('mixed span, RT, empty rank and fractional native frame: $html', () {
+      final f = _Fixture(html, width: 300, height: 200);
+      f.finish();
+      final prepared = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+      try {
+        validateForumBodyPreparedTextPageBinding(
+          snapshot: f.session.snapshot,
+          pageIndex: 0,
+          layoutId: 'formal-nested',
+          fragments: [prepared],
+        );
+        expect(prepared.projection.text, isNotEmpty);
+        for (var i = 0; i < prepared.projection.text.length; i++) {
+          final boxes = prepared.glyphBoxes(i, i + 1);
+          expect(boxes, hasLength(1), reason: 'actual glyph $i');
+          final box = boxes.single;
+          final hit = prepared.view.sourceAt(
+            Offset(box.left + .1, box.toRect().center.dy),
+          );
+          expect(
+            hit.sourceRune,
+            prepared.projection.sourceAtUtf16(i).sourceRune,
+          );
+          expect(hit.displayUtf16, i);
+        }
+      } finally {
+        prepared.close();
+      }
+      expect(f.cache.activeLeases, 0);
+    });
+  }
+
+  test('intermediate mixed projections count against pre-native limits', () {
+    for (final textLimit in [false, true]) {
+      final f = _Fixture(
+        '<ruby><rb>L<ruby>A<rt>x</rt></ruby>R</rb><rt>z</rt></ruby>',
+        // Display is five characters/runs; the retained LAxR child adds four.
+        maxText: textLimit ? 5 : 100000,
+        maxRuns: textLimit ? 10000 : 5,
+      );
+      expect(
+        f.finish,
+        throwsA(
+          isA<ForumBodyTextPageSessionException>().having(
+            (e) => e.failure,
+            'failure',
+            textLimit
+                ? ForumBodyTextPageSessionFailure.textLimit
+                : ForumBodyTextPageSessionFailure.runLimit,
+          ),
+        ),
+      );
+      expect(f.cache.layoutBuildCount, 0);
+      expect(f.cache.activeLeases, 0);
+    }
+  });
+
+  test('mixed logical handle limit includes its real inner parent', () {
+    final f = _Fixture(
+      '<ruby><rb>L<ruby>A<rt>x</rt></ruby>R</rb><rt>z</rt></ruby>',
+      maxIssued: 4,
+    );
+    f.finish();
+    final page = f.session.snapshot.first;
+    expect(
+      () => f.session.openPagePreparation(0),
+      throwsA(
+        isA<ForumBodyTextPageSessionException>().having(
+          (e) => e.failure,
+          'failure',
+          ForumBodyTextPageSessionFailure.leaseLimit,
+        ),
+      ),
+    );
+    expect(f.session.snapshot.first, same(page));
+    expect(f.session.activeIssuedLeases, 0);
+    expect(f.cache.activeLeases, 0);
+  });
+
+  test('retirement in mixed native scaling cannot publish a late child', () {
+    late final _Fixture f;
+    f = _Fixture(
+      '<ruby><rb>L<ruby>A<rt style="font-size:10px">x</rt></ruby>R</rb>'
+      '<rt style="font-size:8px">z</rt></ruby>',
+      scaler: _CallbackScaler((size) {
+        if (size == 10) f.session.close();
+        return size;
+      }),
+    );
+    expect(f.finish, throwsStateError);
+    expect(f.session.state, ForumBodyTextPageSessionState.closed);
+    expect(f.session.snapshot, isEmpty);
+    expect(f.cache.activeLeases, 0);
+  });
+
+  test(
+    'mixed cooperative source and metric cancellation releases partial work',
+    () {
+      for (final cancelAfter in [1, 5, 30, 60, 120, 240, 480]) {
+        final f = _Fixture(
+          '<ruby><rb>L<ruby><rb>M<ruby>A<rt>x</rt></ruby>N</rb>'
+          '<rt>y</rt></ruby>R</rb><rt>z</rt></ruby>',
+        );
+        for (var i = 0; i < cancelAfter && !f.session.isComplete; i++) {
+          f.session.advance(maxEvents: 1, maxLines: 1);
+        }
+        f.session.close();
+        expect(f.cache.activeLeases, 0);
+        final builds = f.cache.layoutBuildCount;
+        expect(
+          () => f.session.advance(maxEvents: 1, maxLines: 1),
+          throwsStateError,
+        );
+        expect(f.cache.layoutBuildCount, builds);
+      }
+    },
+  );
 
   for (final ratio in [1, 3]) {
     test(
@@ -503,4 +850,13 @@ void main() {
       expect(f.cache.activeLeases, 0);
     },
   );
+}
+
+final class _CallbackScaler extends TextScaler {
+  const _CallbackScaler(this.callback);
+  final double Function(double) callback;
+  @override
+  double scale(double fontSize) => callback(fontSize);
+  @override
+  double get textScaleFactor => scale(20) / 20;
 }

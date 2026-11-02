@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:forum_content_renderer/src/inline/forum_body_ruby_tree_input.dart';
@@ -105,6 +106,10 @@ const _html =
     '<rt style="font-size:10px;color:blue">xy</rt></ruby></rb>'
     '<rt style="font-size:8px;color:green">WXYZAB</rt></ruby>';
 
+const _mixedHtml =
+    '<ruby><rb>L<ruby>A<rt style="font-size:10px">x</rt></ruby>R</rb>'
+    '<rt style="font-size:8px">z</rt></ruby>';
+
 Future<List<int>> _pixels(void Function(Canvas) paint, int ratio) async {
   final recorder = ui.PictureRecorder();
   paint(Canvas(recorder)..scale(ratio.toDouble()));
@@ -125,6 +130,273 @@ Future<List<int>> _pixels(void Function(Canvas) paint, int ratio) async {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(() async {
+    await (FontLoader(
+      'packages/forum_content_renderer/ForumBodyInlineSpace',
+    )..addFont(rootBundle.load('assets/fonts/inline_space.ttf'))).load();
+  });
+
+  test(
+    'mixed metrics and visible cold-cache paths resume without native work',
+    () {
+      final input = _input(_mixedHtml);
+      final cache = _cache(16);
+      final metricsJob = ForumBodyRubyTreeMetricsPreparation(
+        input: input,
+        cache: cache,
+        ensureOwner: () {},
+      );
+      try {
+        for (var i = 0; !metricsJob.cacheMiss && i < 10000; i++) {
+          metricsJob.advance(maxParts: 1, cachedOnly: true);
+        }
+        expect(metricsJob.cacheMiss, isTrue);
+        expect(cache.layoutBuildCount, 0);
+        while (!metricsJob.isReady) {
+          final step = metricsJob.advance(maxParts: 1);
+          expect(step.layoutsBuilt + step.picturesBuilt, lessThanOrEqualTo(1));
+        }
+        final metrics = metricsJob.takeMetrics();
+        expect(metrics.nativeHandleCount, 4);
+        expect(metrics.nativeFootprint, hasLength(4));
+        expect(cache.activeLeases, 0);
+        cache.close();
+
+        final visibleCache = _cache(16);
+        final work = ForumBodyRubyTreePreparation(
+          input: input,
+          metrics: metrics,
+          cache: visibleCache,
+          ensureOwner: () {},
+        );
+        try {
+          for (var i = 0; !work.cacheMiss && i < 10000; i++) {
+            work.advance(maxParts: 1, cachedOnly: true);
+          }
+          expect(work.cacheMiss, isTrue);
+          expect(visibleCache.layoutBuildCount, 0);
+          expect(visibleCache.pictureBuildCount, 0);
+          while (!work.isReady) {
+            work.advance(maxParts: 1);
+          }
+          work.takeLayout().close();
+          final builds = visibleCache.layoutBuildCount;
+          final pictures = visibleCache.pictureBuildCount;
+          _prepare(input, metrics, visibleCache, cachedOnly: true).close();
+          expect(visibleCache.layoutBuildCount, builds);
+          expect(visibleCache.pictureBuildCount, pictures);
+          expect(visibleCache.activeLeases, 0);
+        } finally {
+          work.close();
+          visibleCache.close();
+        }
+      } finally {
+        metricsJob.close();
+        cache.close();
+      }
+    },
+  );
+
+  test('mixed inner parent is charged before shaping with owned prefix', () {
+    final input = _input(_mixedHtml);
+    final sourceCache = _cache(16);
+    final metrics = _measure(input, sourceCache);
+    sourceCache.close();
+    for (final prefixOwned in [false, true]) {
+      // A/x share one glyph-band key; the real child parent and z are distinct.
+      final cache = _cache(prefixOwned ? 3 : 2);
+      final extra = _input('<ruby>Z<rt>z</rt></ruby>');
+      final prefix = prefixOwned
+          ? cache.acquire(
+              content: (extra.nodes.first as ForumBodyRubyTreeText).content,
+              width: 500,
+            )
+          : null;
+      final before = cache.layoutBuildCount;
+      final work = ForumBodyRubyTreePreparation(
+        input: input,
+        metrics: metrics,
+        cache: cache,
+        ensureOwner: () {},
+        additionalOwnedLeases: () => [?prefix],
+      );
+      try {
+        expect(
+          () {
+            while (!work.isReady) {
+              work.advance(maxParts: 1);
+            }
+          },
+          throwsA(
+            isA<ForumBodyParagraphBudgetException>().having(
+              (e) => e.failure,
+              'failure',
+              ForumBodyParagraphBudgetFailure.content,
+            ),
+          ),
+        );
+        expect(cache.layoutBuildCount, before);
+        expect(cache.activeLeases, prefixOwned ? 1 : 0);
+      } finally {
+        work.close();
+        prefix?.release();
+        cache.close();
+      }
+    }
+  });
+
+  test(
+    'mixed foreign pin waits retain child handles and resume same transaction',
+    () {
+      final input = _input(_mixedHtml);
+      final sourceCache = _cache(16);
+      final metrics = _measure(input, sourceCache);
+      sourceCache.close();
+      final cache = _cache(3);
+      final extra = _input('<ruby>Z<rt>z</rt></ruby>');
+      final pinned = cache.acquire(
+        content: (extra.nodes.first as ForumBodyRubyTreeText).content,
+        width: 500,
+      );
+      final work = ForumBodyRubyTreePreparation(
+        input: input,
+        metrics: metrics,
+        cache: cache,
+        ensureOwner: () {},
+      );
+      try {
+        var waiting = false;
+        for (var i = 0; !waiting && i < 10000; i++) {
+          waiting = work.advance(maxParts: 1).waitingForLayoutBudget;
+        }
+        expect(waiting, isTrue);
+        final held = work.nativeLeases.toList();
+        expect(held, isNotEmpty);
+        final builds = cache.layoutBuildCount;
+        final pictures = cache.pictureBuildCount;
+        expect(work.advance().formatUnitsPrepared, 0);
+        expect(work.nativeLeases, orderedEquals(held));
+        expect(cache.layoutBuildCount, builds);
+        expect(cache.pictureBuildCount, pictures);
+        pinned.release();
+        while (!work.isReady) {
+          work.advance(maxParts: 1);
+        }
+        final view = work.takeLayout();
+        try {
+          expect(view.nativeLeases, containsAll(held));
+          expect(view.nativeLeases, hasLength(4));
+        } finally {
+          view.close();
+        }
+        expect(cache.activeLeases, 0);
+      } finally {
+        work.close();
+        pinned.release();
+        cache.close();
+      }
+    },
+  );
+
+  test('mixed plans freeze nonlinear samples for ordinary and ruby fonts', () {
+    final input = _input(_mixedHtml);
+    final cache = _cache(16);
+    final raw = _MutableScaler({20: 30, 10: 12, 8: 9});
+    try {
+      final metrics = _measure(input, cache, scaler: raw);
+      expect(metrics.effectiveScales, {20: 30, 10: 12, 8: 9});
+      raw.sizes.updateAll((key, value) => value * 2);
+      final calls = raw.calls;
+      final view = _prepare(input, metrics, cache);
+      try {
+        expect(view.size.width, 90);
+        expect(view.size.height, closeTo(51, 1e-4));
+        for (final member in view.members) {
+          final box = view
+              .selectionBoxes(
+                nodeIndex: member.nodeIndex,
+                startUtf16: 0,
+                endUtf16: member.content.projection.text.length,
+              )
+              .single;
+          final hit = view.sourceAt(
+            Offset(box.left + .1, box.toRect().center.dy),
+          );
+          expect(
+            hit.content,
+            same(member.content),
+            reason:
+                '${member.content.projection.text} -> ${hit.content.projection.text}, $box',
+          );
+          expect(hit.position.isExact, isTrue);
+        }
+        expect(raw.calls, calls);
+      } finally {
+        view.close();
+      }
+    } finally {
+      cache.close();
+    }
+  });
+
+  test(
+    'mixed owner retirement across native and source phases releases late handles',
+    () {
+      final input = _input(_mixedHtml);
+      final sourceCache = _cache(16);
+      final metrics = _measure(input, sourceCache);
+      sourceCache.close();
+      final countCache = _cache(16);
+      var checks = 0;
+      final countWork = ForumBodyRubyTreePreparation(
+        input: input,
+        metrics: metrics,
+        cache: countCache,
+        ensureOwner: () {
+          checks++;
+        },
+      );
+      while (!countWork.isReady) {
+        countWork.advance(maxParts: 1);
+      }
+      countWork.close();
+      countCache.close();
+      // Sample the whole transaction, including native parent adoption and final
+      // source/background assembly rather than only the early probe prefix.
+      for (final closeAt in {
+        1,
+        5,
+        checks ~/ 3,
+        checks ~/ 2,
+        checks - 1,
+        checks,
+      }) {
+        final cache = _cache(16);
+        var calls = 0;
+        late final ForumBodyRubyTreePreparation work;
+        work = ForumBodyRubyTreePreparation(
+          input: input,
+          metrics: metrics,
+          cache: cache,
+          ensureOwner: () {
+            if (++calls == closeAt) work.close();
+          },
+        );
+        try {
+          expect(() {
+            while (!work.isReady) {
+              work.advance(maxParts: 1);
+            }
+          }, throwsStateError);
+          expect(work.nativeLeases, isEmpty);
+          expect(cache.activeLeases, 0);
+        } finally {
+          work.close();
+          cache.close();
+        }
+      }
+    },
+  );
   for (final ratio in [1, 3]) {
     for (final nestedRT in [false, true]) {
       for (final outer in ['over', 'under']) {

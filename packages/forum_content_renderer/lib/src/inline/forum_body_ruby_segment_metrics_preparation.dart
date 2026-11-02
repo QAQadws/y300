@@ -78,12 +78,15 @@ final class ForumBodyRubySegmentMetricsPreparation {
       ? null
       : _base?.lastBudgetRejection ?? _span?.lastBudgetRejection;
 
-  ForumBodyRubyGroupPreparationStep advance({int maxParts = 32}) {
+  ForumBodyRubyGroupPreparationStep advance({
+    int maxParts = 32,
+    bool cachedOnly = false,
+  }) {
     if (_state != ForumBodyRubySegmentMetricsPreparationState.active) {
       throw StateError('Segment metrics are not active');
     }
     if (maxParts <= 0) throw ArgumentError.value(maxParts);
-    return _operate(() => _advance(maxParts, false));
+    return _operate(() => _advance(maxParts, cachedOnly));
   }
 
   bool tryPrepareCached({int maxParts = 32}) {

@@ -568,10 +568,8 @@ final class ForumBodyTextPageSession {
       cache: _cache,
       textScaler: _textScaler,
       ensureOwner: _ensureActivePlan,
-      validateInput: (input) => _content.checkCounts(
-        input.content.projection.display.text.length,
-        input.content.runs.length,
-      ),
+      validateInput: (input) =>
+          _content.checkCounts(input.retainedTextCodeUnits, input.retainedRuns),
     );
   }
 
@@ -627,7 +625,7 @@ final class _RetainedParagraphs {
   int textCodeUnits = 0;
   int runs = 0;
   void check(ForumBodyTextPageContent content) =>
-      checkCounts(content.textCodeUnits, content.runCount);
+      checkCounts(content.retainedTextCodeUnits, content.retainedRuns);
   void checkCounts(int text, int runCount) {
     if (items.length >= limits.maxParagraphs) {
       throw const ForumBodyTextPageSessionException(
@@ -648,15 +646,15 @@ final class _RetainedParagraphs {
 
   void add(ForumBodyTextPageContent content) {
     items.add(content);
-    textCodeUnits += content.textCodeUnits;
-    runs += content.runCount;
+    textCodeUnits += content.retainedTextCodeUnits;
+    runs += content.retainedRuns;
   }
 
   void retain(int count) {
     while (items.length > count) {
       final removed = items.removeLast();
-      textCodeUnits -= removed.textCodeUnits;
-      runs -= removed.runCount;
+      textCodeUnits -= removed.retainedTextCodeUnits;
+      runs -= removed.retainedRuns;
     }
   }
 }

@@ -1,4 +1,6 @@
 import '../paragraph/forum_body_text_request.dart';
+import '../paragraph/forum_body_native_request.dart';
+import '../paragraph/forum_body_paragraph_content.dart';
 import 'forum_body_ruby_column_request.dart';
 import 'forum_body_ruby_group_metrics.dart';
 import 'forum_body_ruby_segment_request.dart';
@@ -30,6 +32,13 @@ sealed class ForumBodyRubyAtomPlan {
   List<ForumBodyTextRequest> get nativeRequests;
   double get maxWidth;
   int get nativeHandleCount => nativeRequests.length;
+  Iterable<ForumBodyParagraphContent> get sourceContexts =>
+      nativeRequests.map((r) => r.content);
+  Iterable<ForumBodyNativeRequestSlot> get nativeFootprint sync* {
+    for (final request in nativeRequests) {
+      yield (request: request, width: maxWidth, minimumLineCount: 1);
+    }
+  }
 }
 
 final class ForumBodyRubyTreePlan extends ForumBodyRubyAtomPlan {
@@ -43,6 +52,14 @@ final class ForumBodyRubyTreePlan extends ForumBodyRubyAtomPlan {
   final ForumBodyRubyTreeMetrics metrics;
   @override
   List<ForumBodyTextRequest> get nativeRequests => request.nativeRequests;
+  @override
+  int get nativeHandleCount => metrics.nativeHandleCount;
+  @override
+  Iterable<ForumBodyParagraphContent> get sourceContexts =>
+      request.sources.map((s) => s.content);
+  @override
+  Iterable<ForumBodyNativeRequestSlot> get nativeFootprint =>
+      metrics.nativeFootprint;
   @override
   double get maxWidth => request.maxWidth;
 }

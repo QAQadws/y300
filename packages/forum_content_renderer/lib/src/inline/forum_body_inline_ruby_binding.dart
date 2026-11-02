@@ -16,6 +16,7 @@ sealed class _RubyBinding {
   void paint(Canvas canvas, Offset offset);
   _RubySourceHit sourceAt(Offset point);
   List<TextBox> selectionBoxes(int start, int end);
+  List<TextBox> glyphBoxes(int start, int end) => selectionBoxes(start, end);
   void close();
 }
 
@@ -50,6 +51,21 @@ final class _RubyTreeBinding extends _RubyBinding {
           nodeIndex: member.nodeIndex,
           startUtf16: from,
           endUtf16: to,
+        ),
+      ),
+  ];
+  @override
+  List<TextBox> glyphBoxes(int start, int end) => [
+    for (final member in tree.members)
+      ..._selectRubyWindow(
+        windows[member.nodeIndex],
+        start,
+        end,
+        (from, to) => tree.selectionBoxes(
+          nodeIndex: member.nodeIndex,
+          startUtf16: from,
+          endUtf16: to,
+          paintedOnly: true,
         ),
       ),
   ];
@@ -99,6 +115,17 @@ final class _RubyRootFrameBinding extends _RubyBinding {
   @override
   List<TextBox> selectionBoxes(int start, int end) => [
     for (final box in child.selectionBoxes(start, end))
+      TextBox.fromLTRBD(
+        box.left,
+        box.top + frame.childTop,
+        box.right,
+        box.bottom + frame.childTop,
+        box.direction,
+      ),
+  ];
+  @override
+  List<TextBox> glyphBoxes(int start, int end) => [
+    for (final box in child.glyphBoxes(start, end))
       TextBox.fromLTRBD(
         box.left,
         box.top + frame.childTop,

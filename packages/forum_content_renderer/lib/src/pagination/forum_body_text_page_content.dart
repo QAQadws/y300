@@ -8,6 +8,7 @@ import '../inline/forum_body_ruby_column_request.dart';
 import '../inline/forum_body_ruby_group_metrics.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_text_request.dart';
+import '../paragraph/forum_body_native_request.dart';
 import '../inline/forum_body_text_band_content.dart';
 import '../inline/forum_body_ruby_container_background.dart';
 import '../inline/forum_body_ruby_root_box.dart';
@@ -44,9 +45,14 @@ sealed class ForumBodyTextPageContent {
   }) = ForumBodyInlinePageContent.atoms;
   int get textCodeUnits;
   int get runCount;
+  int get retainedTextCodeUnits => textCodeUnits;
+  int get retainedRuns => runCount;
   ForumBodyIdentity get identity;
   double requestWidthFor(ForumBodyTextPageFragment fragment);
   int nativeHandleCountFor(ForumBodyTextPageFragment fragment);
+  Iterable<ForumBodyNativeRequestSlot> nativeFootprintFor(
+    ForumBodyTextPageFragment fragment,
+  );
 }
 
 final class ForumBodyParagraphPageContent extends ForumBodyTextPageContent {
@@ -79,6 +85,18 @@ final class ForumBodyParagraphPageContent extends ForumBodyTextPageContent {
       );
     }
     return 1;
+  }
+
+  @override
+  Iterable<ForumBodyNativeRequestSlot> nativeFootprintFor(
+    ForumBodyTextPageFragment fragment,
+  ) sync* {
+    nativeHandleCountFor(fragment);
+    yield (
+      request: ForumBodyTextRequest.paragraph(content),
+      width: requestWidthFor(fragment),
+      minimumLineCount: fragment.endLine,
+    );
   }
 }
 
@@ -206,9 +224,10 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
           );
         }
       }
-      content.resolveAtomicContexts(index, [
-        for (final request in plan.nativeRequests) request.content,
-      ]);
+      content.resolveAtomicContexts(
+        index,
+        plan.sourceContexts.toList(growable: false),
+      );
       for (final request in plan.nativeRequests) {
         // Keep the complete band input inside this already bounded paragraph.
         // An off-input tail must not evade the session's retention accounting.
@@ -263,6 +282,20 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
   int get textCodeUnits => content.projection.display.text.length;
   @override
   int get runCount => content.runs.length;
+  @override
+  late final retainedTextCodeUnits =
+      textCodeUnits +
+      rubyAtoms.whereType<ForumBodyRubyTreePlan>().fold<int>(
+        0,
+        (sum, atom) => sum + atom.request.extraTextCodeUnits,
+      );
+  @override
+  late final retainedRuns =
+      runCount +
+      rubyAtoms.whereType<ForumBodyRubyTreePlan>().fold<int>(
+        0,
+        (sum, atom) => sum + atom.request.extraRuns,
+      );
   // Intrinsic shaping ignores a valid request width. Preserve an empty physical
   // frame's zero width while still passing native input admission explicitly.
   @override
@@ -307,6 +340,20 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
       visibleAtoms(
         fragment,
       ).fold<int>(0, (sum, index) => sum + rubyAtoms[index].nativeHandleCount);
+
+  @override
+  Iterable<ForumBodyNativeRequestSlot> nativeFootprintFor(
+    ForumBodyTextPageFragment fragment,
+  ) sync* {
+    yield (
+      request: parentRequest,
+      width: requestWidthFor(fragment),
+      minimumLineCount: fragment.endLine,
+    );
+    for (final atom in visibleAtoms(fragment)) {
+      yield* rubyAtoms[atom].nativeFootprint;
+    }
+  }
 
   /// Actual parent plus visible child request slots in a legal display window.
   /// Prefix sums are built in the existing bounded input validation pass;

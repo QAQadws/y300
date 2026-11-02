@@ -2,7 +2,6 @@ import 'dart:math' as math;
 import 'package:flutter/painting.dart';
 import '../inline/forum_body_ruby_group_preparation.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
-import '../paragraph/forum_body_text_request.dart';
 import 'forum_body_prepared_text_fragment.dart';
 import 'forum_body_inline_page_preparation.dart';
 import 'forum_body_text_page_binding.dart';
@@ -365,34 +364,16 @@ final class ForumBodyTextPagePreparation {
     final page = snapshot[pageIndex];
     for (final (index, input) in _inputs.indexed) {
       final fragment = page.fragments[index];
-      switch (input) {
-        case ForumBodyParagraphPageContent():
-          ForumBodyTextRequest.paragraph(input.content).includeBudget(
-            probe,
-            width: input.requestWidthFor(fragment),
-            minimumLineCount: fragment.endLine,
-            textScaler: _textScaler!,
-          );
-          yield true;
-        case ForumBodyInlinePageContent():
-          input.parentRequest.includeBudget(
-            probe,
-            width: input.requestWidthFor(fragment),
-            minimumLineCount: fragment.endLine,
-            textScaler: _textScaler!,
-          );
-          yield true;
-          for (final atom in input.visibleAtoms(fragment)) {
-            final request = input.rubyAtoms[atom];
-            for (final child in request.nativeRequests) {
-              child.includeBudget(
-                probe,
-                width: request.maxWidth,
-                textScaler: _textScaler!,
-              );
-              yield false;
-            }
-          }
+      var parent = true;
+      for (final slot in input.nativeFootprintFor(fragment)) {
+        slot.request.includeBudget(
+          probe,
+          width: slot.width,
+          minimumLineCount: slot.minimumLineCount,
+          textScaler: _textScaler!,
+        );
+        yield parent;
+        parent = false;
       }
     }
   }

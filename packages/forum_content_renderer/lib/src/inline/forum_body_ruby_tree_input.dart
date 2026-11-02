@@ -10,24 +10,36 @@ import 'forum_body_ruby_child_input.dart';
 import 'forum_body_ruby_container_background.dart';
 import 'forum_body_ruby_content.dart';
 import 'forum_body_ruby_root_box.dart';
+import 'forum_body_inline_plan_input.dart';
+import 'forum_body_inline_source_preparation.dart';
 
 /// Internal postorder graph of real single-column nested boxes. Source leaves
 /// stay in original base/annotation order; their IDs are not DOM offsets.
-/// Mixed child sequences need a native inline context and are refused here.
+/// Mixed sequences keep a real intrinsic inline plan, not summed text widths.
 final class ForumBodyRubyTreeInput {
   // Both lists transfer from the retired builder; neither is mutated again.
   ForumBodyRubyTreeInput._(
     List<ForumBodyRubyTreeNode> nodes,
     List<ForumBodyTextRequest> requests,
+    List<ForumBodyRubyTreeSource> sources,
     this.maxWidth, [
     Object? structure,
   ]) : nodes = UnmodifiableListView(nodes),
        nativeRequests = UnmodifiableListView(requests),
+       sources = UnmodifiableListView(sources),
        _structure = structure ?? Object();
   final Object _structure;
   final List<ForumBodyRubyTreeNode> nodes;
   final double maxWidth;
   final List<ForumBodyTextRequest> nativeRequests;
+  final List<ForumBodyRubyTreeSource> sources;
+  late final extraTextCodeUnits = nodes
+      .whereType<ForumBodyRubyTreeInline>()
+      .fold<int>(0, (sum, node) => sum + node.input.retainedTextCodeUnits);
+  late final extraRuns = nodes.whereType<ForumBodyRubyTreeInline>().fold<int>(
+    0,
+    (sum, node) => sum + node.input.retainedRuns,
+  );
   int get root => nodes.length - 1;
   ForumBodyRubyTreeGroup get rootGroup => nodes.last as ForumBodyRubyTreeGroup;
   bool hasSameStructure(ForumBodyRubyTreeInput other) =>
@@ -57,12 +69,26 @@ final class ForumBodyRubyTreeInput {
         mapped.add(node);
       }
     }
-    return ForumBodyRubyTreeInput._(mapped, requests, maxWidth, _structure);
+    return ForumBodyRubyTreeInput._(
+      mapped,
+      requests,
+      sources,
+      maxWidth,
+      _structure,
+    );
   }
 }
 
 sealed class ForumBodyRubyTreeNode {
   const ForumBodyRubyTreeNode();
+}
+
+final class ForumBodyRubyTreeSource {
+  const ForumBodyRubyTreeSource(this.id, this.content);
+  // Text nodes retain their graph ID. Inline contexts have distinct negative
+  // IDs in this graph; neither kind is a DOM/source/semantic coordinate.
+  final int id;
+  final ForumBodyParagraphContent content;
 }
 
 final class ForumBodyRubyTreeText extends ForumBodyRubyTreeNode {
@@ -95,6 +121,17 @@ final class ForumBodyRubyTreeFrame extends ForumBodyRubyTreeContainer {
   final int child;
 }
 
+final class ForumBodyRubyTreeInline extends ForumBodyRubyTreeContainer {
+  ForumBodyRubyTreeInline._(
+    super.font,
+    super.background,
+    this.input,
+    List<ForumBodyRubyTreeSource> sources,
+  ) : sources = UnmodifiableListView(sources);
+  final ForumBodyInlinePlanInput input;
+  final List<ForumBodyRubyTreeSource> sources;
+}
+
 final class ForumBodyRubyTreeGroup extends ForumBodyRubyTreeContainer {
   ForumBodyRubyTreeGroup._(
     super.font,
@@ -125,6 +162,7 @@ final class ForumBodyRubyTreeInputPreparation {
   List<_TreeWork> _stack;
   List<ForumBodyRubyTreeNode> _nodes = [];
   List<ForumBodyTextRequest> _requests = [];
+  List<ForumBodyRubyTreeSource> _sources = [];
   final double maxWidth;
   int? _completedChild;
   bool _retired = false;
@@ -148,11 +186,14 @@ final class ForumBodyRubyTreeInputPreparation {
 
   void _finish(ForumBodyRubyTreeNode node) {
     _completedChild = _nodes.length;
+    if (node is ForumBodyRubyTreeText) {
+      _sources.add(ForumBodyRubyTreeSource(_nodes.length, node.content));
+    }
     _nodes.add(node);
     if (node is ForumBodyRubyTreeText && node.needsNative) {
       _requests.add(node.request);
     }
-    _stack.removeLast();
+    _stack.removeLast().close();
   }
 
   int _takeChild() {
@@ -176,7 +217,12 @@ final class ForumBodyRubyTreeInputPreparation {
 
   ForumBodyRubyTreeInput takeInput() {
     if (!isReady) throw StateError('Ruby tree input is incomplete');
-    final result = ForumBodyRubyTreeInput._(_nodes, _requests, maxWidth);
+    final result = ForumBodyRubyTreeInput._(
+      _nodes,
+      _requests,
+      _sources,
+      maxWidth,
+    );
     close();
     return result;
   }
@@ -185,15 +231,20 @@ final class ForumBodyRubyTreeInputPreparation {
     if (_retired) return;
     _retired = true;
     _scope = null;
+    for (final work in _stack) {
+      work.close();
+    }
     _stack = [];
     _nodes = [];
     _requests = [];
+    _sources = [];
     _completedChild = null;
   }
 }
 
 sealed class _TreeWork {
   void advance(ForumBodyRubyTreeInputPreparation owner);
+  void close() {}
 }
 
 final class _GroupWork extends _TreeWork {
@@ -285,6 +336,9 @@ final class _ChildWork extends _TreeWork {
   final ForumBodyRubyChildInput input;
   final bool annotation;
   bool awaitingChild = false;
+  ForumBodyInlineSourcePreparation? _inline;
+  ForumBodyInlinePlanInput? _inlineInput;
+  final _inlineSources = <ForumBodyRubyTreeSource>[];
   @override
   void advance(ForumBodyRubyTreeInputPreparation owner) {
     switch (input) {
@@ -301,11 +355,48 @@ final class _ChildWork extends _TreeWork {
         );
       case ForumBodyRubySequenceChildInput():
         final sequence = input as ForumBodyRubySequenceChildInput;
-        if (!awaitingChild) {
-          if (sequence.parts.length != 1 ||
-              sequence.parts.single is! ForumBodyRubyNestedContent) {
-            _unsupported(sequence.path);
+        final onlyNested =
+            sequence.parts.length == 1 &&
+            sequence.parts.single is ForumBodyRubyNestedContent &&
+            (sequence.parts.single as ForumBodyRubyNestedContent)
+                    .groups
+                    .length ==
+                1;
+        if (!onlyNested) {
+          final source = _inline ??= ForumBodyInlineSourcePreparation(
+            input: sequence.toInlineFlow(trimCollapsibleEdges: annotation),
+            width: owner.maxWidth,
+            ensureOwner: () {
+              if (owner._retired) {
+                throw StateError('Ruby input owner is retired');
+              }
+            },
+          );
+          if (_inlineInput == null) {
+            source.advance(maxParts: 1);
+            if (source.isReady) _inlineInput = source.takeInput();
+            return;
           }
+          if (_inlineSources.length < _inlineInput!.sourceContexts.length) {
+            final source = ForumBodyRubyTreeSource(
+              -(owner._sources.length + 1),
+              _inlineInput!.sourceContexts[_inlineSources.length],
+            );
+            owner._sources.add(source);
+            _inlineSources.add(source);
+            return;
+          }
+          owner._finish(
+            ForumBodyRubyTreeInline._(
+              _font(sequence),
+              _background(sequence),
+              _inlineInput!,
+              _inlineSources,
+            ),
+          );
+          return;
+        }
+        if (!awaitingChild) {
           final nested = sequence.parts.single as ForumBodyRubyNestedContent;
           if (nested.groups.length != 1) _unsupported(nested.path);
           awaitingChild = true;
@@ -314,29 +405,41 @@ final class _ChildWork extends _TreeWork {
         }
         owner._finish(
           ForumBodyRubyTreeFrame._(
-            ForumBodyRubyRootBoxInput(
-              rootPath: sequence.path,
-              fontStrut: ForumBodyParagraphContent.anonymousInline(
-                identity: sequence.identity,
-                fontRevision: sequence.fontRevision,
-                styleRevision: sequence.styleRevision,
-                style: sequence.style,
-              ),
-            ),
-            sequence.source == null
-                ? null
-                : ForumBodyRubyContainerBackground.fromContainer(
-                    identity: sequence.identity,
-                    fontRevision: sequence.fontRevision,
-                    styleRevision: sequence.styleRevision,
-                    path: sequence.path,
-                    style: sequence.style,
-                  ),
+            _font(sequence),
+            _background(sequence),
             sequence,
             owner._takeChild(),
           ),
         );
     }
+  }
+
+  ForumBodyRubyRootBoxInput _font(ForumBodyRubySequenceChildInput sequence) =>
+      ForumBodyRubyRootBoxInput(
+        rootPath: sequence.path,
+        fontStrut: ForumBodyParagraphContent.anonymousInline(
+          identity: sequence.identity,
+          fontRevision: sequence.fontRevision,
+          styleRevision: sequence.styleRevision,
+          style: sequence.style,
+        ),
+      );
+  ForumBodyRubyContainerBackground? _background(
+    ForumBodyRubySequenceChildInput sequence,
+  ) => sequence.source == null
+      ? null
+      : ForumBodyRubyContainerBackground.fromContainer(
+          identity: sequence.identity,
+          fontRevision: sequence.fontRevision,
+          styleRevision: sequence.styleRevision,
+          path: sequence.path,
+          style: sequence.style,
+        );
+  @override
+  void close() {
+    _inline?.close();
+    _inline = null;
+    _inlineInput = null;
   }
 }
 

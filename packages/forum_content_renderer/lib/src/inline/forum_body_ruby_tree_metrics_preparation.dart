@@ -5,6 +5,10 @@ import 'package:flutter/painting.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_text_request.dart';
 import '../paragraph/forum_body_text_request_preparation.dart';
+import '../paragraph/forum_body_native_request.dart';
+import '../pagination/forum_body_text_page_content.dart';
+import '../pagination/forum_body_text_page_composer.dart';
+import 'forum_body_inline_plan_preparation.dart';
 import 'forum_body_ruby_container_background.dart';
 import 'forum_body_ruby_group_metrics.dart';
 import 'forum_body_ruby_group_preparation.dart';
@@ -13,13 +17,15 @@ import 'forum_body_ruby_tree_input.dart';
 import 'forum_body_text_band_content.dart';
 import 'forum_body_text_band_layout.dart';
 
-/// Numeric postorder snapshot. It has no native handles, paint, source hit or
-/// coverage authority; a readable binding must qualify actual current leaves.
+/// Pure postorder plan. Intrinsic children retain their actual source-bound
+/// page input; no native handle or owner is retained. Visible binding must
+/// qualify every actual leaf AND inner parent before claiming coverage.
 final class ForumBodyRubyTreeMetrics {
   ForumBodyRubyTreeMetrics._(
     this.input,
     List<ForumBodyRubyTreeNodeMetrics> nodes,
     Map<double, double> scales,
+    this.nativeHandleCount,
   )
     // The worker seals before transferring this append-only list.
     : nodes = UnmodifiableListView(nodes),
@@ -34,6 +40,22 @@ final class ForumBodyRubyTreeMetrics {
       );
   final ForumBodyRubyTreeInput input;
   final List<ForumBodyRubyTreeNodeMetrics> nodes;
+  final int nativeHandleCount;
+  Iterable<ForumBodyNativeRequestSlot> get nativeFootprint sync* {
+    for (var i = 0; i < input.nodes.length; i++) {
+      final node = input.nodes[i];
+      if (node is ForumBodyRubyTreeText && node.needsNative) {
+        yield (
+          request: node.request,
+          width: input.maxWidth,
+          minimumLineCount: 1,
+        );
+      } else if (node is ForumBodyRubyTreeInline) {
+        final child = (nodes[i] as ForumBodyRubyTreeContainerMetrics).inline!;
+        yield* child.input.nativeFootprintFor(child.fragment);
+      }
+    }
+  }
 
   /// Exact per-font inputs used for native planning, including root/background
   /// fonts and the complete native band when a leaf borrows a shared band key.
@@ -43,7 +65,12 @@ final class ForumBodyRubyTreeMetrics {
   ForumBodyRubyChildMetrics get box => nodes.last.box!;
   ForumBodyRubyTreeContainerMetrics get root =>
       nodes.last as ForumBodyRubyTreeContainerMetrics;
-  ForumBodyRubyTreeMetrics._copy(this.input, this.nodes, this.textScaler);
+  ForumBodyRubyTreeMetrics._copy(
+    this.input,
+    this.nodes,
+    this.textScaler,
+    this.nativeHandleCount,
+  );
 
   /// A band isolation retry can rebind native requests while retaining exactly
   /// the original immutable structural graph and source/style objects.
@@ -53,7 +80,12 @@ final class ForumBodyRubyTreeMetrics {
     }
     return identical(input, current)
         ? this
-        : ForumBodyRubyTreeMetrics._copy(current, nodes, textScaler);
+        : ForumBodyRubyTreeMetrics._copy(
+            current,
+            nodes,
+            textScaler,
+            nativeHandleCount,
+          );
   }
 
   /// Only the existing row alignment may reposition the outer stack. Require
@@ -95,6 +127,7 @@ final class ForumBodyRubyTreeMetrics {
       input,
       UnmodifiableListView(_TreeRootMetricsView(nodes, replacement)),
       textScaler,
+      nativeHandleCount,
     );
   }
 }
@@ -137,6 +170,7 @@ final class ForumBodyRubyTreeContainerMetrics
     required this.backgroundFont,
     required this.frame,
     this.group,
+    this.inline,
   }) : box = ForumBodyRubyChildMetrics(
          bounds: Offset.zero & frame.size,
          alphabeticBaseline: frame.baseline,
@@ -145,8 +179,22 @@ final class ForumBodyRubyTreeContainerMetrics
   final ForumBodyRubyContainerFontBox? backgroundFont;
   final ForumBodyRubyAtomFrame frame;
   final ForumBodyRubyGroupMetrics? group;
+  final ForumBodyRubyInlineChildMetrics? inline;
   @override
   final ForumBodyRubyChildMetrics box;
+}
+
+final class ForumBodyRubyInlineChildMetrics {
+  const ForumBodyRubyInlineChildMetrics(
+    this.input,
+    this.fragment,
+    this.baseline,
+  );
+  final ForumBodyInlinePageContent input;
+  final ForumBodyTextPageFragment fragment;
+  final double baseline;
+  Size get size => Size(fragment.width, fragment.height);
+  int get nativeHandleCount => input.nativeHandleCountFor(fragment);
 }
 
 enum _State { active, ready, transferred, failed, closed }
@@ -178,6 +226,11 @@ final class ForumBodyRubyTreeMetricsPreparation {
   ForumBodyTextRequest? _failedRequest;
   ForumBodyTextRequest? get failedRequest => _failedRequest;
   ForumBodyRubyGroupGeometry? _geometry;
+  ForumBodyInlinePlanPreparation? _inline;
+  Iterator<double>? _inlineFonts;
+  Map<double, double> _inlineScales = {};
+  bool _inlineFontsComplete = false;
+  int _nativeCount = 0;
   ForumBodyRubyRootFontBox? _font;
   ForumBodyRubyContainerFontBox? _backgroundFont;
   List<ForumBodyRubyTreeNodeMetrics> _nodes = [];
@@ -192,6 +245,7 @@ final class ForumBodyRubyTreeMetricsPreparation {
   int get measuredNodeCount => _nodes.length;
   Iterable<ForumBodyNativeParagraphLease> get nativeLeases => [
     if (_member != null) ..._member!.nativeLeases,
+    if (_inline != null) ..._inline!.nativeLeases,
   ];
   ForumBodyParagraphBudgetException? get lastBudgetRejection =>
       _member?.lastBudgetRejection;
@@ -238,7 +292,12 @@ final class ForumBodyRubyTreeMetricsPreparation {
 
   int _advanceNode(bool cachedOnly) {
     if (_nodes.length == _input!.nodes.length) {
-      _result = ForumBodyRubyTreeMetrics._(_input!, _nodes, _scales);
+      _result = ForumBodyRubyTreeMetrics._(
+        _input!,
+        _nodes,
+        _scales,
+        _nativeCount,
+      );
       _state = _State.ready;
       return 1;
     }
@@ -258,6 +317,7 @@ final class ForumBodyRubyTreeMetricsPreparation {
             ),
           ),
         );
+        _nativeCount++;
       });
     }
     final container = node as ForumBodyRubyTreeContainer;
@@ -289,6 +349,8 @@ final class ForumBodyRubyTreeMetricsPreparation {
       );
     }
     switch (container) {
+      case ForumBodyRubyTreeInline():
+        return _advanceInline(container, cachedOnly);
       case ForumBodyRubyTreeFrame(:final child):
         final box = _nodes[child].box!;
         _seal(
@@ -339,13 +401,18 @@ final class ForumBodyRubyTreeMetricsPreparation {
     return 1;
   }
 
-  void _seal(ForumBodyRubyAtomFrame frame, {ForumBodyRubyGroupMetrics? group}) {
+  void _seal(
+    ForumBodyRubyAtomFrame frame, {
+    ForumBodyRubyGroupMetrics? group,
+    ForumBodyRubyInlineChildMetrics? inline,
+  }) {
     _nodes.add(
       ForumBodyRubyTreeContainerMetrics(
         font: _font!,
         backgroundFont: _backgroundFont,
         frame: frame,
         group: group,
+        inline: inline,
       ),
     );
     _geometry?.close();
@@ -353,6 +420,96 @@ final class ForumBodyRubyTreeMetricsPreparation {
     _font = null;
     _backgroundFont = null;
     _rank = -1;
+  }
+
+  int _advanceInline(ForumBodyRubyTreeInline node, bool cachedOnly) {
+    if (!_inlineFontsComplete) {
+      final fonts = _inlineFonts ??= node.input.nativeFontSizes.iterator;
+      if (fonts.moveNext()) {
+        final size = fonts.current;
+        var scaled = _scales[size];
+        if (scaled == null) {
+          scaled = _scaler!.scale(size);
+          _guard();
+          _scales[size] = scaled;
+        }
+        _inlineScales[size] = scaled;
+      } else {
+        _inlineFonts = null;
+        _inlineFontsComplete = true;
+      }
+      return 1;
+    }
+    final work = _inline ??= ForumBodyInlinePlanPreparation(
+      input: node.input,
+      cache: _cache!,
+      ensureOwner: _guard,
+      textScaler: _TreeNativeTextScaler(
+        Map.unmodifiable(_inlineScales),
+        node.input.content.style.textStyle.fontSize!,
+      ),
+    );
+    final step = work.advance(maxParts: 1, cachedOnly: cachedOnly);
+    _guard();
+    _waiting = step.waitingForLayoutBudget;
+    _cacheMiss = work.cacheMiss;
+    if (!work.isReady) return step.partsPrepared;
+    final ready = work.take();
+    _inline = null;
+    work.close();
+    final lease = ready.lease;
+    try {
+      _guard();
+      final layout = lease.layout;
+      if (layout.lines.length != 1) {
+        throw StateError('Intrinsic ruby child is not one native row');
+      }
+      final baseline = layout.lines.single.baseline;
+      final composer = ForumBodyTextPageComposer(
+        identity: ready.content.identity,
+        layoutId: 'intrinsic-ruby-child',
+        // Capacity must be positive even for a zero physical native frame;
+        // the composed fragment retains the actual zero width/height.
+        width: layout.width == 0 ? 1 : layout.width,
+        height: layout.height == 0 ? 1 : layout.height,
+        maxPages: 1,
+        maxFragments: 1,
+      );
+      late ForumBodyTextPageFragment fragment;
+      try {
+        composer.appendInline(
+          lease: lease,
+          paragraphIndex: 0,
+          left: 0,
+          spaceBefore: 0,
+          spaceAtPageStart: 0,
+          nativeHandleCountInRange: ready.content.nativeHandleCountInRange,
+        );
+        composer.advance(maxLines: 1);
+        if (!composer.needsInput) {
+          throw StateError('Intrinsic ruby child exceeded one native row');
+        }
+        composer.finish();
+        fragment = composer.snapshot[0].fragments.single;
+      } finally {
+        composer.close();
+      }
+      final child = ForumBodyRubyInlineChildMetrics(
+        ready.content,
+        fragment,
+        baseline,
+      );
+      _nativeCount += child.nativeHandleCount;
+      _seal(
+        _font!.enclose(childSize: child.size, childBaseline: child.baseline),
+        inline: child,
+      );
+      _inlineScales = {};
+      _inlineFontsComplete = false;
+      return step.partsPrepared;
+    } finally {
+      lease.release();
+    }
   }
 
   int _read(
@@ -462,6 +619,11 @@ final class ForumBodyRubyTreeMetricsPreparation {
   void _dropOwner() {
     _member?.close();
     _member = null;
+    _inline?.close();
+    _inline = null;
+    _inlineFonts = null;
+    _inlineScales = {};
+    _inlineFontsComplete = false;
     _currentRequest = null;
     _geometry?.close();
     _geometry = null;

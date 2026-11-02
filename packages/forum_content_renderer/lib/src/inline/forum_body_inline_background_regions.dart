@@ -3,7 +3,7 @@ part of 'forum_body_inline_paragraph_view.dart';
 /// Merge one source root once per actual native row, before any glyph paint.
 /// Building is charged with each already-bounded visible atom binding.
 final class _RubyBackgroundRegions {
-  var _rects = <({Rect rect, Color color})>[];
+  var _rects = <({Rect rect, ForumBodyRubyContainerFontBox font})>[];
   final _indices =
       <(String, int), ({int index, ForumBodyRubyContainerFontBox font})>{};
   void add(ForumBodyRubyContainerFontBox font, int row, Rect rect) {
@@ -12,7 +12,7 @@ final class _RubyBackgroundRegions {
     final old = _indices[key];
     if (old == null) {
       _indices[key] = (index: _rects.length, font: font);
-      _rects.add((rect: rect, color: font.background.color));
+      _rects.add((rect: rect, font: font));
     } else {
       if (old.font.background.color != font.background.color ||
           old.font.background.fontStrut.style.textStyle !=
@@ -23,12 +23,12 @@ final class _RubyBackgroundRegions {
       }
       _rects[old.index] = (
         rect: _rects[old.index].rect.expandToInclude(rect),
-        color: font.background.color,
+        font: font,
       );
     }
   }
 
-  List<({Rect rect, Color color})> take() {
+  List<({Rect rect, ForumBodyRubyContainerFontBox font})> take() {
     final result = UnmodifiableListView(_rects);
     _rects = [];
     _indices.clear();

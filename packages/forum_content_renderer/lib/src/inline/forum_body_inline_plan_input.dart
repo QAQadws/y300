@@ -29,6 +29,9 @@ final class ForumBodyInlinePlanInput {
     this.width,
     List<int> levelIds,
     this.layoutMode,
+    this.sourceContexts,
+    this.retainedTextCodeUnits,
+    this.retainedRuns,
   ) : rubyLevelIds = List.unmodifiable(levelIds),
       atomEngineOffsets = List.unmodifiable(
         content
@@ -36,7 +39,7 @@ final class ForumBodyInlinePlanInput {
             .atoms
             .map((atom) => atom.engineUtf16),
       );
-  static const revision = 23;
+  static const revision = 24;
 
   factory ForumBodyInlinePlanInput(
     ForumBodyInlineFlowContent input,
@@ -181,9 +184,9 @@ final class ForumBodyInlinePlanInput {
               );
             }
             final start = offset;
-            for (final node in tree.nodes) {
-              if (node is ForumBodyRubyTreeText && !node.content.isSourceFree) {
-                sourceOrder.add(append(node.content));
+            for (final source in tree.sources) {
+              if (!source.content.isSourceFree) {
+                sourceOrder.add(append(source.content));
               }
             }
             if (start == offset) _unsupported(group.rootPath);
@@ -616,12 +619,78 @@ final class ForumBodyInlinePlanInput {
       width,
       levelIds,
       input.layoutMode,
+      List.unmodifiable([for (final index in sourceOrder) contexts[index]]),
+      content.projection.display.text.length +
+          requestsByAtom.fold<int>(
+            0,
+            (sum, atom) =>
+                sum +
+                (atom is ForumBodyRubyTreeAtomRequest
+                    ? atom.value.extraTextCodeUnits
+                    : 0),
+          ),
+      content.runs.length +
+          requestsByAtom.fold<int>(
+            0,
+            (sum, atom) =>
+                sum +
+                (atom is ForumBodyRubyTreeAtomRequest
+                    ? atom.value.extraRuns
+                    : 0),
+          ),
     );
   }
 
   final ForumBodyInlineSpanContent content;
   final double width;
   final ForumBodyParagraphLayoutMode layoutMode;
+
+  /// Explicit original order, independent of column display order.
+  final List<ForumBodyParagraphContent> sourceContexts;
+  final int retainedTextCodeUnits;
+  final int retainedRuns;
+  Iterable<double> get nativeFontSizes sync* {
+    yield content.style.textStyle.fontSize!;
+    for (final run in content.runs) {
+      yield run.style.textStyle.fontSize!;
+    }
+    final bands = Set<ForumBodyTextBandContent>.identity();
+    for (final atom in atoms) {
+      if (atom.rootBox case final root?) {
+        yield root.fontStrut.style.textStyle.fontSize!;
+      }
+      if (atom.background case final background?) {
+        yield background.fontStrut.style.textStyle.fontSize!;
+      }
+      for (final request in atom.nativeRequests) {
+        final contexts = request is ForumBodyTextBandChildRequest
+            ? bands.add(request.band)
+                  ? request.band.contexts
+                  : const <ForumBodyParagraphContent>[]
+            : [request.content];
+        for (final context in contexts) {
+          yield context.style.textStyle.fontSize!;
+          for (final run in context.runs) {
+            yield run.style.textStyle.fontSize!;
+          }
+        }
+      }
+      if (atom is ForumBodyRubyTreeAtomRequest) {
+        for (final node in atom.value.nodes) {
+          if (node is ForumBodyRubyTreeContainer) {
+            yield node.font.fontStrut.style.textStyle.fontSize!;
+            if (node.background case final background?) {
+              yield background.fontStrut.style.textStyle.fontSize!;
+            }
+          }
+          if (node is ForumBodyRubyTreeInline) {
+            yield* node.input.nativeFontSizes;
+          }
+        }
+      }
+    }
+  }
+
   final List<int> rubyLevelIds;
   final List<int> atomEngineOffsets;
   // Rebound only before publication when native isolation supplies a new

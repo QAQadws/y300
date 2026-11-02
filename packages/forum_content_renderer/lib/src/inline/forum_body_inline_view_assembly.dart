@@ -296,9 +296,9 @@ final class ForumBodyInlineViewAssembly {
     return low;
   }
 
-  void _own(ForumBodyTextLease lease) {
+  void _own(ForumBodyNativeParagraphLease lease) {
     if (!_cache!.ownsLease(lease) ||
-        !lease.layout.isPaintPrepared ||
+        (lease is ForumBodyTextLease && !lease.layout.isPaintPrepared) ||
         !_checked.add(lease)) {
       _fail(ForumBodyInlineViewFailure.leases);
     }

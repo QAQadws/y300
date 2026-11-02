@@ -97,10 +97,16 @@ final class ForumBodyInlineParagraphView {
   ForumBodyInlineParagraphLease? _parent;
   ForumBodyInlineParagraphFragment? _fragment;
   Map<int, _RubyBinding> _children;
-  List<({Rect rect, Color color})> _backgrounds;
-  List<({Rect rect, Color color})> get containerBackgrounds {
+  List<({Rect rect, ForumBodyRubyContainerFontBox font})> _backgrounds;
+  List<({Rect rect, ForumBodyRubyContainerFontBox font})>
+  get backgroundSurfaces {
     _ensureActive();
     return _backgrounds;
+  }
+
+  List<({Rect rect, Color color})> get containerBackgrounds {
+    _ensureActive();
+    return _InlineBackgroundColorView(_backgrounds);
   }
 
   late final Rect paintBounds = _backgrounds.fold(
@@ -144,7 +150,10 @@ final class ForumBodyInlineParagraphView {
   void paintContainerBackgrounds(Canvas canvas, Offset offset) {
     _ensureActive();
     for (final region in _backgrounds) {
-      canvas.drawRect(region.rect.shift(offset), Paint()..color = region.color);
+      canvas.drawRect(
+        region.rect.shift(offset),
+        Paint()..color = region.font.background.color,
+      );
     }
   }
 
@@ -173,7 +182,13 @@ final class ForumBodyInlineParagraphView {
   /// Returns parent display coordinates and the ACTUAL child's source point.
   /// Off-window points clamp to this view and remain approximate, never borrow
   /// a hidden sibling's native hit or fabricate an inner placeholder offset.
-  HtmlProjectedSourcePosition sourceAt(Offset offset) {
+  HtmlProjectedSourcePosition sourceAt(Offset offset) =>
+      sourceHitAt(offset).position;
+
+  /// Retains the actual bound child window across recursive parent views.
+  /// Adjacent source endpoints alone cannot identify which child was hit.
+  ({ForumBodyInlineContext? window, HtmlProjectedSourcePosition position})
+  sourceHitAt(Offset offset) {
     _ensureActive();
     if (!offset.dx.isFinite || !offset.dy.isFinite) {
       throw ArgumentError.value(offset);
@@ -182,10 +197,13 @@ final class ForumBodyInlineParagraphView {
       final empty = content.projection.display.sourceAtUtf16(
         coverageStartUtf16,
       );
-      return HtmlProjectedSourcePosition(
-        sourceRune: empty.sourceRune,
-        displayUtf16: empty.displayUtf16,
-        isExact: false,
+      return (
+        window: null,
+        position: HtmlProjectedSourcePosition(
+          sourceRune: empty.sourceRune,
+          displayUtf16: empty.displayUtf16,
+          isExact: false,
+        ),
       );
     }
     final point = Offset(
@@ -195,13 +213,16 @@ final class ForumBodyInlineParagraphView {
     final hit = _fragment!.hitAt(point);
     final display = content.projection.display;
     HtmlProjectedSourcePosition position;
+    ForumBodyInlineContext? window;
     if (hit is ForumBodyInlineAtomHit) {
       final binding = _children[hit.index];
       if (binding == null) _fail(ForumBodyInlineViewFailure.coverage);
       final child = binding.sourceAt(hit.offset);
+      window = child.window;
       position = _projectChildHit(child);
     } else {
-      position = (hit as ForumBodyInlineTextHit).position;
+      final textHit = hit as ForumBodyInlineTextHit;
+      position = textHit.position;
       // Native row rounding can leave a fractional strip outside an atom's
       // frame. Root leading in that strip still belongs to the actual row,
       // not an exact parent caret at a placeholder boundary.
@@ -214,11 +235,14 @@ final class ForumBodyInlineParagraphView {
           }
           final local = point - _origin(entry.key);
           if (binding.hitsOuterLeading(local)) {
-            position = _projectChildHit(binding.sourceAt(local));
+            final child = binding.sourceAt(local);
+            window = child.window;
+            position = _projectChildHit(child);
             break;
           }
         }
       }
+      window ??= _plainWindowAt(position.displayUtf16, textHit.affinity);
     }
     final within = position.displayUtf16.clamp(
       coverageStartUtf16,
@@ -226,17 +250,69 @@ final class ForumBodyInlineParagraphView {
     );
     if (within != position.displayUtf16) {
       final projected = display.sourceAtUtf16(within);
-      return HtmlProjectedSourcePosition(
-        sourceRune: projected.sourceRune,
-        displayUtf16: projected.displayUtf16,
-        isExact: false,
+      return (
+        window: null,
+        position: HtmlProjectedSourcePosition(
+          sourceRune: projected.sourceRune,
+          displayUtf16: projected.displayUtf16,
+          isExact: false,
+        ),
       );
     }
-    return HtmlProjectedSourcePosition(
-      sourceRune: position.sourceRune,
-      displayUtf16: position.displayUtf16,
-      isExact: position.isExact && point == offset && height > 0,
+    return (
+      window: window,
+      position: HtmlProjectedSourcePosition(
+        sourceRune: position.sourceRune,
+        displayUtf16: position.displayUtf16,
+        isExact: position.isExact && point == offset && height > 0,
+      ),
     );
+  }
+
+  ForumBodyInlineContext? _plainWindowAt(int position, TextAffinity affinity) {
+    final windows = content.contexts;
+    final atoms = content.projection.atoms;
+    var low = 0, high = windows.length;
+    while (low < high) {
+      final mid = (low + high) ~/ 2;
+      if (windows[mid].endUtf16 < position) {
+        low = mid + 1;
+      } else {
+        high = mid;
+      }
+    }
+    ForumBodyInlineContext? edge;
+    for (
+      var i = low;
+      i < windows.length && windows[i].startUtf16 <= position;
+      i++
+    ) {
+      final window = windows[i];
+      if (window.startUtf16 == window.endUtf16) continue;
+      // A native ordinary-text hit cannot belong to a child's source window,
+      // even when their caret endpoints share the same raw source coordinate.
+      var first = 0, after = atoms.length;
+      while (first < after) {
+        final mid = (first + after) ~/ 2;
+        if (atoms[mid].displayEndUtf16 <= window.startUtf16) {
+          first = mid + 1;
+        } else {
+          after = mid;
+        }
+      }
+      if (first < atoms.length &&
+          atoms[first].displayStartUtf16 <= window.startUtf16 &&
+          window.endUtf16 <= atoms[first].displayEndUtf16) {
+        continue;
+      }
+      edge ??= window;
+      if (affinity == TextAffinity.upstream
+          ? window.startUtf16 < position
+          : position < window.endUtf16) {
+        return window;
+      }
+    }
+    return edge;
   }
 
   HtmlProjectedSourcePosition _projectChildHit(_RubySourceHit child) {
@@ -319,10 +395,10 @@ final class ForumBodyInlineParagraphView {
     for (final atom in selected.atoms) {
       final binding = _children[atom.index];
       if (binding == null) _fail(ForumBodyInlineViewFailure.coverage);
-      for (final box in binding.selectionBoxes(
-        atom.startUtf16,
-        atom.endUtf16,
-      )) {
+      final boxes = paintedOnly
+          ? binding.glyphBoxes(atom.startUtf16, atom.endUtf16)
+          : binding.selectionBoxes(atom.startUtf16, atom.endUtf16);
+      for (final box in boxes) {
         add(box, _origin(atom.index));
       }
     }
@@ -347,4 +423,23 @@ final class ForumBodyInlineParagraphView {
     _fragment = null;
     parent.release();
   }
+}
+
+final class _InlineBackgroundColorView
+    extends ListBase<({Rect rect, Color color})> {
+  _InlineBackgroundColorView(this.surfaces);
+  final List<({Rect rect, ForumBodyRubyContainerFontBox font})> surfaces;
+  @override
+  int get length => surfaces.length;
+  @override
+  set length(int value) =>
+      throw UnsupportedError('Read-only background surfaces');
+  @override
+  ({Rect rect, Color color}) operator [](int index) => (
+    rect: surfaces[index].rect,
+    color: surfaces[index].font.background.color,
+  );
+  @override
+  void operator []=(int index, ({Rect rect, Color color}) value) =>
+      throw UnsupportedError('Read-only background surfaces');
 }

@@ -322,12 +322,15 @@ final class ForumBodyRubyGroupPreparation {
     if (_group != null) ..._group!.nativeLeases,
   ];
 
-  ForumBodyRubyGroupPreparationStep advance({int maxParts = 32}) {
+  ForumBodyRubyGroupPreparationStep advance({
+    int maxParts = 32,
+    bool cachedOnly = false,
+  }) {
     if (_state != ForumBodyRubyGroupPreparationState.active) {
       throw StateError('Ruby preparation is not active');
     }
     if (maxParts <= 0) throw ArgumentError.value(maxParts, 'maxParts');
-    return _operate(() => _advance(cachedOnly: false, maxParts: maxParts));
+    return _operate(() => _advance(cachedOnly: cachedOnly, maxParts: maxParts));
   }
 
   /// A bounded cache-only quantum. False may mean an incomplete warm scan or

@@ -17,8 +17,12 @@ sealed class ForumBodyInlineHit {
 }
 
 final class ForumBodyInlineTextHit extends ForumBodyInlineHit {
-  const ForumBodyInlineTextHit(this.position);
+  const ForumBodyInlineTextHit(
+    this.position, {
+    this.affinity = TextAffinity.downstream,
+  });
   final HtmlProjectedSourcePosition position;
+  final TextAffinity affinity;
 }
 
 /// Resolve this local point with the actual, scope-matching child layout.
@@ -508,6 +512,7 @@ final class ForumBodyInlineParagraphLayout
               isExact: false,
             )
           : source,
+      affinity: position.affinity,
     );
   }
 

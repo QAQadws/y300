@@ -40,9 +40,21 @@ final class ForumBodyRubyTreePreparation {
   bool _probeStarted = false;
   bool _budgetChecked = false;
   int _probeCursor = 0;
+  Iterator<ForumBodyNativeRequestSlot>? _probeRequests;
   int _nextNode = 0;
   ForumBodyTextRequestPreparation? _member;
   Map<int, ForumBodyTextLease> _leases = {};
+  ForumBodyInlinePagePreparation? _inline;
+  Map<int, ForumBodyInlineParagraphView> _inlineViews = {};
+  Map<int, Map<ForumBodyParagraphContent, ForumBodyInlineContext>>
+  _inlineWindows = {};
+  Map<ForumBodyParagraphContent, ForumBodyInlineContext> _inlineIndex =
+      Map.identity();
+  int _inlineIndexed = 0;
+  Map<int, Map<ForumBodyParagraphContent, int>> _inlineIds = {};
+  List<({int id, Offset offset})> _paintNodes = [];
+  ForumBodyParagraphBudgetException? _inlineRejection;
+  int _inlineBlockedAt = -1;
   Map<int, bool> _hasText = {};
   List<ForumBodyRubyTreeMember> _members = [];
   Map<int, ForumBodyRubyTreeMember> _byNode = {};
@@ -59,10 +71,12 @@ final class ForumBodyRubyTreePreparation {
   bool get cacheMiss => _cacheMiss;
   int get workCount => _workCount;
   ForumBodyParagraphBudgetException? get lastBudgetRejection =>
-      _member?.lastBudgetRejection;
+      _member?.lastBudgetRejection ?? (_waiting ? _inlineRejection : null);
   Iterable<ForumBodyNativeParagraphLease> get nativeLeases => [
     ..._leases.values,
     if (_member != null) ..._member!.nativeLeases,
+    for (final view in _inlineViews.values) ...view.nativeLeases,
+    if (_inline != null) ..._inline!.nativeLeases,
   ];
 
   ForumBodyRubyGroupPreparationStep advance({
@@ -127,9 +141,9 @@ final class ForumBodyRubyTreePreparation {
   int _inspectBudget() {
     if (!_probeStarted) {
       _probe = _cache!.createBudgetProbe();
-      final owned = _additionalOwned?.call();
+      final owned = [...nativeLeases, ...?_additionalOwned?.call()];
       _guard();
-      _prefix = owned?.iterator;
+      _prefix = owned.iterator;
       _guard();
       _probeStarted = true;
       return 1;
@@ -146,10 +160,16 @@ final class ForumBodyRubyTreePreparation {
       }
       return 1;
     }
-    if (_probeCursor < _input!.nativeRequests.length) {
-      _input!.nativeRequests[_probeCursor].includeBudget(
+    if (_probeCursor < _metrics!.nativeHandleCount) {
+      final requests = _probeRequests ??= _metrics!.nativeFootprint.iterator;
+      if (!requests.moveNext()) {
+        throw StateError('Incomplete ruby native footprint');
+      }
+      final slot = requests.current;
+      slot.request.includeBudget(
         _probe!,
-        width: _input!.maxWidth,
+        width: slot.width,
+        minimumLineCount: slot.minimumLineCount,
         textScaler: _metrics!.textScaler,
       );
       _guard();
@@ -158,7 +178,10 @@ final class ForumBodyRubyTreePreparation {
     }
     _probe!.close();
     _probe = null;
+    _probeRequests = null;
     _budgetChecked = true;
+    _waiting =
+        _inlineRejection != null && _cache!.budgetRevision == _inlineBlockedAt;
     return 1;
   }
 
@@ -166,6 +189,9 @@ final class ForumBodyRubyTreePreparation {
     if (_nextNode < _input!.nodes.length) {
       final id = _nextNode;
       final node = _input!.nodes[id];
+      if (node is ForumBodyRubyTreeInline) {
+        return _advanceInline(id, node, cachedOnly);
+      }
       if (node is ForumBodyRubyTreeText && node.needsNative) {
         final member = _member ??= ForumBodyTextRequestPreparation(
           cache: _cache!,
@@ -175,7 +201,7 @@ final class ForumBodyRubyTreePreparation {
           width: _input!.maxWidth,
           textScaler: _metrics!.textScaler,
           additionalOwnedLeases: () => [
-            ..._leases.values,
+            ...nativeLeases,
             ...?_additionalOwned?.call(),
           ],
         );
@@ -222,6 +248,9 @@ final class ForumBodyRubyTreePreparation {
       }
       _hasText[id] = switch (node) {
         ForumBodyRubyTreeText() => false,
+        ForumBodyRubyTreeInline() => throw StateError(
+          'Inline binding is not ready',
+        ),
         ForumBodyRubyTreeFrame() => _hasText[node.child]!,
         ForumBodyRubyTreeGroup() =>
           _hasText[node.base]! ||
@@ -247,6 +276,9 @@ final class ForumBodyRubyTreePreparation {
       members: _members,
       byNode: _byNode,
       hasText: _hasText,
+      inlineViews: _inlineViews,
+      inlineIds: _inlineIds,
+      paintNodes: _paintNodes,
       backgrounds: _backgrounds,
     );
     if (!_result!.isOwnedBy(_cache!)) {
@@ -269,6 +301,9 @@ final class ForumBodyRubyTreePreparation {
       );
       _members.add(member);
       _byNode[work.id] = member;
+      if (member.lease != null) {
+        _paintNodes.add((id: work.id, offset: work.offset));
+      }
       _positions.removeLast();
       return;
     }
@@ -290,6 +325,37 @@ final class ForumBodyRubyTreePreparation {
     final origin = work.offset + Offset(0, box.frame.childTop);
     final container = node as ForumBodyRubyTreeContainer;
     switch (container) {
+      case ForumBodyRubyTreeInline():
+        final view = _inlineViews[work.id]!;
+        if (work.background < view.backgroundSurfaces.length) {
+          final surface = view.backgroundSurfaces[work.background++];
+          _backgrounds.add((
+            rect: surface.rect.shift(origin),
+            font: surface.font,
+          ));
+        } else if (work.rank == -1) {
+          _paintNodes.add((id: work.id, offset: origin));
+          _inlineIds[work.id] = Map.identity();
+          work.rank = 0;
+        } else if (work.rank < container.sources.length) {
+          final source = container.sources[work.rank++];
+          final window = _inlineWindows[work.id]![source.content];
+          if (window == null) {
+            throw StateError('Inline member has no actual source window');
+          }
+          final member = ForumBodyRubyTreeMember._inline(
+            source.id,
+            source.content,
+            view,
+            window,
+            origin,
+          );
+          _members.add(member);
+          _byNode[source.id] = member;
+          _inlineIds[work.id]![source.content] = source.id;
+        } else {
+          _positions.removeLast();
+        }
       case ForumBodyRubyTreeFrame():
         _positions.removeLast();
         _positions.add(_TreePosition(container.child, origin));
@@ -325,6 +391,7 @@ final class ForumBodyRubyTreePreparation {
     }
     _result = null;
     _leases = {};
+    _inlineViews = {};
     _state = _TreeState.transferred;
     _dropOwner();
     return result;
@@ -353,10 +420,13 @@ final class ForumBodyRubyTreePreparation {
   }
 
   void _dropOwner() {
+    _inline?.close();
+    _inline = null;
     _member?.close();
     _member = null;
     _probe?.close();
     _probe = null;
+    _probeRequests = null;
     _prefix = null;
     _scaleSamples = null;
     _expectedScaler = null;
@@ -370,6 +440,11 @@ final class ForumBodyRubyTreePreparation {
     _hasText = {};
     _backgrounds = [];
     _positions = [];
+    _inlineWindows = {};
+    _inlineIndex = Map.identity();
+    _inlineIds = {};
+    _paintNodes = [];
+    _inlineRejection = null;
   }
 
   void _retire(_TreeState state) {
@@ -381,10 +456,99 @@ final class ForumBodyRubyTreePreparation {
       lease.release();
     }
     _leases = {};
+    for (final view in _inlineViews.values) {
+      view.close();
+    }
+    _inlineViews = {};
     _dropOwner();
   }
 
   void close() => _retire(_TreeState.closed);
+
+  int _advanceInline(int id, ForumBodyRubyTreeInline node, bool cachedOnly) {
+    var view = _inlineViews[id];
+    if (view == null) {
+      if (_inlineRejection != null &&
+          _cache!.budgetRevision == _inlineBlockedAt) {
+        _waiting = true;
+        return 0;
+      }
+      _inlineRejection = null;
+      final target =
+          (_metrics!.nodes[id] as ForumBodyRubyTreeContainerMetrics).inline!;
+      final job = _inline ??= ForumBodyInlinePagePreparation(
+        input: target.input,
+        fragment: target.fragment,
+        identity: target.input.identity,
+        cache: _cache!,
+        textScaler: _metrics!.textScaler,
+        ensureOwner: _guard,
+        ownedPageLeases: () => [...nativeLeases, ...?_additionalOwned?.call()],
+      );
+      final before = job.workCount;
+      final rejectedAt = _cache!.budgetRevision;
+      try {
+        final step = job.advance(cachedOnly: cachedOnly, maxParts: 1);
+        _guard();
+        _cacheMiss = step.cacheMiss;
+        view = step.view;
+        if (view != null) {
+          _inlineViews[id] = view;
+          _inline = null;
+          const tolerance = ForumBodyRubyGroupMetrics.geometryTolerance;
+          if ((view.width - target.size.width).abs() > tolerance ||
+              (view.height - target.size.height).abs() > tolerance ||
+              view.lines.length != 1 ||
+              (view.lines.single.baseline - target.baseline).abs() >
+                  tolerance) {
+            throw const ForumBodyRubyGroupException(
+              ForumBodyRubyGroupFailure.geometry,
+            );
+          }
+          _inlineIndexed = 0;
+          _inlineIndex = Map.identity();
+        }
+        final used = job.workCount - before;
+        return used == 0 ? 1 : used;
+      } on ForumBodyParagraphBudgetException catch (error) {
+        _guard();
+        if (error.failure != ForumBodyParagraphBudgetFailure.pinned) rethrow;
+        if (!_cache!.isBlockedByExternalPins(error, [
+          ...nativeLeases,
+          ...?_additionalOwned?.call(),
+        ])) {
+          throw ForumBodyParagraphBudgetException(
+            ForumBodyParagraphBudgetFailure.content,
+            requiredEstimatedBytes: error.requiredEstimatedBytes,
+            requiredAdditionalEntries: error.requiredAdditionalEntries,
+          );
+        }
+        _inlineRejection = error;
+        _inlineBlockedAt = rejectedAt;
+        _probe?.close();
+        _probe = null;
+        _probeCursor = 0;
+        _probeStarted = false;
+        _budgetChecked = false;
+        _probeRequests = null;
+        _prefix = null;
+        return 1;
+      }
+    }
+    if (_inlineIndexed < view.content.contexts.length) {
+      final window = view.content.contexts[_inlineIndexed++];
+      if (_inlineIndex.containsKey(window.content)) {
+        throw StateError('Ambiguous actual inline source window');
+      }
+      _inlineIndex[window.content] = window;
+      return 1;
+    }
+    _inlineWindows[id] = UnmodifiableMapView(_inlineIndex);
+    _inlineIndex = Map.identity();
+    _hasText[id] = view.content.projection.display.text.isNotEmpty;
+    _nextNode++;
+    return 1;
+  }
 }
 
 final class _TreePosition {
@@ -393,4 +557,5 @@ final class _TreePosition {
   final Offset offset;
   bool started = false;
   int rank = -1;
+  int background = 0;
 }

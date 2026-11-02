@@ -81,14 +81,26 @@ final class ForumBodyInlinePlanPreparation {
   var _state = _State.active;
   var _operating = false;
   bool get isReady => _state == _State.ready;
+  bool _cacheMiss = false;
+  bool get cacheMiss => _cacheMiss;
+  Iterable<ForumBodyNativeParagraphLease> get nativeLeases => [
+    ?_parent,
+    ?_probe,
+    if (_pair != null) ..._pair!.nativeLeases,
+    if (_segment != null) ..._segment!.nativeLeases,
+    if (_space != null) ..._space!.nativeLeases,
+    if (_tree != null) ..._tree!.nativeLeases,
+  ];
 
   ({int partsPrepared, bool isReady, bool waitingForLayoutBudget}) advance({
     int maxParts = 32,
+    bool cachedOnly = false,
   }) {
     if (_state != _State.active) throw StateError('Inline plan is not active');
     if (maxParts <= 0) throw ArgumentError.value(maxParts, 'maxParts');
     return _operate(() {
       _guard();
+      _cacheMiss = false;
       final cache = _cache!;
       final before = cache.layoutBuildCount;
       var parts = 0;
@@ -123,10 +135,11 @@ final class ForumBodyInlinePlanPreparation {
               height: height,
               alphabeticBaseline: baseline,
             );
-          });
+          }, cachedOnly: cachedOnly);
           parts += step.partsPrepared;
           waiting = step.waitingForLayoutBudget;
           if (waiting ||
+              _cacheMiss ||
               cache.layoutBuildCount != before ||
               parts == maxParts) {
             break;
@@ -141,10 +154,11 @@ final class ForumBodyInlinePlanPreparation {
               height: height,
               alphabeticBaseline: baseline,
             );
-          });
+          }, cachedOnly: cachedOnly);
           parts += step.partsPrepared;
           waiting = step.waitingForLayoutBudget;
           if (waiting ||
+              _cacheMiss ||
               cache.layoutBuildCount != before ||
               parts == maxParts) {
             break;
@@ -153,7 +167,7 @@ final class ForumBodyInlinePlanPreparation {
         }
         try {
           final revisionBefore = cache.budgetRevision;
-          final step = _advanceMetric(request, maxParts - parts);
+          final step = _advanceMetric(request, maxParts - parts, cachedOnly);
           final budgetChanged = cache.budgetRevision != revisionBefore;
           parts += step.formatUnitsPrepared;
           if (step.formatUnitsPrepared == 0 &&
@@ -162,12 +176,12 @@ final class ForumBodyInlinePlanPreparation {
           }
           waiting = step.waitingForLayoutBudget;
           if (!step.madeProgress) {
-            if (!waiting && !budgetChanged) {
+            if (!waiting && !_cacheMiss && !budgetChanged) {
               throw StateError('Inline metric preparation made no progress');
             }
             break;
           }
-          if (waiting || cache.layoutBuildCount != before) break;
+          if (waiting || _cacheMiss || cache.layoutBuildCount != before) break;
         } on ForumBodyTextBandLayoutException catch (error) {
           _guard();
           // Native child counts omit empty ranks, just like admission. Numeric
@@ -204,7 +218,10 @@ final class ForumBodyInlinePlanPreparation {
       if (_metrics.length == _input!.atoms.length &&
           parts < maxParts &&
           cache.layoutBuildCount == before) {
-        final step = _advanceLayout(maxParts: maxParts - parts);
+        final step = _advanceLayout(
+          maxParts: maxParts - parts,
+          cachedOnly: cachedOnly,
+        );
         parts += step.partsPrepared;
         waiting = step.waitingForLayoutBudget;
       }
@@ -219,6 +236,7 @@ final class ForumBodyInlinePlanPreparation {
   ForumBodyRubyGroupPreparationStep _advanceMetric(
     ForumBodyRubyAtomRequest request,
     int maxParts,
+    bool cachedOnly,
   ) {
     switch (request) {
       case ForumBodyRubyTreeAtomRequest(:final value):
@@ -228,7 +246,8 @@ final class ForumBodyInlinePlanPreparation {
           ensureOwner: _guard,
           textScaler: _textScaler!,
         );
-        final step = tree.advance(maxParts: maxParts);
+        final step = tree.advance(maxParts: maxParts, cachedOnly: cachedOnly);
+        _cacheMiss = tree.cacheMiss;
         if (step.isReady) {
           final metrics = tree.takeMetrics();
           _treeSnapshots[_metrics.length] = metrics;
@@ -246,7 +265,8 @@ final class ForumBodyInlinePlanPreparation {
           textScaler: _textScaler!,
           maxWidth: value.maxWidth,
         );
-        final step = pair.advance(maxParts: maxParts);
+        final step = pair.advance(maxParts: maxParts, cachedOnly: cachedOnly);
+        _cacheMiss = pair.cacheMiss;
         if (step.isReady) {
           _metrics.add(ForumBodyRubyAtomMetrics.column(pair.takeMetrics()));
           _closeMetric();
@@ -259,7 +279,11 @@ final class ForumBodyInlinePlanPreparation {
           ensureOwner: _guard,
           textScaler: _textScaler!,
         );
-        final step = segment.advance(maxParts: maxParts);
+        final step = segment.advance(
+          maxParts: maxParts,
+          cachedOnly: cachedOnly,
+        );
+        _cacheMiss = segment.cacheMiss;
         if (step.isReady) {
           _metrics.add(ForumBodyRubyAtomMetrics.segment(segment.takeMetrics()));
           _closeMetric();
@@ -272,7 +296,8 @@ final class ForumBodyInlinePlanPreparation {
           ensureOwner: _guard,
           textScaler: _textScaler!,
         );
-        final step = space.advance(maxParts: maxParts);
+        final step = space.advance(maxParts: maxParts, cachedOnly: cachedOnly);
+        _cacheMiss = space.cacheMiss;
         if (step.isReady) {
           _metrics.add(ForumBodyRubyAtomMetrics.softSpace(space.takeMetrics()));
           _closeMetric();
@@ -283,20 +308,31 @@ final class ForumBodyInlinePlanPreparation {
 
   ({int partsPrepared, bool waitingForLayoutBudget}) _prepareFont(
     ForumBodyParagraphContent font,
-    void Function(double height, double baseline) capture,
-  ) {
+    void Function(double height, double baseline) capture, {
+    required bool cachedOnly,
+  }) {
     final cache = _cache!;
     final rejectedAt = cache.budgetRevision;
     ForumBodyParagraphLease? lease;
     try {
       // Use the same admission and single-shape quantum as glyph metrics.
       // This auxiliary strut is never issued as visible/source text.
-      lease = cache.acquire(
-        content: font,
-        width: width,
-        textScaler: _textScaler!,
-      );
+      lease = cachedOnly
+          ? cache.tryAcquireCached(
+              content: font,
+              width: width,
+              textScaler: _textScaler!,
+            )
+          : cache.acquire(
+              content: font,
+              width: width,
+              textScaler: _textScaler!,
+            );
       _guard();
+      if (lease == null) {
+        _cacheMiss = true;
+        return (partsPrepared: 1, waitingForLayoutBudget: false);
+      }
       capture(lease.layout.height, lease.layout.alphabeticBaseline);
       return (partsPrepared: 1, waitingForLayoutBudget: false);
     } on ForumBodyParagraphBudgetException catch (error) {
@@ -322,6 +358,7 @@ final class ForumBodyInlinePlanPreparation {
 
   ({int partsPrepared, bool waitingForLayoutBudget}) _advanceLayout({
     required int maxParts,
+    required bool cachedOnly,
   }) {
     final alignment = _alignment ??= ForumBodyRubyRowAlignment.atoms(
       atoms: _metrics,
@@ -340,7 +377,11 @@ final class ForumBodyInlinePlanPreparation {
       }
     }
     if (alignment.needsRows) {
-      final step = _acquireParent(alignment, provisional: true);
+      final step = _acquireParent(
+        alignment,
+        provisional: true,
+        cachedOnly: cachedOnly,
+      );
       return (
         partsPrepared: parts + step.partsPrepared,
         waitingForLayoutBudget: step.waitingForLayoutBudget,
@@ -356,7 +397,11 @@ final class ForumBodyInlinePlanPreparation {
         _makeReady(alignment);
         return (partsPrepared: parts + 1, waitingForLayoutBudget: false);
       }
-      final step = _acquireParent(alignment, provisional: false);
+      final step = _acquireParent(
+        alignment,
+        provisional: false,
+        cachedOnly: cachedOnly,
+      );
       return (
         partsPrepared: parts + step.partsPrepared,
         waitingForLayoutBudget: step.waitingForLayoutBudget,
@@ -371,7 +416,11 @@ final class ForumBodyInlinePlanPreparation {
       return (partsPrepared: parts + 1, waitingForLayoutBudget: false);
     }
     if (_parent == null) {
-      final step = _acquireParent(alignment, provisional: false);
+      final step = _acquireParent(
+        alignment,
+        provisional: false,
+        cachedOnly: cachedOnly,
+      );
       return (
         partsPrepared: parts + step.partsPrepared,
         waitingForLayoutBudget: step.waitingForLayoutBudget,
@@ -390,6 +439,7 @@ final class ForumBodyInlinePlanPreparation {
   ({int partsPrepared, bool waitingForLayoutBudget}) _acquireParent(
     ForumBodyRubyRowAlignment alignment, {
     required bool provisional,
+    required bool cachedOnly,
   }) {
     final cache = _cache!;
     final rejectedAt = cache.budgetRevision;
@@ -419,9 +469,13 @@ final class ForumBodyInlinePlanPreparation {
         cache,
         width: width,
         textScaler: _textScaler!,
-        cachedOnly: false,
-      )!;
+        cachedOnly: cachedOnly,
+      );
       _guard();
+      if (parent == null) {
+        _cacheMiss = true;
+        return (partsPrepared: 1, waitingForLayoutBudget: false);
+      }
       if (provisional) {
         _probe = parent;
         alignment.attachRows(
