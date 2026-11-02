@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
-import 'package:forum_content_renderer/src/inline/forum_body_emphasis_text_input.dart';
 
 ForumBodyParagraphContent _html(String html, {String css = ''}) {
   final document = const ForumBodyParser().parse(

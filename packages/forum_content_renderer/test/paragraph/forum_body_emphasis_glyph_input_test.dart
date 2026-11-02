@@ -4,7 +4,6 @@ import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
-import 'package:forum_content_renderer/src/inline/forum_body_emphasis_text_input.dart';
 
 const _emphasis = 'text-emphasis:open sesame red;';
 const _html =
