@@ -562,19 +562,16 @@ final class ForumBodyTextPageSession {
   ForumBodyInlinePlanPreparation _openInlinePlan(
     ForumBodyBlockFlowInline mixed,
   ) {
-    final input = ForumBodyInlinePlanInput(
-      mixed.paragraph.content,
-      mixed.contentWidth,
-    );
-    _content.checkCounts(
-      input.content.projection.display.text.length,
-      input.content.runs.length,
-    );
-    return ForumBodyInlinePlanPreparation(
-      input: input,
+    return ForumBodyInlinePlanPreparation.fromFlow(
+      input: mixed.paragraph.content,
+      width: mixed.contentWidth,
       cache: _cache,
       textScaler: _textScaler,
       ensureOwner: _ensureActivePlan,
+      validateInput: (input) => _content.checkCounts(
+        input.content.projection.display.text.length,
+        input.content.runs.length,
+      ),
     );
   }
 

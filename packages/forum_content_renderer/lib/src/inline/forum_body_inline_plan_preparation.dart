@@ -16,6 +16,9 @@ import 'forum_body_text_band_layout.dart';
 import 'forum_body_ruby_container_background.dart';
 import 'forum_body_ruby_root_box.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
+import '../flow/forum_body_inline_flow_content.dart';
+import 'forum_body_inline_source_preparation.dart';
+import 'forum_body_ruby_tree_metrics_preparation.dart';
 
 enum _State { active, ready, transferred, closed }
 
@@ -34,7 +37,27 @@ final class ForumBodyInlinePlanPreparation {
        _ensureOwner = ensureOwner,
        width = input.width;
 
+  ForumBodyInlinePlanPreparation.fromFlow({
+    required ForumBodyInlineFlowContent input,
+    required this.width,
+    required ForumBodyParagraphCache cache,
+    required TextScaler textScaler,
+    required void Function() ensureOwner,
+    void Function(ForumBodyInlinePlanInput)? validateInput,
+  }) : _cache = cache,
+       _textScaler = textScaler,
+       _ensureOwner = ensureOwner,
+       _validateInput = validateInput {
+    _source = ForumBodyInlineSourcePreparation(
+      input: input,
+      width: width,
+      ensureOwner: _guard,
+    );
+  }
+
   ForumBodyInlinePlanInput? _input;
+  ForumBodyInlineSourcePreparation? _source;
+  void Function(ForumBodyInlinePlanInput)? _validateInput;
   ForumBodyParagraphCache? _cache;
   TextScaler? _textScaler;
   void Function()? _ensureOwner;
@@ -48,6 +71,8 @@ final class ForumBodyInlinePlanPreparation {
   ForumBodyRubyGroupPreparation? _pair;
   ForumBodyRubySegmentMetricsPreparation? _segment;
   ForumBodyRubySoftSpacePreparation? _space;
+  ForumBodyRubyTreeMetricsPreparation? _tree;
+  final _treeSnapshots = <int, ForumBodyRubyTreeMetrics>{};
   ForumBodyInlineParagraphLease? _parent;
   ForumBodyInlineParagraphLease? _probe;
   Set<int> _finalTrimmedAtoms = const {};
@@ -67,10 +92,30 @@ final class ForumBodyInlinePlanPreparation {
       final before = cache.layoutBuildCount;
       var parts = 0;
       var waiting = false;
+      if (_input == null) {
+        final source = _source!;
+        parts += source.advance(maxParts: maxParts);
+        _guard();
+        if (!source.isReady) {
+          return (
+            partsPrepared: parts,
+            isReady: false,
+            waitingForLayoutBudget: false,
+          );
+        }
+        final input = source.takeInput();
+        _source = null;
+        _validateInput?.call(input);
+        _guard();
+        _validateInput = null;
+        _input = input;
+      }
       while (_metrics.length < _input!.atoms.length && parts < maxParts) {
         final request = _input!.atoms[_metrics.length];
         final root = request.rootBox;
-        if (root != null && !_rootFonts.containsKey(root)) {
+        if (request is! ForumBodyRubyTreeAtomRequest &&
+            root != null &&
+            !_rootFonts.containsKey(root)) {
           final step = _prepareFont(root.fontStrut, (height, baseline) {
             _rootFonts[root] = ForumBodyRubyRootFontBox(
               input: root,
@@ -128,6 +173,7 @@ final class ForumBodyInlinePlanPreparation {
           // finalization cannot throw a native band isolation exception.
           final count = _pair?.preparedPartCount;
           final failed =
+              _tree?.failedRequest ??
               _space?.failedRequest ??
               _segment?.failedRequest ??
               (count != null && count < request.nativeRequests.length
@@ -174,6 +220,22 @@ final class ForumBodyInlinePlanPreparation {
     int maxParts,
   ) {
     switch (request) {
+      case ForumBodyRubyTreeAtomRequest(:final value):
+        final tree = _tree ??= ForumBodyRubyTreeMetricsPreparation(
+          input: value,
+          cache: _cache!,
+          ensureOwner: _guard,
+          textScaler: _textScaler!,
+        );
+        final step = tree.advance(maxParts: maxParts);
+        if (step.isReady) {
+          final metrics = tree.takeMetrics();
+          _treeSnapshots[_metrics.length] = metrics;
+          _rootFonts[value.rootGroup.font] = metrics.root.font;
+          _metrics.add(ForumBodyRubyAtomMetrics.column(metrics.root.group!));
+          _closeMetric();
+        }
+        return step;
       case ForumBodyRubyColumnAtomRequest(:final value):
         final pair = _pair ??= ForumBodyRubyGroupPreparation.forLayerMetrics(
           cache: _cache!,
@@ -247,6 +309,8 @@ final class ForumBodyInlinePlanPreparation {
   }
 
   void _closeMetric() {
+    _tree?.close();
+    _tree = null;
     _pair?.close();
     _pair = null;
     _segment?.close();
@@ -399,6 +463,16 @@ final class ForumBodyInlinePlanPreparation {
         for (final (index, request) in _input!.atoms.indexed)
           switch ((request, alignment.results[index])) {
             (
+              ForumBodyRubyTreeAtomRequest(:final value),
+              ForumBodyRubyColumnMetrics(value: final metrics),
+            ) =>
+              ForumBodyRubyAtomPlan.tree(
+                request: value,
+                metrics: _treeSnapshots[index]!
+                    .rebindInput(value)
+                    .withRootGroup(metrics),
+              ),
+            (
               ForumBodyRubyColumnAtomRequest(:final value),
               ForumBodyRubyColumnMetrics(),
             ) =>
@@ -464,6 +538,10 @@ final class ForumBodyInlinePlanPreparation {
   }
 
   void _drop() {
+    _source?.close();
+    _source = null;
+    _validateInput = null;
+    _treeSnapshots.clear();
     _closeMetric();
     _parent?.release();
     _parent = null;

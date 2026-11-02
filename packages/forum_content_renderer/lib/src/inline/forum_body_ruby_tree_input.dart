@@ -19,13 +19,19 @@ final class ForumBodyRubyTreeInput {
   ForumBodyRubyTreeInput._(
     List<ForumBodyRubyTreeNode> nodes,
     List<ForumBodyTextRequest> requests,
-    this.maxWidth,
-  ) : nodes = UnmodifiableListView(nodes),
-      nativeRequests = UnmodifiableListView(requests);
+    this.maxWidth, [
+    Object? structure,
+  ]) : nodes = UnmodifiableListView(nodes),
+       nativeRequests = UnmodifiableListView(requests),
+       _structure = structure ?? Object();
+  final Object _structure;
   final List<ForumBodyRubyTreeNode> nodes;
   final double maxWidth;
   final List<ForumBodyTextRequest> nativeRequests;
   int get root => nodes.length - 1;
+  ForumBodyRubyTreeGroup get rootGroup => nodes.last as ForumBodyRubyTreeGroup;
+  bool hasSameStructure(ForumBodyRubyTreeInput other) =>
+      identical(_structure, other._structure);
 
   /// Batch rebinding changes only actual native requests, never a leaf's
   /// current source/style object or the structural graph.
@@ -51,7 +57,7 @@ final class ForumBodyRubyTreeInput {
         mapped.add(node);
       }
     }
-    return ForumBodyRubyTreeInput._(mapped, requests, maxWidth);
+    return ForumBodyRubyTreeInput._(mapped, requests, maxWidth, _structure);
   }
 }
 

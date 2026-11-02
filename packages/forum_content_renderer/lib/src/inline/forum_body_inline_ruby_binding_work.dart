@@ -9,17 +9,22 @@ final class _RubyBindingWork {
     ForumBodyRubyGroupLayout? group,
     ForumBodyRubySegmentLayout? segment,
     ForumBodyRubySoftSpaceLayout? space,
+    ForumBodyRubyTreeLayout? tree,
     required void Function(ForumBodyTextLease) own,
   }) : _cursor = content.openAtomicContexts(index),
        _group = group,
        _segment = segment,
        _space = space,
+       _tree = tree,
        _members = segment?.inspectMembers(),
        _own = own;
   ForumBodyInlineAtomicContextCursor? _cursor;
   ForumBodyRubyGroupLayout? _group;
   ForumBodyRubySegmentLayout? _segment;
   ForumBodyRubySoftSpaceLayout? _space;
+  ForumBodyRubyTreeLayout? _tree;
+  Map<int, ForumBodyInlineContext> _treeWindows = {};
+  int _treeMember = 0;
   ForumBodyRubySegmentMemberSnapshot? _members;
   void Function(ForumBodyTextLease)? _own;
   ForumBodyRubyGroupMemberSnapshot? _current;
@@ -41,7 +46,16 @@ final class _RubyBindingWork {
     if (maxParts <= 0) throw ArgumentError.value(maxParts);
     var work = 0;
     while (work < maxParts && !isComplete) {
-      if (_space != null) {
+      if (_tree != null) {
+        if (_treeMember < _tree!.members.length) {
+          final member = _tree!.members[_treeMember++];
+          if (member.lease != null) _own!(member.lease!);
+          _treeWindows[member.nodeIndex] = _cursor!.resolve(member.content);
+        } else {
+          _cursor!.finish();
+          _result = _RubyTreeBinding(_tree!, UnmodifiableMapView(_treeWindows));
+        }
+      } else if (_space != null) {
         if (_spaceWindows.length < _space!.contents.length) {
           final lease = _space!.memberAt(_spaceWindows.length);
           _own!(lease);
@@ -130,6 +144,8 @@ final class _RubyBindingWork {
     _group = null;
     _segment = null;
     _space = null;
+    _tree = null;
+    _treeWindows = {};
     _members = null;
     _current = null;
     _own = null;

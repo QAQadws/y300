@@ -18,6 +18,7 @@ import 'forum_body_ruby_child_input.dart';
 import 'forum_body_ruby_whitespace.dart';
 import 'forum_body_inline_text_window.dart';
 import 'forum_body_text_band_content.dart';
+import 'forum_body_ruby_tree_input.dart';
 
 /// Pure source-bound parent input and child requests for the session's pending
 /// format. No native resource, owner or scheduler is retained here.
@@ -34,12 +35,13 @@ final class ForumBodyInlinePlanInput {
             .atoms
             .map((atom) => atom.engineUtf16),
       );
-  static const revision = 21;
+  static const revision = 22;
 
   factory ForumBodyInlinePlanInput(
     ForumBodyInlineFlowContent input,
-    double width,
-  ) {
+    double width, {
+    Map<ForumBodyRubyGroupContent, ForumBodyRubyTreeInput> trees = const {},
+  }) {
     if (input.layoutMode != ForumBodyParagraphLayoutMode.wrap) {
       _unsupported(input.path);
     }
@@ -159,8 +161,6 @@ final class ForumBodyInlinePlanInput {
           sourceOrder.add(appendPlain(part.content));
         case ForumBodyInlineFlowRuby():
           final group = part.group;
-          final background = ForumBodyRubyContainerBackground.fromGroup(group);
-          final rootBox = ForumBodyRubyRootBoxInput.fromGroup(group);
           final levelId = roots.putIfAbsent(group.rootPath, () => roots.length);
           if (group.identity != input.identity ||
               group.fontRevision != input.fontRevision ||
@@ -170,6 +170,32 @@ final class ForumBodyInlinePlanInput {
               group.rootPath,
             );
           }
+          final tree = trees[group];
+          if (tree != null) {
+            if (!identical(tree.rootGroup.group, group) ||
+                tree.maxWidth != width) {
+              throw ForumBodyParagraphInputException(
+                ForumBodyParagraphInputFailure.identity,
+                group.rootPath,
+              );
+            }
+            final start = offset;
+            for (final node in tree.nodes) {
+              if (node is ForumBodyRubyTreeText && !node.content.isSourceFree) {
+                sourceOrder.add(append(node.content));
+              }
+            }
+            if (start == offset) _unsupported(group.rootPath);
+            atoms.add((startUtf16: start, endUtf16: offset));
+            requestsByAtom.add(ForumBodyRubyAtomRequest.tree(tree));
+            levelIds.add(levelId);
+            previousCollapsibleSpace = false;
+            atLineStart = false;
+            lastPlain = null;
+            continue;
+          }
+          final background = ForumBodyRubyContainerBackground.fromGroup(group);
+          final rootBox = ForumBodyRubyRootBoxInput.fromGroup(group);
           final bases = resolveForumBodyRubyBaseInputs(group);
           final unitCount = bases
               .where((base) => base.kind != ForumBodyRubyBaseInputKind.gap)

@@ -2324,7 +2324,7 @@ void main() {
 
   test('late unsupported input preserves the already published mixed prefix', () {
     final f = _Fixture(
-      '<span>X<ruby>AB<rt>xy</rt></ruby>Y<br>Z<br><ruby>A<rt><ruby>B<rt>b</rt></ruby></rt></ruby></span>',
+      '<span>X<ruby>AB<rt>xy</rt></ruby>Y<br>Z<br><ruby>A<rt>before<ruby>B<rt>b</rt></ruby>after</rt></ruby></span>',
     );
     while (f.session.snapshot.isEmpty) {
       f.advance();

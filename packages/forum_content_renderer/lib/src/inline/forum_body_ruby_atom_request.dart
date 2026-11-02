@@ -4,6 +4,7 @@ import 'forum_body_ruby_segment_request.dart';
 import 'forum_body_ruby_soft_space_request.dart';
 import 'forum_body_ruby_container_background.dart';
 import 'forum_body_ruby_root_box.dart';
+import 'forum_body_ruby_tree_input.dart';
 
 /// Internal pre-measurement variant of an actual parent atom. It borrows the
 /// existing immutable requests; numeric targets only enter the later AtomPlan.
@@ -18,12 +19,30 @@ sealed class ForumBodyRubyAtomRequest {
   const factory ForumBodyRubyAtomRequest.softSpace(
     ForumBodyRubySoftSpaceRequest value,
   ) = ForumBodyRubySoftSpaceAtomRequest;
+  const factory ForumBodyRubyAtomRequest.tree(ForumBodyRubyTreeInput value) =
+      ForumBodyRubyTreeAtomRequest;
   List<ForumBodyTextRequest> get nativeRequests;
   ForumBodyRubyContainerBackground? get background;
   ForumBodyRubyRootBoxInput? get rootBox;
   ForumBodyRubyAtomRequest mapRequests(
     ForumBodyTextRequest Function(ForumBodyTextRequest) map,
   );
+}
+
+final class ForumBodyRubyTreeAtomRequest extends ForumBodyRubyAtomRequest {
+  const ForumBodyRubyTreeAtomRequest(this.value);
+  final ForumBodyRubyTreeInput value;
+  @override
+  List<ForumBodyTextRequest> get nativeRequests => value.nativeRequests;
+  // Every tree surface, including the root, enters the shared page plane.
+  @override
+  ForumBodyRubyContainerBackground? get background => null;
+  @override
+  ForumBodyRubyRootBoxInput get rootBox => value.rootGroup.font;
+  @override
+  ForumBodyRubyAtomRequest mapRequests(
+    ForumBodyTextRequest Function(ForumBodyTextRequest) map,
+  ) => ForumBodyRubyTreeAtomRequest(value.mapRequests(map));
 }
 
 final class ForumBodyRubySoftSpaceAtomRequest extends ForumBodyRubyAtomRequest {

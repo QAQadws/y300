@@ -5,6 +5,8 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
+import '../paragraph/forum_body_paragraph_layout.dart'
+    show ForumBodyParagraphLayoutException, ForumBodyParagraphLayoutFailure;
 import '../paragraph/forum_body_text_request_preparation.dart';
 import 'forum_body_ruby_container_background.dart';
 import 'forum_body_ruby_group_contract.dart';

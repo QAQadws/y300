@@ -39,11 +39,7 @@ ForumBodyInlinePlanInput _input(
 }
 
 ForumBodyRubyContainerBackground? _background(ForumBodyRubyAtomRequest atom) =>
-    switch (atom) {
-      ForumBodyRubyColumnAtomRequest(:final value) => value.background,
-      ForumBodyRubySegmentAtomRequest(:final value) => value.background,
-      ForumBodyRubySoftSpaceAtomRequest(:final value) => value.background,
-    };
+    atom.background;
 const _column = '<rb style="font-size:20px">A</rb><rt>x</rt>';
 const _segment = '<rb>A</rb><rb>B</rb><rtc><rt>x</rt></rtc><rtc>word</rtc>';
 const _space = '<rb>A</rb> <rb>B</rb><rt>x</rt> <rt>y</rt>';

@@ -14,6 +14,7 @@ import 'forum_body_ruby_segment_layout.dart';
 import 'forum_body_ruby_soft_space_layout.dart';
 import 'forum_body_ruby_container_background.dart';
 import 'forum_body_ruby_root_box.dart';
+import 'forum_body_ruby_tree_layout.dart';
 
 part 'forum_body_inline_ruby_binding.dart';
 part 'forum_body_inline_view_assembly.dart';

@@ -47,6 +47,14 @@ void main() {
         'language-ruby-ltr',
         'language-ruby-rtl',
       ]);
+      expect(
+        novelMainPageProfileFixtures('ruby-nested'),
+        same(novelProfileNestedRubyFixtures),
+      );
+      expect(novelProfileNestedRubyFixtures.map((f) => f.name), [
+        'ruby-nested-ltr',
+        'ruby-nested-rtl',
+      ]);
       for (final fixture in novelProfileLanguageFixtures) {
         expect(novelProfileExpectedLanguages(fixture.name), isNotEmpty);
       }
@@ -180,6 +188,8 @@ void main() {
     for (final fixture in novelProfileRubyGapFixtures)
       (native: true, mixed: true, fixture: fixture),
     for (final fixture in novelProfileLanguageFixtures)
+      (native: true, mixed: true, fixture: fixture),
+    for (final fixture in novelProfileNestedRubyFixtures)
       (native: true, mixed: true, fixture: fixture),
   ]) {
     final native = scenario.native;

@@ -11,12 +11,18 @@ final class ForumBodyRubyTreePreparation {
     required ForumBodyRubyTreeMetrics metrics,
     required ForumBodyParagraphCache cache,
     required void Function() ensureOwner,
+    TextScaler? expectedTextScaler,
     Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
   }) : _input = input,
        _metrics = metrics,
        _cache = cache,
        _ensureOwner = ensureOwner,
-       _additionalOwned = additionalOwnedLeases {
+       _additionalOwned = additionalOwnedLeases,
+       _expectedScaler = expectedTextScaler,
+       _scaleSamples = expectedTextScaler == null
+           ? null
+           : metrics.effectiveScales.entries.iterator,
+       _scalesChecked = expectedTextScaler == null {
     if (!identical(input, metrics.input)) {
       throw ArgumentError('Ruby tree input differs from its measured graph');
     }
@@ -25,6 +31,9 @@ final class ForumBodyRubyTreePreparation {
   ForumBodyRubyTreeMetrics? _metrics;
   ForumBodyParagraphCache? _cache;
   void Function()? _ensureOwner;
+  TextScaler? _expectedScaler;
+  Iterator<MapEntry<double, double>>? _scaleSamples;
+  bool _scalesChecked;
   Iterable<ForumBodyNativeParagraphLease> Function()? _additionalOwned;
   ForumBodyParagraphBudgetProbe? _probe;
   Iterator<ForumBodyNativeParagraphLease>? _prefix;
@@ -70,7 +79,9 @@ final class ForumBodyRubyTreePreparation {
       _waiting = false;
       _cacheMiss = false;
       while (!isReady && units < maxParts) {
-        final used = !_budgetChecked
+        final used = !_scalesChecked
+            ? _inspectScale()
+            : !_budgetChecked
             ? _inspectBudget()
             : _advanceBinding(cachedOnly);
         units += used;
@@ -94,6 +105,23 @@ final class ForumBodyRubyTreePreparation {
         waitingForLayoutBudget: _waiting,
       );
     });
+  }
+
+  int _inspectScale() {
+    if (!_scaleSamples!.moveNext()) {
+      _scaleSamples = null;
+      _scalesChecked = true;
+    } else {
+      final sample = _scaleSamples!.current;
+      final actual = _expectedScaler!.scale(sample.key);
+      _guard();
+      if (actual != sample.value) {
+        throw const ForumBodyParagraphLayoutException(
+          ForumBodyParagraphLayoutFailure.scale,
+        );
+      }
+    }
+    return 1;
   }
 
   int _inspectBudget() {
@@ -330,6 +358,8 @@ final class ForumBodyRubyTreePreparation {
     _probe?.close();
     _probe = null;
     _prefix = null;
+    _scaleSamples = null;
+    _expectedScaler = null;
     _input = null;
     _metrics = null;
     _cache = null;

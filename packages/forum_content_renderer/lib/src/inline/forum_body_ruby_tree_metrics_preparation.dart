@@ -11,6 +11,7 @@ import 'forum_body_ruby_group_preparation.dart';
 import 'forum_body_ruby_root_box.dart';
 import 'forum_body_ruby_tree_input.dart';
 import 'forum_body_text_band_content.dart';
+import 'forum_body_text_band_layout.dart';
 
 /// Numeric postorder snapshot. It has no native handles, paint, source hit or
 /// coverage authority; a readable binding must qualify actual current leaves.
@@ -37,7 +38,85 @@ final class ForumBodyRubyTreeMetrics {
   /// Exact per-font inputs used for native planning, including root/background
   /// fonts and the complete native band when a leaf borrows a shared band key.
   final TextScaler textScaler;
+  Map<double, double> get effectiveScales =>
+      (textScaler as _TreeNativeTextScaler).samples;
   ForumBodyRubyChildMetrics get box => nodes.last.box!;
+  ForumBodyRubyTreeContainerMetrics get root =>
+      nodes.last as ForumBodyRubyTreeContainerMetrics;
+  ForumBodyRubyTreeMetrics._copy(this.input, this.nodes, this.textScaler);
+
+  /// A band isolation retry can rebind native requests while retaining exactly
+  /// the original immutable structural graph and source/style objects.
+  ForumBodyRubyTreeMetrics rebindInput(ForumBodyRubyTreeInput current) {
+    if (!input.hasSameStructure(current)) {
+      throw ArgumentError('Foreign ruby tree structure');
+    }
+    return identical(input, current)
+        ? this
+        : ForumBodyRubyTreeMetrics._copy(current, nodes, textScaler);
+  }
+
+  /// Only the existing row alignment may reposition the outer stack. Require
+  /// the same actual child extents; inner nodes never move relative to each other.
+  ForumBodyRubyTreeMetrics withRootGroup(ForumBodyRubyGroupMetrics value) {
+    final old = root.group!;
+    if (old.size.width != value.size.width ||
+        old.baseFontBaseline != value.baseFontBaseline ||
+        old.baseAscent != value.baseAscent ||
+        old.baseDescent != value.baseDescent ||
+        old.baseOffset.dx != value.baseOffset.dx ||
+        old.alignmentSignature != value.alignmentSignature ||
+        old.annotations.length != value.annotations.length) {
+      throw ArgumentError('Ruby row target changed native child geometry');
+    }
+    for (final (rank, a) in old.annotations.indexed) {
+      final b = value.annotations[rank];
+      if (a.bounds != b.bounds ||
+          a.fontBaseline != b.fontBaseline ||
+          a.side != b.side ||
+          a.gap != b.gap ||
+          a.hasAnnotation != b.hasAnnotation) {
+        throw ArgumentError(
+          'Ruby row target changed native annotation geometry',
+        );
+      }
+    }
+    if (identical(old, value)) return this;
+    final replacement = ForumBodyRubyTreeContainerMetrics(
+      font: root.font,
+      backgroundFont: root.backgroundFont,
+      group: value,
+      frame: root.font.enclose(
+        childSize: value.size,
+        childBaseline: value.baseline,
+      ),
+    );
+    return ForumBodyRubyTreeMetrics._copy(
+      input,
+      UnmodifiableListView(_TreeRootMetricsView(nodes, replacement)),
+      textScaler,
+    );
+  }
+}
+
+final class _TreeRootMetricsView
+    extends ListBase<ForumBodyRubyTreeNodeMetrics> {
+  _TreeRootMetricsView(this.prefix, this.root);
+  final List<ForumBodyRubyTreeNodeMetrics> prefix;
+  final ForumBodyRubyTreeNodeMetrics root;
+  @override
+  int get length => prefix.length;
+  @override
+  set length(int value) => throw UnsupportedError('Read-only ruby metrics');
+  @override
+  ForumBodyRubyTreeNodeMetrics operator [](int index) {
+    RangeError.checkValidIndex(index, prefix);
+    return index == length - 1 ? root : prefix[index];
+  }
+
+  @override
+  void operator []=(int index, ForumBodyRubyTreeNodeMetrics value) =>
+      throw UnsupportedError('Read-only ruby metrics');
 }
 
 sealed class ForumBodyRubyTreeNodeMetrics {
@@ -95,6 +174,9 @@ final class ForumBodyRubyTreeMetricsPreparation {
   Map<ForumBodyTextBandContent, TextScaler> _bandScalers = Map.identity();
   Iterable<ForumBodyNativeParagraphLease> Function()? _additionalOwned;
   ForumBodyTextRequestPreparation? _member;
+  ForumBodyTextRequest? _currentRequest;
+  ForumBodyTextRequest? _failedRequest;
+  ForumBodyTextRequest? get failedRequest => _failedRequest;
   ForumBodyRubyGroupGeometry? _geometry;
   ForumBodyRubyRootFontBox? _font;
   ForumBodyRubyContainerFontBox? _backgroundFont;
@@ -278,6 +360,7 @@ final class ForumBodyRubyTreeMetricsPreparation {
     bool cachedOnly,
     void Function(ForumBodyTextLease) capture,
   ) {
+    _currentRequest = request;
     final member = _member ??= ForumBodyTextRequestPreparation(
       cache: _cache!,
       request: request,
@@ -301,6 +384,7 @@ final class ForumBodyRubyTreeMetricsPreparation {
       } finally {
         lease.release();
       }
+      _currentRequest = null;
     }
     return step.units;
   }
@@ -363,8 +447,12 @@ final class ForumBodyRubyTreeMetricsPreparation {
     _operating = true;
     try {
       return action();
-    } catch (_) {
+    } catch (error) {
+      final failed = error is ForumBodyTextBandLayoutException
+          ? _currentRequest
+          : null;
       _retire(_State.failed);
+      _failedRequest = failed;
       rethrow;
     } finally {
       _operating = false;
@@ -374,6 +462,7 @@ final class ForumBodyRubyTreeMetricsPreparation {
   void _dropOwner() {
     _member?.close();
     _member = null;
+    _currentRequest = null;
     _geometry?.close();
     _geometry = null;
     _font = null;

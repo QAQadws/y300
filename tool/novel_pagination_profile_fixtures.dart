@@ -28,6 +28,13 @@ final novelProfileLanguageFixtures = <({String name, String html})>[
   (name: 'language-ruby-rtl', html: _languageRuby(rtl: true)),
 ];
 
+/// Real reader matrix for the admitted nested tree path. Keep established
+/// corpora unchanged so their before/after performance comparisons stay valid.
+final novelProfileNestedRubyFixtures = <({String name, String html})>[
+  (name: 'ruby-nested-ltr', html: _nestedRuby()),
+  (name: 'ruby-nested-rtl', html: _nestedRuby(rtl: true)),
+];
+
 // Deliberately exceeds the reader's issued-handle budget within one page.
 // Keep this independent failure fixture when profiling the admitted corpus.
 final novelProfileRubyGapOverflowHtml = _rubyGaps(
@@ -42,8 +49,23 @@ List<({String name, String html})> novelMainPageProfileFixtures(
   'baseline' => novelProfileFixtures,
   'ruby-gaps' => novelProfileRubyGapFixtures,
   'language' => novelProfileLanguageFixtures,
+  'ruby-nested' => novelProfileNestedRubyFixtures,
   _ => throw ArgumentError.value(corpus, 'corpus', 'Unknown profile corpus'),
 };
+
+String _nestedRuby({bool rtl = false}) => List.generate(
+  48,
+  (p) =>
+      '<p dir="${rtl ? 'rtl' : 'ltr'}">${rtl ? 'نص تجريبي' : '合成嵌套正文'} $p '
+      '<ruby><rb><ruby>漢😀<rt style="font-size:8px">kan</rt></ruby></rb>'
+      '<rt style="font-size:8px">outer</rt></ruby>，'
+      '<ruby>字<rt><ruby style="font-size:10px">に<rt style="font-size:6px">ni</rt></ruby></rt></ruby>，'
+      '<ruby style="background:rgba(255,0,0,.2)"><rb><ruby>同<rt>in</rt></ruby></rb><rt>out</rt>'
+      '<rb>根</rb><rt>flat</rt></ruby>，'
+      '<ruby style="font-size:30px;line-height:2"><rb style="font-size:18px;line-height:1">'
+      '<ruby>空<rt></rt></ruby></rb><rtc></rtc><rtc><rt></rt></rtc></ruby>。'
+      '${rtl ? 'نهاية الفقرة.' : '正文、注音、来源与独立字体框。'}</p>',
+).join();
 
 Set<String>? novelProfileExpectedLanguages(String name) => switch (name) {
   'language-runs' => const {'ja', 'zh-Hans-CN', 'zh-Hant-TW', 'ko', 'und'},
