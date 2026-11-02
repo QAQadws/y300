@@ -15,3 +15,8 @@ These distinct native `locl` results verify that inherited and overridden
 TextStyle locales actually reach shaping, including band children and pagination.
 Tests also verify an explicit unknown language clears an inherited Japanese
 locale. Matching a Locale value alone would not prove the native behavior.
+
+The optional `ruby` feature halves each of these glyph advances. Source-free
+emphasis mark tests use it to prove that the actual native font feature and
+locale both reach shaping at half the original font size. Ordinary language
+tests retain their original widths while `ruby` is disabled.

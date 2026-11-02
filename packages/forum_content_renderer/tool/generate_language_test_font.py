@@ -26,7 +26,8 @@ def rectangle(width):
 
 def main():
     family = "ForumBodyLanguageTest"
-    widths = {".notdef": 500, "han": 500, "han.jp": 750, "han.kr": 1000}
+    widths = {".notdef": 500, "han": 500, "han.jp": 750, "han.kr": 1000,
+              "han.ruby": 250, "han.jp.ruby": 375, "han.kr.ruby": 500}
     builder = FontBuilder(1000, isTTF=True)
     builder.setupGlyphOrder(list(widths))
     builder.setupCharacterMap({0x6F22: "han"})
@@ -54,6 +55,11 @@ def main():
             language KOR;
             sub han by han.kr;
         } locl;
+        feature ruby {
+            sub han by han.ruby;
+            sub han.jp by han.jp.ruby;
+            sub han.kr by han.kr.ruby;
+        } ruby;
     """)
     builder.font["head"].created = builder.font["head"].modified = 2082844800
     builder.font.recalcTimestamp = False

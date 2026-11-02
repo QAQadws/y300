@@ -8,6 +8,7 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 import '../document/forum_body_document.dart';
 import '../inline/forum_body_inline_paragraph_layout.dart';
 import '../inline/forum_body_inline_span_content.dart';
+import '../inline/forum_body_emphasis_mark.dart';
 import '../inline/forum_body_text_band_content.dart';
 import '../inline/forum_body_text_band_layout.dart';
 import 'forum_body_native_paragraph_layout.dart';
@@ -91,6 +92,39 @@ final class ForumBodyParagraphCache {
             : 0),
   );
   bool get isClosed => _closed;
+
+  ForumBodyEmphasisMarkLease acquireEmphasisMark({
+    required ForumBodyEmphasisMarkInput input,
+    TextScaler textScaler = TextScaler.noScaling,
+  }) => _acquireEmphasisMark(input, textScaler, true)!;
+
+  ForumBodyEmphasisMarkLease? tryAcquireEmphasisMarkCached({
+    required ForumBodyEmphasisMarkInput input,
+    TextScaler textScaler = TextScaler.noScaling,
+  }) => _acquireEmphasisMark(input, textScaler, false);
+
+  ForumBodyEmphasisMarkLease? _acquireEmphasisMark(
+    ForumBodyEmphasisMarkInput input,
+    TextScaler scaler,
+    bool allowBuild,
+  ) {
+    if (_closed) throw StateError('Paragraph cache is closed');
+    final scaled = ForumBodyEmphasisMarkLayout.resolveScale(input, scaler);
+    if (_closed) throw StateError('Paragraph cache is closed');
+    final entry = _acquireEntry(
+      key: _EmphasisMarkKey(input, scaled),
+      allowBuild: allowBuild,
+      minimumBytes: input.estimatedInputBytes + 112,
+      reservedGeometryBytes: 112,
+      build: () => ForumBodyEmphasisMarkLayout.create(
+        input: input,
+        scaledFontSize: scaled,
+      ),
+    );
+    return entry == null
+        ? null
+        : ForumBodyEmphasisMarkLease._(this, entry, input);
+  }
 
   /// A prepared text scene shares this owner's entry/byte budget. A miss never
   /// records or shapes; the cooperative preparation owns recording separately.
@@ -443,6 +477,7 @@ final class ForumBodyParagraphCache {
     required ForumBodyNativeParagraphLayout Function() build,
     bool countAsPicture = false,
     bool Function()? isCurrent,
+    int reservedGeometryBytes = 0,
   }) {
     if (_buildingKeys.contains(key)) {
       throw StateError('Native paragraph shaping is reentrant');
@@ -489,11 +524,15 @@ final class ForumBodyParagraphCache {
       if (isCurrent != null && !isCurrent()) {
         throw StateError('Native request is retired');
       }
+      // Single-character font resources can reserve their known one-line
+      // geometry before shaping; unknown paragraph rows are still added here.
+      final geometryBytes =
+          built.lineCount * (built is ForumBodyTextBandLayout ? 96 : 112);
       final bytes =
           minimumBytes +
-          // Only paragraph rows gained the two omitted-space coordinates.
-          // Text-band native lines retain their existing geometry accounting.
-          built.lineCount * (built is ForumBodyTextBandLayout ? 96 : 112) +
+          (geometryBytes > reservedGeometryBytes
+              ? geometryBytes - reservedGeometryBytes
+              : 0) +
           (built is ForumBodyInlineParagraphLayout
               ? built.fragmentFrameBytes
               : 0);
@@ -760,6 +799,25 @@ final class ForumBodyParagraphBudgetProbe {
     _include(cache, input, input.estimatedBytes);
   }
 
+  void includeEmphasisMark({
+    required ForumBodyEmphasisMarkInput input,
+    required TextScaler textScaler,
+  }) {
+    final cache = _cache;
+    if (cache == null || cache.isClosed) {
+      throw StateError('Paragraph budget probe is retired');
+    }
+    final scaled = ForumBodyEmphasisMarkLayout.resolveScale(input, textScaler);
+    if (!identical(_cache, cache) || cache.isClosed) {
+      throw StateError('Paragraph budget probe is retired');
+    }
+    _include(
+      cache,
+      _EmphasisMarkKey(input, scaled),
+      input.estimatedInputBytes + 112,
+    );
+  }
+
   void include({
     required ForumBodyParagraphContent content,
     required double width,
@@ -950,6 +1008,17 @@ sealed class ForumBodyTextLease extends ForumBodyNativeParagraphLease {
   ForumBodyTextLayout get layout;
 }
 
+/// Decoration resources expose neither source content nor text-selection API.
+final class ForumBodyEmphasisMarkLease extends ForumBodyNativeParagraphLease {
+  ForumBodyEmphasisMarkLease._(super.owner, super.entry, this.input)
+    : super._();
+  final ForumBodyEmphasisMarkInput input;
+  ForumBodyEmphasisMarkLayout get layout {
+    if (!isActive) throw StateError('Emphasis mark lease is retired');
+    return _entry.layout as ForumBodyEmphasisMarkLayout;
+  }
+}
+
 final class ForumBodyParagraphLease extends ForumBodyTextLease {
   ForumBodyParagraphLease._(super.owner, super.entry, this.content) : super._();
 
@@ -1025,6 +1094,20 @@ final class _NativeInputIdentity {
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is _NativeInputIdentity && _key == other._key;
+}
+
+final class _EmphasisMarkKey {
+  const _EmphasisMarkKey(this.input, this.scaled);
+  final ForumBodyEmphasisMarkInput input;
+  final double scaled;
+  @override
+  bool operator ==(Object other) =>
+      other is _EmphasisMarkKey &&
+      input == other.input &&
+      scaled == other.scaled;
+  @override
+  int get hashCode =>
+      Object.hash(ForumBodyEmphasisMarkLayout.revision, input, scaled);
 }
 
 final class _LayoutEntry {
