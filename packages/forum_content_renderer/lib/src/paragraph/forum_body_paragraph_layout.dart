@@ -36,6 +36,7 @@ final class ForumBodyParagraphLayout
     this._engineProjection,
     this.firstLineIndent,
     this.rowIsolationPitch,
+    this.nativeFontClearance,
     List<ForumBodyParagraphLine> lines,
   ) : lines = List.unmodifiable(lines),
       identity = content.identity,
@@ -117,6 +118,35 @@ final class ForumBodyParagraphLayout
         );
       }
       final metrics = painter.computeLineMetrics();
+      var nativeFontClearance = scales.values.reduce((a, b) => a > b ? a : b);
+      if (rowIsolationPitch != null) {
+        // Qualify fallback fonts across the entire source once. A distant large
+        // glyph must not escape an adjacent-row-only isolation check. These are
+        // native font frames, not measured ink or a second per-row shape.
+        for (final metric in metrics) {
+          if (metric.unscaledAscent > nativeFontClearance) {
+            nativeFontClearance = metric.unscaledAscent;
+          }
+        }
+        for (final box in painter.getBoxesForSelection(
+          TextSelection(
+            baseOffset: 0,
+            extentOffset:
+                engine?.engineText.length ?? content.projection.text.length,
+          ),
+        )) {
+          if (!box.top.isFinite ||
+              !box.bottom.isFinite ||
+              box.bottom < box.top) {
+            throw const ForumBodyParagraphLayoutException(
+              ForumBodyParagraphLayoutFailure.isolation,
+            );
+          }
+          if (box.bottom - box.top > nativeFontClearance) {
+            nativeFontClearance = box.bottom - box.top;
+          }
+        }
+      }
       if (rowIsolationPitch != null &&
           (!painter.height.isFinite || painter.height > 1048576)) {
         throw const ForumBodyParagraphLayoutException(
@@ -158,6 +188,7 @@ final class ForumBodyParagraphLayout
         engine,
         indentGeometry,
         rowIsolationPitch,
+        nativeFontClearance,
         lines,
       );
     } catch (_) {
@@ -204,6 +235,11 @@ final class ForumBodyParagraphLayout
   /// Consumers must derive row placement and safe paint clips from this actual
   /// layout; ordinary fragments cannot consume an isolated paragraph.
   final double? rowIsolationPitch;
+
+  /// Whole-source native font-frame clearance, including fallback glyphs. Row
+  /// isolation uses this guard without resampling a caller's scaler or querying
+  /// the entire source again for every visible row.
+  final double nativeFontClearance;
 
   /// Physical edge reserve shared by paint, hit testing, lines and boxes.
   final double horizontalInset;

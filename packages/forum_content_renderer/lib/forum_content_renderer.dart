@@ -82,6 +82,7 @@ export 'src/pagination/forum_body_prepared_text_fragment.dart';
 export 'src/pagination/forum_body_text_page_content.dart';
 export 'src/paragraph/forum_body_paragraph_content.dart';
 export 'src/paragraph/forum_body_paragraph_layout.dart';
+export 'src/paragraph/forum_body_paragraph_row.dart';
 export 'src/paragraph/forum_body_paragraph_cache.dart';
 export 'src/paragraph/forum_body_text_layout.dart';
 export 'src/paragraph/forum_body_text_request.dart';

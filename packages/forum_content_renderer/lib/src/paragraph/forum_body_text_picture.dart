@@ -1,12 +1,17 @@
 part of 'forum_body_paragraph_cache.dart';
 
-typedef _TextPictureDependency = ({Object identity, int? bandChildIndex});
+typedef _TextPictureDependency = ({
+  Object identity,
+  int? bandChildIndex,
+  ForumBodyParagraphRowSelector? paragraphRow,
+});
 
 final class ForumBodyTextPictureCommand {
   const ForumBodyTextPictureCommand({
     required this.nativeInputIdentity,
     required this.offset,
     this.bandChildIndex,
+    this.paragraphRow,
     this.fitScale = 1,
   });
   factory ForumBodyTextPictureCommand.fromText(
@@ -30,6 +35,16 @@ final class ForumBodyTextPictureCommand {
     offset: offset,
     fitScale: fitScale,
   );
+  factory ForumBodyTextPictureCommand.fromParagraphRow(
+    ForumBodyParagraphRowView row,
+    Offset offset, {
+    double fitScale = 1,
+  }) => ForumBodyTextPictureCommand(
+    nativeInputIdentity: row.nativeInputIdentity,
+    offset: offset,
+    fitScale: fitScale,
+    paragraphRow: row.selector,
+  );
   final Object nativeInputIdentity;
   final Offset offset;
 
@@ -38,8 +53,12 @@ final class ForumBodyTextPictureCommand {
   final double fitScale;
   // Several source-bound views share a band key but paint different strips.
   final int? bandChildIndex;
-  _TextPictureDependency get _dependency =>
-      (identity: nativeInputIdentity, bandChildIndex: bandChildIndex);
+  final ForumBodyParagraphRowSelector? paragraphRow;
+  _TextPictureDependency get _dependency => (
+    identity: nativeInputIdentity,
+    bandChildIndex: bandChildIndex,
+    paragraphRow: paragraphRow,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -47,10 +66,16 @@ final class ForumBodyTextPictureCommand {
           nativeInputIdentity == other.nativeInputIdentity &&
           offset == other.offset &&
           bandChildIndex == other.bandChildIndex &&
+          paragraphRow == other.paragraphRow &&
           fitScale == other.fitScale;
   @override
-  int get hashCode =>
-      Object.hash(nativeInputIdentity, offset, bandChildIndex, fitScale);
+  int get hashCode => Object.hash(
+    nativeInputIdentity,
+    offset,
+    bandChildIndex,
+    paragraphRow,
+    fitScale,
+  );
 }
 
 /// A finite draw list over actual opaque native inputs. No source authority,
@@ -83,12 +108,30 @@ final class ForumBodyTextPictureInput {
       final key = identity._key;
       if (key is ForumBodyTextBandCacheKey) {
         final child = command.bandChildIndex;
-        if (child == null || child < 0 || child >= key.projections.length) {
+        if (child == null ||
+            child < 0 ||
+            child >= key.projections.length ||
+            command.paragraphRow != null) {
           throw ArgumentError('Invalid native band picture selector');
         }
       } else if ((key is! _LayoutKey && key is! _EmphasisMarkKey) ||
           command.bandChildIndex != null) {
         throw ArgumentError('Text picture requires an actual text input');
+      }
+      final row = command.paragraphRow;
+      if (row != null &&
+          (key is! _LayoutKey ||
+              key.rowIsolationPitch == null ||
+              row.startLine < 0 ||
+              row.endLine <= row.startLine ||
+              !row.originY.isFinite ||
+              !row.clipTop.isFinite ||
+              !row.clipBottom.isFinite ||
+              row.clipBottom <= row.clipTop ||
+              row.originY.abs() > 1048576 ||
+              row.clipTop.abs() > 1114112 ||
+              row.clipBottom.abs() > 1114112)) {
+        throw ArgumentError('Invalid native paragraph row selector');
       }
       inputs.add(identity);
     }
@@ -96,11 +139,12 @@ final class ForumBodyTextPictureInput {
       frozen,
       4096 +
           frozen.length * 128 +
+          frozen.where((command) => command.paragraphRow != null).length * 64 +
           inputs.fold(0, (sum, value) => sum + _textPictureInputBytes(value)),
     );
   }
   final List<ForumBodyTextPictureCommand> commands;
-  static const revision = 3;
+  static const revision = 4;
 
   /// Conservative display-list admission, not font/native/GPU memory. Actual
   /// engine picture bytes can grow this cost before the owner publishes it.
@@ -155,6 +199,7 @@ final class ForumBodyTextPicturePreparation {
     required Iterable<ForumBodyTextLease> text,
     required void Function() ensureOwner,
     Iterable<ForumBodyEmphasisMarkLease> marks = const [],
+    Iterable<ForumBodyParagraphRowView> paragraphRows = const [],
     Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
   }) : _input = input,
        _cache = cache,
@@ -185,6 +230,7 @@ final class ForumBodyTextPicturePreparation {
             bandChildIndex: lease is ForumBodyTextBandChildLease
                 ? lease.childIndex
                 : null,
+            paragraphRow: null,
           );
           if (!wanted.contains(key)) {
             throw ArgumentError('Unrequested text picture dependency');
@@ -198,6 +244,34 @@ final class ForumBodyTextPicturePreparation {
               _ => throw ArgumentError('Unsupported text picture resource'),
             };
           }
+        }
+      }
+      for (final row in paragraphRows) {
+        if (++inspected > input.commands.length) {
+          throw ArgumentError('Excess text picture dependencies');
+        }
+        _guard();
+        final parent = row.parent;
+        if (!cache.ownsLease(parent) || !row.isPaintPrepared) {
+          throw StateError('Foreign or unprepared paragraph row');
+        }
+        final key = (
+          identity: row.nativeInputIdentity,
+          bandChildIndex: null,
+          paragraphRow: row.selector,
+        );
+        if (!wanted.contains(key)) {
+          throw ArgumentError('Unrequested paragraph row dependency');
+        }
+        if (!_resources.containsKey(key)) {
+          final alias =
+              cache._aliasTextLease(parent) as ForumBodyParagraphLease;
+          _resources[key] = alias;
+          _rowViews[key] = ForumBodyParagraphRowView.bind(
+            parent: alias,
+            metrics: row.metrics,
+            ensureOwner: ensureOwner,
+          );
         }
       }
       if (_resources.length != wanted.length) {
@@ -220,6 +294,7 @@ final class ForumBodyTextPicturePreparation {
   Iterator<ForumBodyNativeParagraphLease>? _prefix;
   bool _prefixStarted = false;
   final _resources = <_TextPictureDependency, ForumBodyNativeParagraphLease>{};
+  final _rowViews = <_TextPictureDependency, ForumBodyParagraphRowView>{};
   List<ForumBodyNativeParagraphLease> _dependencies = const [];
   ForumBodyParagraphBudgetProbe? _probe;
   ForumBodyTextPictureLease? _pending;
@@ -336,13 +411,18 @@ final class ForumBodyTextPicturePreparation {
                 }
                 try {
                   final offset = fitted ? Offset.zero : command.offset;
-                  switch (_resources[command._dependency]!) {
-                    case ForumBodyTextLease resource:
-                      resource.layout.paint(canvas, offset);
-                    case ForumBodyEmphasisMarkLease resource:
-                      resource.layout.paint(canvas, offset);
-                    default:
-                      throw StateError('Unsupported text picture resource');
+                  final row = _rowViews[command._dependency];
+                  if (row != null) {
+                    row.paint(canvas, offset);
+                  } else {
+                    switch (_resources[command._dependency]!) {
+                      case ForumBodyTextLease resource:
+                        resource.layout.paint(canvas, offset);
+                      case ForumBodyEmphasisMarkLease resource:
+                        resource.layout.paint(canvas, offset);
+                      default:
+                        throw StateError('Unsupported text picture resource');
+                    }
                   }
                 } finally {
                   if (fitted) canvas.restore();
@@ -471,6 +551,7 @@ final class ForumBodyTextPicturePreparation {
     _probe = null;
     final resources = _resources.values.toList(growable: false);
     _resources.clear();
+    _rowViews.clear();
     _dependencies = const [];
     _ensureOwner = null;
     _additionalOwned = null;
