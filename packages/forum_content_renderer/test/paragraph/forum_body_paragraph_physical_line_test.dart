@@ -480,7 +480,7 @@ void main() {
       expect(input, isNot(normal));
       expect(
         input.estimatedInputBytes - normal.estimatedInputBytes,
-        128 * lines.length,
+        192 * lines.length,
       );
       expect(
         () => ForumBodyTextPictureInput(

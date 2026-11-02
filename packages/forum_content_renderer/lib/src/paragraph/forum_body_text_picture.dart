@@ -175,12 +175,12 @@ final class ForumBodyTextPictureInput {
       4096 +
           frozen.length * 128 +
           frozen.where((command) => command.paragraphRow != null).length * 64 +
-          frozen.where((command) => command.physicalLine != null).length * 128 +
+          frozen.where((command) => command.physicalLine != null).length * 192 +
           inputs.fold(0, (sum, value) => sum + _textPictureInputBytes(value)),
     );
   }
   final List<ForumBodyTextPictureCommand> commands;
-  static const revision = 5;
+  static const revision = 6;
 
   /// Conservative display-list admission, not font/native/GPU memory. Actual
   /// engine picture bytes can grow this cost before the owner publishes it.

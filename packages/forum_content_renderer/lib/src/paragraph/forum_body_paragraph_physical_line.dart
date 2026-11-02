@@ -8,11 +8,16 @@ final class ForumBodyParagraphPhysicalLineSelector {
     this._group,
     this.selector, {
     required bool empty,
+    required this.fontBounds,
   }) : _empty = empty;
   final Object _nativeInputIdentity;
   final ForumBodyParagraphRowSelector _group;
   final bool _empty;
   final ForumBodyParagraphRowSelector selector;
+
+  /// Actual complete-group font boxes and logical frame for this physical row,
+  /// in whole-parent coordinates. This is a font envelope, not measured ink.
+  final Rect fontBounds;
   int get lineIndex => selector.startLine;
 
   /// Pure input comparison, not current owner or source authorization.
@@ -135,6 +140,7 @@ final class ForumBodyParagraphPhysicalLinePreparation {
                 clipBottom: bottom,
               ),
               empty: line.coverageStartUtf16 == line.coverageEndUtf16,
+              fontBounds: _bounds![index],
             ),
           );
         } else {
