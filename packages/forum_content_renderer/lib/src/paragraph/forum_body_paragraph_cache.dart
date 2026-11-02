@@ -1073,6 +1073,18 @@ final class ForumBodyParagraphLease extends ForumBodyTextLease {
   /// Current box/role/interaction metadata, separate from cached native input.
   @override
   final ForumBodyParagraphContent content;
+
+  /// Qualifies a natural/isolated pair without acquiring or reshaping it.
+  /// Equal native keys alone cannot prove the current source or cache owner.
+  bool hasSameSourceAndInputsExceptRowIsolation(
+    ForumBodyParagraphLease other,
+  ) =>
+      hasSameActiveOwner(other) &&
+      identical(content, other.content) &&
+      (_entry.key as _LayoutKey)._hasSameTextInputs(
+        other._entry.key as _LayoutKey,
+      );
+
   @override
   ForumBodyParagraphLayout get layout {
     if (!isActive) throw StateError('Paragraph lease is retired');
@@ -1223,6 +1235,10 @@ final class _LayoutKey {
   @override
   bool operator ==(Object other) =>
       other is _LayoutKey &&
+      rowIsolationPitch == other.rowIsolationPitch &&
+      _hasSameTextInputs(other);
+
+  bool _hasSameTextInputs(_LayoutKey other) =>
       identity == other.identity &&
       path == other.path &&
       fontRevision == other.fontRevision &&
@@ -1236,7 +1252,6 @@ final class _LayoutKey {
       direction == other.direction &&
       width == other.width &&
       indentAdvance == other.indentAdvance &&
-      rowIsolationPitch == other.rowIsolationPitch &&
       listEquals(scales, other.scales);
   @override
   int get hashCode => Object.hash(
