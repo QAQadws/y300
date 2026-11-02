@@ -9,8 +9,10 @@ import 'forum_body_paragraph_content.dart';
 /// native resource. Cached acquisition never shapes or prepares child pictures.
 sealed class ForumBodyTextRequest extends ForumBodyNativeRequest {
   const ForumBodyTextRequest._();
-  factory ForumBodyTextRequest.paragraph(ForumBodyParagraphContent content) =
-      ForumBodyParagraphTextRequest;
+  factory ForumBodyTextRequest.paragraph(
+    ForumBodyParagraphContent content, {
+    double? rowIsolationPitch,
+  }) = ForumBodyParagraphTextRequest;
   factory ForumBodyTextRequest.bandChild({
     required ForumBodyTextBandContent band,
     required int childIndex,
@@ -27,7 +29,12 @@ sealed class ForumBodyTextRequest extends ForumBodyNativeRequest {
 }
 
 final class ForumBodyParagraphTextRequest extends ForumBodyTextRequest {
-  const ForumBodyParagraphTextRequest(this.content) : super._();
+  const ForumBodyParagraphTextRequest(this.content, {this.rowIsolationPitch})
+    : super._();
+
+  /// Native-only spacing for a later row-formatting consumer. It contributes
+  /// to native identity and admission, not to source text or author styles.
+  final double? rowIsolationPitch;
   @override
   final ForumBodyParagraphContent content;
   @override
@@ -41,8 +48,14 @@ final class ForumBodyParagraphTextRequest extends ForumBodyTextRequest {
           content: content,
           width: width,
           textScaler: textScaler,
+          rowIsolationPitch: rowIsolationPitch,
         )
-      : cache.acquire(content: content, width: width, textScaler: textScaler);
+      : cache.acquire(
+          content: content,
+          width: width,
+          textScaler: textScaler,
+          rowIsolationPitch: rowIsolationPitch,
+        );
   @override
   void includeBudget(
     ForumBodyParagraphBudgetProbe probe, {
@@ -54,6 +67,7 @@ final class ForumBodyParagraphTextRequest extends ForumBodyTextRequest {
     width: width,
     minimumLineCount: minimumLineCount,
     textScaler: textScaler,
+    rowIsolationPitch: rowIsolationPitch,
   );
 }
 

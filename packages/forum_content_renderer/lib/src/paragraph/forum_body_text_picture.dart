@@ -522,6 +522,7 @@ int _textPictureInputBytes(_NativeInputIdentity input) {
     return 4096 +
         key.projection.text.length * 96 +
         spans(key.span) * 256 +
+        key.isolationBytes +
         key.scales.length * 16;
   }
   final band = key as ForumBodyTextBandCacheKey;

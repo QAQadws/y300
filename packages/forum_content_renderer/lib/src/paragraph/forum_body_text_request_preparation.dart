@@ -75,7 +75,7 @@ final class ForumBodyTextRequestPreparation {
         if (cache.layoutBuildCount != builds) {
           return (units: 1, waiting: false, cacheMiss: false);
         }
-        cache.prepareBandChildPaint(_pending! as ForumBodyTextBandChildLease);
+        cache.prepareTextPaint(_pending!);
         _guard();
       }
       _state = _MemberState.ready;

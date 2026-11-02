@@ -624,16 +624,13 @@ final class ForumBodyEmphasisLinePreparation {
                   ? _LinePhase.releaseMarks
                   : _LinePhase.basePaint;
             case _LinePhase.basePaint:
-              if (_base is ForumBodyTextBandChildLease &&
-                  !_base!.layout.isPaintPrepared) {
+              if (!_base!.layout.isPaintPrepared) {
                 if (cachedOnly) {
                   _cacheMiss = true;
                   used++;
                   return step();
                 }
-                if (cache.prepareBandChildPaint(
-                  _base! as ForumBodyTextBandChildLease,
-                )) {
+                if (cache.prepareTextPaint(_base!)) {
                   pictures++;
                 }
               }

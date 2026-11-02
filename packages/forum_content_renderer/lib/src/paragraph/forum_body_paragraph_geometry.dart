@@ -10,6 +10,7 @@ enum ForumBodyParagraphLayoutFailure {
   singleLine,
   coverage,
   emphasis,
+  isolation,
 }
 
 enum ForumBodyParagraphWindow {

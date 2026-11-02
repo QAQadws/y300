@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/painting.dart';
 import 'package:html_pagination_core/html_pagination_core.dart';
 
@@ -32,6 +34,7 @@ final class ForumBodyParagraphLayout
     this.horizontalInset,
     this._engineProjection,
     this.firstLineIndent,
+    this.rowIsolationPitch,
     List<ForumBodyParagraphLine> lines,
   ) : lines = List.unmodifiable(lines),
       identity = content.identity,
@@ -42,11 +45,13 @@ final class ForumBodyParagraphLayout
     required ForumBodyParagraphContent content,
     required double width,
     TextScaler textScaler = TextScaler.noScaling,
+    double? rowIsolationPitch,
   }) {
     final scales = validateInputs(
       content: content,
       width: width,
       textScaler: textScaler,
+      rowIsolationPitch: rowIsolationPitch,
     );
     final fitted =
         content.layoutMode == ForumBodyParagraphLayoutMode.fitSingleLine;
@@ -65,6 +70,17 @@ final class ForumBodyParagraphLayout
       textScaler: textScaler,
       locale: content.style.textStyle.locale,
       textWidthBasis: TextWidthBasis.parent,
+      // The requested separation is already physical; compensate only the
+      // strut height for the actual scaled root font, leaving glyphs unchanged.
+      strutStyle: rowIsolationPitch == null
+          ? null
+          : StrutStyle.fromTextStyle(
+              content.style.textStyle,
+              height:
+                  rowIsolationPitch / scales[content.style.textStyle.fontSize]!,
+              leading: 0,
+              forceStrutHeight: true,
+            ),
     );
     try {
       // Shape at the selected font/scaler first. Fitting transforms that same
@@ -101,6 +117,12 @@ final class ForumBodyParagraphLayout
         );
       }
       final metrics = painter.computeLineMetrics();
+      if (rowIsolationPitch != null &&
+          (!painter.height.isFinite || painter.height > 1048576)) {
+        throw const ForumBodyParagraphLayoutException(
+          ForumBodyParagraphLayoutFailure.isolation,
+        );
+      }
       if ((fitted || intrinsic) && metrics.length > 1) {
         throw const ForumBodyParagraphLayoutException(
           ForumBodyParagraphLayoutFailure.singleLine,
@@ -135,6 +157,7 @@ final class ForumBodyParagraphLayout
         horizontalInset,
         engine,
         indentGeometry,
+        rowIsolationPitch,
         lines,
       );
     } catch (_) {
@@ -148,10 +171,20 @@ final class ForumBodyParagraphLayout
     required ForumBodyParagraphContent content,
     required double width,
     required TextScaler textScaler,
+    double? rowIsolationPitch,
   }) {
     if (!width.isFinite || width <= 0 || width > 16384) {
       throw const ForumBodyParagraphLayoutException(
         ForumBodyParagraphLayoutFailure.width,
+      );
+    }
+    if (rowIsolationPitch != null &&
+        (!rowIsolationPitch.isFinite ||
+            rowIsolationPitch <= 0 ||
+            rowIsolationPitch > 16384 ||
+            content.layoutMode != ForumBodyParagraphLayoutMode.wrap)) {
+      throw const ForumBodyParagraphLayoutException(
+        ForumBodyParagraphLayoutFailure.isolation,
       );
     }
     final scales = <double, double>{};
@@ -164,7 +197,13 @@ final class ForumBodyParagraphLayout
     return scales;
   }
 
-  static const backendRevision = 9;
+  static const backendRevision = 10;
+
+  /// Native-only requested baseline separation, in logical pixels after actual
+  /// font scaling. It is neither the author's line height nor page allocation.
+  /// Consumers must derive row placement and safe paint clips from this actual
+  /// layout; ordinary fragments cannot consume an isolated paragraph.
+  final double? rowIsolationPitch;
 
   /// Physical edge reserve shared by paint, hit testing, lines and boxes.
   final double horizontalInset;
@@ -199,7 +238,48 @@ final class ForumBodyParagraphLayout
   }
 
   @override
-  bool get isPaintPrepared => !isDisposed;
+  bool get isPaintPrepared =>
+      !isDisposed && (rowIsolationPitch == null || _isolationPaintPrepared);
+  bool _isolationPaintPrepared = false;
+  bool _preparingPaint = false;
+
+  /// Stage the native paragraph's first drawing outside visible paint. Some
+  /// fallback-font shadows differ on that first recording; subsequent drawing
+  /// must use the qualified native state, not publish the transient picture.
+  /// The reading cache counts this as one recording and retains no picture.
+  bool preparePaint() {
+    _ensureOpen();
+    if (_preparingPaint) {
+      throw StateError('Paragraph paint preparation is reentrant');
+    }
+    if (isPaintPrepared) return false;
+    _preparingPaint = true;
+    ui.PictureRecorder? recorder;
+    ui.Picture? picture;
+    try {
+      recorder = ui.PictureRecorder();
+      _painter.paint(Canvas(recorder), Offset(horizontalInset, 0));
+      picture = recorder.endRecording();
+      recorder = null;
+      _ensureOpen();
+      final finished = picture;
+      picture = null;
+      finished.dispose();
+      _ensureOpen();
+      _isolationPaintPrepared = true;
+      return true;
+    } finally {
+      try {
+        if (recorder != null && recorder.isRecording) {
+          recorder.endRecording().dispose();
+        }
+        picture?.dispose();
+      } finally {
+        _preparingPaint = false;
+      }
+    }
+  }
+
   bool _disposed = false;
   @override
   bool get isDisposed => _disposed;
@@ -211,6 +291,9 @@ final class ForumBodyParagraphLayout
   @override
   void paint(Canvas canvas, Offset offset) {
     _ensureOpen();
+    if (!isPaintPrepared) {
+      throw StateError('Isolated paragraph paint is not prepared');
+    }
     if (_paintScale == 1) {
       _painter.paint(canvas, offset + Offset(horizontalInset, 0));
       return;
@@ -282,6 +365,11 @@ final class ForumBodyParagraphLayout
 
   ForumBodyParagraphFragment fragment(int startLine, int endLine) {
     _ensureOpen();
+    if (rowIsolationPitch != null) {
+      throw const ForumBodyParagraphLayoutException(
+        ForumBodyParagraphLayoutFailure.isolation,
+      );
+    }
     RangeError.checkValueInInterval(
       startLine,
       0,
@@ -307,6 +395,11 @@ final class ForumBodyParagraphLayout
   /// row. Its source coverage is empty; the preceding row owns the separator.
   ({int startLine, int endLine}) lineWindow(ForumBodyParagraphWindow window) {
     _ensureOpen();
+    if (rowIsolationPitch != null) {
+      throw const ForumBodyParagraphLayoutException(
+        ForumBodyParagraphLayoutFailure.isolation,
+      );
+    }
     return forumBodyParagraphLineWindow(
       lines: lines,
       displayText: projection.text,

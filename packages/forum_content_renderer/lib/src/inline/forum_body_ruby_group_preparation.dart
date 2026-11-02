@@ -384,9 +384,7 @@ final class ForumBodyRubyGroupPreparation {
                 break;
               }
               if (cache.layoutBuildCount != buildsBefore) break;
-              cache.prepareBandChildPaint(
-                _pending! as ForumBodyTextBandChildLease,
-              );
+              cache.prepareTextPaint(_pending!);
               _guard();
             }
           }

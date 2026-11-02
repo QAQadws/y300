@@ -220,11 +220,13 @@ final class ForumBodyParagraphCache {
     required ForumBodyParagraphContent content,
     required double width,
     TextScaler textScaler = TextScaler.noScaling,
+    double? rowIsolationPitch,
   }) => _acquire(
     content: content,
     width: width,
     textScaler: textScaler,
     allowBuild: true,
+    rowIsolationPitch: rowIsolationPitch,
   )!;
 
   /// A cache miss never shapes. A returned lease has the usual ownership;
@@ -233,11 +235,13 @@ final class ForumBodyParagraphCache {
     required ForumBodyParagraphContent content,
     required double width,
     TextScaler textScaler = TextScaler.noScaling,
+    double? rowIsolationPitch,
   }) => _acquire(
     content: content,
     width: width,
     textScaler: textScaler,
     allowBuild: false,
+    rowIsolationPitch: rowIsolationPitch,
   );
 
   ForumBodyParagraphLease? _acquire({
@@ -245,24 +249,30 @@ final class ForumBodyParagraphCache {
     required double width,
     required TextScaler textScaler,
     required bool allowBuild,
+    double? rowIsolationPitch,
   }) {
     if (_closed) throw StateError('Paragraph cache is closed');
     final scales = ForumBodyParagraphLayout.validateInputs(
       content: content,
       width: width,
       textScaler: textScaler,
+      rowIsolationPitch: rowIsolationPitch,
     );
     // Caller-provided TextScaler runs during validation and native shaping.
     if (_closed) throw StateError('Paragraph cache is closed');
-    final key = _LayoutKey(content, width, scales);
+    final key = _LayoutKey(content, width, scales, rowIsolationPitch);
     final entry = _acquireEntry(
       key: key,
       allowBuild: allowBuild,
-      minimumBytes: _minimumEstimatedBytes(content) + key.indentBytes,
+      minimumBytes:
+          _minimumEstimatedBytes(content) +
+          key.indentBytes +
+          key.isolationBytes,
       build: () => ForumBodyParagraphLayout.create(
         content: content,
         width: width,
         textScaler: textScaler,
+        rowIsolationPitch: rowIsolationPitch,
       ),
     );
     return entry == null
@@ -434,6 +444,28 @@ final class ForumBodyParagraphCache {
     }
     entry.bandHint = content;
     _bandHints[content] = entry;
+  }
+
+  /// Prepare one actual text view. Ordinary paragraphs need no work; isolated
+  /// paragraphs stage and discard their first native drawing. Band children
+  /// retain their admitted drawing through the existing path below.
+  bool prepareTextPaint(ForumBodyTextLease lease) {
+    if (!ownsLease(lease)) throw StateError('Text lease is retired or foreign');
+    if (lease is ForumBodyTextBandChildLease) {
+      return prepareBandChildPaint(lease);
+    }
+    final paragraph = lease as ForumBodyParagraphLease;
+    if (paragraph.layout.isPaintPrepared) return false;
+    if (_preparingPicture) throw StateError('Picture preparation is reentrant');
+    _preparingPicture = true;
+    try {
+      final recorded = paragraph.layout.preparePaint();
+      if (!ownsLease(lease)) throw StateError('Text lease is retired');
+      if (recorded) _pictureBuilds++;
+      return recorded;
+    } finally {
+      _preparingPicture = false;
+    }
   }
 
   /// Cooperative work outside paint: record one child, admit its measured
@@ -832,6 +864,7 @@ final class ForumBodyParagraphBudgetProbe {
     required double width,
     required int minimumLineCount,
     required TextScaler textScaler,
+    double? rowIsolationPitch,
   }) {
     final cache = _cache;
     if (cache == null || cache.isClosed) {
@@ -842,19 +875,24 @@ final class ForumBodyParagraphBudgetProbe {
       content: content,
       width: width,
       textScaler: textScaler,
+      rowIsolationPitch: rowIsolationPitch,
     );
     // TextScaler is caller code and may re-enter owner/cursor retirement.
     if (!identical(_cache, cache) || cache.isClosed) {
       throw StateError('Paragraph budget probe is retired');
     }
-    final key = _LayoutKey(content, width, scales);
+    final key = _LayoutKey(content, width, scales, rowIsolationPitch);
     _include(
       cache,
       key,
-      _minimumEstimatedBytes(content) + key.indentBytes + minimumLineCount * 96,
+      _minimumEstimatedBytes(content) +
+          key.indentBytes +
+          key.isolationBytes +
+          minimumLineCount * 96,
       inputEstimate:
           _minimumEstimatedBytes(content) +
           key.indentBytes +
+          key.isolationBytes +
           minimumLineCount * 112,
     );
   }
@@ -1139,6 +1177,7 @@ final class _LayoutKey {
     ForumBodyParagraphContent content,
     double requestWidth,
     Map<double, double> scales,
+    this.rowIsolationPitch,
   ) : width =
           content.layoutMode == ForumBodyParagraphLayoutMode.intrinsicSingleLine
           ? 0
@@ -1173,6 +1212,8 @@ final class _LayoutKey {
   final TextDirection direction;
   final double width;
   final double indentAdvance;
+  final double? rowIsolationPitch;
+  int get isolationBytes => rowIsolationPitch == null ? 0 : 32;
   int get indentBytes => indentAdvance > 0
       ? ForumBodyNativeSpaceSpan.nonBreakingText.length * 96
       : 0;
@@ -1194,6 +1235,7 @@ final class _LayoutKey {
       direction == other.direction &&
       width == other.width &&
       indentAdvance == other.indentAdvance &&
+      rowIsolationPitch == other.rowIsolationPitch &&
       listEquals(scales, other.scales);
   @override
   int get hashCode => Object.hash(
@@ -1210,6 +1252,7 @@ final class _LayoutKey {
     direction,
     width,
     indentAdvance,
+    rowIsolationPitch,
     Object.hashAll(scales),
   );
 }
