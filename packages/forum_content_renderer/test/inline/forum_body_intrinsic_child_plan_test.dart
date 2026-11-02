@@ -341,6 +341,125 @@ void main() {
   );
 
   for (final direction in ['ltr', 'rtl']) {
+    for (final fontSize in [40.0, 61.25]) {
+      for (final scaled in [false, true]) {
+        test(
+          'large ordinary glyphs around a small nested box keep their full native frame $direction font=$fontSize scaled=$scaled',
+          () async {
+            final child = _child(
+              'L<ruby style="font-size:10px">A<rt style="font-size:5px">x</rt></ruby>R',
+              direction: direction,
+              style: 'font-size:${fontSize}px;line-height:.25',
+            ).child;
+            final cache = _cache();
+            addTearDown(cache.close);
+            final scaler = scaled
+                ? const _NonlinearScaler()
+                : TextScaler.noScaling;
+            final result = _plan(
+              child.toInlineFlow(trimCollapsibleEdges: false),
+              cache,
+              scaler: scaler,
+            );
+            final view = _view(result, cache, scaler: scaler);
+            try {
+              for (final (displayIndex, source) in [
+                (0, (child.parts.first as ForumBodyRubyTextContent).content),
+                (3, (child.parts.last as ForumBodyRubyTextContent).content),
+              ]) {
+                final textBox = view
+                    .glyphBoxes(displayIndex, displayIndex + 1)
+                    .single;
+                final box = textBox.toRect();
+                expect(box.top, greaterThanOrEqualTo(-1e-3));
+                expect(box.bottom, lessThanOrEqualTo(view.height + 1e-3));
+                final reference = cache.acquire(
+                  content: source,
+                  width: 30,
+                  textScaler: scaler,
+                );
+                try {
+                  final expectedBox = reference.layout
+                      .selectionBoxes(0, 1)
+                      .single
+                      .toRect();
+                  expect(box.width, closeTo(expectedBox.width, 1e-3));
+                  expect(box.height, closeTo(expectedBox.height, 1e-3));
+                  final hit = view.sourceAt(
+                    Offset(
+                      box.left +
+                          box.width *
+                              (textBox.direction == TextDirection.ltr
+                                  ? .2
+                                  : .8),
+                      box.top + 1,
+                    ),
+                  );
+                  expect(hit.isExact, isTrue);
+                  expect(hit.displayUtf16, displayIndex);
+                  expect(
+                    hit.sourceRune,
+                    view.content.projection.display
+                        .sourceAtUtf16(displayIndex)
+                        .sourceRune,
+                  );
+                  final builds = cache.layoutBuildCount;
+                  final pictures = cache.pictureBuildCount;
+                  for (final dpr in [1.0, 3.0]) {
+                    final actual = await _glyphPixels(
+                      box,
+                      dpr,
+                      (canvas) => view.paint(
+                        canvas,
+                        Offset.zero,
+                        paintBackgrounds: false,
+                      ),
+                      size: expectedBox.size,
+                    );
+                    final expected = await _glyphPixels(
+                      expectedBox,
+                      dpr,
+                      (canvas) => reference.layout.paint(canvas, Offset.zero),
+                    );
+                    // A fractional outer crop pixel may also contain the next
+                    // opaque child's ink. Every original glyph pixel must still
+                    // survive the actual view's clipping, including its edges.
+                    var lostInk = 0;
+                    var firstLost = -1;
+                    var maxLost = 0;
+                    for (var pixel = 3; pixel < expected.length; pixel += 4) {
+                      if (actual[pixel] < expected[pixel]) {
+                        lostInk++;
+                        if (firstLost < 0) firstLost = pixel ~/ 4;
+                        final lost = expected[pixel] - actual[pixel];
+                        if (lost > maxLost) maxLost = lost;
+                      }
+                    }
+                    // Native float cancellation at distinct paragraph origins
+                    // can differ by one alpha level; a clipped edge loses much
+                    // more. Both crops use the same reference pixel dimensions.
+                    expect(
+                      maxLost,
+                      lessThanOrEqualTo(1),
+                      reason:
+                          'original glyph $displayIndex DPR$dpr, lost=$lostInk, first lost pixel $firstLost',
+                    );
+                  }
+                  expect(cache.layoutBuildCount, builds);
+                  expect(cache.pictureBuildCount, pictures);
+                } finally {
+                  reference.release();
+                }
+              }
+            } finally {
+              view.close();
+            }
+            expect(cache.activeLeases, 0);
+          },
+        );
+      }
+    }
+
     test(
       'intrinsic final parent retains actual layer SPACE direction=$direction',
       () {
@@ -467,6 +586,67 @@ void main() {
     },
   );
 
+  test('an unshaped parent font does not add a fictitious glyph envelope', () {
+    final child = _child(
+      '<ruby style="font-size:10px">A<rt style="font-size:5px">x</rt></ruby>',
+      style: 'font-size:200px;line-height:.01',
+    ).child;
+    final cache = _cache();
+    addTearDown(cache.close);
+    final result = _plan(
+      child.toInlineFlow(trimCollapsibleEdges: false),
+      cache,
+    );
+    expect(result.content.content.parentRuns, isEmpty);
+    expect(result.lease.layout.height, lessThan(30));
+    final view = _view(result, cache);
+    view.close();
+    expect(cache.activeLeases, 0);
+  });
+
+  test('mechanical SPACE font size never grows an intrinsic font envelope', () {
+    final child = _child(
+      'L<ruby style="font-size:10px"><rb>A</rb><rb>B</rb>'
+      '<rtc style="font-size:40px"><rt style="font-size:1px">x</rt> '
+      '<rt style="font-size:1px">y</rt></rtc></ruby>R',
+      style: 'font-size:60px;line-height:.25',
+    ).child;
+    final cache = _cache();
+    addTearDown(cache.close);
+    final result = _plan(
+      child.toInlineFlow(trimCollapsibleEdges: false),
+      cache,
+    );
+    expect(result.content.content.projection.hasSoftSpaces, isTrue);
+    expect(result.lease.layout.height, lessThan(200));
+    final view = _view(result, cache);
+    view.close();
+    expect(cache.activeLeases, 0);
+  });
+
+  test(
+    'an omitted trailing SPACE font does not allocate invisible glyph height',
+    () {
+      final child = _child(
+        'L<ruby style="font-size:10px">A<rt style="font-size:5px">x</rt></ruby>'
+        '<span style="font-size:400px;line-height:.01"> </span>',
+        style: 'font-size:20px;line-height:.25',
+      ).child;
+      final cache = _cache();
+      addTearDown(cache.close);
+      final result = _plan(
+        child.toInlineFlow(trimCollapsibleEdges: false),
+        cache,
+      );
+      expect(result.content.content.projection.display.text, 'LAx ');
+      expect(result.lease.layout.height, lessThan(100));
+      final view = _view(result, cache);
+      expect(view.glyphBoxes(3, 4), isEmpty);
+      view.close();
+      expect(cache.activeLeases, 0);
+    },
+  );
+
   test('empty nested roots and fit mode are explicit unsupported inputs', () {
     final child = _child('L<ruby></ruby>R').child;
     expect(
@@ -505,6 +685,36 @@ bool _hasInk(List<int> rgba, int width, int height, Rect box, double dpr) {
     }
   }
   return false;
+}
+
+Future<List<int>> _glyphPixels(
+  Rect box,
+  double dpr,
+  void Function(Canvas) paint, {
+  Size? size,
+}) async {
+  final recorder = ui.PictureRecorder();
+  paint(
+    Canvas(recorder)
+      ..scale(dpr)
+      ..translate(-box.left, -box.top),
+  );
+  final picture = recorder.endRecording();
+  try {
+    final image = await picture.toImage(
+      ((size ?? box.size).width * dpr).ceil(),
+      ((size ?? box.size).height * dpr).ceil(),
+    );
+    try {
+      return (await image.toByteData(
+        format: ui.ImageByteFormat.rawRgba,
+      ))!.buffer.asUint8List().toList();
+    } finally {
+      image.dispose();
+    }
+  } finally {
+    picture.dispose();
+  }
 }
 
 final class _NonlinearScaler extends TextScaler {

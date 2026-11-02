@@ -79,7 +79,7 @@ final class ForumBodyInlineParagraphLayout
        _paintOffset = paintOffset,
        _trimmedAtoms = trimmedAtoms,
        _spaceAllocations = spaceAllocations;
-  static const revision = 9;
+  static const revision = 10;
   final ForumBodyFirstLineIndentGeometry firstLineIndent;
 
   factory ForumBodyInlineParagraphLayout.create({
@@ -243,6 +243,43 @@ final class ForumBodyInlineParagraphLayout
         if (box.bottom > bottom) bottom = box.bottom;
         final childBottom = box.top + snapshot[i].size.height;
         if (childBottom > bottom) bottom = childBottom;
+      }
+      if (intrinsic && lines.isNotEmpty && content.parentRuns.isNotEmpty) {
+        // A tight author line-height can put ordinary parent glyphs outside
+        // both its line box and a smaller ruby placeholder. Use this SAME
+        // native paragraph's font boxes, not another shape or a guessed strut.
+        // Opaque boxes are already included above; the mechanical SPACE font
+        // has no vertical metrics. Omitted native SPACE suffixes add no frame.
+        final start = projection.enginePrefix.length;
+        final end = lines.single.engineUnpaintedTrailingSpaceStartUtf16;
+        var parentOverflow = false;
+        if (start < end) {
+          for (final box in painter.getBoxesForSelection(
+            TextSelection(baseOffset: start, extentOffset: end),
+          )) {
+            if (!box.top.isFinite ||
+                !box.bottom.isFinite ||
+                box.top > box.bottom) {
+              throw const ForumBodyParagraphLayoutException(
+                ForumBodyParagraphLayoutFailure.coverage,
+              );
+            }
+            if (box.top < top) {
+              top = box.top;
+              parentOverflow = true;
+            }
+            if (box.bottom > bottom) {
+              bottom = box.bottom;
+              parentOverflow = true;
+            }
+          }
+        }
+        if (parentOverflow) {
+          // Outward allocation retains native edge alpha under a hard viewport
+          // clip. It does not round/sum native baselines or child positions.
+          top = top.floorToDouble();
+          bottom = bottom.ceilToDouble();
+        }
       }
       final paintOffset = Offset(inset, -top);
       // Adjacent native row intervals can overlap at fractional slot edges.
