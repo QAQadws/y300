@@ -7,6 +7,8 @@ import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_paragraph_layout.dart';
 import '../paragraph/forum_body_paragraph_row.dart';
+import '../paragraph/forum_body_paragraph_line_frames.dart';
+import '../paragraph/forum_body_text_request_preparation.dart';
 import '../paragraph/forum_body_text_layout.dart';
 import '../paragraph/forum_body_native_request.dart';
 import '../paragraph/forum_body_text_request.dart';
@@ -16,9 +18,12 @@ import 'forum_body_emphasis_mark_request.dart';
 import 'forum_body_emphasis_text_geometry.dart';
 import 'forum_body_emphasis_text_input.dart';
 import 'forum_body_emphasis_row_input.dart';
+import 'forum_body_emphasis_row_allocation.dart';
 
 part 'forum_body_emphasis_line_preparation.dart';
 part 'forum_body_emphasis_line_metrics.dart';
+part 'forum_body_emphasis_allocated_layout.dart';
+part 'forum_body_emphasis_allocated_preparation.dart';
 
 enum ForumBodyEmphasisLineFailure { source, lines, geometry, metrics }
 

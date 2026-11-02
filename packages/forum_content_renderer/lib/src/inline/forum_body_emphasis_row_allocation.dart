@@ -6,6 +6,9 @@ import 'package:flutter/painting.dart';
 import '../paragraph/forum_body_paragraph_line_frames.dart';
 import '../paragraph/forum_body_paragraph_row.dart';
 import '../paragraph/forum_body_paragraph_row_reference.dart';
+import '../paragraph/forum_body_paragraph_content.dart';
+import '../paragraph/forum_body_native_request.dart';
+import '../paragraph/forum_body_text_request.dart';
 import 'forum_body_emphasis_line_layout.dart';
 
 enum ForumBodyEmphasisAllocationFailure { source, geometry, limit }
@@ -59,15 +62,39 @@ final class ForumBodyEmphasisRowAllocation {
     required List<ForumBodyEmphasisAllocatedMark> marks,
     required this.height,
     required this.fontBounds,
+    required this.isolatedAlphabeticBaseline,
   }) : rows = UnmodifiableListView(rows),
        marks = UnmodifiableListView(marks);
-  static const revision = 1;
+  static const revision = 2;
   final ForumBodyEmphasisLineMetrics source;
   final ForumBodyParagraphRowReference reference;
   final List<ForumBodyEmphasisAllocatedRow> rows;
   final List<ForumBodyEmphasisAllocatedMark> marks;
   final double height;
   final Rect fontBounds;
+  final double isolatedAlphabeticBaseline;
+  late final paintInput = ForumBodyParagraphPaintInput(reference.content);
+
+  /// All temporary fonts, including WHOLE parents for every paint phase.
+  /// A final scene has its own input/lease admission in the visible transaction.
+  Iterable<ForumBodyNativeRequestSlot> get nativeFootprint sync* {
+    yield* source.nativeFootprint;
+    for (final content in [
+      paintInput.background,
+      paintInput.foreground,
+      paintInput.decoration,
+    ]) {
+      yield (
+        request: ForumBodyTextRequest.paragraph(
+          content,
+          rowIsolationPitch: reference.rowIsolationPitch,
+        ),
+        width: source.requestWidth,
+        minimumLineCount: reference.lineCount,
+      );
+    }
+  }
+
   double get width => source.width;
   double get alphabeticBaseline => rows.first.alphabeticBaseline;
 }
@@ -105,6 +132,7 @@ final class ForumBodyEmphasisRowAllocationPreparation {
       _guard();
       final row = source.rowInput?.row;
       if (row == null ||
+          reference.content.paintLayer != ForumBodyParagraphPaintLayer.all ||
           !identical(row.parentContent, reference.content) ||
           row.nativeInputIdentity != reference.isolatedInputIdentity ||
           !identical(naturalFrames.content, reference.content) ||
@@ -199,6 +227,7 @@ final class ForumBodyEmphasisRowAllocationPreparation {
             marks: _marks!,
             height: _height,
             fontBounds: _envelope!,
+            isolatedAlphabeticBaseline: _isolated!.nativeAlphabeticBaseline,
           );
           _rows = null;
           _marks = null;

@@ -135,6 +135,7 @@ final class ForumBodyEmphasisLinePreparation {
     required this.width,
     required TextScaler textScaler,
     required bool measureOnly,
+    bool bindOnly = false,
     ForumBodyTextRequest? baseRequest,
     ForumBodyEmphasisLineMetrics? metrics,
     ForumBodyEmphasisRowInput? rowInput,
@@ -145,6 +146,7 @@ final class ForumBodyEmphasisLinePreparation {
        _ensureOwner = ensureOwner,
        _callerScaler = textScaler,
        _measureOnly = measureOnly,
+       _bindOnly = bindOnly,
        _expected = metrics,
        _additionalOwned = additionalOwnedLeases,
        _request =
@@ -155,6 +157,9 @@ final class ForumBodyEmphasisLinePreparation {
            ) {
     try {
       _guard();
+      if (bindOnly && (metrics == null || rowInput == null)) {
+        _mismatch();
+      }
       if (!width.isFinite || width <= 0 || width > 16384) {
         throw const ForumBodyParagraphLayoutException(
           ForumBodyParagraphLayoutFailure.width,
@@ -206,6 +211,7 @@ final class ForumBodyEmphasisLinePreparation {
   }
   final double width;
   final bool _measureOnly;
+  final bool _bindOnly;
   ForumBodyEmphasisLineMetrics? _expected;
   Iterator<MapEntry<double, double>>? _scaleChecks;
   Iterable<ForumBodyNativeParagraphLease> Function()? _additionalOwned;
@@ -227,7 +233,7 @@ final class ForumBodyEmphasisLinePreparation {
   final _runMarks = <int, int>{};
   List<int> _unitMarks = [];
   List<Object> _markKeys = [];
-  final _markLeases = <ForumBodyEmphasisMarkLease>[];
+  List<ForumBodyEmphasisMarkLease> _markLeases = [];
   final _rawMarks = <_RawMark>[];
   List<ForumBodyEmphasisLineMark>? _positioned = [];
   final _commands = <ForumBodyTextPictureCommand>[];
@@ -707,7 +713,9 @@ final class ForumBodyEmphasisLinePreparation {
               }
               _positioned = null;
               _index = 0;
-              _phase = _measureOnly
+              _phase = _bindOnly
+                  ? _LinePhase.ready
+                  : _measureOnly
                   ? _LinePhase.releaseMarks
                   : _LinePhase.basePaint;
             case _LinePhase.basePaint:
@@ -852,11 +860,42 @@ final class ForumBodyEmphasisLinePreparation {
     _operating = true;
     try {
       _guard();
-      if (!isReady || !_measureOnly) {
+      if (!isReady || !_measureOnly || _bindOnly) {
         throw StateError('Emphasis metrics are incomplete');
       }
       final result = _numeric!;
       _numeric = null;
+      _phase = _LinePhase.transferred;
+      _dropInputs();
+      return result;
+    } catch (_) {
+      close();
+      rethrow;
+    } finally {
+      _operating = false;
+    }
+  }
+
+  /// Reuse the full measured-font/source verification without recording the
+  /// old isolated scene. The allocated renderer adopts these OWNED handles.
+  _EmphasisNativeBinding _takeBinding() {
+    if (_operating) throw StateError('Emphasis line preparation is reentrant');
+    _operating = true;
+    try {
+      _guard();
+      if (!isReady || !_bindOnly) {
+        throw StateError('Emphasis binding is incomplete');
+      }
+      final base = _base! as ForumBodyParagraphLease;
+      final row = ForumBodyParagraphRowView.bind(
+        parent: base,
+        metrics: _rowInput!.row,
+        ensureOwner: _ensureOwner!,
+      );
+      _guard();
+      final result = _EmphasisNativeBinding(base, row, _markLeases);
+      _markLeases = [];
+      _base = null;
       _phase = _LinePhase.transferred;
       _dropInputs();
       return result;
