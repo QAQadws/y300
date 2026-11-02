@@ -47,7 +47,9 @@ final class ForumBodyStyleInheritance {
       textDirection: effective.textDirection,
       whiteSpace: effective.whiteSpace,
       rubyPosition: effective.rubyPosition,
-      textEmphasis: effective.textEmphasis,
+      textEmphasis: restore(ForumBodyStyleProperty.foreground)
+          ? effective.textEmphasis.withColor(author.textEmphasis.color)
+          : effective.textEmphasis,
       indent: restore(ForumBodyStyleProperty.textIndent)
           ? author.indent
           : effective.indent,

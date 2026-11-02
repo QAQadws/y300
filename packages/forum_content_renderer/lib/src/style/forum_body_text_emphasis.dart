@@ -16,7 +16,7 @@ enum ForumBodyEmphasisSide { over, under }
 
 enum ForumBodyEmphasisVerticalSide { right, left }
 
-/// Computed author values only. A mark has no DOM range, copy text, native
+/// Computed values only. A mark has no DOM range, copy text, native
 /// resource or semantic anchor. Layout must separately bind the decorated text.
 final class ForumBodyTextEmphasis {
   const ForumBodyTextEmphasis({
@@ -40,6 +40,16 @@ final class ForumBodyTextEmphasis {
   final Color? color;
   final ForumBodyEmphasisSide side;
   final ForumBodyEmphasisVerticalSide verticalSide;
+  ForumBodyTextEmphasis withColor(Color? value) => value == color
+      ? this
+      : ForumBodyTextEmphasis(
+          shape: shape,
+          fill: fill,
+          customMark: customMark,
+          color: value,
+          side: side,
+          verticalSide: verticalSide,
+        );
   bool get isEnabled =>
       shape != ForumBodyEmphasisShape.none &&
       (shape != ForumBodyEmphasisShape.custom || customMark != '');

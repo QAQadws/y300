@@ -9,7 +9,7 @@ import 'forum_body_box_resolver.dart';
 import 'forum_body_style_options.dart';
 import 'forum_body_text_emphasis_resolver.dart';
 
-const forumBodyStyleRevision = 14;
+const forumBodyStyleRevision = 15;
 ForumBodyLength forumBodyReaderIndent(
   ForumBodyReaderStyle reader,
   double size,
@@ -476,6 +476,21 @@ final class ForumBodyStyleBuilder {
               parent.rubyPosition,
             ),
     };
+    var emphasis = resolveForumBodyTextEmphasis(
+      declarations: declarations,
+      inherited: parent.textEmphasis,
+      rubyAnnotation:
+          node.kind == ForumBodyElementKind.rubyText ||
+          node.kind == ForumBodyElementKind.rubyAnnotationContainer,
+      parseColor: (raw) =>
+          _colors.putIfAbsent(raw, () => _colorParser.parseValue(raw)),
+      onUnsupported: (property, value) => _issue(node, property, value),
+    );
+    if (_force(ForumBodyStyleProperty.foreground, role)) {
+      // Keep currentColor as a reference: links and later role changes use
+      // their actual effective foreground, not a baked body-color snapshot.
+      emphasis = emphasis.withColor(null);
+    }
     return ForumBodyResolvedStyle(
       textStyle: style,
       role: role,
@@ -483,16 +498,7 @@ final class ForumBodyStyleBuilder {
       textDirection: direction,
       whiteSpace: whiteSpace,
       rubyPosition: rubyPosition,
-      textEmphasis: resolveForumBodyTextEmphasis(
-        declarations: declarations,
-        inherited: parent.textEmphasis,
-        rubyAnnotation:
-            node.kind == ForumBodyElementKind.rubyText ||
-            node.kind == ForumBodyElementKind.rubyAnnotationContainer,
-        parseColor: (raw) =>
-            _colors.putIfAbsent(raw, () => _colorParser.parseValue(raw)),
-        onUnsupported: (property, value) => _issue(node, property, value),
-      ),
+      textEmphasis: emphasis,
       indent: indent,
       margin: _insets(node, 'margin', size, role, parent.margin),
       padding: _insets(node, 'padding', size, role, parent.padding),
