@@ -86,16 +86,7 @@ final class ForumBodyRubyTreeEmphasisAtomPlan extends ForumBodyRubyAtomPlan {
   int get extraTextCodeUnits => request.sourceTree.extraTextCodeUnits;
   @override
   // Glyph projections share original text storage but retain derived run tables.
-  late final extraRuns =
-      request.sourceTree.extraRuns +
-      request.sources.fold<int>(
-        0,
-        (sum, source) =>
-            sum +
-            (identical(source.glyphs.runs, source.content.runs)
-                ? 0
-                : source.glyphs.runs.length),
-      );
+  int get extraRuns => request.extraRuns;
   @override
   Iterable<ForumBodyNativeRequestSlot> get nativeFootprint sync* {
     for (final slot in nativeBudgetFootprint) {

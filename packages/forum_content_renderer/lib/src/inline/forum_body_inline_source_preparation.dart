@@ -2,6 +2,10 @@ import '../flow/forum_body_inline_flow_content.dart';
 import 'forum_body_inline_plan_input.dart';
 import 'forum_body_ruby_content.dart';
 import 'forum_body_ruby_tree_input.dart';
+import '../paragraph/forum_body_paragraph_content.dart';
+import '../style/forum_body_style_options.dart';
+
+part 'forum_body_ruby_source_inspection.dart';
 
 /// Cooperative structural preparation before native planning. Each nested tree
 /// builder spends the same caller's work allowance; it is never synchronously
@@ -19,6 +23,12 @@ final class ForumBodyInlineSourcePreparation {
   Map<ForumBodyRubyGroupContent, ForumBodyRubyTreeInput> _trees =
       Map.identity();
   ForumBodyRubyTreeInputPreparation? _tree;
+  ForumBodyRubyGlyphTreeInputPreparation? _glyph;
+  final Map<ForumBodyRubyGroupContent, ForumBodyRubyGlyphTreeInput>
+  _emphasisTrees = Map.identity();
+  _RubySourceInspection? _inspection;
+  Iterator<bool>? _flags;
+  bool _knownEmphasis = false;
   ForumBodyRubyGroupContent? _group;
   ForumBodyInlinePlanInput? _result;
   int _index = 0;
@@ -34,24 +44,61 @@ final class ForumBodyInlineSourcePreparation {
       _guard();
       var units = 0;
       while (!isReady && units < maxParts) {
-        final tree = _tree;
-        if (tree != null) {
+        final tree = _tree, glyph = _glyph, inspection = _inspection;
+        if (glyph != null) {
+          units += glyph.advance(maxParts: maxParts - units);
+          _guard();
+          if (glyph.isReady) {
+            final value = glyph.takeInput();
+            _guard();
+            _emphasisTrees[_group!] = value;
+            glyph.close();
+            _glyph = null;
+            _group = null;
+          }
+        } else if (_flags != null) {
+          if (!_flags!.moveNext()) {
+            _flags = null;
+            _group = null;
+          } else if (_flags!.current) {
+            _projectGlyphs();
+          }
+          units++;
+        } else if (tree != null) {
           units += tree.advance(maxParts: maxParts - units);
           _guard();
           if (tree.isReady) {
             _trees[_group!] = tree.takeInput();
             tree.close();
             _tree = null;
-            _group = null;
+            if (_knownEmphasis) {
+              _projectGlyphs();
+            } else {
+              _flags = _rubyTreeEmphasisFlags(_trees[_group!]!).iterator;
+            }
+          }
+        } else if (inspection != null) {
+          units += inspection.isComplete
+              ? 1
+              : inspection.advance(maxParts: maxParts - units);
+          _guard();
+          if (inspection.isComplete) {
+            _knownEmphasis = inspection.emphasisKnown;
+            if (inspection.needsTree) {
+              _tree = ForumBodyRubyTreeInputPreparation(
+                group: _group!,
+                maxWidth: width,
+              );
+            } else {
+              _group = null;
+            }
+            _inspection = null;
           }
         } else if (_index < _input!.parts.length) {
           final part = _input!.parts[_index++];
-          if (part is ForumBodyInlineFlowRuby && _hasNested(part.group)) {
+          if (part is ForumBodyInlineFlowRuby) {
             _group = part.group;
-            _tree = ForumBodyRubyTreeInputPreparation(
-              group: part.group,
-              maxWidth: width,
-            );
+            _inspection = _RubySourceInspection(part.group);
           }
           units++;
         } else {
@@ -59,6 +106,7 @@ final class ForumBodyInlineSourcePreparation {
             _input!,
             width,
             trees: _trees,
+            emphasisTrees: _emphasisTrees,
           );
           _guard();
           _result = result;
@@ -75,12 +123,29 @@ final class ForumBodyInlineSourcePreparation {
     }
   }
 
+  void _projectGlyphs() {
+    _flags = null;
+    _glyph = ForumBodyRubyGlyphTreeInputPreparation.fromTree(
+      sourceTree: _trees[_group!]!,
+      ensureOwner: _guard,
+    );
+  }
+
   ForumBodyInlinePlanInput takeInput() {
-    _guard();
-    if (!isReady) throw StateError('Inline source input is incomplete');
-    final result = _result!;
-    close();
-    return result;
+    if (_operating) throw StateError('Inline source preparation is reentrant');
+    _operating = true;
+    try {
+      _guard();
+      if (!isReady) throw StateError('Inline source input is incomplete');
+      final result = _result!;
+      close();
+      return result;
+    } catch (_) {
+      close();
+      rethrow;
+    } finally {
+      _operating = false;
+    }
   }
 
   void _guard() {
@@ -94,29 +159,15 @@ final class ForumBodyInlineSourcePreparation {
     _closed = true;
     _tree?.close();
     _tree = null;
+    _glyph?.close();
+    _glyph = null;
+    _flags = null;
+    _inspection = null;
+    _emphasisTrees.clear();
     _input = null;
     _group = null;
     _result = null;
     _trees = Map.identity();
     _ensureOwner = null;
   }
-}
-
-bool _hasNested(ForumBodyRubyGroupContent group) {
-  final pending = <ForumBodyRubyInlineContent>[
-    ...group.base,
-    ...group.annotations,
-  ];
-  while (pending.isNotEmpty) {
-    switch (pending.removeLast()) {
-      case ForumBodyRubyNestedContent():
-        return true;
-      case ForumBodyRubyBaseContent(:final parts) ||
-          ForumBodyRubyAnnotationContent(:final parts):
-        pending.addAll(parts);
-      case ForumBodyRubyTextContent():
-        break;
-    }
-  }
-  return false;
 }

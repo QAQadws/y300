@@ -19,6 +19,7 @@ import 'forum_body_ruby_whitespace.dart';
 import 'forum_body_inline_text_window.dart';
 import 'forum_body_text_band_content.dart';
 import 'forum_body_ruby_tree_input.dart';
+import 'forum_body_emphasis_mark.dart';
 
 /// Pure source-bound parent input and child requests for the session's pending
 /// format. No native resource, owner or scheduler is retained here.
@@ -39,12 +40,14 @@ final class ForumBodyInlinePlanInput {
             .atoms
             .map((atom) => atom.engineUtf16),
       );
-  static const revision = 25;
+  static const revision = 26;
 
   factory ForumBodyInlinePlanInput(
     ForumBodyInlineFlowContent input,
     double width, {
     Map<ForumBodyRubyGroupContent, ForumBodyRubyTreeInput> trees = const {},
+    Map<ForumBodyRubyGroupContent, ForumBodyRubyGlyphTreeInput> emphasisTrees =
+        const {},
   }) {
     if (input.layoutMode == ForumBodyParagraphLayoutMode.fitSingleLine) {
       _unsupported(input.path);
@@ -174,10 +177,12 @@ final class ForumBodyInlinePlanInput {
               group.rootPath,
             );
           }
-          final tree = trees[group];
+          final glyphs = emphasisTrees[group];
+          final tree = trees[group] ?? glyphs?.sourceTree;
           if (tree != null) {
             if (!identical(tree.rootGroup.group, group) ||
-                tree.maxWidth != width) {
+                tree.maxWidth != width ||
+                (glyphs != null && !identical(glyphs.sourceTree, tree))) {
               throw ForumBodyParagraphInputException(
                 ForumBodyParagraphInputFailure.identity,
                 group.rootPath,
@@ -191,7 +196,11 @@ final class ForumBodyInlinePlanInput {
             }
             if (start == offset) _unsupported(group.rootPath);
             atoms.add((startUtf16: start, endUtf16: offset));
-            requestsByAtom.add(ForumBodyRubyAtomRequest.tree(tree));
+            requestsByAtom.add(
+              glyphs == null
+                  ? ForumBodyRubyAtomRequest.tree(tree)
+                  : ForumBodyRubyAtomRequest.emphasisTree(glyphs),
+            );
             levelIds.add(levelId);
             previousCollapsibleSpace = false;
             atLineStart = false;
@@ -598,14 +607,22 @@ final class ForumBodyInlinePlanInput {
       sourceOrder: sourceOrder,
     );
     final glyphContexts = Set<ForumBodyParagraphContent>.identity();
+    final derived =
+        Map<ForumBodyParagraphContent, ForumBodyParagraphContent>.identity();
     for (final atom in requestsByAtom) {
       glyphContexts.addAll(atom.nativeRequests.map((r) => r.content));
+      if (atom is ForumBodyRubyTreeEmphasisAtomRequest) {
+        for (final source in atom.value.sources) {
+          if (source.needsNative) derived[source.content] = source.glyphs;
+        }
+      }
     }
     final requests = _requests([
       // Batch children in the same explicit ORIGINAL source order as the parent
       // projection, not their reordered display columns. Never sort or rebase.
       for (final index in sourceOrder)
-        if (glyphContexts.contains(contexts[index])) contexts[index],
+        if (glyphContexts.contains(derived[contexts[index]] ?? contexts[index]))
+          derived[contexts[index]] ?? contexts[index],
       for (final atom in requestsByAtom)
         for (final request in atom.nativeRequests)
           if (request.content.isSourceFree) request.content,
@@ -623,21 +640,10 @@ final class ForumBodyInlinePlanInput {
       content.projection.display.text.length +
           requestsByAtom.fold<int>(
             0,
-            (sum, atom) =>
-                sum +
-                (atom is ForumBodyRubyTreeAtomRequest
-                    ? atom.value.extraTextCodeUnits
-                    : 0),
+            (sum, atom) => sum + atom.extraTextCodeUnits,
           ),
       content.runs.length +
-          requestsByAtom.fold<int>(
-            0,
-            (sum, atom) =>
-                sum +
-                (atom is ForumBodyRubyTreeAtomRequest
-                    ? atom.value.extraRuns
-                    : 0),
-          ),
+          requestsByAtom.fold<int>(0, (sum, atom) => sum + atom.extraRuns),
     );
   }
 
@@ -649,6 +655,9 @@ final class ForumBodyInlinePlanInput {
   final List<ForumBodyParagraphContent> sourceContexts;
   final int retainedTextCodeUnits;
   final int retainedRuns;
+  late final hasEmphasisTrees = atoms.any(
+    (atom) => atom is ForumBodyRubyTreeEmphasisAtomRequest,
+  );
   Iterable<double> get nativeFontSizes sync* {
     yield content.style.textStyle.fontSize!;
     for (final run in content.runs) {
@@ -675,8 +684,13 @@ final class ForumBodyInlinePlanInput {
           }
         }
       }
-      if (atom is ForumBodyRubyTreeAtomRequest) {
-        for (final node in atom.value.nodes) {
+      final tree = switch (atom) {
+        ForumBodyRubyTreeAtomRequest(:final value) => value,
+        ForumBodyRubyTreeEmphasisAtomRequest(:final value) => value.sourceTree,
+        _ => null,
+      };
+      if (tree != null) {
+        for (final node in tree.nodes) {
           if (node is ForumBodyRubyTreeContainer) {
             yield node.font.fontStrut.style.textStyle.fontSize!;
             if (node.background case final background?) {
@@ -685,6 +699,23 @@ final class ForumBodyInlinePlanInput {
           }
           if (node is ForumBodyRubyTreeInline) {
             yield* node.input.nativeFontSizes;
+          }
+        }
+      }
+      if (atom is ForumBodyRubyTreeEmphasisAtomRequest) {
+        for (final source in atom.value.sources) {
+          // Empty RTs have no glyph request but still contribute actual natural
+          // font samples to a containing inline parent's frozen scaler.
+          yield source.content.style.textStyle.fontSize!;
+          for (final run in source.content.runs) {
+            yield run.style.textStyle.fontSize!;
+          }
+          final emphasis = source.emphasis;
+          if (emphasis == null) continue;
+          for (final unit in emphasis.units) {
+            yield ForumBodyEmphasisMarkInput.resolveFontSize(
+              source.content.runs[unit.runIndex].style.textStyle,
+            );
           }
         }
       }

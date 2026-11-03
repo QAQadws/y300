@@ -40,6 +40,17 @@ final class ForumBodyRubyGlyphTreeInput {
   final Map<int, ForumBodyRubyGlyphTreeSource> _byId;
   double get maxWidth => sourceTree.maxWidth;
   List<ForumBodyTextRequest> get glyphRequests => _glyphTree.nativeRequests;
+  int get extraTextCodeUnits => sourceTree.extraTextCodeUnits;
+  late final extraRuns =
+      sourceTree.extraRuns +
+      sources.fold<int>(
+        0,
+        (sum, source) =>
+            sum +
+            (identical(source.glyphs.runs, source.content.runs)
+                ? 0
+                : source.glyphs.runs.length),
+      );
   ForumBodyRubyGlyphTreeSource sourceForId(int id) =>
       _byId[id] ?? (throw ArgumentError.value(id, 'id'));
   ForumBodyTextRequest requestForSource(int id) {
@@ -86,6 +97,15 @@ final class ForumBodyRubyGlyphTreeInputPreparation {
          maxWidth: maxWidth,
        ),
        _ensureOwner = ensureOwner;
+
+  /// Project this exact already prepared graph. Rebuilding from its group would
+  /// create different trimmed source windows and cannot bind the same parent.
+  ForumBodyRubyGlyphTreeInputPreparation.fromTree({
+    required ForumBodyRubyTreeInput sourceTree,
+    required void Function() ensureOwner,
+  }) : _sourceTree = sourceTree,
+       _ensureOwner = ensureOwner,
+       _phase = _GlyphTreePhase.nodes;
   ForumBodyRubyTreeInputPreparation? _builder;
   ForumBodyRubyTreeInput? _sourceTree;
   void Function()? _ensureOwner;

@@ -37,17 +37,22 @@ final class ForumBodyRubyRowAlignment {
     required List<int> levelIds,
     required List<int> atomOffsets,
     List<ForumBodyRubyRootFontBox?>? rootFonts,
+    List<PlaceholderDimensions?>? discoveryDimensions,
   }) : atoms = List.unmodifiable(atoms),
        levelIds = List.unmodifiable(levelIds),
        atomOffsets = List.unmodifiable(atomOffsets),
        rootFonts = List.unmodifiable(
          rootFonts ?? List.filled(atoms.length, null),
        ),
+       discoveryDimensions = List.unmodifiable(
+         discoveryDimensions ?? List.filled(atoms.length, null),
+       ),
        _targets = List.filled(atoms.length, null),
        _atomRows = List.filled(atoms.length, -1) {
     if (levelIds.length != atoms.length ||
         atomOffsets.length != atoms.length ||
-        this.rootFonts.length != atoms.length) {
+        this.rootFonts.length != atoms.length ||
+        this.discoveryDimensions.length != atoms.length) {
       throw ArgumentError('Ruby alignment input lengths differ');
     }
     if (atoms.isEmpty) _phase = _Phase.done;
@@ -66,10 +71,16 @@ final class ForumBodyRubyRowAlignment {
   final List<int> levelIds;
   final List<int> atomOffsets;
   final List<ForumBodyRubyRootFontBox?> rootFonts;
+
+  /// Complete format dimensions for initial physical-row discovery only. The
+  /// containing planner must reformat aligned roots before the final parent.
+  final List<PlaceholderDimensions?> discoveryDimensions;
   PlaceholderDimensions _dimensionFor(
     int index,
-    ForumBodyRubyAtomMetrics atom,
-  ) =>
+    ForumBodyRubyAtomMetrics atom, {
+    bool discovery = false,
+  }) =>
+      (discovery ? discoveryDimensions[index] : null) ??
       rootFonts[index]
           ?.enclose(childSize: atom.size, childBaseline: atom.baseline)
           .dimensions ??
@@ -160,7 +171,7 @@ final class ForumBodyRubyRowAlignment {
                     atomOffsets[_cursor + 1] != atomOffsets[_cursor] + 1)) {
               _invalid();
             }
-            _dimensions.add(_dimensionFor(_cursor, column));
+            _dimensions.add(_dimensionFor(_cursor, column, discovery: true));
             _provisionalDimensions!.add(
               soft
                   ? PlaceholderDimensions(
@@ -188,7 +199,7 @@ final class ForumBodyRubyRowAlignment {
           parts += merge.advance(maxParts: maxParts - parts);
           if (merge.isComplete) {
             _merge = null;
-            _dimensions.add(_dimensionFor(_cursor, column));
+            _dimensions.add(_dimensionFor(_cursor, column, discovery: true));
             _results.add(column);
             if (++_cursor == atoms.length) {
               _cursor = 0;

@@ -21,17 +21,46 @@ sealed class ForumBodyRubyAtomRequest {
   ) = ForumBodyRubySoftSpaceAtomRequest;
   const factory ForumBodyRubyAtomRequest.tree(ForumBodyRubyTreeInput value) =
       ForumBodyRubyTreeAtomRequest;
+  const factory ForumBodyRubyAtomRequest.emphasisTree(
+    ForumBodyRubyGlyphTreeInput value,
+  ) = ForumBodyRubyTreeEmphasisAtomRequest;
   List<ForumBodyTextRequest> get nativeRequests;
   ForumBodyRubyContainerBackground? get background;
   ForumBodyRubyRootBoxInput? get rootBox;
+  int get extraTextCodeUnits => 0;
+  int get extraRuns => 0;
   ForumBodyRubyAtomRequest mapRequests(
     ForumBodyTextRequest Function(ForumBodyTextRequest) map,
   );
 }
 
+final class ForumBodyRubyTreeEmphasisAtomRequest
+    extends ForumBodyRubyAtomRequest {
+  const ForumBodyRubyTreeEmphasisAtomRequest(this.value);
+  final ForumBodyRubyGlyphTreeInput value;
+  @override
+  List<ForumBodyTextRequest> get nativeRequests => value.glyphRequests;
+  @override
+  ForumBodyRubyContainerBackground? get background => null;
+  @override
+  ForumBodyRubyRootBoxInput get rootBox => value.sourceTree.rootGroup.font;
+  @override
+  int get extraTextCodeUnits => value.extraTextCodeUnits;
+  @override
+  int get extraRuns => value.extraRuns;
+  @override
+  ForumBodyRubyAtomRequest mapRequests(
+    ForumBodyTextRequest Function(ForumBodyTextRequest) map,
+  ) => ForumBodyRubyTreeEmphasisAtomRequest(value.mapGlyphRequests(map));
+}
+
 final class ForumBodyRubyTreeAtomRequest extends ForumBodyRubyAtomRequest {
   const ForumBodyRubyTreeAtomRequest(this.value);
   final ForumBodyRubyTreeInput value;
+  @override
+  int get extraTextCodeUnits => value.extraTextCodeUnits;
+  @override
+  int get extraRuns => value.extraRuns;
   @override
   List<ForumBodyTextRequest> get nativeRequests => value.nativeRequests;
   // Every tree surface, including the root, enters the shared page plane.
