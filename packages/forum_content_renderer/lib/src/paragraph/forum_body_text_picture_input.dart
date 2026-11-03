@@ -35,6 +35,12 @@ final class ForumBodyTextPictureInput {
     if (nativeInputIdentity is! _NativeInputIdentity) {
       throw ArgumentError('Unknown native text picture input');
     }
+    final key = nativeInputIdentity._key;
+    if (key is! _LayoutKey &&
+        key is! _EmphasisMarkKey &&
+        key is! ForumBodyTextBandCacheKey) {
+      throw ArgumentError('Drawing metadata requires an actual font input');
+    }
     return _textPictureInputBytes(nativeInputIdentity);
   }
 

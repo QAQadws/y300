@@ -155,6 +155,12 @@ void main() {
         job.advance(maxParts: 1);
       }
       final scene = job.takeLease();
+      expect(
+        () => ForumBodyTextPictureInput.estimateRetainedMetadataBytesFor(
+          scene.nativeInputIdentity,
+        ),
+        throwsArgumentError,
+      );
       addTearDown(scene.release);
       final captures = <ui.Picture>[];
       addTearDown(() {
