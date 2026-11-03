@@ -63,9 +63,11 @@ final class ForumBodyEmphasisRowAllocation {
     required this.height,
     required this.fontBounds,
     required this.isolatedAlphabeticBaseline,
+    ForumBodyParagraphPaintInput? paintInput,
   }) : rows = UnmodifiableListView(rows),
-       marks = UnmodifiableListView(marks);
-  static const revision = 2;
+       marks = UnmodifiableListView(marks),
+       _sharedPaintInput = paintInput;
+  static const revision = 3;
   final ForumBodyEmphasisLineMetrics source;
   final ForumBodyParagraphRowReference reference;
   final List<ForumBodyEmphasisAllocatedRow> rows;
@@ -73,7 +75,9 @@ final class ForumBodyEmphasisRowAllocation {
   final double height;
   final Rect fontBounds;
   final double isolatedAlphabeticBaseline;
-  late final paintInput = ForumBodyParagraphPaintInput(reference.content);
+  final ForumBodyParagraphPaintInput? _sharedPaintInput;
+  late final paintInput =
+      _sharedPaintInput ?? ForumBodyParagraphPaintInput(reference.content);
 
   /// All temporary fonts, including WHOLE parents for every paint phase.
   /// A final scene has its own input/lease admission in the visible transaction.
@@ -114,6 +118,7 @@ final class ForumBodyEmphasisRowAllocationPreparation {
     required ForumBodyParagraphLineFrames isolatedFrames,
     required List<ForumBodyParagraphPhysicalLineSelector> physicalLines,
     required void Function() ensureOwner,
+    ForumBodyParagraphPaintInput? paintInput,
     this.maxLines = 64,
     this.maxMarks = 512,
     this.maxHeight = 1048576,
@@ -121,7 +126,8 @@ final class ForumBodyEmphasisRowAllocationPreparation {
        _reference = reference,
        _natural = naturalFrames,
        _isolated = isolatedFrames,
-       _ensureOwner = ensureOwner {
+       _ensureOwner = ensureOwner,
+       _paintInput = paintInput {
     if (maxLines <= 0 ||
         maxMarks < 0 ||
         !maxHeight.isFinite ||
@@ -132,6 +138,8 @@ final class ForumBodyEmphasisRowAllocationPreparation {
       _guard();
       final row = source.rowInput?.row;
       if (row == null ||
+          (paintInput != null &&
+              !identical(paintInput.original, reference.content)) ||
           reference.content.paintLayer != ForumBodyParagraphPaintLayer.all ||
           !identical(row.parentContent, reference.content) ||
           row.nativeInputIdentity != reference.isolatedInputIdentity ||
@@ -162,6 +170,7 @@ final class ForumBodyEmphasisRowAllocationPreparation {
   final double maxHeight;
   ForumBodyEmphasisLineMetrics? _source;
   ForumBodyParagraphRowReference? _reference;
+  ForumBodyParagraphPaintInput? _paintInput;
   ForumBodyParagraphLineFrames? _natural, _isolated;
   List<ForumBodyParagraphPhysicalLineSelector>? _lines;
   void Function()? _ensureOwner;
@@ -228,6 +237,7 @@ final class ForumBodyEmphasisRowAllocationPreparation {
             height: _height,
             fontBounds: _envelope!,
             isolatedAlphabeticBaseline: _isolated!.nativeAlphabeticBaseline,
+            paintInput: _paintInput,
           );
           _rows = null;
           _marks = null;
@@ -332,6 +342,7 @@ final class ForumBodyEmphasisRowAllocationPreparation {
     _closed = true;
     _source = null;
     _reference = null;
+    _paintInput = null;
     _natural = null;
     _isolated = null;
     _lines = null;

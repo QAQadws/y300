@@ -31,8 +31,9 @@ final class ForumBodyEmphasisParagraphException implements Exception {
 /// projection remain LOCAL; only these explicit offsets connect them to the
 /// original paragraph's display UTF-16 and final physical coordinates.
 final class ForumBodyEmphasisParagraphGroup {
-  const ForumBodyEmphasisParagraphGroup._(this.allocation, this.top);
-  final ForumBodyEmphasisRowAllocation allocation;
+  const ForumBodyEmphasisParagraphGroup._(this.sceneInput, this.top);
+  final ForumBodyEmphasisAllocatedSceneInput sceneInput;
+  ForumBodyEmphasisRowAllocation get allocation => sceneInput.allocation;
   final double top;
   ForumBodyParagraphRowMetrics get source => allocation.source.rowInput!.row;
   int get startLine => source.selector.startLine;
@@ -69,7 +70,7 @@ final class ForumBodyEmphasisParagraphMetrics {
     required this.retainedRuns,
   }) : groups = UnmodifiableListView(groups),
        lines = UnmodifiableListView(lines);
-  static const revision = 1;
+  static const revision = 2;
   final ForumBodyEmphasisGlyphInput glyphInput;
   ForumBodyParagraphContent get content => glyphInput.original;
   final ForumBodyParagraphRowReference reference;
@@ -142,6 +143,16 @@ final class ForumBodyEmphasisParagraphMetrics {
     final view = fragment(startLine, endLine);
     for (var index = view.startGroup; index < view.endGroup; index++) {
       yield* groups[index].allocation.nativeFootprint;
+    }
+  }
+
+  Iterable<ForumBodyTextPictureInput> nativePictureInputsFor(
+    int startLine,
+    int endLine,
+  ) sync* {
+    final view = fragment(startLine, endLine);
+    for (var index = view.startGroup; index < view.endGroup; index++) {
+      yield groups[index].sceneInput.pictureInput;
     }
   }
 }

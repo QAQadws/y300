@@ -10,11 +10,14 @@ enum _ParagraphPhase {
   isolated,
   reference,
   isolatedFrames,
+  paintParent,
+  paintFrames,
   group,
   source,
   measure,
   physical,
   allocate,
+  sceneInput,
   lines,
   commit,
   release,
@@ -88,6 +91,13 @@ final class ForumBodyEmphasisParagraphPreparation {
   Iterable<ForumBodyNativeParagraphLease> Function()? _additionalOwned;
   ForumBodyEmphasisGlyphPreparation? _glyphJob;
   ForumBodyEmphasisGlyphInput? _glyphs;
+  ForumBodyParagraphPaintInput? _paintInput;
+  List<ForumBodyParagraphContent> _paintContents = const [];
+  final _paintParents = <ForumBodyParagraphLease>[];
+  final _paintPhases = <ForumBodyEmphasisMeasuredPaintPhase>[];
+  ForumBodyEmphasisAllocatedSceneInputPreparation? _sceneInputJob;
+  ForumBodyEmphasisAllocatedSceneInput? _sceneInput;
+  int _paintLayer = 0, _releasedParent = 0;
   ForumBodyTextRequestPreparation? _requestJob;
   ForumBodyParagraphBudgetProbe? _probe;
   Iterator<ForumBodyNativeParagraphLease>? _prefix;
@@ -120,6 +130,7 @@ final class ForumBodyEmphasisParagraphPreparation {
   Iterable<ForumBodyNativeParagraphLease> get nativeLeases sync* {
     if (_natural?.isActive == true) yield _natural!;
     if (_isolated?.isActive == true) yield _isolated!;
+    yield* _paintParents.where((parent) => parent.isActive);
     if (_requestJob != null) yield* _requestJob!.nativeLeases;
     if (_measureJob != null) yield* _measureJob!.nativeLeases;
   }
@@ -131,6 +142,7 @@ final class ForumBodyEmphasisParagraphPreparation {
     yield* extra;
     if (_natural?.isActive == true) yield _natural!;
     if (_isolated?.isActive == true) yield _isolated!;
+    yield* _paintParents.where((parent) => parent.isActive);
   }
 
   ForumBodyEmphasisLineStep advance({
@@ -163,6 +175,12 @@ final class ForumBodyEmphasisParagraphPreparation {
               _glyphJob!.advance(maxParts: 1);
               if (_glyphJob!.isReady) {
                 _glyphs = _glyphJob!.takeInput();
+                _paintInput = ForumBodyParagraphPaintInput(_glyphs!.glyphs);
+                _paintContents = [
+                  _paintInput!.background,
+                  _paintInput!.foreground,
+                  _paintInput!.decoration,
+                ];
                 _glyphJob = null;
                 _phase = _ParagraphPhase.scales;
               }
@@ -200,10 +218,11 @@ final class ForumBodyEmphasisParagraphPreparation {
                 _phase = _ParagraphPhase.probe;
               }
             case _ParagraphPhase.probe:
-              if (_probeParent < 2) {
+              if (_probeParent < (_content!.projection.text.isEmpty ? 2 : 5)) {
+                final index = _probeParent++;
                 ForumBodyTextRequest.paragraph(
-                  _glyphs!.glyphs,
-                  rowIsolationPitch: _probeParent++ == 0 ? null : _pitch,
+                  index < 2 ? _glyphs!.glyphs : _paintContents[index - 2],
+                  rowIsolationPitch: index == 0 ? null : _pitch,
                 ).includeBudget(_probe!, width: width, textScaler: _scaler!);
               } else {
                 _probe!.close();
@@ -268,8 +287,52 @@ final class ForumBodyEmphasisParagraphPreparation {
                   _phase = _ParagraphPhase.isolated;
                 } else {
                   _isolatedFrames = frames;
-                  _phase = _ParagraphPhase.group;
+                  _phase = _reference!.lineCount == 0
+                      ? _ParagraphPhase.group
+                      : _ParagraphPhase.paintParent;
                 }
+              }
+            case _ParagraphPhase.paintParent:
+              _requestJob ??= ForumBodyTextRequestPreparation(
+                cache: cache,
+                request: ForumBodyTextRequest.paragraph(
+                  _paintContents[_paintLayer],
+                  rowIsolationPitch: _pitch,
+                ),
+                ensureOwner: _guard,
+                preparePaint: false,
+                width: width,
+                textScaler: _scaler!,
+                additionalOwnedLeases: _otherOwned,
+              );
+              final work = _requestJob!.advance(cachedOnly: cachedOnly);
+              if (work.waiting || work.cacheMiss) {
+                _cacheMiss = work.cacheMiss;
+                used += work.units;
+                return step(work.waiting);
+              }
+              if (_requestJob!.isReady) {
+                final parent =
+                    _requestJob!.takeLease() as ForumBodyParagraphLease;
+                _requestJob = null;
+                _paintParents.add(parent);
+                _frameJob = ForumBodyParagraphLineFramePreparation(
+                  parent: parent,
+                  ensureOwner: _guard,
+                  maxLines: maxLines,
+                );
+                _phase = _ParagraphPhase.paintFrames;
+              }
+            case _ParagraphPhase.paintFrames:
+              _frameJob!.advance(maxParts: 1);
+              if (_frameJob!.isReady) {
+                final frames = _frameJob!.takeFrames();
+                _frameJob = null;
+                _paintPhases.add((parent: _paintParents.last, frames: frames));
+                _paintLayer++;
+                _phase = _paintLayer < 3
+                    ? _ParagraphPhase.paintParent
+                    : _ParagraphPhase.group;
               }
             case _ParagraphPhase.reference:
               _referenceJob!.advance(maxParts: 1);
@@ -376,6 +439,7 @@ final class ForumBodyEmphasisParagraphPreparation {
                   maxLines: maxGroupLines,
                   maxMarks: maxGroupMarks,
                   maxHeight: maxHeight - _height,
+                  paintInput: _paintInput,
                 );
                 _phase = _ParagraphPhase.allocate;
               }
@@ -384,6 +448,20 @@ final class ForumBodyEmphasisParagraphPreparation {
               if (_allocationJob!.isReady) {
                 _allocation = _allocationJob!.takeAllocation();
                 _allocationJob = null;
+                _sceneInputJob =
+                    ForumBodyEmphasisAllocatedSceneInputPreparation(
+                      allocation: _allocation!,
+                      source: _isolated!,
+                      phases: _paintPhases,
+                      ensureOwner: _guard,
+                    );
+                _phase = _ParagraphPhase.sceneInput;
+              }
+            case _ParagraphPhase.sceneInput:
+              _sceneInputJob!.advance(maxParts: 1);
+              if (_sceneInputJob!.isReady) {
+                _sceneInput = _sceneInputJob!.takeInput();
+                _sceneInputJob = null;
                 _row = 0;
                 _phase = _ParagraphPhase.lines;
               }
@@ -407,7 +485,7 @@ final class ForumBodyEmphasisParagraphPreparation {
                 _fail(ForumBodyEmphasisParagraphFailure.geometry);
               }
               _groups!.add(
-                ForumBodyEmphasisParagraphGroup._(_allocation!, _height),
+                ForumBodyEmphasisParagraphGroup._(_sceneInput!, _height),
               );
               _height += _allocation!.height;
               _marks += _allocation!.marks.length;
@@ -421,8 +499,16 @@ final class ForumBodyEmphasisParagraphPreparation {
               _source = null;
               _measurement = null;
               _allocation = null;
+              _sceneInput = null;
               _phase = _ParagraphPhase.group;
             case _ParagraphPhase.release:
+              if (_releasedParent < _paintParents.length) {
+                _paintParents[_releasedParent++].release();
+                _guard();
+                break;
+              }
+              _paintParents.clear();
+              _paintPhases.clear();
               final natural = _natural!;
               _natural = null;
               natural.release();
@@ -509,6 +595,11 @@ final class ForumBodyEmphasisParagraphPreparation {
     _physicalJob = null;
     _allocationJob?.close();
     _allocationJob = null;
+    _sceneInputJob?.close();
+    _sceneInputJob = null;
+    _releasePaintParents();
+    _guard();
+    _paintLayer = 0;
     final isolated = _isolated;
     _isolated = null;
     isolated?.release();
@@ -519,6 +610,7 @@ final class ForumBodyEmphasisParagraphPreparation {
     _source = null;
     _measurement = null;
     _allocation = null;
+    _sceneInput = null;
     _groups = [];
     _lines = [];
     _height = 0;
@@ -610,9 +702,29 @@ final class ForumBodyEmphasisParagraphPreparation {
     _source = null;
     _measurement = null;
     _allocation = null;
+    _paintInput = null;
+    _paintContents = const [];
+    _sceneInput = null;
     _groups = null;
     _lines = null;
     _result = null;
+  }
+
+  void _releasePaintParents() {
+    final parents = List<ForumBodyParagraphLease>.of(_paintParents);
+    _paintParents.clear();
+    _paintPhases.clear();
+    Object? failure;
+    StackTrace? stack;
+    for (final parent in parents) {
+      try {
+        parent.release();
+      } catch (error, trace) {
+        failure ??= error;
+        stack ??= trace;
+      }
+    }
+    if (failure != null) Error.throwWithStackTrace(failure, stack!);
   }
 
   void close() {
@@ -640,16 +752,25 @@ final class ForumBodyEmphasisParagraphPreparation {
       _physicalJob = null;
       _allocationJob?.close();
       _allocationJob = null;
+      _sceneInputJob?.close();
+      _sceneInputJob = null;
     } finally {
       try {
         _natural?.release();
       } finally {
         _natural = null;
-        _isolated?.release();
-        _isolated = null;
-        _probe?.close();
-        _probe = null;
-        _dropInputs();
+        try {
+          _isolated?.release();
+        } finally {
+          _isolated = null;
+          try {
+            _releasePaintParents();
+          } finally {
+            _probe?.close();
+            _probe = null;
+            _dropInputs();
+          }
+        }
       }
     }
   }

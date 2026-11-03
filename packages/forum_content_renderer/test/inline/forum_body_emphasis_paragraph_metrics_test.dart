@@ -175,6 +175,146 @@ void main() {
       'packages/forum_content_renderer/ForumBodyInlineSpace',
     )..addFont(rootBundle.load('assets/fonts/inline_space.ttf'))).load();
   });
+  test(
+    'aggregate component admission includes distinct scenes and shared whole fonts',
+    () {
+      final measured = _cache();
+      final plan = _finish(
+        ForumBodyEmphasisParagraphPreparation(
+          content: _content(body: 'AAAA'),
+          cache: measured,
+          ensureOwner: () {},
+          width: 1,
+        ),
+      );
+      measured.close();
+      expect(plan.groups, hasLength(4));
+      final cache = _cache(),
+          probe = cache.createBudgetProbe(captureInputEstimates: true);
+      try {
+        for (final slot in plan.nativeFootprintFor(0, plan.lines.length)) {
+          slot.request.includeBudget(
+            probe,
+            width: slot.width,
+            minimumLineCount: slot.minimumLineCount,
+            textScaler: plan.textScaler,
+          );
+        }
+        final pictures = plan
+            .nativePictureInputsFor(0, plan.lines.length)
+            .toList();
+        expect(pictures.toSet(), hasLength(4));
+        for (final picture in pictures) {
+          probe.includeTextPicture(picture);
+        }
+        expect(probe.snapshotNativeEstimates(), hasLength(9));
+        expect(cache.layoutBuildCount, 0);
+        expect(cache.pictureBuildCount, 0);
+        expect(cache.hitCount, 0);
+      } finally {
+        probe.close();
+      }
+      final tiny = _cache(entries: 8), rejected = tiny.createBudgetProbe();
+      try {
+        for (final slot in plan.nativeFootprintFor(0, plan.lines.length)) {
+          slot.request.includeBudget(
+            rejected,
+            width: slot.width,
+            minimumLineCount: slot.minimumLineCount,
+            textScaler: plan.textScaler,
+          );
+        }
+        expect(
+          () {
+            for (final picture in plan.nativePictureInputsFor(
+              0,
+              plan.lines.length,
+            )) {
+              rejected.includeTextPicture(picture);
+            }
+          },
+          throwsA(
+            isA<ForumBodyParagraphBudgetException>().having(
+              (e) => e.failure,
+              'failure',
+              ForumBodyParagraphBudgetFailure.content,
+            ),
+          ),
+        );
+      } finally {
+        rejected.close();
+      }
+      expect(tiny.layoutBuildCount, 0);
+    },
+  );
+
+  test('planned scene peak rejects before the first native acquisition', () {
+    final measured = _cache();
+    final plan = _finish(
+      ForumBodyEmphasisParagraphPreparation(
+        content: _content(body: 'AB CD'),
+        cache: measured,
+        ensureOwner: () {},
+        width: 140,
+      ),
+    );
+    measured.close();
+    final group = plan.groups.first, cache = _cache(entries: 5);
+    final job = ForumBodyEmphasisAllocatedPreparation(
+      input: group.allocation.source.rowInput!,
+      allocation: group.allocation,
+      plannedSceneInput: group.sceneInput,
+      cache: cache,
+      ensureOwner: () {},
+      width: 140,
+      expectedTextScaler: plan.textScaler,
+    );
+    expect(
+      () {
+        while (!job.isReady) {
+          job.advance(maxParts: 1);
+        }
+      },
+      throwsA(
+        isA<ForumBodyParagraphBudgetException>().having(
+          (e) => e.failure,
+          'failure',
+          ForumBodyParagraphBudgetFailure.content,
+        ),
+      ),
+    );
+    expect(cache.layoutBuildCount, 0);
+    expect(cache.pictureBuildCount, 0);
+    expect(cache.activeLeases, 0);
+  });
+
+  test('another complete group cannot supply a planned scene', () {
+    final cache = _cache();
+    final plan = _finish(
+      ForumBodyEmphasisParagraphPreparation(
+        content: _content(body: 'AAAA'),
+        cache: cache,
+        ensureOwner: () {},
+        width: 1,
+      ),
+    );
+    final before = cache.layoutBuildCount;
+    expect(
+      () => ForumBodyEmphasisAllocatedPreparation(
+        input: plan.groups[0].allocation.source.rowInput!,
+        allocation: plan.groups[0].allocation,
+        plannedSceneInput: plan.groups[1].sceneInput,
+        cache: cache,
+        ensureOwner: () {},
+        width: 1,
+        expectedTextScaler: plan.textScaler,
+      ),
+      throwsA(isA<ForumBodyEmphasisLineException>()),
+    );
+    expect(cache.layoutBuildCount, before);
+    expect(cache.activeLeases, 0);
+  });
+
   for (final direction in TextDirection.values) {
     for (final width in [1.0, 140.0]) {
       for (final height in ['.4', '1.6', '37px']) {
@@ -267,7 +407,7 @@ void main() {
       expect(plan.markCount, 600);
       expect(plan.groups, hasLength(600));
       expect(plan.lines, hasLength(600));
-      expect(cache.layoutBuildCount, 3);
+      expect(cache.layoutBuildCount, 6);
       expect(cache.pictureBuildCount, 0);
       expect(cache.activeLeases, 0);
       _checkSource(plan);
@@ -354,6 +494,7 @@ void main() {
           ensureOwner: () {},
           width: 1,
           expectedTextScaler: plan.textScaler,
+          plannedSceneInput: group.sceneInput,
         );
         addTearDown(job.close);
         for (var n = 0; !job.isReady && n < 50000; n++) {
@@ -367,6 +508,7 @@ void main() {
         expect(job.isReady, isTrue);
         final visible = job.takeLayout();
         try {
+          expect(visible.pictureInput, group.sceneInput.pictureInput);
           copied.write(visible.projection.text);
           for (final mark in allocation.marks) {
             final unit = allocation
@@ -463,7 +605,7 @@ void main() {
     test(
       'declared owned prefix versus unrelated pin pressure declared=$declared',
       () {
-        final cache = _cache(entries: 3), content = _content(body: 'AB CD');
+        final cache = _cache(entries: 6), content = _content(body: 'AB CD');
         final extra = cache.acquire(
           content: ForumBodyParagraphContent.anonymousInline(
             identity: content.identity,
@@ -539,7 +681,7 @@ void main() {
     expect(cache.activeLeases, 0);
   });
 
-  for (final target in [1, 2, 3]) {
+  for (final target in [1, 2, 3, 4, 5, 6]) {
     for (final closeCache in [false, true]) {
       test('retirement after native acquisition $target cache=$closeCache', () {
         final cache = _cache(), content = _content(body: 'AB CD');

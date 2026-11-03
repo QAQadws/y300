@@ -35,7 +35,6 @@ enum _AllocatedPhase {
   group,
   physical,
   verify,
-  bucketMarks,
   commands,
   scene,
   releaseParents,
@@ -57,15 +56,19 @@ final class ForumBodyEmphasisAllocatedPreparation {
     required void Function() ensureOwner,
     required double width,
     required TextScaler expectedTextScaler,
+    ForumBodyEmphasisAllocatedSceneInput? plannedSceneInput,
     Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
   }) : _allocation = allocation,
        _cache = cache,
        _ensureOwner = ensureOwner,
        _callerScaler = expectedTextScaler,
-       _additionalOwned = additionalOwnedLeases {
+       _additionalOwned = additionalOwnedLeases,
+       _expectedScene = plannedSceneInput {
     try {
       _guard();
       if (!identical(input, allocation.source.rowInput) ||
+          (plannedSceneInput != null &&
+              !identical(plannedSceneInput.allocation, allocation)) ||
           width != allocation.source.requestWidth ||
           allocation.rows.isEmpty ||
           allocation.rows.length > 64 ||
@@ -74,7 +77,6 @@ final class ForumBodyEmphasisAllocatedPreparation {
       }
       _scales = allocation.source.effectiveScales.entries.iterator;
       _slots = allocation.nativeFootprint.iterator;
-      _markBuckets = List.generate(allocation.rows.length, (_) => <int>[]);
       _phaseRequests = [
         for (final content in [
           allocation.paintInput.background,
@@ -93,6 +95,8 @@ final class ForumBodyEmphasisAllocatedPreparation {
     }
   }
   ForumBodyEmphasisRowAllocation? _allocation;
+  ForumBodyEmphasisAllocatedSceneInput? _expectedScene;
+  bool _sceneProbed = false;
   ForumBodyParagraphCache? _cache;
   void Function()? _ensureOwner;
   TextScaler? _callerScaler;
@@ -113,19 +117,12 @@ final class ForumBodyEmphasisAllocatedPreparation {
   ForumBodyParagraphLineFrames? _frames;
   ForumBodyParagraphRowPreparation? _groupJob;
   ForumBodyParagraphPhysicalLinePreparation? _physicalJob;
-  List<List<int>> _markBuckets = const [];
-  final _commands = <ForumBodyTextPictureCommand>[];
+  _AllocatedSceneCommands? _commandJob;
   ForumBodyTextPicturePreparation? _sceneJob;
   ForumBodyTextPictureLease? _picture;
   ForumBodyEmphasisAllocatedLayout? _result;
   var _phase = _AllocatedPhase.scales;
-  int _layer = 0,
-      _verify = 0,
-      _mark = 0,
-      _drawRow = 0,
-      _drawLayer = 0,
-      _drawMark = 0,
-      _release = 0;
+  int _layer = 0, _verify = 0, _release = 0;
   bool _operating = false, _cacheMiss = false;
   bool get isReady => _phase == _AllocatedPhase.ready;
   bool get cacheMiss => _cacheMiss;
@@ -221,6 +218,9 @@ final class ForumBodyEmphasisAllocatedPreparation {
                 textScaler: source.textScaler,
                 minimumLineCount: slot.minimumLineCount,
               );
+            } else if (!_sceneProbed && _expectedScene != null) {
+              _expectedScene!.includeBudget(_probe!);
+              _sceneProbed = true;
             } else {
               _probe!.close();
               _probe = null;
@@ -351,56 +351,23 @@ final class ForumBodyEmphasisAllocatedPreparation {
               _layer++;
               _phase = _layer < 3
                   ? _AllocatedPhase.acquirePhase
-                  : _AllocatedPhase.bucketMarks;
-            }
-          case _AllocatedPhase.bucketMarks:
-            if (_mark < plan.marks.length) {
-              final index = _mark++, mark = plan.marks[index];
-              if (mark.markIndex != index) {
-                ForumBodyEmphasisLinePreparation._mismatch();
-              }
-              _markBuckets[source.marks[index].lineIndex].add(index);
-            } else {
-              _phase = _AllocatedPhase.commands;
+                  : _AllocatedPhase.commands;
             }
           case _AllocatedPhase.commands:
-            if (_drawRow < plan.rows.length) {
-              final row = plan.rows[_drawRow];
-              if (_drawLayer < 3) {
-                final layer = _drawLayer++, strip = _strips[layer][_drawRow];
-                final offset =
-                    (layer == 1 ? row.glyphOffset : row.logicalOffset) +
-                    Offset(0, strip.selector.originY);
-                _commands.add(
-                  ForumBodyTextPictureCommand.fromPhysicalLine(
-                    _groups[layer],
-                    strip,
-                    offset,
-                  ),
-                );
-              } else if (_drawMark < _markBuckets[_drawRow].length) {
-                final index = _markBuckets[_drawRow][_drawMark++],
-                    placed = plan.marks[index],
-                    original = source.marks[index];
-                final lease =
-                    _binding!.marks[source._unitMarks[original.unitIndex]];
-                _commands.add(
-                  ForumBodyTextPictureCommand.fromEmphasisMark(
-                    lease,
-                    placed.offset,
-                    fitScale: original.fitScale,
-                  ),
-                );
-              } else {
-                _drawRow++;
-                _drawLayer = 0;
-                _drawMark = 0;
+            _commandJob ??= _AllocatedSceneCommands(
+              plan,
+              _groups,
+              _strips,
+              _guard,
+            );
+            _commandJob!.advance();
+            if (_commandJob!.isReady) {
+              final input = _commandJob!.takeInput();
+              _commandJob = null;
+              if (_expectedScene != null &&
+                  input != _expectedScene!.pictureInput) {
+                ForumBodyEmphasisLinePreparation._mismatch();
               }
-            } else {
-              final input = ForumBodyTextPictureInput(
-                commands: _commands,
-                maxCommands: 704,
-              );
               _sceneJob = ForumBodyTextPicturePreparation(
                 cache: cache,
                 input: input,
@@ -482,23 +449,8 @@ final class ForumBodyEmphasisAllocatedPreparation {
     }
   }
 
-  void _verifyParent(ForumBodyParagraphLease parent) {
-    final plan = _allocation!,
-        layout = parent.layout,
-        expected = plan.reference;
-    if (!parent.hasSameActiveOwner(_binding!.base!) ||
-        layout.lineCount != expected.lineCount ||
-        layout.width != expected.width ||
-        layout.height != expected.isolatedHeight ||
-        layout.rowIsolationPitch != expected.rowIsolationPitch ||
-        layout.nativeAlphabeticBaseline != plan.isolatedAlphabeticBaseline ||
-        layout.firstLineIndent.requestedAdvance !=
-            expected.firstLineIndent.requestedAdvance ||
-        layout.firstLineIndent.appliedAdvance !=
-            expected.firstLineIndent.appliedAdvance) {
-      ForumBodyEmphasisLinePreparation._mismatch();
-    }
-  }
+  void _verifyParent(ForumBodyParagraphLease parent) =>
+      _verifyAllocatedParent(_allocation!, _binding!.base!, parent);
 
   static bool _samePhaseLine(
     ForumBodyParagraphLine a,
@@ -573,8 +525,9 @@ final class ForumBodyEmphasisAllocatedPreparation {
     _additionalOwned = null;
     _phaseRequests = const [];
     _frames = null;
-    _markBuckets = const [];
-    _commands.clear();
+    _expectedScene = null;
+    _commandJob?.close();
+    _commandJob = null;
   }
 
   void close() {

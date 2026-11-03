@@ -1077,6 +1077,28 @@ final class ForumBodyParagraphLease extends ForumBodyTextLease {
   @override
   final ForumBodyParagraphContent content;
 
+  /// Exact current source/request qualification without acquisition, cache
+  /// mutation or shaping. A caller scaler can retire this handle while sampled.
+  bool matchesNativeInputs({
+    required ForumBodyParagraphContent content,
+    required double width,
+    required TextScaler textScaler,
+    double? rowIsolationPitch,
+  }) {
+    if (!isActive) throw StateError('Paragraph lease is retired');
+    final scales = ForumBodyParagraphLayout.validateInputs(
+      content: content,
+      width: width,
+      textScaler: textScaler,
+      rowIsolationPitch: rowIsolationPitch,
+    );
+    if (!isActive) {
+      throw StateError('Paragraph lease retired during validation');
+    }
+    return identical(this.content, content) &&
+        _entry.key == _LayoutKey(content, width, scales, rowIsolationPitch);
+  }
+
   /// Qualifies a natural/isolated pair without acquiring or reshaping it.
   /// Equal native keys alone cannot prove the current source or cache owner.
   bool hasSameSourceAndInputsExceptRowIsolation(
