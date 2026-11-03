@@ -65,7 +65,11 @@ export 'src/inline/forum_body_ruby_tree_input.dart'
         ForumBodyRubyGlyphTreeMetricsPreparation,
         ForumBodyRubyGlyphTreeGeometry,
         ForumBodyRubyGlyphTreeSourcePosition,
-        ForumBodyRubyGlyphTreeGeometryPreparation;
+        ForumBodyRubyGlyphTreeGeometryPreparation,
+        ForumBodyRubyGlyphTreeBand,
+        ForumBodyRubyGlyphTreeBandContext,
+        ForumBodyRubyGlyphTreeBands,
+        ForumBodyRubyGlyphTreeBandsPreparation;
 export 'src/inline/forum_body_ruby_tree_child_geometry.dart'
     show
         ForumBodyRubyTreeBranch,
