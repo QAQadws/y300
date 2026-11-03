@@ -1,0 +1,95 @@
+import 'package:flutter/painting.dart';
+import 'package:forum_content_renderer/forum_content_renderer.dart';
+
+/// Real parser/source/measurement pipeline shared by tree-format tests. A
+/// request transform can attach an actual band before measuring that same graph.
+ForumBodyRubyGlyphTreeBands rubyGlyphTreeBandsFixture(
+  String html,
+  ForumBodyParagraphCache cache, {
+  TextDirection direction = TextDirection.ltr,
+  TextScaler scaler = TextScaler.noScaling,
+  String sourceId = 'ruby-glyph-tree-fixture',
+  String fontRevision = 'ruby-glyph-tree-ahem',
+  ForumBodyRubyGlyphTreeInput Function(ForumBodyRubyGlyphTreeInput)? mapInput,
+}) {
+  final document = const ForumBodyParser().parse(
+    html: html,
+    sourceId: sourceId,
+    conversionIdentity: 'none',
+  );
+  final flow = ForumBodyTextFlowCursor(
+    document: document,
+    reader: ForumBodyReaderStyle(
+      textStyle: const TextStyle(fontFamily: 'Ahem', fontSize: 20),
+      fontRevision: fontRevision,
+      linkColor: const Color(0xff0000ff),
+      textDirection: direction,
+    ),
+  );
+  ForumBodyRubyGroupContent? group;
+  try {
+    while (!flow.isComplete && group == null) {
+      flow.advance(maxEvents: 1);
+      if (flow.current case ForumBodyTextFlowInline(:final content)) {
+        group = content.parts.whereType<ForumBodyInlineFlowRuby>().first.group;
+      }
+    }
+  } finally {
+    flow.close();
+  }
+  final source = ForumBodyRubyGlyphTreeInputPreparation(
+    group: group!,
+    maxWidth: 500,
+    ensureOwner: () {},
+  );
+  late ForumBodyRubyGlyphTreeInput input;
+  try {
+    while (!source.isReady) {
+      source.advance(maxParts: 1);
+    }
+    input = source.takeInput();
+  } finally {
+    source.close();
+  }
+  input = mapInput?.call(input) ?? input;
+  final measure = ForumBodyRubyGlyphTreeMetricsPreparation(
+    input: input,
+    cache: cache,
+    ensureOwner: () {},
+    textScaler: scaler,
+  );
+  late ForumBodyRubyGlyphTreeMetrics metrics;
+  try {
+    while (!measure.isReady) {
+      measure.advance(maxParts: 1);
+    }
+    metrics = measure.takeMetrics();
+  } finally {
+    measure.close();
+  }
+  final positions = ForumBodyRubyGlyphTreeGeometryPreparation(
+    metrics: metrics,
+    ensureOwner: () {},
+  );
+  late ForumBodyRubyGlyphTreeGeometry geometry;
+  try {
+    while (!positions.isReady) {
+      positions.advance(maxParts: 1);
+    }
+    geometry = positions.takeGeometry();
+  } finally {
+    positions.close();
+  }
+  final bands = ForumBodyRubyGlyphTreeBandsPreparation(
+    geometry: geometry,
+    ensureOwner: () {},
+  );
+  try {
+    while (!bands.isReady) {
+      bands.advance(maxParts: 1);
+    }
+    return bands.takeBands();
+  } finally {
+    bands.close();
+  }
+}

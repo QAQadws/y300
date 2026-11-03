@@ -45,10 +45,7 @@ final class ForumBodyEmphasisMarkInput {
       throw ArgumentError('Emphasis mark must be one intrinsic character');
     }
     final source = style.textStyle;
-    final size = source.fontSize;
-    if (size == null || !size.isFinite || size * .5 <= 0) {
-      throw ArgumentError('Emphasis requires a resolved font size');
-    }
+    final markSize = resolveFontSize(source);
     final settings =
         (source.fontFeatures?.length ?? 0) +
         (source.fontVariations?.length ?? 0) +
@@ -76,7 +73,7 @@ final class ForumBodyEmphasisMarkInput {
         fontFamilyFallback: source.fontFamilyFallback == null
             ? null
             : List.unmodifiable(source.fontFamilyFallback!),
-        fontSize: size * .5,
+        fontSize: markSize,
         fontWeight: source.fontWeight,
         fontStyle: source.fontStyle,
         locale: source.locale,
@@ -98,6 +95,17 @@ final class ForumBodyEmphasisMarkInput {
       ),
     );
   }
+
+  /// The marker's unscaled font input. A nonlinear TextScaler must sample this
+  /// size independently of the source font; it cannot halve a scaled result.
+  static double resolveFontSize(TextStyle source) {
+    final size = source.fontSize;
+    if (size == null || !size.isFinite || size * .5 <= 0) {
+      throw ArgumentError('Emphasis requires a resolved font size');
+    }
+    return size * .5;
+  }
+
   static const revision = 1;
   final String mark;
   final TextStyle textStyle;

@@ -72,7 +72,10 @@ export 'src/inline/forum_body_ruby_tree_input.dart'
         ForumBodyRubyGlyphTreeBandsPreparation,
         ForumBodyRubyEmptyAnnotationFont,
         ForumBodyRubyEmptyAnnotationFonts,
-        ForumBodyRubyEmptyAnnotationFontsPreparation;
+        ForumBodyRubyEmptyAnnotationFontsPreparation,
+        ForumBodyRubyTreeEmphasisSourceMetrics,
+        ForumBodyRubyTreeEmphasisMetrics,
+        ForumBodyRubyTreeEmphasisMetricsPreparation;
 export 'src/inline/forum_body_ruby_tree_child_geometry.dart'
     show
         ForumBodyRubyTreeBranch,

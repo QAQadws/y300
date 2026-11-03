@@ -2,6 +2,8 @@ import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
+import 'test_support/ruby_glyph_tree_fixture.dart';
+
 final class _Sizes extends TextScaler {
   _Sizes({double small = 1.4, double large = 1.1})
     : state = _SizeState(small, large);
@@ -32,73 +34,14 @@ ForumBodyRubyGlyphTreeBands _bands(
   ForumBodyParagraphCache cache, {
   TextDirection direction = TextDirection.ltr,
   TextScaler scaler = TextScaler.noScaling,
-}) {
-  final document = const ForumBodyParser().parse(
-    html: html,
-    sourceId: 'empty-annotation-fonts',
-    conversionIdentity: 'none',
-  );
-  final flow = ForumBodyTextFlowCursor(
-    document: document,
-    reader: ForumBodyReaderStyle(
-      textStyle: const TextStyle(fontFamily: 'Ahem', fontSize: 20),
-      fontRevision: 'empty-font-ahem',
-      linkColor: const Color(0xff0000ff),
-      textDirection: direction,
-    ),
-  );
-  ForumBodyRubyGroupContent? group;
-  try {
-    while (!flow.isComplete && group == null) {
-      flow.advance(maxEvents: 1);
-      if (flow.current case ForumBodyTextFlowInline(:final content)) {
-        group = content.parts.whereType<ForumBodyInlineFlowRuby>().first.group;
-      }
-    }
-  } finally {
-    flow.close();
-  }
-  final inputWork = ForumBodyRubyGlyphTreeInputPreparation(
-    group: group!,
-    maxWidth: 500,
-    ensureOwner: () {},
-  );
-  while (!inputWork.isReady) {
-    inputWork.advance(maxParts: 1);
-  }
-  final input = inputWork.takeInput();
-  inputWork.close();
-  final metricWork = ForumBodyRubyGlyphTreeMetricsPreparation(
-    input: input,
-    cache: cache,
-    ensureOwner: () {},
-    textScaler: scaler,
-  );
-  while (!metricWork.isReady) {
-    metricWork.advance(maxParts: 1);
-  }
-  final metrics = metricWork.takeMetrics();
-  metricWork.close();
-  final positions = ForumBodyRubyGlyphTreeGeometryPreparation(
-    metrics: metrics,
-    ensureOwner: () {},
-  );
-  while (!positions.isReady) {
-    positions.advance(maxParts: 1);
-  }
-  final geometry = positions.takeGeometry();
-  positions.close();
-  final bands = ForumBodyRubyGlyphTreeBandsPreparation(
-    geometry: geometry,
-    ensureOwner: () {},
-  );
-  while (!bands.isReady) {
-    bands.advance(maxParts: 1);
-  }
-  final result = bands.takeBands();
-  bands.close();
-  return result;
-}
+}) => rubyGlyphTreeBandsFixture(
+  html,
+  cache,
+  direction: direction,
+  scaler: scaler,
+  sourceId: 'empty-annotation-fonts',
+  fontRevision: 'empty-font-ahem',
+);
 
 ForumBodyRubyEmptyAnnotationFonts _finish(
   ForumBodyRubyEmptyAnnotationFontsPreparation work, {

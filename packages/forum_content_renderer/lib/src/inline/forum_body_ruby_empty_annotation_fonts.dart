@@ -34,16 +34,13 @@ final class ForumBodyRubyEmptyAnnotationFonts {
     double rootSize,
   ) : fonts = UnmodifiableListView(fonts),
       _bySource = UnmodifiableMapView(bySource),
-      textScaler = _EmptyAnnotationScaler(
-        UnmodifiableMapView(scales),
-        rootSize,
-      );
+      textScaler = _RubyFormatScaler(UnmodifiableMapView(scales), rootSize);
   final ForumBodyRubyGlyphTreeBands bands;
   final List<ForumBodyRubyEmptyAnnotationFont> fonts;
   final Map<int, ForumBodyRubyEmptyAnnotationFont> _bySource;
   final TextScaler textScaler;
   Map<double, double> get effectiveScales =>
-      (textScaler as _EmptyAnnotationScaler).samples;
+      (textScaler as _RubyFormatScaler).samples;
   ForumBodyRubyEmptyAnnotationFont? fontForSource(int id) {
     bands.geometry.sourceForId(id);
     return _bySource[id];
@@ -217,7 +214,7 @@ final class ForumBodyRubyEmptyAnnotationFontsPreparation {
             rank,
             side,
             ForumBodyTextRequest.paragraph(font),
-            _EmptyAnnotationScaler(UnmodifiableMapView({size: scaled}), size),
+            _RubyFormatScaler(UnmodifiableMapView({size: scaled}), size),
           ),
         );
         _index++;
@@ -374,14 +371,14 @@ final class _EmptyFontInput {
   final TextScaler scaler;
 }
 
-final class _EmptyAnnotationScaler extends TextScaler {
-  const _EmptyAnnotationScaler(this.samples, this.rootSize);
+final class _RubyFormatScaler extends TextScaler {
+  const _RubyFormatScaler(this.samples, this.rootSize);
   final Map<double, double> samples;
   final double rootSize;
   @override
   double scale(double fontSize) =>
       samples[fontSize] ??
-      (throw ArgumentError.value(fontSize, 'fontSize', 'Unmeasured RT font'));
+      (throw ArgumentError.value(fontSize, 'fontSize', 'Unmeasured ruby font'));
   @override
   double get textScaleFactor => scale(rootSize) / rootSize;
 }
