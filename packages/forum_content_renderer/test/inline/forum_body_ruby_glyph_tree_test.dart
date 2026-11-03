@@ -1,10 +1,12 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:forum_content_renderer/src/inline/forum_body_ruby_tree_input.dart';
 import 'package:forum_content_renderer/src/inline/forum_body_ruby_tree_metrics_preparation.dart';
+import 'package:forum_content_renderer/src/inline/forum_body_ruby_tree_layout.dart';
 
 const _nested =
     '<ruby style="text-emphasis:\'X\' red;font-size:24px;line-height:.4">'
@@ -48,10 +50,11 @@ ForumBodyRubyGroupContent _group(String html, TextDirection direction) {
 ForumBodyRubyGlyphTreeInput _input(
   String html, {
   TextDirection direction = TextDirection.ltr,
+  double maxWidth = 500,
 }) {
   final work = ForumBodyRubyGlyphTreeInputPreparation(
     group: _group(html, direction),
-    maxWidth: 500,
+    maxWidth: maxWidth,
     ensureOwner: () {},
   );
   try {
@@ -105,6 +108,11 @@ final class _Nonlinear extends TextScaler {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(() async {
+    await (FontLoader(
+      'packages/forum_content_renderer/ForumBodyInlineSpace',
+    )..addFont(rootBundle.load('assets/fonts/inline_space.ttf'))).load();
+  });
   for (final html in [
     _nested,
     _segment,
@@ -695,4 +703,357 @@ void main() {
       expect(cache.pictureBuildCount, 0);
     },
   );
+  for (final html in [
+    '<ruby style="font-size:24px;line-height:.4;background:rgba(255,0,0,.5)">'
+        '<rb><ruby><rb>A é</rb><rt>inner</rt></ruby></rb><rt>outer</rt></ruby>',
+    '<ruby><rb>A</rb> <rb>B</rb><rtc><rt rbspan="2">wide</rt></rtc>'
+        '<rtc><rt>a</rt> <rt>b</rt></rtc></ruby>',
+    '<ruby><rb>A</rb>\n<rb>B</rb><rt>a</rt>\n<rt>b</rt></ruby>',
+    _plainInline,
+    '<ruby><rb></rb><rt> </rt></ruby>',
+  ]) {
+    for (final direction in TextDirection.values) {
+      for (final nonlinear in [false, true]) {
+        test('source contexts share actual visible-tree coordinates '
+            '$direction nonlinear=$nonlinear $html', () {
+          final input = _input(html, direction: direction), cache = _cache();
+          final scaler = nonlinear ? const _Nonlinear() : TextScaler.noScaling;
+          final metrics = _finish(
+            ForumBodyRubyGlyphTreeMetricsPreparation(
+              input: input,
+              cache: cache,
+              ensureOwner: () {},
+              textScaler: scaler,
+            ),
+          );
+          final before = (
+            cache.layoutBuildCount,
+            cache.pictureBuildCount,
+            cache.activeLeases,
+          );
+          final geometry = _geometry(metrics);
+          expect((
+            cache.layoutBuildCount,
+            cache.pictureBuildCount,
+            cache.activeLeases,
+          ), before);
+          expect(geometry.metrics, same(metrics));
+          expect(geometry.nodes, hasLength(input.sourceTree.nodes.length));
+          expect(
+            geometry.nodes.map((n) => n.id).toSet(),
+            hasLength(geometry.nodes.length),
+          );
+          expect(geometry.nodes.first.id, input.sourceTree.root);
+          expect(geometry.nodes.first.origin, Offset.zero);
+          expect(geometry.nodes.first.parent, isNull);
+          expect(geometry.nodes.first.edge, isNull);
+          for (final node in geometry.nodes) {
+            expect(geometry.nodeForId(node.id), same(node));
+            if (node.parent case final parent?) {
+              expect(node.edge!.node, node.id);
+              expect(node.origin, parent.contentOrigin + node.edge!.offset);
+              expect(geometry.nodeForId(parent.id), same(parent));
+              expect(
+                geometry.nodes.indexOf(parent),
+                lessThan(geometry.nodes.indexOf(node)),
+              );
+            }
+          }
+          expect(
+            geometry.sources.map((s) => s.source),
+            orderedEquals(input.sources),
+          );
+
+          // Bind the ordinary, originally supported visible format separately.
+          // Existing pixel tests additionally guard the shared child offsets.
+          final original = ForumBodyRubyTreeMetricsPreparation(
+            input: input.sourceTree,
+            cache: cache,
+            ensureOwner: () {},
+            textScaler: scaler,
+          );
+          while (!original.isReady) {
+            original.advance(maxParts: 1);
+          }
+          final originalMetrics = original.takeMetrics();
+          original.close();
+          final bind = ForumBodyRubyTreePreparation(
+            input: input.sourceTree,
+            metrics: originalMetrics,
+            cache: cache,
+            ensureOwner: () {},
+            expectedTextScaler: scaler,
+          );
+          try {
+            while (!bind.isReady) {
+              final step = bind.advance(maxParts: 1);
+              expect(step.waitingForLayoutBudget, isFalse);
+              expect(bind.cacheMiss, isFalse);
+            }
+            final visible = bind.takeLayout();
+            try {
+              expect(
+                visible.members.map((m) => m.nodeIndex),
+                geometry.sources.map((s) => s.source.id),
+              );
+              for (final member in visible.members) {
+                final source = geometry.sourceForId(member.nodeIndex);
+                expect(source.source.content, same(member.content));
+                expect(source.contextOrigin, member.offset);
+                expect(source.usesInlineParent, member.inlineView != null);
+                if (member.lease case final lease?) {
+                  final local = metrics.nodes[source.node.id].box!;
+                  expect(
+                    local.bounds,
+                    originalMetrics.nodes[source.node.id].box!.bounds,
+                  );
+                  if (member.content.projection.text.isNotEmpty) {
+                    final box = lease.layout
+                        .selectionBoxes(
+                          0,
+                          member.content.projection.text.length,
+                        )
+                        .first;
+                    final hit = visible.sourceAt(
+                      box.toRect().center + member.offset,
+                    );
+                    expect(hit.nodeIndex, member.nodeIndex);
+                    expect(hit.content, same(member.content));
+                  }
+                }
+              }
+            } finally {
+              visible.close();
+            }
+          } finally {
+            bind.close();
+          }
+          expect(cache.activeLeases, 0);
+          cache.close();
+          expect(
+            geometry.sources.map((s) => s.contextOrigin),
+            everyElement(isA<Offset>()),
+          );
+          expect(() => geometry.nodes.clear(), throwsUnsupportedError);
+          expect(() => geometry.sources.clear(), throwsUnsupportedError);
+          expect(() => geometry.nodeForId(-1), throwsArgumentError);
+          expect(() => geometry.sourceForId(100000), throwsArgumentError);
+        });
+      }
+    }
+  }
+  test('active source ancestry distinguishes base, RT and spanning ranks', () {
+    final cache = _cache();
+    ForumBodyRubyGlyphTreeGeometry prepare(String html) {
+      final input = _input(html);
+      return _geometry(
+        _finish(
+          ForumBodyRubyGlyphTreeMetricsPreparation(
+            input: input,
+            cache: cache,
+            ensureOwner: () {},
+          ),
+        ),
+      );
+    }
+
+    final nested = prepare(_nested);
+    final base = nested.sources.firstWhere(
+      (s) => s.source.content.projection.text.contains('é'),
+    );
+    final inner = nested.sources.firstWhere(
+      (s) => s.source.content.projection.text == 'inner',
+    );
+    final outer = nested.sources.firstWhere(
+      (s) => s.source.content.projection.text == 'outer',
+    );
+    List<ForumBodyRubyTreeChildGeometry> path(
+      ForumBodyRubyGlyphTreeSourcePosition source,
+    ) {
+      final edges = <ForumBodyRubyTreeChildGeometry>[];
+      for (var node = source.node; node.parent != null; node = node.parent!) {
+        edges.add(node.edge!);
+      }
+      return edges;
+    }
+
+    expect(
+      path(base).where((e) => e.branch == ForumBodyRubyTreeBranch.base),
+      hasLength(2),
+    );
+    expect(
+      path(base).where((e) => e.branch == ForumBodyRubyTreeBranch.annotation),
+      isEmpty,
+    );
+    expect(
+      path(inner).where((e) => e.branch == ForumBodyRubyTreeBranch.base),
+      hasLength(1),
+    );
+    expect(
+      path(inner).where((e) => e.branch == ForumBodyRubyTreeBranch.annotation),
+      hasLength(1),
+    );
+    expect(
+      path(outer).where((e) => e.branch == ForumBodyRubyTreeBranch.base),
+      isEmpty,
+    );
+    expect(
+      path(outer).where((e) => e.branch == ForumBodyRubyTreeBranch.annotation),
+      hasLength(1),
+    );
+    expect(base.source.emphasis, isNotNull);
+    expect(
+      nested
+          .metrics
+          .input
+          .sourceTree
+          .rootGroup
+          .font
+          .fontStrut
+          .style
+          .textEmphasis
+          .isEnabled,
+      isTrue,
+    );
+    final segment = prepare(_segment);
+    final rt = segment.sources.firstWhere(
+      (s) => s.source.content.projection.text == '音',
+    );
+    final position = rt.node;
+    expect(position.edge!.branch, ForumBodyRubyTreeBranch.span);
+    final parent =
+        segment.metrics.input.sourceTree.nodes[position.parent!.id]
+            as ForumBodyRubyTreeSegment;
+    final span = parent.spans[position.edge!.index];
+    expect((span.startColumn, span.endColumn, span.rank), (1, 2, 1));
+    expect(rt.source.emphasis, isNotNull);
+    expect(cache.activeLeases, 0);
+    expect(cache.pictureBuildCount, 0);
+  });
+  test(
+    'glyph geometry cancellation and reentry remain bounded through publication',
+    () {
+      final cache = _cache();
+      final metrics = _finish(
+        ForumBodyRubyGlyphTreeMetricsPreparation(
+          input: _input(_segment),
+          cache: cache,
+          ensureOwner: () {},
+        ),
+      );
+      var parts = 0;
+      final count = ForumBodyRubyGlyphTreeGeometryPreparation(
+        metrics: metrics,
+        ensureOwner: () {},
+      );
+      while (!count.isReady) {
+        parts += count.advance(maxParts: 1);
+      }
+      count.close();
+      final before = (
+        cache.layoutBuildCount,
+        cache.pictureBuildCount,
+        cache.activeLeases,
+      );
+      for (var at = 0; at <= parts; at++) {
+        var active = true;
+        final work = ForumBodyRubyGlyphTreeGeometryPreparation(
+          metrics: metrics,
+          ensureOwner: () {
+            if (!active) throw StateError('retired');
+          },
+        );
+        for (var i = 0; i < at; i++) {
+          work.advance(maxParts: 1);
+        }
+        active = false;
+        expect(() => work.advance(maxParts: 1), throwsStateError);
+        expect(work.takeGeometry, throwsStateError);
+        work.close();
+        work.close();
+      }
+      ForumBodyRubyGlyphTreeGeometryPreparation? reentry;
+      reentry = ForumBodyRubyGlyphTreeGeometryPreparation(
+        metrics: metrics,
+        ensureOwner: () {
+          if (reentry == null) return;
+          expect(reentry.advance, throwsStateError);
+          expect(reentry.takeGeometry, throwsStateError);
+        },
+      );
+      while (!reentry.isReady) {
+        reentry.advance(maxParts: 1);
+      }
+      final value = reentry.takeGeometry();
+      reentry.close();
+      expect(value.sources, hasLength(metrics.input.sources.length));
+      ForumBodyRubyGlyphTreeGeometryPreparation? publication;
+      publication = ForumBodyRubyGlyphTreeGeometryPreparation(
+        metrics: metrics,
+        ensureOwner: () {
+          if (publication?.isReady == true) publication!.close();
+        },
+      );
+      expect(() => publication!.advance(maxParts: 10000), throwsStateError);
+      expect(publication.takeGeometry, throwsStateError);
+      expect((
+        cache.layoutBuildCount,
+        cache.pictureBuildCount,
+        cache.activeLeases,
+      ), before);
+    },
+  );
+  test(
+    'wide source trees retain ancestry prefixes without an unbounded final copy',
+    () {
+      final children = List.generate(80, (i) => '<rb>A$i</rb>').join();
+      final input = _input(
+        '<ruby>$children<rt rbspan="80">wide</rt></ruby>',
+        maxWidth: 8000,
+      );
+      final cache = _cache();
+      final metrics = _finish(
+        ForumBodyRubyGlyphTreeMetricsPreparation(
+          input: input,
+          cache: cache,
+          ensureOwner: () {},
+        ),
+      );
+      final geometry = _geometry(metrics);
+      final root = geometry.nodes.first;
+      final direct = geometry.nodes
+          .where((n) => identical(n.parent, root))
+          .toList();
+      expect(direct, hasLength(81));
+      expect(direct.every((n) => identical(n.parent, root)), isTrue);
+      expect(geometry.sources, hasLength(81));
+      expect(cache.activeLeases, 0);
+      expect(cache.pictureBuildCount, 0);
+    },
+  );
+}
+
+ForumBodyRubyGlyphTreeGeometry _geometry(
+  ForumBodyRubyGlyphTreeMetrics metrics,
+) {
+  final work = ForumBodyRubyGlyphTreeGeometryPreparation(
+    metrics: metrics,
+    ensureOwner: () {},
+  );
+  var parts = 0;
+  try {
+    while (!work.isReady) {
+      expect(work.advance(maxParts: 1), 1);
+      expect(
+        ++parts,
+        lessThan(12 * (metrics.nodes.length + metrics.input.sources.length)),
+      );
+    }
+    final result = work.takeGeometry();
+    expect(work.takeGeometry, throwsStateError);
+    expect(work.advance, throwsStateError);
+    return result;
+  } finally {
+    work.close();
+  }
 }

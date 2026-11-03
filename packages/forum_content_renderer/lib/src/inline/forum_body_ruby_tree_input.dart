@@ -22,10 +22,12 @@ import 'forum_body_emphasis_text_input.dart';
 import 'forum_body_ruby_group_metrics.dart';
 import 'forum_body_ruby_group_preparation.dart';
 import 'forum_body_ruby_tree_metrics_preparation.dart';
+import 'forum_body_ruby_tree_child_geometry.dart';
 
 part 'forum_body_ruby_tree_segment_input.dart';
 part 'forum_body_ruby_glyph_tree_input.dart';
 part 'forum_body_ruby_glyph_tree_metrics.dart';
+part 'forum_body_ruby_glyph_tree_geometry.dart';
 
 /// Internal postorder graph of real nested columns and segments. Source leaves
 /// stay in original base/annotation order; their IDs are not DOM offsets.

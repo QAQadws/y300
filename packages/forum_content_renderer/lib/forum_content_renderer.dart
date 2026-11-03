@@ -62,7 +62,15 @@ export 'src/inline/forum_body_ruby_tree_input.dart'
         ForumBodyRubyGlyphTreeSource,
         ForumBodyRubyGlyphTreeInputPreparation,
         ForumBodyRubyGlyphTreeMetrics,
-        ForumBodyRubyGlyphTreeMetricsPreparation;
+        ForumBodyRubyGlyphTreeMetricsPreparation,
+        ForumBodyRubyGlyphTreeGeometry,
+        ForumBodyRubyGlyphTreeSourcePosition,
+        ForumBodyRubyGlyphTreeGeometryPreparation;
+export 'src/inline/forum_body_ruby_tree_child_geometry.dart'
+    show
+        ForumBodyRubyTreeBranch,
+        ForumBodyRubyTreeChildGeometry,
+        ForumBodyRubyTreeNodePosition;
 export 'src/inline/forum_body_ruby_atom_plan.dart';
 export 'src/inline/forum_body_ruby_segment_metrics_preparation.dart';
 export 'src/inline/forum_body_ruby_segment_preparation.dart';

@@ -20,6 +20,7 @@ import 'forum_body_ruby_hit_band.dart';
 import 'forum_body_ruby_tree_input.dart';
 import 'forum_body_ruby_segment_hit_route.dart';
 import 'forum_body_ruby_tree_metrics_preparation.dart';
+import 'forum_body_ruby_tree_child_geometry.dart';
 
 part 'forum_body_ruby_tree_preparation.dart';
 

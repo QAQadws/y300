@@ -328,30 +328,21 @@ final class ForumBodyRubyTreePreparation {
     final origin = work.offset + box.frame.childOffset;
     final container = node as ForumBodyRubyTreeContainer;
     switch (container) {
-      case ForumBodyRubyTreeSegment():
+      case ForumBodyRubyTreeSegment() ||
+          ForumBodyRubyTreeGroup() ||
+          ForumBodyRubyTreeFrame():
         if (work.rank == -1) work.rank = 0;
-        if (work.rank == container.children.length) {
+        if (work.rank == forumBodyRubyTreeChildSlotCount(container)) {
           _positions.removeLast();
         } else {
-          final child = container.children[work.rank++];
-          final segment = box.segment!;
-          final delta = switch (child.kind) {
-            ForumBodyRubyTreeSegmentChildKind.base =>
-              segment.columnOffsets[child.index] +
-                  segment.columns[child.index].baseOffset,
-            ForumBodyRubyTreeSegmentChildKind.gap =>
-              segment.gaps[child.index].offset +
-                  segment.gaps[child.index].font.baseOffset,
-            ForumBodyRubyTreeSegmentChildKind.span =>
-              segment.spans[child.index].offset,
-            ForumBodyRubyTreeSegmentChildKind.annotationGap =>
-              segment.annotationGaps[child.index].offset,
-            ForumBodyRubyTreeSegmentChildKind.fence => _fenceOffset(
-              segment,
-              container.fences[child.index],
-            ),
-          };
-          _positions.add(_TreePosition(child.node, origin + delta));
+          final edge = forumBodyRubyTreeChildGeometryAt(
+            container,
+            box,
+            work.rank++,
+          );
+          if (edge != null) {
+            _positions.add(_TreePosition(edge.node, origin + edge.offset));
+          }
         }
       case ForumBodyRubyTreeInline():
         final view = _inlineViews[work.id]!;
@@ -384,46 +375,7 @@ final class ForumBodyRubyTreePreparation {
         } else {
           _positions.removeLast();
         }
-      case ForumBodyRubyTreeFrame():
-        _positions.removeLast();
-        _positions.add(_TreePosition(container.child, origin));
-      case ForumBodyRubyTreeGroup():
-        if (work.rank == -1) {
-          work.rank = 0;
-          _positions.add(
-            _TreePosition(container.base, origin + box.group!.baseOffset),
-          );
-        } else if (work.rank < container.annotations.length) {
-          final rank = work.rank++;
-          final child = container.annotations[rank].child;
-          if (child != null) {
-            _positions.add(
-              _TreePosition(
-                child,
-                origin + box.group!.annotations[rank].offset,
-              ),
-            );
-          }
-        } else {
-          _positions.removeLast();
-        }
     }
-  }
-
-  Offset _fenceOffset(
-    ForumBodyRubySegmentMetrics segment,
-    ForumBodyRubyTreeSegmentFence fence,
-  ) {
-    final atEnd = fence.beforeColumn == segment.columns.length;
-    final rtl = segment.direction == TextDirection.rtl;
-    final x = atEnd
-        ? (rtl ? 0.0 : segment.size.width)
-        : segment.columnLefts[fence.beforeColumn] +
-              (rtl ? segment.columnWidths[fence.beforeColumn] : 0);
-    final y = fence.rank == null
-        ? segment.baseline
-        : segment.columns.first.annotations[fence.rank!].bandTop;
-    return Offset(x, y);
   }
 
   ForumBodyRubyTreeLayout takeLayout() => _operate(() {
