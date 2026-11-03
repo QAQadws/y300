@@ -4,146 +4,7 @@ import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
-final class _Nonlinear extends TextScaler {
-  const _Nonlinear();
-  @override
-  double scale(double size) => size < 20 ? size * 1.45 : size * 1.12;
-  @override
-  double get textScaleFactor => throw StateError('Use per-size values');
-}
-
-typedef _Fixture = ({
-  ForumBodyParagraphContent base,
-  List<ForumBodyParagraphContent> annotations,
-  List<ForumBodyParagraphContent> emptyAnnotations,
-});
-
-_Fixture _content({
-  String text =
-      'ffi 中 é <span style="font-size:15px;text-emphasis-position:under">'
-      'الع 👩‍👩‍👧‍👦</span>',
-  String emphasis = "'X' red",
-  double size = 20,
-  double height = .4,
-  TextDirection direction = TextDirection.ltr,
-  ForumBodyParagraphLayoutMode mode =
-      ForumBodyParagraphLayoutMode.intrinsicSingleLine,
-}) {
-  final annotationHtml = [
-    for (final empty in [false, true])
-      for (var i = 0; i < 3; i++)
-        '<p style="font-size:${8 + i * 3}px;line-height:.4">'
-            '${empty ? '' : '注音'}</p>',
-  ].join();
-  final document = const ForumBodyParser().parse(
-    html:
-        '<p style="font-size:${size}px;line-height:$height;'
-        'text-emphasis:$emphasis">$text</p>$annotationHtml',
-    sourceId: 'ruby-base-emphasis',
-    conversionIdentity: 'none',
-  );
-  final styles = const ForumBodyStyleResolver().resolve(
-    document,
-    ForumBodyReaderStyle(
-      textStyle: const TextStyle(fontFamily: 'Ahem', fontSize: 20),
-      fontRevision: 'ahem',
-      linkColor: const Color(0xff0000ff),
-      textDirection: direction,
-    ),
-  );
-  ForumBodyParagraphContent build(
-    String path,
-    ForumBodyParagraphLayoutMode mode,
-  ) => const ForumBodyParagraphContentBuilder().build(
-    document: document,
-    styles: styles,
-    path: path,
-    layoutMode: mode,
-  );
-  return (
-    base: build('0', mode),
-    annotations: [
-      for (var i = 1; i <= 3; i++)
-        build('$i', ForumBodyParagraphLayoutMode.intrinsicSingleLine),
-    ],
-    emptyAnnotations: [
-      for (var i = 4; i <= 6; i++)
-        build('$i', ForumBodyParagraphLayoutMode.intrinsicSingleLine),
-    ],
-  );
-}
-
-ForumBodyEmphasisLineMetrics _line(
-  ForumBodyParagraphCache cache, {
-  TextScaler scaler = TextScaler.noScaling,
-  _Fixture? content,
-}) {
-  final source = ForumBodyEmphasisTextPreparation(
-    content: (content ?? _content()).base,
-  );
-  while (!source.isReady) {
-    source.advance(maxParts: 1);
-  }
-  final job = ForumBodyEmphasisLineMetricsPreparation(
-    input: source.takeInput(),
-    cache: cache,
-    ensureOwner: () {},
-    textScaler: scaler,
-  );
-  addTearDown(job.close);
-  while (!job.isReady) {
-    final step = job.advance(maxParts: 1);
-    expect(step.partsPrepared, lessThanOrEqualTo(1));
-    expect(step.picturesRecorded, 0);
-    expect(step.nativeLayoutsBuilt, lessThanOrEqualTo(1));
-    expect(step.waitingForLayoutBudget, isFalse);
-  }
-  return job.takeMetrics();
-}
-
-ForumBodyRubyGroupMetrics _group(
-  ForumBodyParagraphCache cache,
-  ForumBodyEmphasisLineMetrics line, {
-  required _Fixture fixture,
-  List<ForumBodyRubySide> sides = const [ForumBodyRubySide.over],
-  bool empty = false,
-}) {
-  final base = line.baseRequest.acquire(
-    cache,
-    width: line.requestWidth,
-    textScaler: line.textScaler,
-    cachedOnly: false,
-  )!;
-  final inputs = (empty ? fixture.emptyAnnotations : fixture.annotations)
-      .take(sides.length)
-      .toList();
-  final annotations = <ForumBodyTextLease?>[];
-  try {
-    for (final input in inputs) {
-      annotations.add(
-        empty ? null : cache.acquire(content: input, width: line.requestWidth),
-      );
-    }
-    return ForumBodyRubyGroupMetrics.measureLayers(
-      cache: cache,
-      baseLease: base,
-      annotations: [
-        for (var i = 0; i < inputs.length; i++)
-          (
-            content: inputs[i],
-            lease: annotations[i],
-            side: sides[i],
-            gap: (i + 1).toDouble(),
-          ),
-      ],
-    );
-  } finally {
-    base.release();
-    for (final annotation in annotations) {
-      annotation?.release();
-    }
-  }
-}
+import 'test_support/ruby_emphasis_fixture.dart';
 
 ForumBodyRubyBaseEmphasisGeometry _finish(
   ForumBodyRubyBaseEmphasisPreparation job, {
@@ -243,13 +104,23 @@ void main() {
         for (final sides in topologies) {
           test('actual marks outside reserved bands $direction $height '
               'nonlinear=$nonlinear $sides', () {
-            final fixture = _content(direction: direction, height: height);
-            final line = _line(
+            final fixture = rubyEmphasisFixture(
+              direction: direction,
+              height: height,
+            );
+            final line = measureRubyEmphasisLine(
               cache,
               content: fixture,
-              scaler: nonlinear ? const _Nonlinear() : TextScaler.noScaling,
+              scaler: nonlinear
+                  ? const RubyEmphasisNonlinearScaler()
+                  : TextScaler.noScaling,
             );
-            final group = _group(cache, line, fixture: fixture, sides: sides);
+            final group = measureRubyEmphasisGroup(
+              cache,
+              line,
+              fixture: fixture,
+              sides: sides,
+            );
             expect(group.baseFontBounds, line.baseFontBounds);
             expect(group.baseFontBaseline, line.baseAlphabeticBaseline);
             final before = (
@@ -283,15 +154,15 @@ void main() {
   }
   for (final side in ForumBodyRubySide.values) {
     test('empty local RT keeps populated shared $side band', () {
-      final fixture = _content();
-      final line = _line(cache, content: fixture);
-      final populated = _group(
+      final fixture = rubyEmphasisFixture();
+      final line = measureRubyEmphasisLine(cache, content: fixture);
+      final populated = measureRubyEmphasisGroup(
         cache,
         line,
         fixture: fixture,
         sides: [side, side],
       );
-      final empty = _group(
+      final empty = measureRubyEmphasisGroup(
         cache,
         line,
         fixture: fixture,
@@ -319,9 +190,9 @@ void main() {
     });
   }
   test('inactive emphasis adds no marks or invented height', () {
-    final fixture = _content(emphasis: 'none');
-    final line = _line(cache, content: fixture);
-    final group = _group(cache, line, fixture: fixture);
+    final fixture = rubyEmphasisFixture(emphasis: 'none');
+    final line = measureRubyEmphasisLine(cache, content: fixture);
+    final group = measureRubyEmphasisGroup(cache, line, fixture: fixture);
     final geometry = _finish(
       ForumBodyRubyBaseEmphasisPreparation(
         line: line,
@@ -335,9 +206,9 @@ void main() {
   test(
     'numeric placement survives native eviction and borrowed cache closure',
     () {
-      final fixture = _content();
-      final line = _line(cache, content: fixture),
-          group = _group(cache, line, fixture: fixture);
+      final fixture = rubyEmphasisFixture();
+      final line = measureRubyEmphasisLine(cache, content: fixture),
+          group = measureRubyEmphasisGroup(cache, line, fixture: fixture);
       cache.close();
       final geometry = _finish(
         ForumBodyRubyBaseEmphasisPreparation(
@@ -351,10 +222,10 @@ void main() {
     },
   );
   test('incompatible glyph geometry is rejected before publication', () {
-    final line = _line(cache);
-    final fixture = _content(size: 30);
-    final other = _line(cache, content: fixture);
-    final group = _group(cache, other, fixture: fixture);
+    final line = measureRubyEmphasisLine(cache);
+    final fixture = rubyEmphasisFixture(size: 30);
+    final other = measureRubyEmphasisLine(cache, content: fixture);
+    final group = measureRubyEmphasisGroup(cache, other, fixture: fixture);
     expect(
       () => ForumBodyRubyBaseEmphasisPreparation(
         line: line,
@@ -372,14 +243,14 @@ void main() {
     test(
       'other source formats do not borrow intrinsic qualification $mode',
       () {
-        final line = _line(
+        final line = measureRubyEmphasisLine(
           cache,
-          content: _content(text: 'A', mode: mode),
+          content: rubyEmphasisFixture(text: 'A', mode: mode),
         );
-        final fixture = _content(text: 'A');
-        final group = _group(
+        final fixture = rubyEmphasisFixture(text: 'A');
+        final group = measureRubyEmphasisGroup(
           cache,
-          _line(cache, content: fixture),
+          measureRubyEmphasisLine(cache, content: fixture),
           fixture: fixture,
         );
         expect(
@@ -394,9 +265,9 @@ void main() {
     );
   }
   test('retirement at every work boundary prevents late delivery', () {
-    final fixture = _content();
-    final line = _line(cache, content: fixture),
-        group = _group(cache, line, fixture: fixture);
+    final fixture = rubyEmphasisFixture();
+    final line = measureRubyEmphasisLine(cache, content: fixture),
+        group = measureRubyEmphasisGroup(cache, line, fixture: fixture);
     var steps = 0;
     final initial = ForumBodyRubyBaseEmphasisPreparation(
       line: line,
@@ -432,9 +303,9 @@ void main() {
   test(
     'publication callback can retire the worker without mutating delivery',
     () {
-      final fixture = _content();
-      final line = _line(cache, content: fixture),
-          group = _group(cache, line, fixture: fixture);
+      final fixture = rubyEmphasisFixture();
+      final line = measureRubyEmphasisLine(cache, content: fixture),
+          group = measureRubyEmphasisGroup(cache, line, fixture: fixture);
       ForumBodyRubyBaseEmphasisPreparation? work;
       work = ForumBodyRubyBaseEmphasisPreparation(
         line: line,
@@ -452,9 +323,9 @@ void main() {
   test(
     'reader callback cannot reenter or consume partially published work',
     () {
-      final fixture = _content();
-      final line = _line(cache, content: fixture),
-          group = _group(cache, line, fixture: fixture);
+      final fixture = rubyEmphasisFixture();
+      final line = measureRubyEmphasisLine(cache, content: fixture),
+          group = measureRubyEmphasisGroup(cache, line, fixture: fixture);
       ForumBodyRubyBaseEmphasisPreparation? work;
       var calls = 0;
       work = ForumBodyRubyBaseEmphasisPreparation(
