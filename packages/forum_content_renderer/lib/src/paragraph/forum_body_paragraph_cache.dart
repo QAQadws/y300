@@ -1186,6 +1186,21 @@ final class ForumBodyInlineParagraphLease
         other._entry.key as _InlineLayoutKey,
       );
 
+  /// Same current owner/source, font/paint/scale/mode/pitch and slot widths.
+  /// Only slot height/baseline may differ. This does not verify the resulting
+  /// native rows, trim or target child dimensions; a reflow reference must.
+  bool hasSameSourceAndInputsExceptSlotVerticalGeometry(
+    ForumBodyInlineParagraphLease other,
+  ) {
+    if (!hasSameActiveOwner(other) || !identical(content, other.content)) {
+      return false;
+    }
+    final a = _entry.key as _InlineLayoutKey,
+        b = other._entry.key as _InlineLayoutKey;
+    return a.rowIsolationPitch == b.rowIsolationPitch &&
+        a._hasSameTextInputs(b, compareSlotVerticalGeometry: false);
+  }
+
   /// Drop a provisional shape only when this is its last handle. Existing
   /// aliases keep their actual layout and ordinary cache lifetime unchanged.
   void releaseProvisional() {
@@ -1448,7 +1463,10 @@ final class _InlineLayoutKey {
       rowIsolationPitch == other.rowIsolationPitch &&
       _hasSameTextInputs(other);
 
-  bool _hasSameTextInputs(_InlineLayoutKey other) =>
+  bool _hasSameTextInputs(
+    _InlineLayoutKey other, {
+    bool compareSlotVerticalGeometry = true,
+  }) =>
       identity == other.identity &&
       path == other.path &&
       fontRevision == other.fontRevision &&
@@ -1466,7 +1484,17 @@ final class _InlineLayoutKey {
       width == other.width &&
       indentAdvance == other.indentAdvance &&
       listEquals(scales, other.scales) &&
-      listEquals(dimensions, other.dimensions);
+      (compareSlotVerticalGeometry
+          ? listEquals(dimensions, other.dimensions)
+          : _hasSameSlotWidths(other));
+
+  bool _hasSameSlotWidths(_InlineLayoutKey other) {
+    if (dimensions.length != other.dimensions.length) return false;
+    for (var i = 0; i < dimensions.length; i++) {
+      if (dimensions[i].$1 != other.dimensions[i].$1) return false;
+    }
+    return true;
+  }
 
   @override
   int get hashCode => Object.hash(
