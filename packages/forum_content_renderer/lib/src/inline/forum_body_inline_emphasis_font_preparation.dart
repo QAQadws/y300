@@ -273,6 +273,16 @@ final class ForumBodyInlineEmphasisFontPreparation {
                 _owned,
               );
               _guard();
+              if (cache.budgetRevision != _rejectedAt) {
+                _probe!.close();
+                _probe = null;
+                _owned = [];
+                _rejection = null;
+                _blockedAt = -1;
+                _phase = _InlineFontPhase.beginPrefix;
+                used++;
+                return step();
+              }
               if (!external) {
                 throw ForumBodyParagraphBudgetException(
                   ForumBodyParagraphBudgetFailure.content,

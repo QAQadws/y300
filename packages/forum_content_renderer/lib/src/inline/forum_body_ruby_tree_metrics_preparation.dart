@@ -493,6 +493,7 @@ final class ForumBodyRubyTreeMetricsPreparation {
       input: node.input,
       cache: _cache!,
       ensureOwner: _guard,
+      additionalOwnedLeases: _additionalOwned,
       textScaler: _TreeNativeTextScaler(
         Map.unmodifiable(_inlineScales),
         node.input.content.style.textStyle.fontSize!,

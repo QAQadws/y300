@@ -418,18 +418,25 @@ final class ForumBodyRubyGroupPreparation {
           ...additional,
         ]);
         _guard();
-        if (!external) {
-          throw const ForumBodyRubyGroupPreparationException(
-            ForumBodyRubyGroupPreparationFailure.intrinsicBudget,
-          );
+        if (cache.budgetRevision != rejectedAt) {
+          _budgetRejection = null;
+          _blockedRevision = -1;
+          _waiting = false;
+          units++;
+        } else {
+          if (!external) {
+            throw const ForumBodyRubyGroupPreparationException(
+              ForumBodyRubyGroupPreparationFailure.intrinsicBudget,
+            );
+          }
+          _blockedRevision = rejectedAt;
+          if (!_budgetChecked) {
+            _probe ??= cache.createBudgetProbe();
+            inspected = _inspectBudget(maxParts - units);
+            units += inspected;
+          }
+          _waiting = _budgetChecked && cache.budgetRevision == rejectedAt;
         }
-        _blockedRevision = rejectedAt;
-        if (!_budgetChecked) {
-          _probe ??= cache.createBudgetProbe();
-          inspected = _inspectBudget(maxParts - units);
-          units += inspected;
-        }
-        _waiting = _budgetChecked && cache.budgetRevision == rejectedAt;
       }
     }
     final nativeWork =

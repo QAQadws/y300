@@ -86,10 +86,16 @@ final class ForumBodyTextRequestPreparation {
       final additional =
           _additionalOwned?.call() ?? const <ForumBodyNativeParagraphLease>[];
       _guard();
-      if (!cache.isBlockedByExternalPins(error, [
+      final external = cache.isBlockedByExternalPins(error, [
         ...nativeLeases,
         ...additional,
-      ])) {
+      ]);
+      _guard();
+      if (cache.budgetRevision != rejectedAt) {
+        _blockedRevision = -1;
+        return (units: 1, waiting: false, cacheMiss: false);
+      }
+      if (!external) {
         throw ForumBodyParagraphBudgetException(
           ForumBodyParagraphBudgetFailure.content,
           requiredEstimatedBytes: error.requiredEstimatedBytes,

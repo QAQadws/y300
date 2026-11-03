@@ -381,6 +381,29 @@ void main() {
       expect(input.original.lease.isActive, isTrue);
     },
   );
+  test(
+    'pin released during rejection classification resumes the same reflow',
+    () {
+      final cache = _cache(entries: 2),
+          input = _input(cache),
+          pin = _pin(cache);
+      var callbacks = 0;
+      final work = _work(
+        input,
+        cache,
+        owned: () {
+          if (++callbacks == 2) pin.release();
+          return const [];
+        },
+      );
+      final result = _finish(work, cache).value;
+      addTearDown(result.parent.release);
+      expect(callbacks, greaterThanOrEqualTo(2));
+      expect(pin.isActive, isFalse);
+      expect(cache.activeLeases, 2);
+      expect(input.original.lease.isActive, isTrue);
+    },
+  );
   test('external pin wait remains stable and resumes on the same job', () {
     final cache = _cache(entries: 2),
         input = _input(cache),

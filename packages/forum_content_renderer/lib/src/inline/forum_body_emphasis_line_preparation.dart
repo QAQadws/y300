@@ -876,6 +876,11 @@ final class ForumBodyEmphasisLinePreparation {
             ...additional,
           ]);
           _guard();
+          if (cache.budgetRevision != rejectedAt) {
+            _blockedAt = -1;
+            used++;
+            return step();
+          }
           if (!external) {
             throw ForumBodyParagraphBudgetException(
               ForumBodyParagraphBudgetFailure.content,

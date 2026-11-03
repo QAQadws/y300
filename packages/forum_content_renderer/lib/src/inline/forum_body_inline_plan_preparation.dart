@@ -36,10 +36,12 @@ final class ForumBodyInlinePlanPreparation {
     required ForumBodyParagraphCache cache,
     required TextScaler textScaler,
     required void Function() ensureOwner,
+    Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
   }) : _input = input,
        _cache = cache,
        _textScaler = textScaler,
        _ensureOwner = ensureOwner,
+       _additionalOwned = additionalOwnedLeases,
        width = input.width;
 
   /// Measures the explicitly derived glyph parent and complete original child
@@ -51,11 +53,13 @@ final class ForumBodyInlinePlanPreparation {
     required ForumBodyParagraphCache cache,
     required TextScaler textScaler,
     required void Function() ensureOwner,
+    Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
   }) : _input = input,
        _parentGlyphs = glyphInput,
        _cache = cache,
        _textScaler = textScaler,
        _ensureOwner = ensureOwner,
+       _additionalOwned = additionalOwnedLeases,
        width = input.width {
     if (!identical(input.content, glyphInput.original)) {
       throw ForumBodyParagraphInputException(
@@ -72,9 +76,11 @@ final class ForumBodyInlinePlanPreparation {
     required TextScaler textScaler,
     required void Function() ensureOwner,
     void Function(ForumBodyInlinePlanInput)? validateInput,
+    Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
   }) : _cache = cache,
        _textScaler = textScaler,
        _ensureOwner = ensureOwner,
+       _additionalOwned = additionalOwnedLeases,
        _validateInput = validateInput {
     _source = ForumBodyInlineSourcePreparation(
       input: input,
@@ -90,6 +96,7 @@ final class ForumBodyInlinePlanPreparation {
   ForumBodyParagraphCache? _cache;
   TextScaler? _textScaler;
   void Function()? _ensureOwner;
+  Iterable<ForumBodyNativeParagraphLease> Function()? _additionalOwned;
   final double width;
   final _metrics = <ForumBodyRubyAtomMetrics>[];
   final _backgroundFonts =
@@ -117,6 +124,7 @@ final class ForumBodyInlinePlanPreparation {
   var _operating = false;
   bool get isReady => _state == _State.ready;
   bool _cacheMiss = false;
+  int _blockedRevision = -1;
   bool get cacheMiss => _cacheMiss;
   Iterable<ForumBodyNativeParagraphLease> get nativeLeases => [
     ?_parent,
@@ -140,6 +148,11 @@ final class ForumBodyInlinePlanPreparation {
       _guard();
       _cacheMiss = false;
       final cache = _cache!;
+      if (_blockedRevision == cache.budgetRevision) {
+        return (partsPrepared: 0, isReady: false, waitingForLayoutBudget: true);
+      }
+      final revisionAtStart = cache.budgetRevision;
+      _blockedRevision = -1;
       final before = cache.layoutBuildCount;
       var parts = 0;
       var waiting = false;
@@ -274,6 +287,9 @@ final class ForumBodyInlinePlanPreparation {
         parts += step.partsPrepared;
         waiting = step.waitingForLayoutBudget;
       }
+      if (waiting && cache.budgetRevision == revisionAtStart) {
+        _blockedRevision = revisionAtStart;
+      }
       return (
         partsPrepared: parts,
         isReady: isReady,
@@ -295,6 +311,7 @@ final class ForumBodyInlinePlanPreparation {
             cache: _cache!,
             ensureOwner: _guard,
             textScaler: _textScaler!,
+            additionalOwnedLeases: _ownedPrefix,
           );
           final step = job.advance(maxParts: maxParts, cachedOnly: cachedOnly);
           _cacheMiss = job.cacheMiss;
@@ -318,6 +335,7 @@ final class ForumBodyInlinePlanPreparation {
           cache: _cache!,
           ensureOwner: _guard,
           expectedTextScaler: _textScaler!,
+          additionalOwnedLeases: _ownedPrefix,
         );
         final step = job.advance(maxParts: maxParts, cachedOnly: cachedOnly);
         _cacheMiss = job.cacheMiss;
@@ -336,6 +354,7 @@ final class ForumBodyInlinePlanPreparation {
           cache: _cache!,
           ensureOwner: _guard,
           textScaler: _textScaler!,
+          additionalOwnedLeases: _ownedPrefix,
         );
         final step = tree.advance(maxParts: maxParts, cachedOnly: cachedOnly);
         _cacheMiss = tree.cacheMiss;
@@ -355,6 +374,7 @@ final class ForumBodyInlinePlanPreparation {
           ensureOwner: _guard,
           textScaler: _textScaler!,
           maxWidth: value.maxWidth,
+          additionalOwnedLeases: _ownedPrefix,
         );
         final step = pair.advance(maxParts: maxParts, cachedOnly: cachedOnly);
         _cacheMiss = pair.cacheMiss;
@@ -369,6 +389,7 @@ final class ForumBodyInlinePlanPreparation {
           request: value,
           ensureOwner: _guard,
           textScaler: _textScaler!,
+          additionalOwnedLeases: _ownedPrefix,
         );
         final step = segment.advance(
           maxParts: maxParts,
@@ -386,6 +407,7 @@ final class ForumBodyInlinePlanPreparation {
           request: value,
           ensureOwner: _guard,
           textScaler: _textScaler!,
+          additionalOwnedLeases: _ownedPrefix,
         );
         final step = space.advance(maxParts: maxParts, cachedOnly: cachedOnly);
         _cacheMiss = space.cacheMiss;
@@ -429,10 +451,72 @@ final class ForumBodyInlinePlanPreparation {
     } on ForumBodyParagraphBudgetException catch (error) {
       _guard();
       if (error.failure != ForumBodyParagraphBudgetFailure.pinned) rethrow;
-      final waiting = cache.budgetRevision == rejectedAt;
+      final waiting = _classifyPinned(error, rejectedAt);
       return (partsPrepared: waiting ? 0 : 1, waitingForLayoutBudget: waiting);
     } finally {
       lease?.release();
+    }
+  }
+
+  // Initial metric workers have no parent pins yet. Preserve their existing
+  // fast path when neither the caller nor this plan owns an enclosing prefix.
+  Iterable<ForumBodyNativeParagraphLease> Function()? get _ownedPrefix =>
+      _additionalOwned == null && _parent == null && _probe == null
+      ? null
+      : _otherOwned;
+
+  bool _classifyPinned(
+    ForumBodyParagraphBudgetException error,
+    int rejectedAt,
+  ) {
+    final external = _cache!.isBlockedByExternalPins(error, _otherOwned());
+    _guard();
+    // Prefix callbacks may release a pin. That rejection describes the older
+    // budget, so retry on the next quantum before declaring content pressure.
+    if (_cache!.budgetRevision != rejectedAt) return false;
+    if (!external) {
+      throw ForumBodyParagraphBudgetException(
+        ForumBodyParagraphBudgetFailure.content,
+        requiredEstimatedBytes: error.requiredEstimatedBytes,
+        requiredAdditionalEntries: error.requiredAdditionalEntries,
+      );
+    }
+    return _cache!.budgetRevision == rejectedAt;
+  }
+
+  /// A nested worker already accounts for its own pins. Supply this parent's
+  /// other live handles and the caller's bounded prefix, without taking aliases
+  /// or releasing any borrowed resource. Classification uses actual cache keys.
+  Iterable<ForumBodyNativeParagraphLease> _otherOwned() sync* {
+    _guard();
+    var count = 0;
+    for (final lease in [?_parent, ?_probe]) {
+      _guard();
+      yield lease;
+      count++;
+    }
+    final values =
+        _additionalOwned?.call() ?? const <ForumBodyNativeParagraphLease>[];
+    _guard();
+    final iterator = values.iterator;
+    _guard();
+    while (true) {
+      final more = iterator.moveNext();
+      _guard();
+      if (!more) break;
+      if (count++ >= 32768) {
+        throw ForumBodyParagraphInputException(
+          ForumBodyParagraphInputFailure.inputLimit,
+          _input!.content.path,
+        );
+      }
+      final lease = iterator.current;
+      _guard();
+      if (!_cache!.ownsLease(lease)) {
+        throw StateError('Inline budget prefix is retired or foreign');
+      }
+      yield lease;
+      _guard();
     }
   }
 
@@ -610,7 +694,7 @@ final class ForumBodyInlinePlanPreparation {
       release();
       _guard();
       if (error.failure != ForumBodyParagraphBudgetFailure.pinned) rethrow;
-      final waiting = cache.budgetRevision == rejectedAt;
+      final waiting = _classifyPinned(error, rejectedAt);
       return (partsPrepared: waiting ? 0 : 1, waitingForLayoutBudget: waiting);
     } catch (_) {
       release();
@@ -663,6 +747,7 @@ final class ForumBodyInlinePlanPreparation {
               cache: cache,
               ensureOwner: _guard,
               expectedTextScaler: _textScaler!,
+              additionalOwnedLeases: _ownedPrefix,
             );
           }
           parts++;
@@ -858,6 +943,8 @@ final class ForumBodyInlinePlanPreparation {
     _cache = null;
     _textScaler = null;
     _ensureOwner = null;
+    _additionalOwned = null;
+    _blockedRevision = -1;
   }
 
   void close() {
