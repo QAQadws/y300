@@ -4,6 +4,7 @@ import '../paragraph/forum_body_paragraph_cache.dart';
 import '../pagination/forum_body_text_page_content.dart';
 import '../paragraph/forum_body_text_request.dart';
 import 'forum_body_inline_plan_input.dart';
+import 'forum_body_inline_span_content.dart';
 import 'forum_body_inline_paragraph_request.dart';
 import 'forum_body_ruby_atom_plan.dart';
 import 'forum_body_ruby_atom_request.dart';
@@ -41,6 +42,29 @@ final class ForumBodyInlinePlanPreparation {
        _ensureOwner = ensureOwner,
        width = input.width;
 
+  /// Measures the explicitly derived glyph parent and complete original child
+  /// formats. Transfer remains separate from an ordinary readable inline plan;
+  /// parent markers and final physical-row allocation are still required.
+  ForumBodyInlinePlanPreparation.emphasisParent({
+    required ForumBodyInlinePlanInput input,
+    required ForumBodyInlineEmphasisGlyphInput glyphInput,
+    required ForumBodyParagraphCache cache,
+    required TextScaler textScaler,
+    required void Function() ensureOwner,
+  }) : _input = input,
+       _parentGlyphs = glyphInput,
+       _cache = cache,
+       _textScaler = textScaler,
+       _ensureOwner = ensureOwner,
+       width = input.width {
+    if (!identical(input.content, glyphInput.original)) {
+      throw ForumBodyParagraphInputException(
+        ForumBodyParagraphInputFailure.identity,
+        input.content.path,
+      );
+    }
+  }
+
   ForumBodyInlinePlanPreparation.fromFlow({
     required ForumBodyInlineFlowContent input,
     required this.width,
@@ -60,6 +84,7 @@ final class ForumBodyInlinePlanPreparation {
   }
 
   ForumBodyInlinePlanInput? _input;
+  ForumBodyInlineEmphasisGlyphInput? _parentGlyphs;
   ForumBodyInlineSourcePreparation? _source;
   void Function(ForumBodyInlinePlanInput)? _validateInput;
   ForumBodyParagraphCache? _cache;
@@ -550,7 +575,7 @@ final class ForumBodyInlinePlanPreparation {
 
     try {
       final request = ForumBodyInlineParagraphRequest(
-        content: _input!.content,
+        content: _parentGlyphs?.glyphs ?? _input!.content,
         dimensions: provisional ? alignment.provisionalDimensions : _dimensions,
         layoutMode: _input!.layoutMode,
       );
@@ -747,6 +772,26 @@ final class ForumBodyInlinePlanPreparation {
 
   ({ForumBodyInlinePageContent content, ForumBodyInlineParagraphLease lease})
   take() {
+    if (_parentGlyphs != null) {
+      throw StateError('Emphasis parent requires its qualified transfer');
+    }
+    return _take();
+  }
+
+  ({
+    ForumBodyInlinePageContent plan,
+    ForumBodyInlineEmphasisGlyphInput glyphInput,
+    ForumBodyInlineParagraphLease lease,
+  })
+  takeEmphasisParent() {
+    final glyphs = _parentGlyphs;
+    if (glyphs == null) throw StateError('No emphasis parent was prepared');
+    final value = _take();
+    return (plan: value.content, glyphInput: glyphs, lease: value.lease);
+  }
+
+  ({ForumBodyInlinePageContent content, ForumBodyInlineParagraphLease lease})
+  _take() {
     if (!isReady) throw StateError('Inline plan is not ready');
     return _operate(() {
       _guard();
@@ -803,6 +848,7 @@ final class ForumBodyInlinePlanPreparation {
     _probe?.releaseProvisional();
     _probe = null;
     _input = null;
+    _parentGlyphs = null;
     _result = null;
     _metrics.clear();
     _backgroundFonts.clear();
