@@ -166,6 +166,8 @@ void main() {
                 lease.layout.selectionBoxes(3, 5),
               ForumBodyPreparedInlineFragment(:final view) =>
                 view.selectionBoxes(3, 5, clipToView: false),
+              ForumBodyPreparedEmphasisFragment(:final view) =>
+                view.selectionBoxes(3, 5),
             };
             expect(raw, isNotEmpty);
             expect(raw.any((box) => box.left < 0 || box.right > 45), isTrue);

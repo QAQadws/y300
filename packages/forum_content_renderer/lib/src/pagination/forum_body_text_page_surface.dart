@@ -4,6 +4,7 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_surface.dart';
 import '../inline/forum_body_inline_paragraph_surface.dart';
+import '../inline/forum_body_emphasis_fragment_surface.dart';
 import 'forum_body_prepared_text_fragment.dart';
 import 'forum_body_text_page_composer.dart';
 import 'forum_body_text_page_binding.dart';
@@ -108,6 +109,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
       switch (binding) {
         ForumBodyPreparedParagraphFragment() => binding.lease,
         ForumBodyPreparedInlineFragment() => binding.view,
+        ForumBodyPreparedEmphasisFragment() => binding.view,
       };
 
   Widget _fragmentSurface(
@@ -138,6 +140,11 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
       ForumBodyPreparedInlineFragment() => ForumBodyInlineParagraphSurface(
         view: binding.view,
         paintBackgrounds: false,
+        interactionIdentity: interaction,
+        onSourceTap: tap,
+      ),
+      ForumBodyPreparedEmphasisFragment() => ForumBodyEmphasisFragmentSurface(
+        view: binding.view,
         interactionIdentity: interaction,
         onSourceTap: tap,
       ),

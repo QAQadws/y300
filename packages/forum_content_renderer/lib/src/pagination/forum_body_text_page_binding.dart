@@ -103,6 +103,32 @@ ForumBodyTextPage validateForumBodyPreparedTextPageBinding({
                 )) {
           _fail(ForumBodyTextPageSurfaceFailure.geometry);
         }
+      case ForumBodyPreparedEmphasisFragment():
+        if (fragment.kind != ForumBodyTextPageFragmentKind.emphasis) {
+          _fail(ForumBodyTextPageSurfaceFailure.identity);
+        }
+        final view = binding.view, content = view.input.paragraph.content;
+        view.ensureActive();
+        if (content.identity != snapshot.identity ||
+            content.path != fragment.path ||
+            content.fontRevision != fragment.fontRevision ||
+            content.styleRevision != fragment.styleRevision) {
+          _fail(ForumBodyTextPageSurfaceFailure.identity);
+        }
+        if (view.input.startLine != fragment.startLine ||
+            view.input.endLine != fragment.endLine ||
+            view.width != fragment.width ||
+            view.height != fragment.height ||
+            view.coverageStartUtf16 != fragment.coverageStartUtf16 ||
+            view.coverageEndUtf16 != fragment.coverageEndUtf16 ||
+            fragment.sourceHint !=
+                forumBodySourceHint(
+                  content.projection,
+                  view.coverageStartUtf16,
+                  view.coverageEndUtf16,
+                )) {
+          _fail(ForumBodyTextPageSurfaceFailure.geometry);
+        }
     }
   }
   return page;

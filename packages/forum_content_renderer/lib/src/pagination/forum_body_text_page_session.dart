@@ -447,7 +447,7 @@ final class ForumBodyTextPageSession {
   List<ForumBodyParagraphLease> preparePageLeases(int pageIndex) {
     _ensureUsable();
     if (snapshot[pageIndex].fragments.any(
-      (fragment) => fragment.kind == ForumBodyTextPageFragmentKind.inline,
+      (fragment) => fragment.kind != ForumBodyTextPageFragmentKind.paragraph,
     )) {
       throw StateError('Mixed pages require typed fragment delivery');
     }

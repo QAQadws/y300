@@ -2,11 +2,14 @@ import 'package:flutter/painting.dart';
 import '../document/forum_body_document.dart';
 
 import '../inline/forum_body_inline_span_content.dart';
+import '../inline/forum_body_emphasis_paragraph_metrics.dart';
 import '../inline/forum_body_inline_paragraph_request.dart';
 import '../inline/forum_body_ruby_atom_plan.dart';
 import '../inline/forum_body_ruby_column_request.dart';
 import '../inline/forum_body_ruby_group_metrics.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
+import '../paragraph/forum_body_paragraph_layout.dart'
+    show ForumBodyParagraphLayoutException;
 import '../paragraph/forum_body_text_request.dart';
 import '../paragraph/forum_body_native_request.dart';
 import '../inline/forum_body_text_band_content.dart';
@@ -14,8 +17,11 @@ import '../inline/forum_body_ruby_container_background.dart';
 import '../inline/forum_body_ruby_root_box.dart';
 import 'forum_body_text_page_binding.dart';
 import 'forum_body_text_page_composer.dart';
+import 'forum_body_source_hint.dart';
 
 export '../inline/forum_body_ruby_column_request.dart';
+
+part 'forum_body_emphasis_page_content.dart';
 
 /// Retained pure input for one composed paragraph, without a native owner,
 /// preparation cursor, Context or callback. The session controls total input
@@ -25,6 +31,9 @@ sealed class ForumBodyTextPageContent {
   factory ForumBodyTextPageContent.paragraph(
     ForumBodyParagraphContent content,
   ) = ForumBodyParagraphPageContent;
+  factory ForumBodyTextPageContent.emphasis(
+    ForumBodyEmphasisParagraphMetrics paragraph,
+  ) = ForumBodyEmphasisPageContent;
   factory ForumBodyTextPageContent.inline({
     required ForumBodyInlineSpanContent content,
     required List<PlaceholderDimensions> dimensions,

@@ -42,6 +42,7 @@ final class ForumBodyEmphasisFragmentLayout implements ForumBodyTextLayout {
       _source?.isActive != true || _picture?.isActive != true;
   @override
   bool get isPaintPrepared => !isDisposed;
+  void ensureActive() => _guard();
   void _guard() {
     if (isDisposed) throw StateError('Emphasis fragment is retired');
     _ensureOwner!();

@@ -2,6 +2,7 @@ import 'package:flutter/painting.dart';
 import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../inline/forum_body_inline_paragraph_view.dart';
+import '../inline/forum_body_emphasis_line_layout.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_layout.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
@@ -21,6 +22,9 @@ sealed class ForumBodyPreparedTextFragment {
   factory ForumBodyPreparedTextFragment.inline(
     ForumBodyInlineParagraphView view,
   ) = ForumBodyPreparedInlineFragment;
+  factory ForumBodyPreparedTextFragment.emphasis(
+    ForumBodyEmphasisFragmentLayout view,
+  ) = ForumBodyPreparedEmphasisFragment;
   bool get isActive;
 
   /// Borrowed for the same owner's page-budget checks and lifecycle counts.
@@ -42,6 +46,27 @@ sealed class ForumBodyPreparedTextFragment {
   /// evidence; ordinary UI selections still retain their native boxes.
   List<TextBox> glyphBoxes(int startUtf16, int endUtf16);
   void close();
+}
+
+final class ForumBodyPreparedEmphasisFragment
+    extends ForumBodyPreparedTextFragment {
+  const ForumBodyPreparedEmphasisFragment(this.view) : super._();
+  final ForumBodyEmphasisFragmentLayout view;
+  @override
+  bool get isActive => !view.isDisposed;
+  @override
+  Iterable<ForumBodyNativeParagraphLease> get nativeLeases => view.nativeLeases;
+  @override
+  HtmlDisplayTextProjection get projection => view.projection;
+  @override
+  List<ForumBodyParagraphRun> get runs => view.input.paragraph.content.runs;
+  @override
+  Iterable<ForumBodyParagraphLine> get lines => view.lines;
+  @override
+  List<TextBox> glyphBoxes(int startUtf16, int endUtf16) =>
+      view.glyphBoxes(startUtf16, endUtf16);
+  @override
+  void close() => view.close();
 }
 
 final class ForumBodyPreparedParagraphFragment

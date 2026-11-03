@@ -4,6 +4,7 @@ import '../inline/forum_body_ruby_group_preparation.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import 'forum_body_prepared_text_fragment.dart';
 import 'forum_body_inline_page_preparation.dart';
+import 'forum_body_emphasis_page_preparation.dart';
 import 'forum_body_text_page_binding.dart';
 import 'forum_body_text_page_composer.dart';
 import 'forum_body_text_page_content.dart';
@@ -17,6 +18,8 @@ enum ForumBodyTextPagePreparationState {
 }
 
 enum ForumBodyTextPagePreparationFailure { intrinsicBudget }
+
+typedef _PageBudgetPart = ({bool startsFragment, void Function() inspect});
 
 final class ForumBodyTextPagePreparationException implements Exception {
   const ForumBodyTextPagePreparationException(this.failure);
@@ -106,7 +109,9 @@ final class ForumBodyTextPagePreparation {
     this._ensureOwner,
     this._onTransfer,
     this._onRetire,
-  );
+  ) : _initialProbePending = _inputs.any(
+        (input) => input is ForumBodyEmphasisPageContent,
+      );
   ForumBodyParagraphCache? _cache;
   final ForumBodyTextPageSnapshot snapshot;
   final int pageIndex;
@@ -122,15 +127,22 @@ final class ForumBodyTextPagePreparation {
   void Function(ForumBodyTextPagePreparation)? _onRetire;
   final _fragments = <ForumBodyPreparedTextFragment>[];
   ForumBodyInlinePagePreparation? _inline;
+  final _emphasis = <int, ForumBodyEmphasisPagePreparation>{};
+  ForumBodyEmphasisPagePreparation? _activeEmphasis;
+  bool _initialProbePending;
   var _state = ForumBodyTextPagePreparationState.active;
   bool _operating = false;
   bool _waiting = false;
   bool _cacheMiss = false;
   int _completedWork = 0;
-  int get _retainedWork => _completedWork + (_inline?.workCount ?? 0);
+  int get _retainedWork =>
+      _completedWork +
+      (_inline?.workCount ?? 0) +
+      (_activeEmphasis?.workCount ?? 0);
   ForumBodyParagraphBudgetProbe? _budgetProbe;
-  Iterator<bool>? _probeWork;
-  int _probePartsRead = 0;
+  Iterator<_PageBudgetPart>? _probeWork;
+  _PageBudgetPart? _nextProbePart;
+  bool _probeAfterRejection = false;
   int _rejectedAtRevision = 0;
   int _probeBuilds = 0;
   int _probePictures = 0;
@@ -144,14 +156,19 @@ final class ForumBodyTextPagePreparation {
       _state == ForumBodyTextPagePreparationState.active && _cacheMiss;
   int get preparedFragmentCount => _fragments.length;
   int get expectedFragmentCount => snapshot[pageIndex].fragments.length;
-  Iterable<ForumBodyNativeParagraphLease> get _ownedLeases sync* {
+  Iterable<ForumBodyNativeParagraphLease> get _finishedLeases sync* {
     for (final fragment in _fragments) {
       yield* fragment.nativeLeases;
     }
+  }
+
+  Iterable<ForumBodyNativeParagraphLease> get _ownedLeases sync* {
+    yield* _finishedLeases;
     final active = _inline;
     if (active != null) {
       yield* active.nativeLeases;
     }
+    if (_activeEmphasis != null) yield* _activeEmphasis!.nativeLeases;
   }
 
   ForumBodyTextPagePreparationStep advance({
@@ -187,8 +204,15 @@ final class ForumBodyTextPagePreparation {
         );
     _operating = true;
     try {
+      if (_initialProbePending) {
+        _initialProbePending = false;
+        _startBudgetProbe(afterRejection: false);
+      }
       if (_budgetProbe != null) {
-        final work = _inspectBudget(math.min(maxFragments, maxParts));
+        final work = _inspectBudget(
+          maxFragments: maxFragments,
+          maxParts: maxParts,
+        );
         inspectedFragments = work.fragments;
         inspectedParts = work.parts;
         return result();
@@ -203,6 +227,10 @@ final class ForumBodyTextPagePreparation {
         final beforeWork = _retainedWork;
         _prepareNext(cachedOnly: false, maxParts: maxParts - parts);
         parts += math.max(1, _retainedWork - beforeWork);
+        if (_waiting) {
+          if (!_hasCurrentBudgetCheck) _startBudgetProbe();
+          break;
+        }
         if (cache.layoutBuildCount != buildsBefore ||
             cache.pictureBuildCount != picturesBefore) {
           break;
@@ -235,10 +263,8 @@ final class ForumBodyTextPagePreparation {
         if (!current) {
           _startBudgetProbe();
           final work = _inspectBudget(
-            math.min(
-              maxFragments,
-              math.max(0, maxParts - (_retainedWork - workBefore)),
-            ),
+            maxFragments: maxFragments,
+            maxParts: math.max(0, maxParts - (_retainedWork - workBefore)),
           );
           inspectedFragments = work.fragments;
           inspectedParts = work.parts;
@@ -268,6 +294,14 @@ final class ForumBodyTextPagePreparation {
     _waiting = false;
     _cacheMiss = false;
     try {
+      if (_initialProbePending) {
+        _initialProbePending = false;
+        _startBudgetProbe(afterRejection: false);
+      }
+      if (_budgetProbe != null) {
+        _inspectBudget(maxFragments: expectedFragmentCount, maxParts: maxParts);
+        return false;
+      }
       for (
         var parts = 0;
         parts < maxParts && _fragments.length < expectedFragmentCount;
@@ -278,6 +312,7 @@ final class ForumBodyTextPagePreparation {
           return false;
         }
         parts += math.max(1, _retainedWork - beforeWork);
+        if (_waiting) return false;
       }
       _finishIfReady();
       return isReady;
@@ -294,6 +329,25 @@ final class ForumBodyTextPagePreparation {
     final fragment = snapshot[pageIndex].fragments[index];
     final input = _inputs[index];
     final cache = _cache!;
+    if (input is ForumBodyEmphasisPageContent) {
+      final active = _activeEmphasis ??= _emphasisPart(index, input);
+      final step = active.advance(cachedOnly: cachedOnly, maxParts: maxParts);
+      _waiting = step.waiting;
+      final view = step.view;
+      if (view != null) {
+        try {
+          _guard();
+          _fragments.add(ForumBodyPreparedTextFragment.emphasis(view));
+          _guard();
+        } catch (_) {
+          view.close();
+          rethrow;
+        }
+        _completedWork += active.workCount;
+        _activeEmphasis = null;
+      }
+      return !step.cacheMiss;
+    }
     if (input is ForumBodyParagraphPageContent) {
       final requestWidth = input.requestWidthFor(fragment);
       final lease = cachedOnly
@@ -349,10 +403,33 @@ final class ForumBodyTextPagePreparation {
     return !step.cacheMiss;
   }
 
-  void _startBudgetProbe() {
+  bool get _hasCurrentBudgetCheck =>
+      _pageBudgetChecked &&
+      _checkedBuilds == _cache!.layoutBuildCount &&
+      _checkedPictures == _cache!.pictureBuildCount;
+
+  ForumBodyEmphasisPagePreparation _emphasisPart(
+    int index,
+    ForumBodyEmphasisPageContent input,
+  ) => _emphasis.putIfAbsent(
+    index,
+    () => ForumBodyEmphasisPagePreparation(
+      input: input,
+      fragment: snapshot[pageIndex].fragments[index],
+      cache: _cache!,
+      textScaler: _textScaler!,
+      ensureOwner: _guard,
+      ensureVisibleOwner: _ensureOwner!,
+      ownedPageLeases: () => _finishedLeases,
+    ),
+  );
+
+  void _startBudgetProbe({bool afterRejection = true}) {
     _budgetProbe?.close();
+    _waiting = false;
     _budgetProbe = _cache!.createBudgetProbe();
-    _probePartsRead = 0;
+    _nextProbePart = null;
+    _probeAfterRejection = afterRejection;
     _probeBuilds = _cache!.layoutBuildCount;
     _probePictures = _cache!.pictureBuildCount;
     _probeWork = _budgetParts(_budgetProbe!).iterator;
@@ -360,46 +437,74 @@ final class ForumBodyTextPagePreparation {
 
   // Parent and child requests are separate bounded inspection units. No native
   // work or large list of callbacks is retained by the whole-page probe.
-  Iterable<bool> _budgetParts(ForumBodyParagraphBudgetProbe probe) sync* {
+  Iterable<_PageBudgetPart> _budgetParts(
+    ForumBodyParagraphBudgetProbe probe,
+  ) sync* {
     final page = snapshot[pageIndex];
     for (final (index, input) in _inputs.indexed) {
       final fragment = page.fragments[index];
       var parent = true;
       for (final slot in input.nativeFootprintFor(fragment)) {
-        slot.request.includeBudget(
-          probe,
-          width: slot.width,
-          minimumLineCount: slot.minimumLineCount,
-          textScaler: _textScaler!,
+        yield (
+          startsFragment: parent,
+          inspect: () {
+            slot.request.includeBudget(
+              probe,
+              width: slot.width,
+              minimumLineCount: slot.minimumLineCount,
+              textScaler: input is ForumBodyEmphasisPageContent
+                  ? input.paragraph.textScaler
+                  : _textScaler!,
+            );
+          },
         );
-        yield parent;
         parent = false;
+      }
+      if (input is ForumBodyEmphasisPageContent) {
+        final parts = _emphasisPart(index, input);
+        while (!parts.isInputReady) {
+          yield (startsFragment: parent, inspect: parts.advanceInput);
+          parent = false;
+        }
+        yield (
+          startsFragment: parent,
+          inspect: () => parts.includeSceneBudget(probe),
+        );
       }
     }
   }
 
-  ({int fragments, int parts}) _inspectBudget(int limit) {
+  ({int fragments, int parts}) _inspectBudget({
+    required int maxFragments,
+    required int maxParts,
+  }) {
     var fragments = 0;
     var parts = 0;
     try {
-      while (_probePartsRead < expectedNativeLeaseCount && parts < limit) {
+      while (parts < maxParts) {
+        if (_nextProbePart == null) {
+          if (!_probeWork!.moveNext()) {
+            _finishBudgetProbe();
+            break;
+          }
+          _guard();
+          _nextProbePart = _probeWork!.current;
+        }
+        final part = _nextProbePart!;
+        if (part.startsFragment && fragments >= maxFragments) break;
+        _nextProbePart = null;
+        part.inspect();
+        _guard();
+        parts++;
+        if (part.startsFragment) fragments++;
+        // Look ahead only to an inert descriptor. It performs no probe/native
+        // work, and permits exact EOF without confusing handles with work units.
         if (!_probeWork!.moveNext()) {
-          throw StateError('Unordered page budget input');
+          _finishBudgetProbe();
+          break;
         }
         _guard();
-        _probePartsRead++;
-        parts++;
-        if (_probeWork!.current) fragments++;
-      }
-      if (_probePartsRead == expectedNativeLeaseCount) {
-        _pageBudgetChecked =
-            _probeBuilds == _cache!.layoutBuildCount &&
-            _probePictures == _cache!.pictureBuildCount;
-        _checkedBuilds = _probeBuilds;
-        _checkedPictures = _probePictures;
-        _closeProbe();
-        _waiting =
-            _pageBudgetChecked && _cache!.budgetRevision == _rejectedAtRevision;
+        _nextProbePart = _probeWork!.current;
       }
       return (fragments: fragments, parts: parts);
     } on ForumBodyParagraphBudgetException {
@@ -407,6 +512,20 @@ final class ForumBodyTextPagePreparation {
         ForumBodyTextPagePreparationFailure.intrinsicBudget,
       );
     }
+  }
+
+  void _finishBudgetProbe() {
+    _pageBudgetChecked =
+        _probeBuilds == _cache!.layoutBuildCount &&
+        _probePictures == _cache!.pictureBuildCount;
+    _checkedBuilds = _probeBuilds;
+    _checkedPictures = _probePictures;
+    final waiting =
+        _probeAfterRejection &&
+        _pageBudgetChecked &&
+        _cache!.budgetRevision == _rejectedAtRevision;
+    _closeProbe();
+    _waiting = waiting;
   }
 
   void _finishIfReady() {
@@ -511,6 +630,11 @@ final class ForumBodyTextPagePreparation {
     _state = state;
     _inline?.close();
     _inline = null;
+    for (final parts in _emphasis.values) {
+      parts.close();
+    }
+    _emphasis.clear();
+    _activeEmphasis = null;
     for (final fragment in _fragments) {
       fragment.close();
     }
@@ -524,10 +648,16 @@ final class ForumBodyTextPagePreparation {
     _budgetProbe?.close();
     _budgetProbe = null;
     _probeWork = null;
+    _nextProbePart = null;
   }
 
   void _dropOwner() {
     _closeProbe();
+    for (final parts in _emphasis.values) {
+      parts.close();
+    }
+    _emphasis.clear();
+    _activeEmphasis = null;
     _cache = null;
     _inputs = const [];
     _textScaler = null;
