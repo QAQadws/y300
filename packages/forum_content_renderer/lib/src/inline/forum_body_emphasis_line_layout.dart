@@ -27,9 +27,12 @@ import 'forum_body_ruby_tree_input.dart';
 import 'forum_body_ruby_root_box.dart';
 import 'forum_body_ruby_tree_layout.dart' show ForumBodyRubyTreeHit;
 import 'forum_body_ruby_container_background.dart';
+import 'forum_body_inline_paragraph_request.dart';
 
 part 'forum_body_emphasis_line_preparation.dart';
 part 'forum_body_emphasis_line_metrics.dart';
+part 'forum_body_inline_emphasis_font_metrics.dart';
+part 'forum_body_inline_emphasis_font_preparation.dart';
 part 'forum_body_emphasis_allocated_layout.dart';
 part 'forum_body_emphasis_allocated_preparation.dart';
 part 'forum_body_emphasis_allocated_scene_input.dart';
