@@ -38,6 +38,7 @@ part 'forum_body_ruby_glyph_tree_bands.dart';
 part 'forum_body_ruby_empty_annotation_fonts.dart';
 part 'forum_body_ruby_tree_emphasis_metrics.dart';
 part 'forum_body_ruby_tree_decoration_bands.dart';
+part 'forum_body_ruby_tree_emphasis_placement.dart';
 
 /// Internal postorder graph of real nested columns and segments. Source leaves
 /// stay in original base/annotation order; their IDs are not DOM offsets.

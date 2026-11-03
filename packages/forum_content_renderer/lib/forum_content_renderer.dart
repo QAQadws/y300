@@ -81,7 +81,11 @@ export 'src/inline/forum_body_ruby_tree_input.dart'
         ForumBodyRubyTreeDecorationNode,
         ForumBodyRubyTreeDecorationContext,
         ForumBodyRubyTreeDecorationBands,
-        ForumBodyRubyTreeDecorationBandsPreparation;
+        ForumBodyRubyTreeDecorationBandsPreparation,
+        ForumBodyRubyTreePlacedEmphasisMark,
+        ForumBodyRubyTreeEmphasisRow,
+        ForumBodyRubyTreeEmphasisPlacement,
+        ForumBodyRubyTreeEmphasisPlacementPreparation;
 export 'src/inline/forum_body_ruby_tree_child_geometry.dart'
     show
         ForumBodyRubyTreeBranch,
