@@ -108,6 +108,111 @@ void _draw(Canvas canvas, _Fixture f, ForumBodyTextPictureInput input) {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'nested scene placements keep native transform order and bounded costs',
+    () async {
+      final f = _Fixture();
+      const inner = Offset(3.333333333, 7.6), outer = Offset(-1.25, 31.135);
+      final first = _finish(
+        ForumBodyTextPictureInputComposition(
+          inputs: [(input: f.a, offset: inner)],
+          ensureOwner: () {},
+        ),
+      );
+      final nested = _finish(
+        ForumBodyTextPictureInputComposition(
+          inputs: [(input: first, offset: outer)],
+          ensureOwner: () {},
+        ),
+      );
+      final command = nested.commands.first;
+      expect(command.offset, f.a.commands.first.offset);
+      expect(command.translations, [outer, inner]);
+      expect(command.translationDepth, 2);
+      expect(command, isNot(f.a.commands.first.translated(outer + inner)));
+      final direct = ForumBodyTextPictureInput(
+        commands: [
+          for (final c in f.a.commands) c.translated(inner).translated(outer),
+        ],
+      );
+      expect(nested, direct);
+      expect(nested.hashCode, direct.hashCode);
+      expect(
+        nested.estimatedInputBytes - f.a.estimatedInputBytes,
+        f.a.commands.length * 2 * 64,
+      );
+      expect(
+        nested.estimatedPictureBytes - f.a.estimatedPictureBytes,
+        f.a.commands.length * 2 * 64,
+      );
+      final job = ForumBodyTextPicturePreparation(
+        cache: f.cache,
+        input: nested,
+        text: f.text,
+        ensureOwner: () {},
+      );
+      while (!job.isReady) {
+        job.advance(maxParts: 1);
+      }
+      final scene = job.takeLease();
+      addTearDown(scene.release);
+      final captures = <ui.Picture>[];
+      addTearDown(() {
+        for (final p in captures) {
+          p.dispose();
+        }
+      });
+      Future<List<int>> pixels(void Function(Canvas) draw) async {
+        final r = ui.PictureRecorder();
+        draw(Canvas(r)..scale(3));
+        final p = r.endRecording();
+        captures.add(p);
+        final image = await p.toImage(540, 420);
+        try {
+          return (await image.toByteData(
+            format: ui.ImageByteFormat.rawRgba,
+          ))!.buffer.asUint8List().toList();
+        } finally {
+          image.dispose();
+        }
+      }
+
+      final expected = await pixels((c) {
+        c.save();
+        c.translate(outer.dx, outer.dy);
+        c.translate(inner.dx, inner.dy);
+        _draw(c, f, f.a);
+        c.restore();
+      });
+      expect(await pixels((c) => scene.paint(c, Offset.zero)), expected);
+    },
+  );
+  test(
+    'translation depth, finite coordinates and final scene limits are enforced',
+    () {
+      final f = _Fixture();
+      var command = f.a.commands.first;
+      expect(command.translated(Offset.zero), same(command));
+      for (
+        var i = 0;
+        i < ForumBodyTextPictureCommand.maximumTranslationDepth;
+        i++
+      ) {
+        command = command.translated(const Offset(1, .25));
+      }
+      expect(() => command.translated(const Offset(1, 0)), throwsArgumentError);
+      expect(
+        () => f.a.commands.first.translated(const Offset(double.nan, 0)),
+        throwsArgumentError,
+      );
+      expect(
+        () => ForumBodyTextPictureInput(
+          commands: [f.a.commands.first.translated(const Offset(32768, 0))],
+        ),
+        throwsArgumentError,
+      );
+    },
+  );
   for (final band in [false, true]) {
     test('composition records one exact positioned scene band=$band', () async {
       final f = _Fixture(band: band, entries: 3);
@@ -136,8 +241,10 @@ void main() {
         combined.estimatedBytes,
         lessThan(f.a.estimatedBytes + f.b.estimatedBytes),
       );
-      expect(combined.commands[0].offset, const Offset(5, 10));
-      expect(combined.commands[2].offset, const Offset(22, 78));
+      expect(combined.commands[0].sceneOffset, const Offset(5, 10));
+      expect(combined.commands[2].sceneOffset, const Offset(22, 78));
+      expect(combined.commands[0].offset, f.a.commands[0].offset);
+      expect(combined.commands[0].translations, [const Offset(3, 7)]);
       expect(combined.commands[0].fitScale, .63);
       expect(combined.commands[2].fitScale, .75);
       expect(combined.commands[0].bandChildIndex, band ? 0 : null);
@@ -245,7 +352,7 @@ void main() {
         ),
       );
       expect(result.commands, hasLength(2));
-      expect(result.commands.first.offset, const Offset(3, 5));
+      expect(result.commands.first.sceneOffset, const Offset(3, 5));
     },
   );
   test(

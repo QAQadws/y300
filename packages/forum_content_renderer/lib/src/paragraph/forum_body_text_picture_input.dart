@@ -6,6 +6,7 @@ final class ForumBodyTextPictureInput {
   ForumBodyTextPictureInput._(
     this.commands,
     this.estimatedInputBytes,
+    this.estimatedPictureBytes,
     this._hash,
   ) : _keyRevision = revision;
   factory ForumBodyTextPictureInput({
@@ -22,7 +23,7 @@ final class ForumBodyTextPictureInput {
       writer.close();
     }
   }
-  static const revision = 7;
+  static const revision = 8;
   static const maximumCommands = 32768;
   final List<ForumBodyTextPictureCommand> commands;
   final int _keyRevision, _hash;
@@ -30,7 +31,7 @@ final class ForumBodyTextPictureInput {
   /// Conservative display-list admission, not native/GPU memory. Recording
   /// still rechecks actual engine picture growth before publication.
   final int estimatedInputBytes;
-  int get estimatedPictureBytes => 4096 + commands.length * 256;
+  final int estimatedPictureBytes;
   int get estimatedBytes => estimatedInputBytes + estimatedPictureBytes;
   @override
   int get hashCode => _hash;
@@ -112,16 +113,7 @@ final class ForumBodyTextPictureInputComposition {
           }
         } else if (_command < current.input.commands.length) {
           final original = current.input.commands[_command++];
-          _writer!.add(
-            ForumBodyTextPictureCommand(
-              nativeInputIdentity: original.nativeInputIdentity,
-              offset: original.offset + current.offset,
-              fitScale: original.fitScale,
-              bandChildIndex: original.bandChildIndex,
-              paragraphRow: original.paragraphRow,
-              physicalLine: original.physicalLine,
-            ),
-          );
+          _writer!.add(original.translated(current.offset));
         } else {
           _current = null;
         }
@@ -198,6 +190,7 @@ final class _TextPictureInputWriter {
   final _inputs = <_NativeInputIdentity>{};
   final _hash = _TextPictureCommandHash();
   int _inputBytes = 4096;
+  int _pictureBytes = 4096;
   void add(ForumBodyTextPictureCommand command) {
     final commands =
         _commands ?? (throw StateError('Picture input writer is retired'));
@@ -210,7 +203,9 @@ final class _TextPictureInputWriter {
     _inputBytes +=
         128 +
         (command.paragraphRow == null ? 0 : 64) +
-        (command.physicalLine == null ? 0 : 192);
+        (command.physicalLine == null ? 0 : 192) +
+        command.translationDepth * 64;
+    _pictureBytes += 256 + command.translationDepth * 64;
     if (_inputs.add(identity)) _inputBytes += _textPictureInputBytes(identity);
     _hash.add(command);
   }
@@ -222,6 +217,7 @@ final class _TextPictureInputWriter {
     final result = ForumBodyTextPictureInput._(
       UnmodifiableListView(commands),
       _inputBytes,
+      _pictureBytes,
       _hash.finish(),
     );
     close();
@@ -268,7 +264,9 @@ void _validateTextPictureCommand(ForumBodyTextPictureCommand command) {
       !command.offset.dx.isFinite ||
       !command.offset.dy.isFinite ||
       command.offset.dx.abs() > 32768 ||
-      command.offset.dy.abs() > 32768) {
+      command.offset.dy.abs() > 32768 ||
+      command.sceneOffset.dx.abs() > 32768 ||
+      command.sceneOffset.dy.abs() > 32768) {
     throw ArgumentError('Invalid native text picture command');
   }
   if (!command.fitScale.isFinite ||
@@ -310,4 +308,36 @@ void _validateTextPictureCommand(ForumBodyTextPictureCommand command) {
       throw ArgumentError('Invalid native paragraph row selector');
     }
   }
+}
+
+// An immutable bounded transform chain keeps Canvas's actual nested float
+// operations in the key. Equal sums alone do not prove identical native pixels.
+final class _TextPictureTranslation {
+  _TextPictureTranslation(this.offset, this.inner)
+    : depth = (inner?.depth ?? 0) + 1,
+      total = offset + (inner?.total ?? Offset.zero),
+      _hash = Object.hash(offset, inner) {
+    if (depth > ForumBodyTextPictureCommand.maximumTranslationDepth ||
+        !offset.dx.isFinite ||
+        !offset.dy.isFinite ||
+        offset.dx.abs() > 32768 ||
+        offset.dy.abs() > 32768 ||
+        !total.dx.isFinite ||
+        !total.dy.isFinite ||
+        total.dx.abs() > 32768 ||
+        total.dy.abs() > 32768) {
+      throw ArgumentError('Invalid text picture translation');
+    }
+  }
+  final Offset offset, total;
+  final _TextPictureTranslation? inner;
+  final int depth, _hash;
+  @override
+  int get hashCode => _hash;
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _TextPictureTranslation &&
+          offset == other.offset &&
+          inner == other.inner;
 }

@@ -98,7 +98,9 @@ void main() {
             final delta = Offset(0, group.top - result.selection.top);
             for (final original in group.sceneInput.pictureInput.commands) {
               final actual = result.pictureInput.commands[index++];
-              expect(actual.offset, original.offset + delta);
+              expect(actual.sceneOffset, original.sceneOffset + delta);
+              expect(actual.offset, original.offset);
+              expect(actual.translations, [if (delta != Offset.zero) delta]);
               expect(
                 actual.nativeInputIdentity,
                 same(original.nativeInputIdentity),

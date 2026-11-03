@@ -14,7 +14,44 @@ final class ForumBodyTextPictureCommand {
     this.paragraphRow,
     this.physicalLine,
     this.fitScale = 1,
-  });
+  }) : _translation = null;
+  const ForumBodyTextPictureCommand._translated({
+    required this.nativeInputIdentity,
+    required this.offset,
+    required this.fitScale,
+    required this.bandChildIndex,
+    required this.paragraphRow,
+    required this.physicalLine,
+    required _TextPictureTranslation translation,
+  }) : _translation = translation;
+  static const maximumTranslationDepth = 8;
+  final _TextPictureTranslation? _translation;
+
+  /// Preserve the original native transform order. Adding two double offsets
+  /// before Canvas records them can change float precision and shadow pixels.
+  ForumBodyTextPictureCommand translated(Offset by) {
+    if (by == Offset.zero) return this;
+    return ForumBodyTextPictureCommand._translated(
+      nativeInputIdentity: nativeInputIdentity,
+      offset: offset,
+      fitScale: fitScale,
+      bandChildIndex: bandChildIndex,
+      paragraphRow: paragraphRow,
+      physicalLine: physicalLine,
+      translation: _TextPictureTranslation(by, _translation),
+    );
+  }
+
+  int get translationDepth => _translation?.depth ?? 0;
+  Offset get sceneOffset => (_translation?.total ?? Offset.zero) + offset;
+  Iterable<Offset> get translations sync* {
+    var current = _translation;
+    while (current != null) {
+      yield current.offset;
+      current = current.inner;
+    }
+  }
+
   factory ForumBodyTextPictureCommand.fromText(
     ForumBodyTextLease text,
     Offset offset, {
@@ -91,6 +128,7 @@ final class ForumBodyTextPictureCommand {
           bandChildIndex == other.bandChildIndex &&
           paragraphRow == other.paragraphRow &&
           physicalLine == other.physicalLine &&
+          _translation == other._translation &&
           fitScale == other.fitScale;
   @override
   int get hashCode => Object.hash(
@@ -100,6 +138,7 @@ final class ForumBodyTextPictureCommand {
     paragraphRow,
     physicalLine,
     fitScale,
+    _translation,
   );
 }
 
@@ -356,8 +395,19 @@ final class ForumBodyTextPicturePreparation {
                 final command = input.commands[_index++];
                 final canvas = _canvas!;
                 final fitted = command.fitScale != 1;
-                if (fitted) {
+                final saved = fitted || command._translation != null;
+                if (saved) {
                   canvas.save();
+                }
+                var translation = command._translation;
+                while (translation != null) {
+                  canvas.translate(
+                    translation.offset.dx,
+                    translation.offset.dy,
+                  );
+                  translation = translation.inner;
+                }
+                if (fitted) {
                   canvas.translate(command.offset.dx, command.offset.dy);
                   canvas.scale(command.fitScale, command.fitScale);
                 }
@@ -382,7 +432,7 @@ final class ForumBodyTextPicturePreparation {
                     }
                   }
                 } finally {
-                  if (fitted) canvas.restore();
+                  if (saved) canvas.restore();
                 }
               } else {
                 final recorder = _recorder!;
