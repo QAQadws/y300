@@ -40,6 +40,8 @@ final class ForumBodyInlineEmphasisReflowPreparation {
     this.maxAtoms = 512,
     this.maxHeight = 1048576,
     this.maxOwnedLeases = 32768,
+    this.maxBoxes = 4096,
+    this.maxGlyphQueries = 16384,
     Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
   }) : _placement = placement,
        _original = original,
@@ -50,7 +52,9 @@ final class ForumBodyInlineEmphasisReflowPreparation {
         maxAtoms < 0 ||
         !maxHeight.isFinite ||
         maxHeight <= 0 ||
-        maxOwnedLeases <= 0) {
+        maxOwnedLeases <= 0 ||
+        maxBoxes < 0 ||
+        maxGlyphQueries < 0) {
       throw ArgumentError('Invalid mixed reflow preparation budget');
     }
     try {
@@ -80,7 +84,7 @@ final class ForumBodyInlineEmphasisReflowPreparation {
       rethrow;
     }
   }
-  final int maxLines, maxAtoms, maxOwnedLeases;
+  final int maxLines, maxAtoms, maxOwnedLeases, maxBoxes, maxGlyphQueries;
   final double maxHeight;
   ForumBodyInlineEmphasisRowPlacement? _placement;
   ForumBodyInlineParagraphLease? _original, _pending;
@@ -260,6 +264,8 @@ final class ForumBodyInlineEmphasisReflowPreparation {
                   input: _placement!.input.fonts.geometry.input,
                   parent: _pending!,
                   ensureOwner: _guard,
+                  maxBoxes: maxBoxes,
+                  maxGlyphQueries: maxGlyphQueries,
                 );
                 _phase = _ReflowPhase.geometry;
               }
