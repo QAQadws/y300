@@ -798,11 +798,13 @@ void main() {
     },
   );
 
-  for (final emphasis in [false, true]) {
+  for (final format in ['ordinary', 'emphasis', 'fitted']) {
+    final emphasis = format == 'emphasis', fitted = format == 'fitted';
     testWidgets(
-      'prepared chapter and real viewport share one layout (emphasis=$emphasis)',
+      'prepared chapter, resolved font scope and real viewport share one layout ($format)',
       (tester) async {
         final chapter = await _chapter(
+          '${fitted ? '<div class="pstatus" style="margin:0;text-emphasis:\'X\' red">statusABCDEFGHIJ</div>' : ''}'
           '<p style="margin:0;${emphasis ? 'text-emphasis:\'X\' red' : ''}">abcdefgh</p>',
         );
         final environment = await _environment(
@@ -813,7 +815,7 @@ void main() {
             paragraphSpacing: 0,
           ),
         );
-        final pageHeight = emphasis ? 20.0 : 10.0;
+        final pageHeight = emphasis || fitted ? 20.0 : 10.0;
         final scope = await _scope(
           chapter,
           environment,
@@ -878,15 +880,22 @@ void main() {
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
         expect(reports.single.paginationKey, scope.paginationKey);
-        expect(reports.single.pageIndex, 2);
+        expect(reports.single.pageIndex, fitted ? 0 : 2);
         expect(reports.single.anchor.textOffset, 5);
         expect(reports.single.hasUserNavigated, isFalse);
-        if (emphasis) {
-          expect(find.byType(ForumBodyEmphasisFragmentSurface), findsWidgets);
-          expect(controller.requestPage(3), isTrue);
+        if (emphasis || fitted) {
+          expect(
+            find.byType(
+              fitted
+                  ? ForumBodyEmphasisLineSurface
+                  : ForumBodyEmphasisFragmentSurface,
+            ),
+            findsWidgets,
+          );
+          expect(controller.requestPage(fitted ? 1 : 3), isTrue);
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
-          expect(reports.last.pageIndex, 3);
+          expect(reports.last.pageIndex, fitted ? 1 : 3);
           expect(reports.last.hasUserNavigated, isTrue);
         } else {
           expect(cache.layoutBuildCount, 1);

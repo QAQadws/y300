@@ -219,7 +219,10 @@ void main() {
       expect(fragment.coverageEndUtf16, 4);
       expect(fragment.sourceHint, (runeStart: 0, runeEnd: 4));
       expect(fragment.height, entries.paragraph.height);
-      expect(composer.snapshot.composerRevision, 12);
+      expect(
+        composer.snapshot.composerRevision,
+        ForumBodyTextPageComposer.revision,
+      );
       final actual = _fragment(
         entries.paragraph,
         fragment.startLine,

@@ -168,7 +168,10 @@ void main() {
       expect(prefix.single.fragments.single, same(first));
       expect(lease.isActive, isFalse);
       expect(child.isActive, isTrue);
-      expect(target.snapshot.composerRevision, 12);
+      expect(
+        target.snapshot.composerRevision,
+        ForumBodyTextPageComposer.revision,
+      );
     },
   );
 

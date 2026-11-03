@@ -3,6 +3,7 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../inline/forum_body_inline_paragraph_view.dart';
 import '../inline/forum_body_emphasis_line_layout.dart';
+import '../inline/forum_body_fitted_emphasis_plan.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_layout.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
@@ -25,6 +26,10 @@ sealed class ForumBodyPreparedTextFragment {
   factory ForumBodyPreparedTextFragment.emphasis(
     ForumBodyEmphasisFragmentLayout view,
   ) = ForumBodyPreparedEmphasisFragment;
+  factory ForumBodyPreparedTextFragment.fittedEmphasis({
+    required ForumBodyEmphasisLineLayout view,
+    required ForumBodyFittedEmphasisPlan plan,
+  }) = ForumBodyPreparedFittedEmphasisFragment;
   bool get isActive;
 
   /// Borrowed for the same owner's page-budget checks and lifecycle counts.
@@ -65,6 +70,47 @@ final class ForumBodyPreparedEmphasisFragment
   @override
   List<TextBox> glyphBoxes(int startUtf16, int endUtf16) =>
       view.glyphBoxes(startUtf16, endUtf16);
+  @override
+  void close() => view.close();
+}
+
+final class ForumBodyPreparedFittedEmphasisFragment
+    extends ForumBodyPreparedTextFragment {
+  ForumBodyPreparedFittedEmphasisFragment({
+    required this.view,
+    required this.plan,
+  }) : super._() {
+    if (!identical(view.metrics, plan.metrics)) {
+      throw ArgumentError('Fitted source and numeric plan differ');
+    }
+  }
+  final ForumBodyEmphasisLineLayout view;
+  final ForumBodyFittedEmphasisPlan plan;
+  @override
+  bool get isActive => !view.isDisposed;
+  @override
+  Iterable<ForumBodyNativeParagraphLease> get nativeLeases => view.nativeLeases;
+  @override
+  HtmlDisplayTextProjection get projection => view.projection;
+  @override
+  List<ForumBodyParagraphRun> get runs => plan.content.runs;
+  @override
+  Iterable<ForumBodyParagraphLine> get lines => plan.lines;
+  @override
+  List<TextBox> glyphBoxes(int startUtf16, int endUtf16) {
+    view.ensureActive();
+    // Native tail SPACE is omitted from paint, while selection and copying
+    // retain it. Keep every actual glyph box, including any out-of-frame box.
+    return List.unmodifiable([
+      for (final range in forumBodyPaintedTextRanges(
+        plan.lines,
+        startUtf16,
+        endUtf16,
+      ))
+        ...view.selectionBoxes(range.start, range.end),
+    ]);
+  }
+
   @override
   void close() => view.close();
 }

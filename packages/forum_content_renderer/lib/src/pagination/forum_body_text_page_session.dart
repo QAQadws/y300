@@ -320,6 +320,18 @@ final class ForumBodyTextPageSession {
               rethrow;
             }
             admission.close();
+          } else if (admission.isFitted) {
+            final fitted = admission.takeFitted();
+            input = fitted;
+            _composer.appendFittedEmphasis(
+              plan: fitted.plan,
+              ensureOwner: _ensureActivePlan,
+              paragraphIndex: pending.paragraph.index,
+              left: pending.contentLeft,
+              spaceBefore: _margin,
+              spaceAtPageStart: 0,
+              window: pending.paragraph.window,
+            );
           } else {
             final ready = admission.take();
             input = ready.content;

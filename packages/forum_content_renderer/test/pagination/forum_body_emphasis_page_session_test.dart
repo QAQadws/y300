@@ -438,10 +438,9 @@ void main() {
   );
 
   test(
-    'fitted and ruby emphasis retain explicit unsupported-format guards',
+    'ruby emphasis retains its explicit unsupported-format guard',
     () {
       for (final html in [
-        '<div class="pstatus" style="text-emphasis:\'X\'">edit status</div>',
         '<p style="text-emphasis:\'X\'">A<ruby>B<rt>b</rt></ruby>C</p>',
       ]) {
         final fixture = _Fixture(html), session = fixture.open();

@@ -110,6 +110,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
         ForumBodyPreparedParagraphFragment() => binding.lease,
         ForumBodyPreparedInlineFragment() => binding.view,
         ForumBodyPreparedEmphasisFragment() => binding.view,
+        ForumBodyPreparedFittedEmphasisFragment() => binding.view,
       };
 
   Widget _fragmentSurface(
@@ -144,6 +145,11 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
         onSourceTap: tap,
       ),
       ForumBodyPreparedEmphasisFragment() => ForumBodyEmphasisFragmentSurface(
+        view: binding.view,
+        interactionIdentity: interaction,
+        onSourceTap: tap,
+      ),
+      ForumBodyPreparedFittedEmphasisFragment() => ForumBodyEmphasisLineSurface(
         view: binding.view,
         interactionIdentity: interaction,
         onSourceTap: tap,

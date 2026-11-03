@@ -44,7 +44,7 @@ final class NovelReaderNativeLayoutScope {
     required String paragraphInputs,
   }) : _fontCollectionGeneration = fontCollectionGeneration,
        _paragraphInputs = paragraphInputs;
-  static const fingerprintRevision = 10;
+  static const fingerprintRevision = 11;
   final NovelReaderNativePreparedChapter chapter;
   final ForumBodyReaderStyle reader;
   final TextScaler textScaler;
@@ -282,6 +282,7 @@ List<int> _nativeRevisions() => [
   ForumBodyEmphasisLineMetrics.revision,
   ForumBodyEmphasisFragmentInput.revision,
   ForumBodyEmphasisFragmentLayout.revision,
+  ForumBodyFittedEmphasisPlan.revision,
   ForumBodyTextPictureInput.revision,
   ForumBodyInlineSpanContent.revision,
   ForumBodyInlineParagraphLayout.revision,

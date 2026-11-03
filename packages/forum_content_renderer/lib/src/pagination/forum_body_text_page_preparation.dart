@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/painting.dart';
 import '../inline/forum_body_ruby_group_preparation.dart';
+import '../inline/forum_body_emphasis_line_layout.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import 'forum_body_prepared_text_fragment.dart';
 import 'forum_body_inline_page_preparation.dart';
@@ -110,7 +111,9 @@ final class ForumBodyTextPagePreparation {
     this._onTransfer,
     this._onRetire,
   ) : _initialProbePending = _inputs.any(
-        (input) => input is ForumBodyEmphasisPageContent,
+        (input) =>
+            input is ForumBodyEmphasisPageContent ||
+            input is ForumBodyFittedEmphasisPageContent,
       );
   ForumBodyParagraphCache? _cache;
   final ForumBodyTextPageSnapshot snapshot;
@@ -129,6 +132,8 @@ final class ForumBodyTextPagePreparation {
   ForumBodyInlinePagePreparation? _inline;
   final _emphasis = <int, ForumBodyEmphasisPagePreparation>{};
   ForumBodyEmphasisPagePreparation? _activeEmphasis;
+  ForumBodyEmphasisLinePreparation? _fitted;
+  int _fittedWork = 0;
   bool _initialProbePending;
   var _state = ForumBodyTextPagePreparationState.active;
   bool _operating = false;
@@ -137,6 +142,7 @@ final class ForumBodyTextPagePreparation {
   int _completedWork = 0;
   int get _retainedWork =>
       _completedWork +
+      _fittedWork +
       (_inline?.workCount ?? 0) +
       (_activeEmphasis?.workCount ?? 0);
   ForumBodyParagraphBudgetProbe? _budgetProbe;
@@ -169,6 +175,7 @@ final class ForumBodyTextPagePreparation {
       yield* active.nativeLeases;
     }
     if (_activeEmphasis != null) yield* _activeEmphasis!.nativeLeases;
+    if (_fitted != null) yield* _fitted!.nativeLeases;
   }
 
   ForumBodyTextPagePreparationStep advance({
@@ -329,6 +336,42 @@ final class ForumBodyTextPagePreparation {
     final fragment = snapshot[pageIndex].fragments[index];
     final input = _inputs[index];
     final cache = _cache!;
+    if (input is ForumBodyFittedEmphasisPageContent) {
+      final work = _fitted ??= ForumBodyEmphasisLinePreparation.fromMetrics(
+        input: input.plan.metrics.input,
+        metrics: input.plan.metrics,
+        cache: cache,
+        width: input.plan.metrics.requestWidth,
+        expectedTextScaler: _textScaler!,
+        ensureOwner: _guard,
+        ensureVisibleOwner: _ensureOwner!,
+        additionalOwnedLeases: () => _finishedLeases,
+      );
+      final step = work.advance(maxParts: maxParts, cachedOnly: cachedOnly);
+      _fittedWork += step.partsPrepared;
+      _waiting = step.waitingForLayoutBudget;
+      _guard();
+      if (work.isReady) {
+        final view = work.takeLayout();
+        try {
+          _guard();
+          _fragments.add(
+            ForumBodyPreparedTextFragment.fittedEmphasis(
+              view: view,
+              plan: input.plan,
+            ),
+          );
+          _guard();
+        } catch (_) {
+          view.close();
+          rethrow;
+        }
+        _fitted = null;
+        _completedWork += _fittedWork;
+        _fittedWork = 0;
+      }
+      return !work.cacheMiss;
+    }
     if (input is ForumBodyEmphasisPageContent) {
       final active = _activeEmphasis ??= _emphasisPart(index, input);
       final step = active.advance(cachedOnly: cachedOnly, maxParts: maxParts);
@@ -452,7 +495,9 @@ final class ForumBodyTextPagePreparation {
               probe,
               width: slot.width,
               minimumLineCount: slot.minimumLineCount,
-              textScaler: input is ForumBodyEmphasisPageContent
+              textScaler: input is ForumBodyFittedEmphasisPageContent
+                  ? input.plan.metrics.textScaler
+                  : input is ForumBodyEmphasisPageContent
                   ? input.paragraph.textScaler
                   : _textScaler!,
             );
@@ -469,6 +514,13 @@ final class ForumBodyTextPagePreparation {
         yield (
           startsFragment: parent,
           inspect: () => parts.includeSceneBudget(probe),
+        );
+      }
+      if (input is ForumBodyFittedEmphasisPageContent) {
+        yield (
+          startsFragment: parent,
+          inspect: () =>
+              probe.includeTextPicture(input.plan.metrics.pictureInput),
         );
       }
     }
@@ -630,6 +682,9 @@ final class ForumBodyTextPagePreparation {
     _state = state;
     _inline?.close();
     _inline = null;
+    _fitted?.close();
+    _fitted = null;
+    _fittedWork = 0;
     for (final parts in _emphasis.values) {
       parts.close();
     }
@@ -653,6 +708,9 @@ final class ForumBodyTextPagePreparation {
 
   void _dropOwner() {
     _closeProbe();
+    _fitted?.close();
+    _fitted = null;
+    _fittedWork = 0;
     for (final parts in _emphasis.values) {
       parts.close();
     }
