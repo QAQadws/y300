@@ -31,10 +31,12 @@ final class ForumBodyEmphasisFragmentPreparation {
     required void Function() ensureOwner,
     required double width,
     required TextScaler expectedTextScaler,
+    void Function()? ensureVisibleOwner,
     Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
   }) : _input = input,
        _cache = cache,
        _ensureOwner = ensureOwner,
+       _ensureVisibleOwner = ensureVisibleOwner ?? ensureOwner,
        _callerScaler = expectedTextScaler,
        _additionalOwned = additionalOwnedLeases {
     try {
@@ -53,6 +55,7 @@ final class ForumBodyEmphasisFragmentPreparation {
   ForumBodyEmphasisFragmentInput? _input;
   ForumBodyParagraphCache? _cache;
   void Function()? _ensureOwner;
+  void Function()? _ensureVisibleOwner;
   TextScaler? _callerScaler;
   Iterator<MapEntry<double, double>>? _scales;
   Iterator<ForumBodyNativeRequestSlot>? _slots;
@@ -377,7 +380,7 @@ final class ForumBodyEmphasisFragmentPreparation {
                 ForumBodyParagraphRowView.bind(
                   parent: _source!,
                   metrics: paragraph.groups[_index++].source,
-                  ensureOwner: _ensureOwner!,
+                  ensureOwner: _ensureVisibleOwner!,
                 ),
               );
             } else {
@@ -395,13 +398,14 @@ final class ForumBodyEmphasisFragmentPreparation {
               _phase = _FragmentPhase.publish;
             }
           case _FragmentPhase.publish:
+            _checkVisibleOwner();
             _result = ForumBodyEmphasisFragmentLayout._(
               input: input,
               source: _source!,
               picture: _picture!,
               rows: _sourceRows,
               lines: _lines,
-              ensureOwner: _ensureOwner!,
+              ensureOwner: _ensureVisibleOwner!,
             );
             _source = null;
             _picture = null;
@@ -435,6 +439,7 @@ final class ForumBodyEmphasisFragmentPreparation {
       if (!isReady) {
         throw StateError('Emphasis fragment preparation is incomplete');
       }
+      _checkVisibleOwner();
       final result = _result!;
       _result = null;
       _phase = _FragmentPhase.transferred;
@@ -463,10 +468,20 @@ final class ForumBodyEmphasisFragmentPreparation {
     }
   }
 
+  // A page transaction can retire after delivery while the reader still owns
+  // its view. The persistent visible guard must not capture that transaction.
+  void _checkVisibleOwner() {
+    if (!identical(_ensureVisibleOwner, _ensureOwner)) {
+      _ensureVisibleOwner!();
+      _guard();
+    }
+  }
+
   void _dropInputs() {
     _input = null;
     _cache = null;
     _ensureOwner = null;
+    _ensureVisibleOwner = null;
     _callerScaler = null;
     _scales = null;
     _slots = null;

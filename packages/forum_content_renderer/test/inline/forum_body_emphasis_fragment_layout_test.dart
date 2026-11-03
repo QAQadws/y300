@@ -80,6 +80,7 @@ ForumBodyEmphasisFragmentPreparation _job(
   ForumBodyEmphasisFragmentInput input,
   ForumBodyParagraphCache cache, {
   void Function()? owner,
+  void Function()? visibleOwner,
   TextScaler scaler = const _Scaler(),
   double? width,
   Iterable<ForumBodyNativeParagraphLease> Function()? prefix,
@@ -88,6 +89,7 @@ ForumBodyEmphasisFragmentPreparation _job(
     input: input,
     cache: cache,
     ensureOwner: owner ?? () {},
+    ensureVisibleOwner: visibleOwner,
     width: width ?? input.width,
     expectedTextScaler: scaler,
     additionalOwnedLeases: prefix,
@@ -156,6 +158,82 @@ void main() {
       'packages/forum_content_renderer/ForumBodyInlineSpace',
     )..addFont(rootBundle.load('assets/fonts/inline_space.ttf'))).load();
   });
+  test(
+    'delivered view outlives its preparation guard and follows the reader owner',
+    () {
+      final input = _input(body: 'AAAA'), cache = _cache(6);
+      var preparing = true, reading = true;
+      final job = _job(
+        input,
+        cache,
+        owner: () {
+          if (!preparing) throw StateError('Preparation retired');
+        },
+        visibleOwner: () {
+          if (!reading) throw StateError('Reader retired');
+        },
+      );
+      final view = _finish(job);
+      preparing = false;
+      job.close();
+      final before = (cache.layoutBuildCount, cache.pictureBuildCount);
+      expect(view.sourceAt(Offset.zero).displayUtf16, inInclusiveRange(0, 4));
+      expect(view.selectionBoxes(0, 4), isNotEmpty);
+      expect(view.glyphBoxes(0, 4), isNotEmpty);
+      final recorder = ui.PictureRecorder();
+      view.paint(Canvas(recorder), Offset.zero);
+      recorder.endRecording().dispose();
+      expect((cache.layoutBuildCount, cache.pictureBuildCount), before);
+      reading = false;
+      expect(() => view.sourceAt(Offset.zero), throwsStateError);
+      expect(() => view.selectionBoxes(0, 4), throwsStateError);
+      expect(() => view.glyphBoxes(0, 4), throwsStateError);
+      view.close();
+      expect(cache.activeLeases, 0);
+    },
+  );
+  test(
+    'persistent owner retirement after ready rejects transfer and drains both handles',
+    () {
+      final input = _input(body: 'AAAA'), cache = _cache(6);
+      var active = true;
+      final job = _job(
+        input,
+        cache,
+        visibleOwner: () {
+          if (!active) throw StateError('Reader retired');
+        },
+      );
+      while (!job.isReady) {
+        job.advance(maxParts: 32);
+      }
+      expect(cache.activeLeases, 2);
+      active = false;
+      expect(job.takeLayout, throwsStateError);
+      expect(cache.activeLeases, 0);
+    },
+  );
+  test(
+    'persistent owner callback cannot publish after canceling the transaction',
+    () {
+      final input = _input(body: 'AAAA'), cache = _cache(6);
+      late ForumBodyEmphasisFragmentPreparation job;
+      var cancel = false;
+      job = _job(
+        input,
+        cache,
+        visibleOwner: () {
+          if (cancel) job.close();
+        },
+      );
+      while (!job.isReady) {
+        job.advance(maxParts: 32);
+      }
+      cancel = true;
+      expect(job.takeLayout, throwsStateError);
+      expect(cache.activeLeases, 0);
+    },
+  );
   for (final direction in TextDirection.values) {
     for (final width in [1.0, 140.0]) {
       for (final selected in [false, true]) {
