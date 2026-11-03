@@ -82,7 +82,7 @@ final class _RubyRootFrameBinding extends _RubyBinding {
   final Rect rowAllocation;
   bool hitsOuterLeading(Offset point) =>
       rowAllocation.contains(point) && !(Offset.zero & size).contains(point);
-  Offset get _offset => Offset(0, frame.childTop);
+  Offset get _offset => frame.childOffset;
   @override
   Size get size => frame.size;
   @override
@@ -99,7 +99,7 @@ final class _RubyRootFrameBinding extends _RubyBinding {
   _RubySourceHit sourceAt(Offset point) {
     final local = point - _offset;
     final hit = child.sourceAt(local);
-    if ((Offset.zero & child.size).contains(local)) return hit;
+    if (frame.childBounds.contains(local)) return hit;
     // Root leading is allocation only. A clamped child caret cannot prove a
     // glyph/source hit at an unpainted point in that newly reserved area.
     return (
@@ -116,10 +116,10 @@ final class _RubyRootFrameBinding extends _RubyBinding {
   List<TextBox> selectionBoxes(int start, int end) => [
     for (final box in child.selectionBoxes(start, end))
       TextBox.fromLTRBD(
-        box.left,
-        box.top + frame.childTop,
-        box.right,
-        box.bottom + frame.childTop,
+        box.left + _offset.dx,
+        box.top + _offset.dy,
+        box.right + _offset.dx,
+        box.bottom + _offset.dy,
         box.direction,
       ),
   ];
@@ -127,10 +127,10 @@ final class _RubyRootFrameBinding extends _RubyBinding {
   List<TextBox> glyphBoxes(int start, int end) => [
     for (final box in child.glyphBoxes(start, end))
       TextBox.fromLTRBD(
-        box.left,
-        box.top + frame.childTop,
-        box.right,
-        box.bottom + frame.childTop,
+        box.left + _offset.dx,
+        box.top + _offset.dy,
+        box.right + _offset.dx,
+        box.bottom + _offset.dy,
         box.direction,
       ),
   ];

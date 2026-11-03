@@ -149,7 +149,7 @@ final class ForumBodyRubyTreeLayout {
         case ForumBodyRubyTreeSegment():
           final box = numeric as ForumBodyRubyTreeContainerMetrics;
           final segment = box.segment!;
-          point -= Offset(0, box.frame.childTop);
+          point -= box.frame.childOffset;
           if (!(Offset.zero & segment.size).contains(point)) approximate = true;
           final route = resolveForumBodyRubySegmentHitRoute(
             metrics: segment,
@@ -178,7 +178,7 @@ final class ForumBodyRubyTreeLayout {
           }
         case ForumBodyRubyTreeInline():
           final box = numeric as ForumBodyRubyTreeContainerMetrics;
-          point -= Offset(0, box.frame.childTop);
+          point -= box.frame.childOffset;
           final view = _inlineViews[id]!;
           final bound = view.sourceHitAt(point);
           final hit = bound.position;
@@ -258,7 +258,7 @@ final class ForumBodyRubyTreeLayout {
           );
         case ForumBodyRubyTreeFrame():
           final box = numeric as ForumBodyRubyTreeContainerMetrics;
-          point -= Offset(0, box.frame.childTop);
+          point -= box.frame.childOffset;
           if (!metrics.nodes[node.child].box!.bounds.contains(point)) {
             approximate = true;
           }
@@ -266,7 +266,7 @@ final class ForumBodyRubyTreeLayout {
         case ForumBodyRubyTreeGroup():
           final box = numeric as ForumBodyRubyTreeContainerMetrics;
           final group = box.group!;
-          point -= Offset(0, box.frame.childTop);
+          point -= box.frame.childOffset;
           if (!(Offset.zero & group.size).contains(point)) approximate = true;
           final band = resolveForumBodyRubyHitBand(
             metrics: group,

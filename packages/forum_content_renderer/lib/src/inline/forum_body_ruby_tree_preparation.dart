@@ -325,7 +325,7 @@ final class ForumBodyRubyTreePreparation {
       work.started = true;
       return;
     }
-    final origin = work.offset + Offset(0, box.frame.childTop);
+    final origin = work.offset + box.frame.childOffset;
     final container = node as ForumBodyRubyTreeContainer;
     switch (container) {
       case ForumBodyRubyTreeSegment():

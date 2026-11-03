@@ -71,20 +71,38 @@ final class ForumBodyRubyRootFontBox {
   ForumBodyRubyAtomFrame enclose({
     required Size childSize,
     required double childBaseline,
+  }) => encloseBounds(
+    childBounds: Offset.zero & childSize,
+    childBaseline: childBaseline,
+  );
+
+  /// Reserve the actual child's complete envelope without changing its local
+  /// origin. Decorations can extend on either side of its original ruby box;
+  /// moving those extents into the base band would also move the annotations.
+  ForumBodyRubyAtomFrame encloseBounds({
+    required Rect childBounds,
+    required double childBaseline,
   }) {
-    if (!childSize.width.isFinite ||
-        childSize.width > 16384 ||
-        childSize.width < 0 ||
-        !childSize.height.isFinite ||
-        childSize.height <= 0 ||
+    if (!childBounds.left.isFinite ||
+        !childBounds.top.isFinite ||
+        !childBounds.right.isFinite ||
+        !childBounds.bottom.isFinite ||
+        !childBounds.width.isFinite ||
+        childBounds.width > 16384 ||
+        childBounds.width < 0 ||
+        !childBounds.height.isFinite ||
+        childBounds.height <= 0 ||
         !childBaseline.isFinite ||
-        childBaseline < 0 ||
-        childBaseline > childSize.height) {
+        childBaseline < childBounds.top ||
+        childBaseline > childBounds.bottom) {
       throw ArgumentError('Invalid ruby child frame');
     }
-    final ascent = math.max(childBaseline, alphabeticBaseline);
+    final ascent = math.max(
+      childBaseline - childBounds.top,
+      alphabeticBaseline,
+    );
     final descent = math.max(
-      childSize.height - childBaseline,
+      childBounds.bottom - childBaseline,
       height - alphabeticBaseline,
     );
     final frameHeight = ascent + descent;
@@ -92,9 +110,10 @@ final class ForumBodyRubyRootFontBox {
       throw ArgumentError('Ruby root frame exceeds layout bounds');
     }
     return ForumBodyRubyAtomFrame._(
-      Size(childSize.width, frameHeight),
+      Size(childBounds.width, frameHeight),
       ascent,
-      ascent - childBaseline,
+      Offset(-childBounds.left, ascent - childBaseline),
+      childBounds,
     );
   }
 }
@@ -102,10 +121,19 @@ final class ForumBodyRubyRootFontBox {
 /// Parent allocation and one translation of the unchanged child layout. Root
 /// leading must not be folded into the base band and move its annotations.
 final class ForumBodyRubyAtomFrame {
-  const ForumBodyRubyAtomFrame._(this.size, this.baseline, this.childTop);
+  const ForumBodyRubyAtomFrame._(
+    this.size,
+    this.baseline,
+    this.childOffset,
+    this.childBounds,
+  );
   final Size size;
   final double baseline;
-  final double childTop;
+
+  /// The original child's coordinates stay intact for paint, hit and selection.
+  final Offset childOffset;
+  final Rect childBounds;
+  double get childTop => childOffset.dy;
   PlaceholderDimensions get dimensions => PlaceholderDimensions(
     size: size,
     alignment: PlaceholderAlignment.baseline,
