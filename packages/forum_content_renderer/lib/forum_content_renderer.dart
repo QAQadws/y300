@@ -15,6 +15,7 @@ export 'src/inline/forum_body_inline_span_content.dart'
         ForumBodyInlineEmphasisGlyphInput,
         ForumBodyInlineEmphasisGlyphPreparation;
 export 'src/inline/forum_body_inline_paragraph_layout.dart';
+export 'src/inline/forum_body_inline_emphasis_child_bands.dart';
 export 'src/inline/forum_body_inline_paragraph_view.dart'
     show
         ForumBodyInlineParagraphView,

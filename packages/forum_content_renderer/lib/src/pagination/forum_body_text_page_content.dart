@@ -235,6 +235,10 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
           size: metrics.size,
           baseline: metrics.baseline,
         ),
+        ForumBodyRubyColumnPlan(metrics: final metrics?) => (
+          size: metrics.size,
+          baseline: metrics.baseline,
+        ),
         _ => null,
       };
       if (target != null) {

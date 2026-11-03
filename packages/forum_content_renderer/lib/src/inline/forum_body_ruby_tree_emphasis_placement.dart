@@ -25,12 +25,18 @@ final class ForumBodyRubyTreeEmphasisRow {
     required this.annotationSide,
     required this.overBaseline,
     required this.underBaseline,
+    required this.overAnnotationMarkerBounds,
+    required this.underAnnotationMarkerBounds,
     required this.subtreeMarkerBounds,
   });
   final ForumBodyRubyPhysicalRow id;
   final ForumBodyRubyPhysicalRow? parent;
   final ForumBodyRubySide? annotationSide;
   final double? overBaseline, underBaseline;
+
+  /// Annotation descendants only, excluding this row's own marks. Mixed
+  /// parents need this clearance without treating base marks as annotations.
+  final Rect? overAnnotationMarkerBounds, underAnnotationMarkerBounds;
 
   /// Marker fonts only, including annotation descendants. This never becomes
   /// an ancestor's glyph base or changes the font-only decoration bands.
@@ -375,14 +381,16 @@ final class _TreeMarkerRowWork {
   final ForumBodyRubyPhysicalRow? parent;
   final ForumBodyRubySide? annotationSide;
   final over = _TreeMarkerSideWork(), under = _TreeMarkerSideWork();
-  Rect? descendants;
+  Rect? descendants, overDescendants, underDescendants;
   void include(_TreeMarkerInput input) =>
       (input.side == ForumBodyEmphasisSide.over ? over : under).include(input);
   void includeAnnotation(Rect bounds, ForumBodyRubySide side) {
     descendants = descendants?.expandToInclude(bounds) ?? bounds;
     if (side == ForumBodyRubySide.over) {
+      overDescendants = overDescendants?.expandToInclude(bounds) ?? bounds;
       over.edge = _RubyDecorationEdges.min(over.edge, bounds.top);
     } else {
+      underDescendants = underDescendants?.expandToInclude(bounds) ?? bounds;
       under.edge = _RubyDecorationEdges.max(under.edge, bounds.bottom);
     }
   }
@@ -398,6 +406,8 @@ final class _TreeMarkerRowWork {
       annotationSide: annotationSide,
       overBaseline: over.baseline,
       underBaseline: under.baseline,
+      overAnnotationMarkerBounds: overDescendants,
+      underAnnotationMarkerBounds: underDescendants,
       subtreeMarkerBounds: bounds,
     );
   }

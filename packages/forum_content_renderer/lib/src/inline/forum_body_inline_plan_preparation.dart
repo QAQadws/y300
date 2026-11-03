@@ -690,11 +690,12 @@ final class ForumBodyInlinePlanPreparation {
             ),
           (
             ForumBodyRubyColumnAtomRequest(:final value),
-            ForumBodyRubyColumnMetrics(),
+            ForumBodyRubyColumnMetrics(value: final metrics),
           ) =>
             ForumBodyRubyAtomPlan.column(
               request: value,
               level: alignment.targets[index],
+              metrics: metrics,
             ),
           (
             ForumBodyRubySegmentAtomRequest(:final value),

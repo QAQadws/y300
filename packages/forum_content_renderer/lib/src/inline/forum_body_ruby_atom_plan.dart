@@ -17,6 +17,7 @@ sealed class ForumBodyRubyAtomPlan {
   factory ForumBodyRubyAtomPlan.column({
     required ForumBodyRubyColumnRequest request,
     ForumBodyRubyLevelMetrics? level,
+    ForumBodyRubyGroupMetrics? metrics,
   }) = ForumBodyRubyColumnPlan;
   factory ForumBodyRubyAtomPlan.segment({
     required ForumBodyRubySegmentRequest request,
@@ -157,7 +158,8 @@ final class ForumBodyRubySoftSpacePlan extends ForumBodyRubyAtomPlan {
 }
 
 final class ForumBodyRubyColumnPlan extends ForumBodyRubyAtomPlan {
-  ForumBodyRubyColumnPlan({required this.request, this.level}) : super._() {
+  ForumBodyRubyColumnPlan({required this.request, this.level, this.metrics})
+    : super._() {
     if (level != null &&
         (level!.annotations.length != request.annotations.length ||
             request.annotations.indexed.any(
@@ -165,9 +167,22 @@ final class ForumBodyRubyColumnPlan extends ForumBodyRubyAtomPlan {
             ))) {
       throw ArgumentError('Ruby row target does not match column ranks');
     }
+    final measured = metrics;
+    if (measured != null &&
+        (request.annotations.length != measured.annotations.length ||
+            request.annotations.indexed.any(
+              (item) => item.$2.side != measured.annotations[item.$1].side,
+            ) ||
+            (level != null && !level!.contains(measured)))) {
+      throw ArgumentError('Ruby column metrics differ from its row target');
+    }
   }
   final ForumBodyRubyColumnRequest request;
   final ForumBodyRubyLevelMetrics? level;
+
+  /// Actual final aligned geometry. Legacy explicit plans may omit it; numeric
+  /// font/annotation consumers must require it instead of guessing from a slot.
+  final ForumBodyRubyGroupMetrics? metrics;
   @override
   List<ForumBodyTextRequest> get nativeRequests => request.nativeRequests;
   @override
