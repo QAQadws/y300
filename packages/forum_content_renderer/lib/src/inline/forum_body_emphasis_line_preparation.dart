@@ -73,6 +73,7 @@ final class ForumBodyEmphasisLinePreparation {
     required ForumBodyEmphasisRowInput input,
     required ForumBodyParagraphCache cache,
     required void Function() ensureOwner,
+    void Function()? ensureVisibleOwner,
     TextScaler textScaler = TextScaler.noScaling,
     Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
   }) : this._work(
@@ -80,6 +81,7 @@ final class ForumBodyEmphasisLinePreparation {
          rowInput: input,
          cache: cache,
          ensureOwner: ensureOwner,
+         ensureVisibleOwner: ensureVisibleOwner,
          width: input.row.width,
          textScaler: textScaler,
          measureOnly: false,
@@ -90,6 +92,7 @@ final class ForumBodyEmphasisLinePreparation {
     required ForumBodyEmphasisTextInput input,
     required ForumBodyParagraphCache cache,
     required void Function() ensureOwner,
+    void Function()? ensureVisibleOwner,
     ForumBodyTextRequest? baseRequest,
     double width = 16384,
     TextScaler textScaler = TextScaler.noScaling,
@@ -98,6 +101,7 @@ final class ForumBodyEmphasisLinePreparation {
          input: input,
          cache: cache,
          ensureOwner: ensureOwner,
+         ensureVisibleOwner: ensureVisibleOwner,
          baseRequest: baseRequest,
          width: width,
          textScaler: textScaler,
@@ -112,6 +116,7 @@ final class ForumBodyEmphasisLinePreparation {
     required ForumBodyEmphasisLineMetrics metrics,
     required ForumBodyParagraphCache cache,
     required void Function() ensureOwner,
+    void Function()? ensureVisibleOwner,
     required double width,
     required TextScaler expectedTextScaler,
     Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
@@ -119,6 +124,7 @@ final class ForumBodyEmphasisLinePreparation {
          input: input,
          cache: cache,
          ensureOwner: ensureOwner,
+         ensureVisibleOwner: ensureVisibleOwner,
          baseRequest: metrics.baseRequest,
          rowInput: metrics.rowInput,
          width: width,
@@ -132,6 +138,7 @@ final class ForumBodyEmphasisLinePreparation {
     required ForumBodyEmphasisTextInput input,
     required ForumBodyParagraphCache cache,
     required void Function() ensureOwner,
+    void Function()? ensureVisibleOwner,
     required this.width,
     required TextScaler textScaler,
     required bool measureOnly,
@@ -144,6 +151,7 @@ final class ForumBodyEmphasisLinePreparation {
        _rowInput = rowInput,
        _cache = cache,
        _ensureOwner = ensureOwner,
+       _ensureVisibleOwner = ensureVisibleOwner ?? ensureOwner,
        _callerScaler = textScaler,
        _measureOnly = measureOnly,
        _bindOnly = bindOnly,
@@ -221,7 +229,7 @@ final class ForumBodyEmphasisLinePreparation {
   ForumBodyEmphasisRowInput? _rowInput;
   ForumBodyParagraphRowView? _rowView;
   ForumBodyParagraphCache? _cache;
-  void Function()? _ensureOwner;
+  void Function()? _ensureOwner, _ensureVisibleOwner;
   ForumBodyTextRequest? _request;
   TextScaler? _callerScaler;
   List<ForumBodyParagraphContent> _contexts = const [];
@@ -675,6 +683,13 @@ final class ForumBodyEmphasisLinePreparation {
               final bounds = _envelope!.shift(_baseOffset);
               final base = _textLayout;
               final baseline = base.alphabeticBaseline + _baseOffset.dy;
+              final source = _base;
+              final paragraphLine =
+                  _rowInput == null &&
+                      source is ForumBodyParagraphLease &&
+                      source.layout.lines.isNotEmpty
+                  ? source.layout.lines.single
+                  : null;
               if (_expected != null) {
                 final expected = _expected!;
                 if (_baseOffset != expected.baseOffset ||
@@ -682,6 +697,8 @@ final class ForumBodyEmphasisLinePreparation {
                     base.width != expected.width ||
                     _height != expected.height ||
                     baseline != expected.alphabeticBaseline ||
+                    _lineValues(paragraphLine) !=
+                        _lineValues(expected.paragraphLine) ||
                     pictureInput != expected.pictureInput ||
                     _positioned!.length != expected.marks.length) {
                   _mismatch();
@@ -700,6 +717,7 @@ final class ForumBodyEmphasisLinePreparation {
                   height: _height,
                   alphabeticBaseline: baseline,
                   pictureInput: pictureInput,
+                  paragraphLine: paragraphLine,
                   baseKey: _base!.nativeInputIdentity,
                   markKeys: _markKeys,
                   markInputs: _markInputs,
@@ -772,19 +790,20 @@ final class ForumBodyEmphasisLinePreparation {
               _base = null;
               _phase = _LinePhase.ready;
             case _LinePhase.publish:
+              _checkVisibleOwner();
               final row = _rowInput == null
                   ? null
                   : ForumBodyParagraphRowView.bind(
                       parent: _base! as ForumBodyParagraphLease,
                       metrics: _rowInput!.row,
-                      ensureOwner: _ensureOwner!,
+                      ensureOwner: _ensureVisibleOwner!,
                     );
               _guard();
               _result = ForumBodyEmphasisLineLayout._(
                 metrics: _numeric!,
                 base: _base!,
                 picture: _picture!,
-                ensureOwner: _ensureOwner!,
+                ensureOwner: _ensureVisibleOwner!,
                 row: row,
               );
               _numeric = null;
@@ -842,6 +861,7 @@ final class ForumBodyEmphasisLinePreparation {
       if (!isReady || _measureOnly) {
         throw StateError('Emphasis line preparation is incomplete');
       }
+      _checkVisibleOwner();
       final result = _result!;
       _result = null;
       _phase = _LinePhase.transferred;
@@ -922,6 +942,35 @@ final class ForumBodyEmphasisLinePreparation {
     }
   }
 
+  void _checkVisibleOwner() {
+    if (!identical(_ensureVisibleOwner, _ensureOwner)) {
+      _ensureVisibleOwner!();
+      _guard();
+    }
+  }
+
+  static Object? _lineValues(ForumBodyParagraphLine? line) => line == null
+      ? null
+      : (
+          line.top,
+          line.bottom,
+          line.baseline,
+          line.left,
+          line.width,
+          line.startUtf16,
+          line.endUtf16,
+          line.coverageStartUtf16,
+          line.coverageEndUtf16,
+          line.engineStartUtf16,
+          line.engineEndUtf16,
+          line.engineCoverageStartUtf16,
+          line.engineCoverageEndUtf16,
+          line.unpaintedTrailingSpaceStartUtf16,
+          line.engineUnpaintedTrailingSpaceStartUtf16,
+          line.canBreakBefore,
+          line.canBreakAfter,
+        );
+
   static void _checkRect(Rect rect) {
     if (!rect.left.isFinite ||
         !rect.top.isFinite ||
@@ -969,6 +1018,7 @@ final class ForumBodyEmphasisLinePreparation {
     _positioned = null;
     _cache = null;
     _ensureOwner = null;
+    _ensureVisibleOwner = null;
     _scales.clear();
     _markInputs = [];
     _markIndex.clear();

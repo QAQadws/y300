@@ -117,6 +117,82 @@ void main() {
       'packages/forum_content_renderer/ForumBodyInlineSpace',
     )..addFont(rootBundle.load('assets/fonts/inline_space.ttf'))).load();
   });
+  test('delivered fitted line keeps the persistent reader guard', () {
+    final input = _input(mode: ForumBodyParagraphLayoutMode.fitSingleLine),
+        cache = _cache();
+    var preparing = true, reading = true;
+    final job = ForumBodyEmphasisLinePreparation(
+      input: input,
+      cache: cache,
+      width: 80,
+      ensureOwner: () {
+        if (!preparing) throw StateError('Preparation retired');
+      },
+      ensureVisibleOwner: () {
+        if (!reading) throw StateError('Reader retired');
+      },
+    );
+    final line = _finish(job);
+    addTearDown(line.close);
+    preparing = false;
+    job.close();
+    line.ensureActive();
+    expect(
+      line.sourceAt(Offset.zero).displayUtf16,
+      inInclusiveRange(0, line.projection.text.length),
+    );
+    expect(line.selectionBoxes(0, line.projection.text.length), isNotEmpty);
+    final shapes = cache.layoutBuildCount, pictures = cache.pictureBuildCount;
+    final recorder = ui.PictureRecorder();
+    line.paint(Canvas(recorder), Offset.zero);
+    recorder.endRecording().dispose();
+    expect(cache.layoutBuildCount, shapes);
+    expect(cache.pictureBuildCount, pictures);
+    final native = (line.nativeLeases.first as ForumBodyParagraphLease)
+        .layout
+        .lines
+        .single;
+    expect(line.metrics.paragraphLine, same(native));
+    expect(native.coverageStartUtf16, 0);
+    expect(native.coverageEndUtf16, input.content.projection.text.length);
+    reading = false;
+    expect(line.ensureActive, throwsStateError);
+    expect(() => line.sourceAt(Offset.zero), throwsStateError);
+    line.close();
+    expect(cache.activeLeases, 0);
+  });
+
+  for (final cancelTransaction in [false, true]) {
+    test('visible owner is rechecked at line transfer: $cancelTransaction', () {
+      final input = _input(mode: ForumBodyParagraphLayoutMode.fitSingleLine),
+          cache = _cache();
+      var calls = 0;
+      late final ForumBodyEmphasisLinePreparation job;
+      job = ForumBodyEmphasisLinePreparation(
+        input: input,
+        cache: cache,
+        width: 80,
+        ensureOwner: () {},
+        ensureVisibleOwner: () {
+          if (++calls == 2) {
+            if (cancelTransaction) {
+              job.close();
+            } else {
+              throw StateError('Reader retired');
+            }
+          }
+        },
+      );
+      for (var n = 0; !job.isReady; n++) {
+        expect(n, lessThan(10000));
+        job.advance(maxParts: 1);
+      }
+      expect(calls, 1);
+      expect(job.takeLayout, throwsStateError);
+      expect(cache.activeLeases, 0);
+      job.close();
+    });
+  }
   for (final mode in ForumBodyParagraphLayoutMode.values) {
     for (final direction in TextDirection.values) {
       for (final dpr in [1, 3]) {

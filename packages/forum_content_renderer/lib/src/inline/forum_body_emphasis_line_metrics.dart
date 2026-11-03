@@ -15,6 +15,7 @@ final class ForumBodyEmphasisLineMetrics {
     required this.height,
     required this.alphabeticBaseline,
     required this.pictureInput,
+    required this.paragraphLine,
     required Object baseKey,
     required List<Object> markKeys,
     required List<ForumBodyEmphasisMarkInput> markInputs,
@@ -42,6 +43,10 @@ final class ForumBodyEmphasisLineMetrics {
   /// A numeric draw specification, not an acquired/recorded picture or source
   /// authority. Page admission may include it without producing any drawing.
   final ForumBodyTextPictureInput pictureInput;
+
+  /// Actual native single-line paragraph coordinates, before baseOffset. Row
+  /// groups and band children have their own source qualification instead.
+  final ForumBodyParagraphLine? paragraphLine;
   final Object _baseKey;
   final List<Object> _markKeys;
   final List<ForumBodyEmphasisMarkInput> _markInputs;

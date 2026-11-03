@@ -98,6 +98,7 @@ final class ForumBodyEmphasisLineLayout implements ForumBodyTextLayout {
   bool get isDisposed => _base?.isActive != true || _picture?.isActive != true;
   @override
   bool get isPaintPrepared => !isDisposed;
+  void ensureActive() => _guard();
   Iterable<ForumBodyNativeParagraphLease> get nativeLeases => [
     ?_base,
     ?_picture,
