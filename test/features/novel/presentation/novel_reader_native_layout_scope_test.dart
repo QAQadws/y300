@@ -113,6 +113,90 @@ const _limits = ForumBodyTextPageSessionLimits(
 
 void main() {
   testWidgets(
+    'emphasis mark scaling is frozen and invalidates the reading layout',
+    (tester) async {
+      final chapter = await _chapter(
+        '<p style="margin:0;font-size:80px;text-emphasis:\'X\' red">AB</p>',
+      );
+      final scaler = _BranchScaler(1.6);
+      final environment = await _environment(tester, scaler: scaler);
+      final first = await _scope(chapter, environment, width: 400, height: 400);
+      expect(first.textScaler.scale(80), 80);
+      expect(first.textScaler.scale(40), 64);
+      scaler.ratio = 2;
+      final second = await _scope(
+        chapter,
+        environment,
+        width: 400,
+        height: 400,
+      );
+      expect(second.textScaler.scale(80), 80);
+      expect(second.textScaler.scale(40), 80);
+      expect(first.textScaler.scale(40), 64);
+      expect(first.paginationKey, isNot(second.paginationKey));
+      expect(
+        first.tryUpdateCanvas(
+          environment: environment,
+          width: 400,
+          height: 400,
+          fontCollectionGeneration: 0,
+          isCurrent: () => true,
+        ),
+        isNull,
+      );
+      await expectLater(
+        _scope(chapter, environment, maxSizes: 2),
+        throwsA(
+          isA<NovelReaderNativeLayoutInputException>().having(
+            (e) => e.failure,
+            'failure',
+            NovelReaderNativeLayoutInputFailure.budget,
+          ),
+        ),
+      );
+      final cache = ForumBodyParagraphCache(
+        maxEntries: 32,
+        maxEstimatedBytes: 1 << 24,
+      );
+      final session = first.openSession(
+        cache: cache,
+        layoutId: 'emphasis',
+        limits: _limits,
+      );
+      addTearDown(() {
+        session.close();
+        cache.close();
+      });
+      for (var n = 0; !session.isComplete; n++) {
+        if (n > 10000) fail('Emphasis reading session did not finish');
+        final step = session.advance(
+          maxEvents: 2,
+          maxLines: 1,
+          maxFormatParts: 1,
+        );
+        expect(step.formatUnitsPrepared, lessThanOrEqualTo(1));
+        expect(step.layoutsBuilt, lessThanOrEqualTo(1));
+        expect(step.waitingForLayoutBudget, isFalse);
+      }
+      final preparation = session.openPagePreparation(0);
+      while (!preparation.isReady) {
+        preparation.advance(maxFragments: 1, maxParts: 1);
+      }
+      final binding =
+          preparation.takeFragments().single
+              as ForumBodyPreparedEmphasisFragment;
+      preparation.close();
+      expect(binding.view.input.paragraph.effectiveScales[40], 64);
+      expect(binding.view.input.paragraph.effectiveScales[80], 80);
+      expect(binding.projection.text, 'AB');
+      expect(binding.glyphBoxes(0, 1), isNotEmpty);
+      session.close();
+      expect(binding.isActive, isFalse);
+      expect(cache.activeLeases, 0);
+    },
+  );
+
+  testWidgets(
     'actual cache byte capacity limits and identifies both visible pages',
     (tester) async {
       final chapter = await _chapter();
@@ -714,86 +798,105 @@ void main() {
     },
   );
 
-  testWidgets(
-    'prepared chapter, resolved font scope, native session and real viewport share one layout',
-    (tester) async {
-      final chapter = await _chapter('<p>abcdefgh</p>');
-      final environment = await _environment(
-        tester,
-        preferences: NovelReaderPreferences.defaults().copyWith(
-          fontSize: 10,
-          lineHeight: 1,
-          paragraphSpacing: 0,
-        ),
-      );
-      final scope = await _scope(chapter, environment, width: 20, height: 10);
-      final cache = ForumBodyParagraphCache(
-        maxEntries: 8,
-        maxEstimatedBytes: 1 << 20,
-      );
-      final session = scope.openSession(
-        cache: cache,
-        layoutId: 'request',
-        limits: _limits,
-      );
-      final parent = NovelReaderPaginationCancellationToken();
-      final anchor = chapter.anchors.segments.first.projection.baseAnchor;
-      final controller = NovelReaderNativePagedController(
-        session: session,
-        anchors: chapter.anchors,
-        parent: parent,
-        paginationKey: scope.paginationKey,
-        position: NovelReaderProgressSnapshot(
-          novelId: 'novel',
-          episodeId: 'episode',
-          flowMode: NovelReaderFlowMode.pagedLtr,
-          scrollOffset: 0,
-          pageIndex: 0,
-          anchorNodeId: anchor.nodeId,
-          anchorTextOffset: 5,
-          anchorFormatVersion: anchor.formatVersion,
-          anchorTextIdentity: anchor.textIdentity,
-          progressPercent: .6,
-          isProgressPercentValid: true,
-        ),
-      );
-      addTearDown(() {
-        controller.close();
-        parent.cancel();
-        session.close();
-        cache.close();
-      });
-      final reports = <NovelReaderPaginationPosition>[];
-      await tester.pumpWidget(
-        Directionality(
-          textDirection: TextDirection.ltr,
-          child: Align(
-            alignment: Alignment.topLeft,
-            child: SizedBox(
-              width: 20,
-              height: 10,
-              child: NovelReaderNativePagedViewport(
-                controller: controller,
-                ownerIdentity: cache,
-                readingAuthorityIdentity: Object(),
-                onPositionChanged: reports.add,
+  for (final emphasis in [false, true]) {
+    testWidgets(
+      'prepared chapter and real viewport share one layout (emphasis=$emphasis)',
+      (tester) async {
+        final chapter = await _chapter(
+          '<p style="margin:0;${emphasis ? 'text-emphasis:\'X\' red' : ''}">abcdefgh</p>',
+        );
+        final environment = await _environment(
+          tester,
+          preferences: NovelReaderPreferences.defaults().copyWith(
+            fontSize: 10,
+            lineHeight: 1,
+            paragraphSpacing: 0,
+          ),
+        );
+        final pageHeight = emphasis ? 20.0 : 10.0;
+        final scope = await _scope(
+          chapter,
+          environment,
+          width: 20,
+          height: pageHeight,
+        );
+        final cache = ForumBodyParagraphCache(
+          maxEntries: 8,
+          maxEstimatedBytes: 1 << 20,
+        );
+        final session = scope.openSession(
+          cache: cache,
+          layoutId: 'request',
+          limits: _limits,
+        );
+        final parent = NovelReaderPaginationCancellationToken();
+        final anchor = chapter.anchors.segments.first.projection.baseAnchor;
+        final controller = NovelReaderNativePagedController(
+          session: session,
+          anchors: chapter.anchors,
+          parent: parent,
+          paginationKey: scope.paginationKey,
+          position: NovelReaderProgressSnapshot(
+            novelId: 'novel',
+            episodeId: 'episode',
+            flowMode: NovelReaderFlowMode.pagedLtr,
+            scrollOffset: 0,
+            pageIndex: 0,
+            anchorNodeId: anchor.nodeId,
+            anchorTextOffset: 5,
+            anchorFormatVersion: anchor.formatVersion,
+            anchorTextIdentity: anchor.textIdentity,
+            progressPercent: .6,
+            isProgressPercentValid: true,
+          ),
+        );
+        addTearDown(() {
+          controller.close();
+          parent.cancel();
+          session.close();
+          cache.close();
+        });
+        final reports = <NovelReaderPaginationPosition>[];
+        await tester.pumpWidget(
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: 20,
+                height: pageHeight,
+                child: NovelReaderNativePagedViewport(
+                  controller: controller,
+                  ownerIdentity: cache,
+                  readingAuthorityIdentity: Object(),
+                  onPositionChanged: reports.add,
+                ),
               ),
             ),
           ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-      expect(reports.single.paginationKey, scope.paginationKey);
-      expect(reports.single.pageIndex, 2);
-      expect(reports.single.anchor.textOffset, 5);
-      expect(reports.single.hasUserNavigated, isFalse);
-      expect(cache.layoutBuildCount, 1);
-      await tester.pumpWidget(const SizedBox.shrink());
-      controller.close();
-      expect(cache.activeLeases, 0);
-    },
-  );
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(reports.single.paginationKey, scope.paginationKey);
+        expect(reports.single.pageIndex, 2);
+        expect(reports.single.anchor.textOffset, 5);
+        expect(reports.single.hasUserNavigated, isFalse);
+        if (emphasis) {
+          expect(find.byType(ForumBodyEmphasisFragmentSurface), findsWidgets);
+          expect(controller.requestPage(3), isTrue);
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          expect(reports.last.pageIndex, 3);
+          expect(reports.last.hasUserNavigated, isTrue);
+        } else {
+          expect(cache.layoutBuildCount, 1);
+        }
+        await tester.pumpWidget(const SizedBox.shrink());
+        controller.close();
+        expect(cache.activeLeases, 0);
+      },
+    );
+  }
 }
 
 class _BranchScaler extends TextScaler {

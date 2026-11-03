@@ -44,7 +44,7 @@ final class NovelReaderNativeLayoutScope {
     required String paragraphInputs,
   }) : _fontCollectionGeneration = fontCollectionGeneration,
        _paragraphInputs = paragraphInputs;
-  static const fingerprintRevision = 9;
+  static const fingerprintRevision = 10;
   final NovelReaderNativePreparedChapter chapter;
   final ForumBodyReaderStyle reader;
   final TextScaler textScaler;
@@ -277,6 +277,12 @@ List<int> _nativeRevisions() => [
   ForumBodyParagraphLayout.backendRevision,
   ForumBodyTextPageComposer.revision,
   ForumBodyTextPageSession.inlinePlanRevision,
+  ForumBodyEmphasisParagraphMetrics.revision,
+  ForumBodyEmphasisRowAllocation.revision,
+  ForumBodyEmphasisLineMetrics.revision,
+  ForumBodyEmphasisFragmentInput.revision,
+  ForumBodyEmphasisFragmentLayout.revision,
+  ForumBodyTextPictureInput.revision,
   ForumBodyInlineSpanContent.revision,
   ForumBodyInlineParagraphLayout.revision,
   ForumBodyRubyContentCursor.revision,
@@ -320,15 +326,24 @@ List<double> _fontSizes(
   int limit,
 ) {
   final cursor = const ForumBodyStyleResolver().open(document, reader);
-  final sizes = <double>{cursor.root.textStyle.fontSize!};
+  final sizes = <double>{};
+  void include(ForumBodyResolvedStyle style) {
+    final size = style.textStyle.fontSize!;
+    sizes.add(size);
+    // Marks use half the unscaled author size, then the platform's actual
+    // per-size scale. Sampling only body sizes cannot freeze nonlinear marks.
+    if (style.textEmphasis.isEnabled) sizes.add(size * .5);
+    if (sizes.length > limit) {
+      throw const NovelReaderNativeLayoutInputException(
+        NovelReaderNativeLayoutInputFailure.budget,
+      );
+    }
+  }
+
   try {
+    include(cursor.root);
     while (cursor.moveNext()) {
-      sizes.add(cursor.currentStyle!.textStyle.fontSize!);
-      if (sizes.length > limit) {
-        throw const NovelReaderNativeLayoutInputException(
-          NovelReaderNativeLayoutInputFailure.budget,
-        );
-      }
+      include(cursor.currentStyle!);
     }
     return List.unmodifiable(sizes.toList()..sort());
   } finally {

@@ -148,6 +148,76 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   for (final direction in TextDirection.values) {
+    test(
+      'emphasis page coverage uses actual body glyphs and original anchors: $direction',
+      () {
+        final fixture = _Fixture(
+          '<p dir="${direction.name}" style="margin:0;white-space:pre-wrap;'
+          'line-height:.4;text-emphasis:\'X\' red">AB\nCD\nEF</p>',
+          width: 20,
+          height: 20,
+        );
+        expect(fixture.session.snapshot.length, greaterThan(1));
+        var offset = 0;
+        for (var page = 0; page < fixture.session.snapshot.length; page++) {
+          final bindings = fixture.prepareFragments(page);
+          final fragment = fixture.session.snapshot[page].fragments.single;
+          expect(fragment.coverageStartUtf16, offset);
+          offset = fragment.coverageEndUtf16;
+          final view =
+              (bindings.single as ForumBodyPreparedEmphasisFragment).view;
+          expect(view.projection.text, 'AB\nCD\nEF');
+          final builds = fixture.cache.layoutBuildCount,
+              pictures = fixture.cache.pictureBuildCount;
+          final coverage = _finish(fixture.preparedCursor(page, bindings));
+          expect(coverage.hasClippedGlyphs, isFalse);
+          expect(coverage.points, isNotEmpty);
+          expect(
+            coverage.locate(fixture.anchor(fragment.coverageStartUtf16)),
+            isNotNull,
+          );
+          if (fragment.coverageEndUtf16 < 8) {
+            expect(coverage.locate(fixture.anchor(8)), isNull);
+          }
+          expect(fixture.cache.layoutBuildCount, builds);
+          expect(fixture.cache.pictureBuildCount, pictures);
+          for (final binding in bindings) {
+            binding.close();
+          }
+          expect(fixture.cache.activeLeases, 0);
+        }
+        expect(offset, 8);
+      },
+    );
+  }
+
+  test('emphasis marks and hidden text cannot create extra anchor proof', () {
+    final fixture = _Fixture(
+      '<p style="margin:0;text-emphasis:\'X\' red">A'
+      '<span style="visibility:hidden">ZZZ</span>B</p>',
+    );
+    final bindings = fixture.prepareFragments(0);
+    expect(bindings.single.projection.text, 'AZZZB');
+    final coverage = _finish(fixture.preparedCursor(0, bindings));
+    expect(coverage.hasClippedGlyphs, isFalse);
+    expect(coverage.locate(fixture.anchor(0)), isNotNull);
+    expect(coverage.locate(fixture.anchor(2)), isNull);
+    expect(coverage.locate(fixture.anchor(4)), isNotNull);
+    expect(coverage.locate(fixture.anchor(5)), isNotNull);
+    expect(coverage.points.every((p) => p.displayUtf16 <= 5), isTrue);
+    final cursor = fixture.preparedCursor(0, bindings);
+    cursor.advance(maxGraphemes: 1, maxFragments: 1);
+    fixture.session.close();
+    expect(
+      () => cursor.advance(maxGraphemes: 1, maxFragments: 1),
+      _failure(NovelReaderNativeCoverageFailure.retired),
+    );
+    expect(() => cursor.result, throwsStateError);
+    cursor.close();
+    expect(fixture.cache.activeLeases, 0);
+  });
+
+  for (final direction in TextDirection.values) {
     for (final mixed in [false, true]) {
       test(
         'hanging row SPACE is not a clipped glyph or new source proof ($direction, mixed=$mixed)',

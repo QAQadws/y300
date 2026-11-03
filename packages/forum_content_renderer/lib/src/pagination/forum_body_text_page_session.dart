@@ -16,6 +16,7 @@ import 'forum_body_text_page_preparation.dart';
 import 'forum_body_prepared_text_fragment.dart';
 import 'forum_body_text_page_content.dart';
 import 'forum_body_inline_native_entries.dart';
+import 'forum_body_emphasis_page_admission.dart';
 
 enum ForumBodyTextPageSessionState { active, complete, failed, closed }
 
@@ -201,6 +202,7 @@ final class ForumBodyTextPageSession {
   final _issues = <ForumBodyStyleIssue>[];
   ForumBodyTextPageSessionState _state = ForumBodyTextPageSessionState.active;
   ForumBodyBlockFlowParagraph? _pendingParagraph;
+  ForumBodyEmphasisPageAdmission? _paragraphAdmission;
   ForumBodyBlockFlowInline? _pendingInline;
   ForumBodyInlinePlanPreparation? _inlinePreparation;
   ({ForumBodyInlinePageContent content, ForumBodyInlineParagraphLease lease})?
@@ -241,15 +243,18 @@ final class ForumBodyTextPageSession {
   /// Each call handles at most one paragraph/padding input and publishes at
   /// most one page. Pinned-cache pressure retains the exact pending input; retry
   /// after view leases change instead of spinning or restarting the traversal.
+  /// Format inspection, emphasis measurement and native-index work share the
+  /// explicit part budget; numeric preparation never records a visible scene.
   ForumBodyTextPageSessionStep advance({
     required int maxEvents,
     required int maxLines,
+    int maxFormatParts = 32,
   }) {
     _ensureUsable();
     if (_state != ForumBodyTextPageSessionState.active) {
       throw StateError('Page session is not active');
     }
-    if (maxEvents <= 0 || maxLines <= 0) {
+    if (maxEvents <= 0 || maxLines <= 0 || maxFormatParts <= 0) {
       throw ArgumentError('Invalid session work budget');
     }
     var events = 0;
@@ -286,28 +291,49 @@ final class ForumBodyTextPageSession {
       while (true) {
         final pending = _pendingParagraph;
         if (pending != null) {
-          final input = ForumBodyTextPageContent.paragraph(
-            pending.paragraph.content,
-          );
-          _content.check(input);
-          final lease = _cache.acquire(
-            content: pending.paragraph.content,
-            width: pending.contentWidth,
-            textScaler: _textScaler,
-          );
-          try {
-            _composer.append(
-              lease: lease,
+          final admission = _paragraphAdmission ??= _openParagraphPlan(pending);
+          if (!admission.isReady) {
+            final step = admission.advance(maxParts: maxFormatParts);
+            formatUnits += step.partsPrepared;
+            _waiting = step.waitingForLayoutBudget;
+            if (!admission.isReady) return result();
+          }
+          ForumBodyTextPageContent input;
+          if (admission.isPlain) {
+            input = ForumBodyTextPageContent.paragraph(admission.plainContent);
+            final lease = _cache.acquire(
+              content: admission.plainContent,
+              width: pending.contentWidth,
+              textScaler: _textScaler,
+            );
+            try {
+              _composer.append(
+                lease: lease,
+                paragraphIndex: pending.paragraph.index,
+                left: pending.contentLeft,
+                spaceBefore: _margin,
+                spaceAtPageStart: 0,
+                window: pending.paragraph.window,
+              );
+            } catch (_) {
+              lease.release();
+              rethrow;
+            }
+            admission.close();
+          } else {
+            final ready = admission.take();
+            input = ready.content;
+            _composer.appendEmphasis(
+              entries: ready.entries,
+              ensureOwner: _ensureActivePlan,
               paragraphIndex: pending.paragraph.index,
               left: pending.contentLeft,
               spaceBefore: _margin,
               spaceAtPageStart: 0,
               window: pending.paragraph.window,
             );
-          } catch (_) {
-            lease.release();
-            rethrow;
           }
+          _paragraphAdmission = null;
           _content.add(input);
           _pendingParagraph = null;
           _margin = 0;
@@ -317,7 +343,7 @@ final class ForumBodyTextPageSession {
         if (mixed != null) {
           if (_readyInline == null) {
             final prepare = _inlinePreparation ??= _openInlinePlan(mixed);
-            final step = prepare.advance();
+            final step = prepare.advance(maxParts: maxFormatParts);
             formatUnits += step.partsPrepared;
             _waiting = step.waitingForLayoutBudget;
             if (!step.isReady) return result();
@@ -339,7 +365,7 @@ final class ForumBodyTextPageSession {
           ForumBodyInlineNativeEntries? entries;
           final entryJob = _entryPreparation;
           if (entryJob != null) {
-            formatUnits += entryJob.advance();
+            formatUnits += entryJob.advance(maxParts: maxFormatParts);
             if (!entryJob.isReady) return result();
             entries = entryJob.take();
             _entryPreparation = null;
@@ -475,7 +501,7 @@ final class ForumBodyTextPageSession {
 
   void _completeWarmPreparation(ForumBodyTextPagePreparation preparation) {
     while (!preparation.tryPrepareCached()) {
-      if (preparation.cacheMiss) {
+      if (preparation.cacheMiss || preparation.waitingForLayoutBudget) {
         throw const ForumBodyTextPageSessionException(
           ForumBodyTextPageSessionFailure.pageNotPrepared,
         );
@@ -606,6 +632,21 @@ final class ForumBodyTextPageSession {
     );
   }
 
+  ForumBodyEmphasisPageAdmission _openParagraphPlan(
+    ForumBodyBlockFlowParagraph paragraph,
+  ) {
+    final content = paragraph.paragraph.content;
+    _content.check(ForumBodyTextPageContent.paragraph(content));
+    return ForumBodyEmphasisPageAdmission(
+      content: content,
+      width: paragraph.contentWidth,
+      cache: _cache,
+      textScaler: _textScaler,
+      ensureOwner: _ensureActivePlan,
+      validateCounts: _content.checkCounts,
+    );
+  }
+
   void _closeInlineAdmission() {
     _entryPreparation?.close();
     _entryPreparation = null;
@@ -619,7 +660,8 @@ final class ForumBodyTextPageSession {
     _flow.close();
     _composer.close();
     _pendingParagraph = null;
-    _closeInlineAdmission();
+    _paragraphAdmission?.close();
+    _paragraphAdmission = null;
     _closeInlineAdmission();
     _inlinePreparation?.close();
     _inlinePreparation = null;
@@ -646,7 +688,8 @@ final class ForumBodyTextPageSession {
     _issued.clear();
     _content.retain(0);
     _pendingParagraph = null;
-    _closeInlineAdmission();
+    _paragraphAdmission?.close();
+    _paragraphAdmission = null;
     _closeInlineAdmission();
     _inlinePreparation?.close();
     _inlinePreparation = null;
