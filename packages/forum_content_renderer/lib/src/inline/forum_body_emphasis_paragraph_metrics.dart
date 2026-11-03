@@ -17,6 +17,7 @@ import 'forum_body_emphasis_row_allocation.dart';
 import 'forum_body_emphasis_row_input.dart';
 
 part 'forum_body_emphasis_paragraph_preparation.dart';
+part 'forum_body_emphasis_fragment_input.dart';
 
 enum ForumBodyEmphasisParagraphFailure { input, limit, geometry }
 
