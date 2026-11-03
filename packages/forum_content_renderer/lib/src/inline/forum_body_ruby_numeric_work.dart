@@ -220,6 +220,7 @@ final class ForumBodyRubyColumnAlignment {
         baseDescent: column.baseDescent,
         annotations: _annotations,
         alignmentSignature: column.alignmentSignature,
+        measuredIdentity: column._measuredIdentity,
       );
     }
     return parts;

@@ -106,32 +106,13 @@ final class ForumBodyRubyTreeMetrics {
           );
   }
 
-  /// Only the existing row alignment may reposition the outer stack. Require
-  /// the same actual child extents; inner nodes never move relative to each other.
+  /// Only alignment of this actual measurement may replace the outer stack.
+  /// The private lineage preserves immutable child geometry without rescanning
+  /// every annotation during final publication; inner nodes remain unchanged.
   ForumBodyRubyTreeMetrics withRootGroup(ForumBodyRubyGroupMetrics value) {
     final old = root.group;
-    if (old == null ||
-        old.size.width != value.size.width ||
-        old.baseFontBounds != value.baseFontBounds ||
-        old.baseFontBaseline != value.baseFontBaseline ||
-        old.baseAscent != value.baseAscent ||
-        old.baseDescent != value.baseDescent ||
-        old.baseOffset.dx != value.baseOffset.dx ||
-        old.alignmentSignature != value.alignmentSignature ||
-        old.annotations.length != value.annotations.length) {
-      throw ArgumentError('Ruby row target changed native child geometry');
-    }
-    for (final (rank, a) in old.annotations.indexed) {
-      final b = value.annotations[rank];
-      if (a.bounds != b.bounds ||
-          a.fontBaseline != b.fontBaseline ||
-          a.side != b.side ||
-          a.gap != b.gap ||
-          a.hasAnnotation != b.hasAnnotation) {
-        throw ArgumentError(
-          'Ruby row target changed native annotation geometry',
-        );
-      }
+    if (old == null || !old.hasSameMeasuredInput(value)) {
+      throw ArgumentError('Ruby tree group changed measured members');
     }
     if (identical(old, value)) return this;
     final replacement = ForumBodyRubyTreeContainerMetrics(

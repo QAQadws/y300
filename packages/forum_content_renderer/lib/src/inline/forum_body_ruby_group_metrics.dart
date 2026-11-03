@@ -151,13 +151,22 @@ final class ForumBodyRubyGroupMetrics {
     required this.baseDescent,
     required List<ForumBodyRubyAnnotationMetrics> annotations,
     String? alignmentSignature,
+    Object? measuredIdentity,
   }) : annotations = List.unmodifiable(annotations),
+       _measuredIdentity = measuredIdentity ?? Object(),
        alignmentSignature =
            alignmentSignature ??
            annotations.map((item) => item.side.index).join();
 
   static const revision = 6;
   static const geometryTolerance = 1e-4;
+  final Object _measuredIdentity;
+
+  /// Only vertical alignment of this actual measurement preserves this token.
+  /// Equal geometry from another measurement does not bind the original tree;
+  /// lineage itself still grants no native ownership or visible source proof.
+  bool hasSameMeasuredInput(ForumBodyRubyGroupMetrics other) =>
+      identical(_measuredIdentity, other._measuredIdentity);
 
   /// Borrows current same-owner glyph leases. Does not shape, prepare pictures,
   /// transfer ownership or release the caller's handles, including on failure.

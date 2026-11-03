@@ -10,6 +10,26 @@ final class ForumBodyRubyGlyphTreeMetrics {
   List<ForumBodyRubyTreeNodeMetrics> get nodes => _value.nodes;
   ForumBodyRubyTreeContainerMetrics get root => _value.root;
   ForumBodyRubyChildMetrics get box => _value.box;
+  ForumBodyRubyAtomMetrics get rootAtom => _value.rootAtom;
+
+  /// Replace only this measurement's aligned root. All original sources,
+  /// requests, inner glyph nodes and scaling snapshots remain unchanged.
+  /// Geometry/decoration/marker plans must then be regenerated for this value.
+  ForumBodyRubyGlyphTreeMetrics withAlignedRoot(ForumBodyRubyAtomMetrics root) {
+    final value = switch (root) {
+      ForumBodyRubyColumnMetrics(:final value) => _value.withRootGroup(value),
+      ForumBodyRubyComponentMetrics(:final value) => _value.withRootSegment(
+        value,
+      ),
+      ForumBodyRubySpaceMetrics() => throw ArgumentError(
+        'A glyph tree root cannot become a soft space',
+      ),
+    };
+    return identical(value, _value)
+        ? this
+        : ForumBodyRubyGlyphTreeMetrics._(input, value);
+  }
+
   Map<double, double> get effectiveGlyphScales => _value.effectiveScales;
   TextScaler get glyphTextScaler => _value.textScaler;
   int get glyphHandleCount => _value.nativeHandleCount;

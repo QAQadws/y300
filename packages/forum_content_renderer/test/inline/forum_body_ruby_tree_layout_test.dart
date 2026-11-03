@@ -168,6 +168,28 @@ void main() {
     },
   );
 
+  test('equal foreign group geometry cannot replace a measured tree root', () {
+    final input = _input(_html), cache = _cache(16);
+    try {
+      final metrics = _measure(input, cache),
+          foreign = _measure(input, cache).root.group!,
+          root = metrics.root.group!;
+      expect(foreign.size, root.size);
+      expect(foreign.baseline, root.baseline);
+      expect(root.hasSameMeasuredInput(foreign), isFalse);
+      expect(() => metrics.withRootGroup(foreign), throwsArgumentError);
+      final aligned = root.alignedTo(ForumBodyRubyLevelMetrics.single(root));
+      expect(root.hasSameMeasuredInput(aligned), isTrue);
+      final current = metrics.withRootGroup(aligned);
+      expect(current.root.group, same(aligned));
+      final view = _prepare(input, current, cache);
+      view.close();
+      expect(cache.activeLeases, 0);
+    } finally {
+      cache.close();
+    }
+  });
+
   test(
     'multi-column visible cache miss and foreign pins preserve the same transaction',
     () {
