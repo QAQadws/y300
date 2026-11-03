@@ -662,25 +662,10 @@ final class ForumBodyEmphasisParagraphPreparation {
     ForumBodyParagraphLine source,
     ForumBodyEmphasisAllocatedRow row,
     double top,
-  ) => ForumBodyParagraphLine(
+  ) => source.withVerticalFrame(
     top: top + row.flowTop,
     bottom: top + row.flowBottom,
     baseline: top + row.alphabeticBaseline,
-    left: source.left,
-    width: source.width,
-    startUtf16: source.startUtf16,
-    endUtf16: source.endUtf16,
-    coverageStartUtf16: source.coverageStartUtf16,
-    coverageEndUtf16: source.coverageEndUtf16,
-    engineStartUtf16: source.engineStartUtf16,
-    engineEndUtf16: source.engineEndUtf16,
-    engineCoverageStartUtf16: source.engineCoverageStartUtf16,
-    engineCoverageEndUtf16: source.engineCoverageEndUtf16,
-    unpaintedTrailingSpaceStartUtf16: source.unpaintedTrailingSpaceStartUtf16,
-    engineUnpaintedTrailingSpaceStartUtf16:
-        source.engineUnpaintedTrailingSpaceStartUtf16,
-    canBreakBefore: source.canBreakBefore,
-    canBreakAfter: source.canBreakAfter,
   );
 
   static Never _fail(ForumBodyEmphasisParagraphFailure failure) =>

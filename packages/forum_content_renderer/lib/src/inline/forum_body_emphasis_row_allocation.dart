@@ -1,5 +1,4 @@
 import 'dart:collection';
-import 'dart:math' as math;
 
 import 'package:flutter/painting.dart';
 
@@ -10,15 +9,12 @@ import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_native_request.dart';
 import '../paragraph/forum_body_text_request.dart';
 import 'forum_body_emphasis_line_layout.dart';
+import 'forum_body_emphasis_allocation_geometry.dart';
 
-enum ForumBodyEmphasisAllocationFailure { source, geometry, limit }
-
-final class ForumBodyEmphasisAllocationException implements Exception {
-  const ForumBodyEmphasisAllocationException(this.failure);
-  final ForumBodyEmphasisAllocationFailure failure;
-  @override
-  String toString() => 'ForumBodyEmphasisAllocationException(${failure.name})';
-}
+export 'forum_body_emphasis_allocation_geometry.dart'
+    show
+        ForumBodyEmphasisAllocationFailure,
+        ForumBodyEmphasisAllocationException;
 
 /// One allocated physical row, still inside its COMPLETE legal source group.
 /// Offsets translate whole-parent coordinates; strip origins are added only
@@ -264,31 +260,19 @@ final class ForumBodyEmphasisRowAllocationPreparation {
     final originalBaseline =
         isolated.baseline - group.selector.originY + source.baseOffset.dy;
     final extent = _extents![index];
-    final top = extent.top - originalBaseline,
-        bottom = extent.bottom - originalBaseline;
-    final relativeBaseline = math.max(ascent, -top);
     final authoredAdvance = frame.flowBottom - frame.flowTop;
-    final height = math.max(
-      authoredAdvance + relativeBaseline - ascent,
-      relativeBaseline + bottom,
+    final allocated = forumBodyAllocateEmphasisRowFrame(
+      ascent: ascent,
+      authoredAdvance: authoredAdvance,
+      originalBaseline: originalBaseline,
+      extentTop: extent.top,
+      extentBottom: extent.bottom,
+      flowTop: _height,
+      maxHeight: maxHeight,
     );
-    final baseline = _height + relativeBaseline;
-    final delta = baseline - originalBaseline;
-    if (![
-          ascent,
-          relativeBaseline,
-          authoredAdvance,
-          height,
-          baseline,
-          delta,
-        ].every((v) => v.isFinite) ||
-        authoredAdvance < 0 ||
-        height < 0) {
-      _fail(ForumBodyEmphasisAllocationFailure.geometry);
-    }
-    if (_height + height > maxHeight) {
-      _fail(ForumBodyEmphasisAllocationFailure.limit);
-    }
+    final height = allocated.height,
+        baseline = allocated.baseline,
+        delta = allocated.translationY;
     final shift = Offset(0, delta), bounds = extent.shift(shift);
     final isolatedGlyph =
         _isolated!.frames[absolute].flowTop +

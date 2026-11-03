@@ -521,6 +521,23 @@ final class ForumBodyInlineParagraphLayout
   int get lineCount => lines.length;
   final List<TextBox> atomBoxes;
   final List<PlaceholderDimensions> dimensions;
+
+  /// Native flow excludes outer slot overhang already reserved by allocation.
+  double get nativeFlowTop {
+    _ensureOpen();
+    return _paintOffset.dy;
+  }
+
+  double get nativeFlowBottom {
+    _ensureOpen();
+    return _paintOffset.dy + _painter.height;
+  }
+
+  double get nativeAlphabeticBaseline {
+    _ensureOpen();
+    return _painter.computeDistanceToActualBaseline(TextBaseline.alphabetic);
+  }
+
   bool _disposed = false;
   @override
   bool get isDisposed => _disposed;

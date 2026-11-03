@@ -201,6 +201,33 @@ final class ForumBodyParagraphLine {
   final bool canBreakBefore;
   final bool canBreakAfter;
 
+  /// Replace only the physical vertical frame after measured allocation.
+  /// All original source/engine ranges and legal break flags remain intact.
+  ForumBodyParagraphLine withVerticalFrame({
+    required double top,
+    required double bottom,
+    required double baseline,
+  }) => ForumBodyParagraphLine(
+    top: top,
+    bottom: bottom,
+    baseline: baseline,
+    left: left,
+    width: width,
+    startUtf16: startUtf16,
+    endUtf16: endUtf16,
+    coverageStartUtf16: coverageStartUtf16,
+    coverageEndUtf16: coverageEndUtf16,
+    engineStartUtf16: engineStartUtf16,
+    engineEndUtf16: engineEndUtf16,
+    engineCoverageStartUtf16: engineCoverageStartUtf16,
+    engineCoverageEndUtf16: engineCoverageEndUtf16,
+    unpaintedTrailingSpaceStartUtf16: unpaintedTrailingSpaceStartUtf16,
+    engineUnpaintedTrailingSpaceStartUtf16:
+        engineUnpaintedTrailingSpaceStartUtf16,
+    canBreakBefore: canBreakBefore,
+    canBreakAfter: canBreakAfter,
+  );
+
   /// Translate only physical geometry; source/display/engine coordinates and
   /// legal break boundaries keep their original explicit units.
   ForumBodyParagraphLine shift(Offset offset) => ForumBodyParagraphLine(
