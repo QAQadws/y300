@@ -26,6 +26,7 @@ final class _SegmentGroupWork extends _TreeWork {
   int rank = 0;
   int span = 0;
   int annotationGap = 0;
+  Iterator<({Map<int, List<int>> map, int rank})>? _rankSeal;
 
   @override
   void advance(ForumBodyRubyTreeInputPreparation owner) {
@@ -161,6 +162,12 @@ final class _SegmentGroupWork extends _TreeWork {
       span++;
       return;
     }
+    final seal = _rankSeal ??= _rankEntries().iterator;
+    if (seal.moveNext()) {
+      final entry = seal.current;
+      entry.map[entry.rank] = UnmodifiableListView(entry.map[entry.rank]!);
+      return;
+    }
     owner._finish(
       ForumBodyRubyTreeSegment._(
         ForumBodyRubyRootBoxInput.fromGroup(group),
@@ -177,6 +184,14 @@ final class _SegmentGroupWork extends _TreeWork {
         annotationGapRanks: annotationGapRanks,
       ),
     );
+  }
+
+  Iterable<({Map<int, List<int>> map, int rank})> _rankEntries() sync* {
+    for (final map in [spanRanks, annotationGapRanks]) {
+      for (final rank in map.keys) {
+        yield (map: map, rank: rank);
+      }
+    }
   }
 
   bool _openGap(
@@ -225,6 +240,7 @@ final class _SegmentGroupWork extends _TreeWork {
 
   @override
   void close() {
+    _rankSeal = null;
     gapWork = null;
     pending = null;
   }
