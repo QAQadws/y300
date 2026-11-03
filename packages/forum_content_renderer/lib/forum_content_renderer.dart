@@ -18,6 +18,7 @@ export 'src/inline/forum_body_inline_paragraph_layout.dart';
 export 'src/inline/forum_body_inline_emphasis_child_bands.dart';
 export 'src/inline/forum_body_inline_emphasis_row_placement.dart';
 export 'src/inline/forum_body_inline_row_reference.dart';
+export 'src/inline/forum_body_inline_parent_rows.dart';
 export 'src/inline/forum_body_inline_paragraph_view.dart'
     show
         ForumBodyInlineParagraphView,

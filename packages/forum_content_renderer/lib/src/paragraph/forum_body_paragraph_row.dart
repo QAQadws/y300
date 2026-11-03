@@ -8,6 +8,7 @@ import 'forum_body_paragraph_cache.dart';
 import 'forum_body_paragraph_content.dart';
 import 'forum_body_paragraph_layout.dart';
 import 'forum_body_paragraph_line_frames.dart';
+import 'forum_body_native_paint_clearance.dart';
 import 'forum_body_text_layout.dart';
 
 part 'forum_body_paragraph_physical_line.dart';
@@ -287,6 +288,7 @@ final class ForumBodyParagraphRowPreparation {
         );
       }
       _nativeKey = parent.nativeInputIdentity;
+      _clearance = ForumBodyNativePaintClearance(layout.nativeFontClearance);
     } catch (_) {
       close();
       rethrow;
@@ -301,8 +303,7 @@ final class ForumBodyParagraphRowPreparation {
   final _bounds = <Rect?>[null, null, null];
   List<TextBox>? _boxes;
   ForumBodyParagraphRowMetrics? _result;
-  double _shadowTop = 0, _shadowBottom = 0, _shadowHorizontal = 0;
-  double _decorationGuard = 0;
+  late final ForumBodyNativePaintClearance _clearance;
   bool _groupReady = false, _closed = false, _operating = false;
   bool get isReady => _result != null;
 
@@ -320,44 +321,9 @@ final class ForumBodyParagraphRowPreparation {
               ? parent.content.style
               : parent.content.runs[_style].style;
           _style++;
-          final text = style.textStyle;
-          final thickness = text.decorationThickness ?? 1;
-          if (!thickness.isFinite || thickness < 0) {
+          if (!_clearance.include(style.textStyle)) {
             throw const ForumBodyParagraphRowException(
               ForumBodyParagraphRowFailure.geometry,
-            );
-          }
-          _decorationGuard = math.max(
-            _decorationGuard,
-            layout.nativeFontClearance * math.max(1, thickness),
-          );
-          for (final paint in [text.foreground, text.background]) {
-            if (paint != null &&
-                (paint.style != PaintingStyle.fill ||
-                    paint.maskFilter != null ||
-                    paint.imageFilter != null)) {
-              throw const ForumBodyParagraphRowException(
-                ForumBodyParagraphRowFailure.geometry,
-              );
-            }
-          }
-          for (final shadow in text.shadows ?? const <Shadow>[]) {
-            final reach = 3 * shadow.blurSigma + 1;
-            final top = reach - shadow.offset.dy,
-                bottom = reach + shadow.offset.dy;
-            if (!top.isFinite ||
-                !bottom.isFinite ||
-                reach + shadow.offset.dx.abs() + _decorationGuard > 16384 ||
-                shadow.offset.dy.abs() > 16384) {
-              throw const ForumBodyParagraphRowException(
-                ForumBodyParagraphRowFailure.geometry,
-              );
-            }
-            _shadowTop = math.max(_shadowTop, top);
-            _shadowBottom = math.max(_shadowBottom, bottom);
-            _shadowHorizontal = math.max(
-              _shadowHorizontal,
-              reach + shadow.offset.dx.abs(),
             );
           }
         } else if (!_groupReady) {
@@ -426,18 +392,13 @@ final class ForumBodyParagraphRowPreparation {
   Rect _envelope(Rect bounds) {
     // Native selection bounds are font frames, not ink. Keep one actual maximum
     // font size of clearance plus all admitted shadow support before clipping.
-    final guard = _decorationGuard;
-    if (guard + _shadowHorizontal > 16384) {
+    final result = _clearance.envelope(bounds);
+    if (result == null) {
       throw const ForumBodyParagraphRowException(
         ForumBodyParagraphRowFailure.geometry,
       );
     }
-    return Rect.fromLTRB(
-      bounds.left - guard,
-      bounds.top - guard - _shadowTop,
-      bounds.right + guard,
-      bounds.bottom + guard + _shadowBottom,
-    );
+    return result;
   }
 
   void _finish() {
@@ -489,10 +450,7 @@ final class ForumBodyParagraphRowPreparation {
       fontBounds: font.shift(Offset(0, -origin)),
       rowIsolationPitch: pitch,
       parentLineCount: layout.lineCount,
-      paintClearance: (
-        top: _decorationGuard + _shadowTop,
-        bottom: _decorationGuard + _shadowBottom,
-      ),
+      paintClearance: (top: _clearance.top, bottom: _clearance.bottom),
     );
   }
 
