@@ -60,4 +60,12 @@ final class ForumBodyFittedEmphasisPageContent
     nativeHandleCountFor(fragment);
     yield* plan.metrics.nativeFootprint;
   }
+
+  @override
+  Iterable<ForumBodyNativeBudgetSlot> nativeBudgetFootprintFor(
+    ForumBodyTextPageFragment fragment,
+  ) sync* {
+    nativeHandleCountFor(fragment);
+    yield* plan.nativeBudgetFootprint;
+  }
 }

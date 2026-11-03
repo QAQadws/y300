@@ -68,7 +68,7 @@ final class ForumBodyInlineNativeEntriesPreparation {
   TextScaler? _scaler;
   void Function()? _ensureOwner;
   List<List<ForumBodyNativeInputCost>> _atoms = [];
-  Iterator<ForumBodyNativeRequestSlot>? _requests;
+  Iterator<ForumBodyNativeBudgetSlot>? _requests;
   ForumBodyParagraphBudgetProbe? _probe;
   bool _ready = false;
   bool _closed = false;
@@ -87,7 +87,7 @@ final class ForumBodyInlineNativeEntriesPreparation {
           _ready = true;
         } else {
           final requests = _requests ??=
-              _input!.rubyAtoms[_atoms.length].nativeFootprint.iterator;
+              _input!.rubyAtoms[_atoms.length].nativeBudgetFootprint.iterator;
           final probe = _probe ??= _cache!.createBudgetProbe(
             captureInputEstimates: true,
           );

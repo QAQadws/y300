@@ -38,9 +38,11 @@ final class ForumBodyFittedEmphasisPlan {
   final List<ForumBodyNativeInputCost> nativeCosts;
   late final List<ForumBodyParagraphLine> lines;
   ForumBodyParagraphContent get content => metrics.input.content;
+  Iterable<ForumBodyNativeBudgetSlot> get nativeBudgetFootprint =>
+      metrics.nativeBudgetFootprint;
 }
 
-enum _Phase { fonts, scene, publish, ready, closed }
+enum _Phase { inputs, publish, ready, closed }
 
 /// The same aggregate probe as visible delivery, one actual font/scene per
 /// part. No alias, shape, picture, cache hit or source authority is acquired.
@@ -69,10 +71,10 @@ final class ForumBodyFittedEmphasisPlanPreparation {
   ForumBodyEmphasisLineMetrics? _metrics;
   ForumBodyParagraphCache? _cache;
   void Function()? _ensureOwner;
-  Iterator<ForumBodyNativeRequestSlot>? _requests;
+  Iterator<ForumBodyNativeBudgetSlot>? _requests;
   ForumBodyParagraphBudgetProbe? _probe;
   ForumBodyFittedEmphasisPlan? _result;
-  var _phase = _Phase.fonts;
+  var _phase = _Phase.inputs;
   bool _operating = false;
   bool get isReady => _phase == _Phase.ready;
   int advance({required int maxParts}) {
@@ -86,8 +88,8 @@ final class ForumBodyFittedEmphasisPlanPreparation {
       _probe ??= _cache!.createBudgetProbe(captureInputEstimates: true);
       while (!isReady && used < maxParts) {
         switch (_phase) {
-          case _Phase.fonts:
-            _requests ??= _metrics!.nativeFootprint.iterator;
+          case _Phase.inputs:
+            _requests ??= _metrics!.nativeBudgetFootprint.iterator;
             if (_requests!.moveNext()) {
               final slot = _requests!.current;
               slot.request.includeBudget(
@@ -98,11 +100,8 @@ final class ForumBodyFittedEmphasisPlanPreparation {
               );
             } else {
               _requests = null;
-              _phase = _Phase.scene;
+              _phase = _Phase.publish;
             }
-          case _Phase.scene:
-            _probe!.includeTextPicture(_metrics!.pictureInput);
-            _phase = _Phase.publish;
           case _Phase.publish:
             _result = ForumBodyFittedEmphasisPlan._(
               _metrics!,

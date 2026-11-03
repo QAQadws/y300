@@ -39,6 +39,9 @@ sealed class ForumBodyRubyAtomPlan {
       yield (request: request, width: maxWidth, minimumLineCount: 1);
     }
   }
+
+  Iterable<ForumBodyNativeBudgetSlot> get nativeBudgetFootprint =>
+      nativeFootprint;
 }
 
 final class ForumBodyRubyTreePlan extends ForumBodyRubyAtomPlan {
@@ -60,6 +63,9 @@ final class ForumBodyRubyTreePlan extends ForumBodyRubyAtomPlan {
   @override
   Iterable<ForumBodyNativeRequestSlot> get nativeFootprint =>
       metrics.nativeFootprint;
+  @override
+  Iterable<ForumBodyNativeBudgetSlot> get nativeBudgetFootprint =>
+      metrics.nativeBudgetFootprint;
   @override
   double get maxWidth => request.maxWidth;
 }

@@ -70,6 +70,17 @@ final class ForumBodyEmphasisLineMetrics {
       );
     }
   }
+
+  /// All inputs needed for this component's own final scene. Their count is
+  /// independent of the two source/scene handles retained after delivery.
+  Iterable<ForumBodyNativeBudgetSlot> get nativeBudgetFootprint sync* {
+    yield* nativeFootprint;
+    yield (
+      request: ForumBodyTextPictureBudgetInput(pictureInput),
+      width: requestWidth,
+      minimumLineCount: 0,
+    );
+  }
 }
 
 /// Uses the exact same native measurement and placement transaction as visible

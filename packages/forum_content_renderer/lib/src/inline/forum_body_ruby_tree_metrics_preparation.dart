@@ -44,6 +44,19 @@ final class ForumBodyRubyTreeMetrics {
   final List<ForumBodyRubyTreeNodeMetrics> nodes;
   final int nativeHandleCount;
   Iterable<ForumBodyNativeRequestSlot> get nativeFootprint sync* {
+    for (final slot in nativeBudgetFootprint) {
+      final request = slot.request;
+      if (request is ForumBodyNativeRequest) {
+        yield (
+          request: request,
+          width: slot.width,
+          minimumLineCount: slot.minimumLineCount,
+        );
+      }
+    }
+  }
+
+  Iterable<ForumBodyNativeBudgetSlot> get nativeBudgetFootprint sync* {
     for (var i = 0; i < input.nodes.length; i++) {
       final node = input.nodes[i];
       if (node is ForumBodyRubyTreeText && node.needsNative) {
@@ -54,7 +67,7 @@ final class ForumBodyRubyTreeMetrics {
         );
       } else if (node is ForumBodyRubyTreeInline) {
         final child = (nodes[i] as ForumBodyRubyTreeContainerMetrics).inline!;
-        yield* child.input.nativeFootprintFor(child.fragment);
+        yield* child.input.nativeBudgetFootprintFor(child.fragment);
       }
     }
   }

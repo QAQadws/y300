@@ -39,8 +39,7 @@ final class ForumBodyRubyTreePreparation {
   Iterator<ForumBodyNativeParagraphLease>? _prefix;
   bool _probeStarted = false;
   bool _budgetChecked = false;
-  int _probeCursor = 0;
-  Iterator<ForumBodyNativeRequestSlot>? _probeRequests;
+  Iterator<ForumBodyNativeBudgetSlot>? _probeRequests;
   int _nextNode = 0;
   ForumBodyTextRequestPreparation? _member;
   Map<int, ForumBodyTextLease> _leases = {};
@@ -160,11 +159,13 @@ final class ForumBodyRubyTreePreparation {
       }
       return 1;
     }
-    if (_probeCursor < _metrics!.nativeHandleCount) {
-      final requests = _probeRequests ??= _metrics!.nativeFootprint.iterator;
-      if (!requests.moveNext()) {
-        throw StateError('Incomplete ruby native footprint');
-      }
+    // A component's font/scene budget inputs need not match its final retained
+    // handles. Inspect the complete actual sequence, one contribution per part.
+    final requests = _probeRequests ??=
+        _metrics!.nativeBudgetFootprint.iterator;
+    final hasNext = requests.moveNext();
+    _guard();
+    if (hasNext) {
       final slot = requests.current;
       slot.request.includeBudget(
         _probe!,
@@ -173,7 +174,6 @@ final class ForumBodyRubyTreePreparation {
         textScaler: _metrics!.textScaler,
       );
       _guard();
-      _probeCursor++;
       return 1;
     }
     _probe!.close();
@@ -571,7 +571,6 @@ final class ForumBodyRubyTreePreparation {
         _inlineBlockedAt = rejectedAt;
         _probe?.close();
         _probe = null;
-        _probeCursor = 0;
         _probeStarted = false;
         _budgetChecked = false;
         _probeRequests = null;

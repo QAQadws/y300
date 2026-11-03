@@ -67,6 +67,13 @@ sealed class ForumBodyTextPageContent {
   Iterable<ForumBodyNativeRequestSlot> nativeFootprintFor(
     ForumBodyTextPageFragment fragment,
   );
+
+  /// Inputs already known by the retained plan, including scenes. A format
+  /// needing cooperative scene composition adds that contribution in PageJob.
+  /// Resource acquisition and final handle reservation remain separate.
+  Iterable<ForumBodyNativeBudgetSlot> nativeBudgetFootprintFor(
+    ForumBodyTextPageFragment fragment,
+  ) => nativeFootprintFor(fragment);
 }
 
 final class ForumBodyParagraphPageContent extends ForumBodyTextPageContent {
@@ -359,13 +366,29 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
   Iterable<ForumBodyNativeRequestSlot> nativeFootprintFor(
     ForumBodyTextPageFragment fragment,
   ) sync* {
+    for (final slot in nativeBudgetFootprintFor(fragment)) {
+      final request = slot.request;
+      if (request is ForumBodyNativeRequest) {
+        yield (
+          request: request,
+          width: slot.width,
+          minimumLineCount: slot.minimumLineCount,
+        );
+      }
+    }
+  }
+
+  @override
+  Iterable<ForumBodyNativeBudgetSlot> nativeBudgetFootprintFor(
+    ForumBodyTextPageFragment fragment,
+  ) sync* {
     yield (
       request: parentRequest,
       width: requestWidthFor(fragment),
       minimumLineCount: fragment.endLine,
     );
     for (final atom in visibleAtoms(fragment)) {
-      yield* rubyAtoms[atom].nativeFootprint;
+      yield* rubyAtoms[atom].nativeBudgetFootprint;
     }
   }
 

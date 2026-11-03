@@ -487,7 +487,7 @@ final class ForumBodyTextPagePreparation {
     for (final (index, input) in _inputs.indexed) {
       final fragment = page.fragments[index];
       var parent = true;
-      for (final slot in input.nativeFootprintFor(fragment)) {
+      for (final slot in input.nativeBudgetFootprintFor(fragment)) {
         yield (
           startsFragment: parent,
           inspect: () {
@@ -514,13 +514,6 @@ final class ForumBodyTextPagePreparation {
         yield (
           startsFragment: parent,
           inspect: () => parts.includeSceneBudget(probe),
-        );
-      }
-      if (input is ForumBodyFittedEmphasisPageContent) {
-        yield (
-          startsFragment: parent,
-          inspect: () =>
-              probe.includeTextPicture(input.plan.metrics.pictureInput),
         );
       }
     }
