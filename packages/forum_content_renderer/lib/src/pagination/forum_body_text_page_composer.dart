@@ -6,9 +6,12 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../document/forum_body_document.dart';
 import '../inline/forum_body_inline_paragraph_layout.dart';
+import '../inline/forum_body_emphasis_paragraph_metrics.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_layout.dart';
 import 'forum_body_source_hint.dart';
+
+part 'forum_body_emphasis_scene_reservation.dart';
 
 enum ForumBodyTextPageFailure {
   oversizedGroup,
@@ -18,9 +21,10 @@ enum ForumBodyTextPageFailure {
   nativeHandleLimit,
   nativeEntryLimit,
   nativeByteLimit,
+  sceneLimit,
 }
 
-enum ForumBodyTextPageFragmentKind { paragraph, inline }
+enum ForumBodyTextPageFragmentKind { paragraph, inline, emphasis }
 
 final class ForumBodyTextPageException implements Exception {
   const ForumBodyTextPageException(this.failure);
@@ -159,7 +163,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 11;
+  static const revision = 12;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;
@@ -175,6 +179,8 @@ final class ForumBodyTextPageComposer {
   int _nativeBytes = 0;
   int _usedNativeHandles = 0;
   int _lastFragmentNativeHandles = 0;
+  int _sceneEntries = 0, _sceneBytes = 0;
+  _EmphasisSceneReservation? _lastSceneReservation;
   final _pages = <ForumBodyTextPage>[];
   final _draft = <ForumBodyTextPageFragment>[];
   ForumBodyTextPageSnapshot? _snapshot;
@@ -255,6 +261,26 @@ final class ForumBodyTextPageComposer {
     window: window,
   );
 
+  /// Numeric complete-group input only. This transfers no native resource;
+  /// actual readable delivery must rebind the finalized fragment's source and
+  /// single scene. The Host's generation guard remains live until consumption.
+  void appendEmphasis({
+    required ForumBodyEmphasisParagraphNativeEntries entries,
+    required void Function() ensureOwner,
+    required int paragraphIndex,
+    required double left,
+    required double spaceBefore,
+    required double spaceAtPageStart,
+    ForumBodyParagraphWindow window = ForumBodyParagraphWindow.full,
+  }) => _append(
+    input: _CompositionParagraph.emphasis(entries, ensureOwner),
+    paragraphIndex: paragraphIndex,
+    left: left,
+    spaceBefore: spaceBefore,
+    spaceAtPageStart: spaceAtPageStart,
+    window: window,
+  );
+
   void _append({
     required _CompositionParagraph input,
     required int paragraphIndex,
@@ -266,6 +292,7 @@ final class ForumBodyTextPageComposer {
     _ensureOpen();
     if (!needsInput) throw StateError('Composition input is still pending');
     input.ensureActive();
+    _ensureOpen();
     if (paragraphIndex != _nextParagraphIndex ||
         input.identity != identity ||
         !left.isFinite ||
@@ -391,6 +418,7 @@ final class ForumBodyTextPageComposer {
       final active = _active!;
       final layout = active.input;
       layout.ensureActive();
+      _ensureOpen();
       while (true) {
         if (layout.lines.isEmpty && active.groupEnd == null) {
           active.groupEnd = 0;
@@ -438,9 +466,42 @@ final class ForumBodyTextPageComposer {
         if (!continuation && _fragmentCount >= maxFragments) {
           _fail(ForumBodyTextPageFailure.fragmentLimit);
         }
+        final emphasis = layout._emphasisEntries;
+        _EmphasisSceneReservation? scene;
+        _EmphasisSceneAddition? sceneAddition;
+        if (emphasis != null) {
+          scene = continuation
+              ? _lastSceneReservation!
+              : _EmphasisSceneReservation(
+                  emphasis.inLines(firstLine, end).first.group.top,
+                );
+          sceneAddition = scene.propose(emphasis.inLines(active.nextLine, end));
+          if (!sceneAddition.withinLimits ||
+              fragmentHeight >
+                  ForumBodyEmphasisFragmentInputPreparation.defaultMaxHeight) {
+            if (_draft.isEmpty && _usedHeight == 0) {
+              _fail(ForumBodyTextPageFailure.sceneLimit);
+            }
+            _seal();
+            return _result(inspected, pagesBefore, false);
+          }
+        }
+        final replacedSceneBytes = continuation
+            ? (_lastSceneReservation?.estimatedBytes ?? 0)
+            : 0;
+        final proposedSceneEntries =
+            _sceneEntries +
+            (scene == null ? 0 : 1) -
+            (continuation && _lastSceneReservation != null ? 1 : 0);
+        final proposedSceneBytes =
+            _sceneBytes -
+            replacedSceneBytes +
+            (sceneAddition?.estimatedBytes ?? 0);
         final limit = maxNativeHandlesPerPage;
         final handles = limit == null
             ? 0
+            : emphasis != null
+            ? 2
             : layout.nativeHandleCountInRange?.call(
                     view?.coverageStartUtf16 ?? 0,
                     view?.coverageEndUtf16 ?? 0,
@@ -469,14 +530,15 @@ final class ForumBodyTextPageComposer {
           addedEntries = <Object, int>{};
           if (byteLimit != null) {
             final costs =
+                emphasis?.fontCostsInLines(active.nextLine, end) ??
                 layout.nativeCostsInRange?.call(
                   from,
                   view?.coverageEndUtf16 ?? 0,
                 ) ??
                 [
                   (
-                    identity: layout.lease.nativeInputIdentity,
-                    estimatedBytes: layout.lease.nativeLayoutEstimatedBytes,
+                    identity: layout.lease!.nativeInputIdentity,
+                    estimatedBytes: layout.lease!.nativeLayoutEstimatedBytes,
                   ),
                 ];
             for (final cost in costs) {
@@ -490,14 +552,17 @@ final class ForumBodyTextPageComposer {
             }
           } else {
             for (final entry
-                in layout.nativeEntriesInRange?.call(
+                in emphasis
+                        ?.fontCostsInLines(active.nextLine, end)
+                        .map((cost) => cost.identity) ??
+                    layout.nativeEntriesInRange?.call(
                       from,
                       view?.coverageEndUtf16 ?? 0,
                     ) ??
                     layout.nativeCostsInRange
                         ?.call(from, view?.coverageEndUtf16 ?? 0)
                         .map((cost) => cost.identity) ??
-                    [layout.lease.nativeInputIdentity]) {
+                    [layout.lease!.nativeInputIdentity]) {
               addedEntries[entry] = 0;
             }
           }
@@ -508,6 +573,7 @@ final class ForumBodyTextPageComposer {
           }
           final proposedEntries =
               _nativeEntries.length +
+              proposedSceneEntries +
               addedEntries.keys
                   .where((entry) => !_nativeEntries.containsKey(entry))
                   .length;
@@ -523,7 +589,8 @@ final class ForumBodyTextPageComposer {
             addedBytes += math.max(0, entry.value - old);
             addedEntries[entry.key] = math.max(old, entry.value);
           }
-          if (byteLimit != null && _nativeBytes + addedBytes > byteLimit) {
+          if (byteLimit != null &&
+              _nativeBytes + addedBytes + proposedSceneBytes > byteLimit) {
             if (_draft.isEmpty && _usedHeight == 0) {
               _fail(ForumBodyTextPageFailure.nativeByteLimit);
             }
@@ -578,6 +645,10 @@ final class ForumBodyTextPageComposer {
         _usedNativeHandles = proposed;
         if (addedEntries != null) _nativeEntries.addAll(addedEntries);
         _nativeBytes += addedBytes;
+        if (scene != null) scene.apply(sceneAddition!);
+        _lastSceneReservation = scene;
+        _sceneEntries = proposedSceneEntries;
+        _sceneBytes = proposedSceneBytes;
         _lastFragmentNativeHandles = handles;
         _flowHeight = bottom;
         _usedHeight = math.max(_usedHeight, bottom);
@@ -586,7 +657,7 @@ final class ForumBodyTextPageComposer {
         active.groupEnd = null;
         final paragraphComplete = end == active.endLine;
         if (paragraphComplete) {
-          active.input.lease.release();
+          active.input.lease?.release();
           _active = null;
           _nextParagraphIndex++;
         }
@@ -636,6 +707,9 @@ final class ForumBodyTextPageComposer {
     _nativeEntries.clear();
     _nativeBytes = 0;
     _lastFragmentNativeHandles = 0;
+    _sceneEntries = 0;
+    _sceneBytes = 0;
+    _lastSceneReservation = null;
     _usedHeight = 0;
     _flowHeight = 0;
     _snapshot = null;
@@ -651,7 +725,7 @@ final class ForumBodyTextPageComposer {
   void close() {
     if (_closed) return;
     _closed = true;
-    _active?.input.lease.release();
+    _active?.input.lease?.release();
     _active = null;
     _padding = null;
     _fragmentCount -= _draft.length;
@@ -660,6 +734,9 @@ final class ForumBodyTextPageComposer {
     _nativeEntries.clear();
     _nativeBytes = 0;
     _lastFragmentNativeHandles = 0;
+    _sceneEntries = 0;
+    _sceneBytes = 0;
+    _lastSceneReservation = null;
     _usedHeight = 0;
     _flowHeight = 0;
   }
@@ -676,6 +753,8 @@ final class _CompositionParagraph {
       nativeCostsInRange = null,
       _text = current.layout,
       _inline = null,
+      _emphasisEntries = null,
+      _emphasisGuard = null,
       identity = current.content.identity,
       path = current.content.path,
       fontRevision = current.content.fontRevision,
@@ -694,13 +773,38 @@ final class _CompositionParagraph {
   ) : lease = current,
       _text = null,
       _inline = current.layout,
+      _emphasisEntries = null,
+      _emphasisGuard = null,
       identity = current.content.identity,
       path = current.content.path,
       fontRevision = current.content.fontRevision,
       styleRevision = current.content.styleRevision,
       projection = current.content.projection.display,
       kind = ForumBodyTextPageFragmentKind.inline;
-  final ForumBodyNativeParagraphLease lease;
+  _CompositionParagraph.emphasis(
+    ForumBodyEmphasisParagraphNativeEntries entries,
+    void Function() ensureOwner,
+  ) : lease = null,
+      _text = null,
+      _inline = null,
+      _emphasisEntries = entries,
+      _emphasisGuard = ensureOwner,
+      nativeHandleCountInRange = null,
+      nativeEntriesInRange = null,
+      nativeCostsInRange = null,
+      identity = entries.paragraph.content.identity,
+      path = entries.paragraph.content.path,
+      fontRevision = entries.paragraph.content.fontRevision,
+      styleRevision = entries.paragraph.content.styleRevision,
+      projection = entries.paragraph.content.projection,
+      kind = ForumBodyTextPageFragmentKind.emphasis {
+    if (entries.groups.isEmpty) {
+      throw ArgumentError('Empty struts require an actual paragraph input');
+    }
+  }
+  final ForumBodyNativeParagraphLease? lease;
+  final ForumBodyEmphasisParagraphNativeEntries? _emphasisEntries;
+  final void Function()? _emphasisGuard;
   final int Function(int startUtf16, int endUtf16)? nativeHandleCountInRange;
   final Iterable<Object> Function(int startUtf16, int endUtf16)?
   nativeEntriesInRange;
@@ -717,21 +821,39 @@ final class _CompositionParagraph {
   final int styleRevision;
   final HtmlDisplayTextProjection projection;
   final ForumBodyTextPageFragmentKind kind;
-  double get width => _text?.width ?? _inline!.width;
-  double get height => _text?.height ?? _inline!.height;
-  List<ForumBodyParagraphLine> get lines => _text?.lines ?? _inline!.lines;
+  double get width =>
+      _emphasisEntries?.paragraph.width ?? _text?.width ?? _inline!.width;
+  double get height =>
+      _emphasisEntries?.paragraph.height ?? _text?.height ?? _inline!.height;
+  List<ForumBodyParagraphLine> get lines =>
+      _emphasisEntries?.paragraph.lines ?? _text?.lines ?? _inline!.lines;
   void ensureActive() {
-    if (!lease.isActive || (_text?.isDisposed ?? _inline!.isDisposed)) {
+    if (_emphasisEntries != null) {
+      _emphasisGuard!();
+      return;
+    }
+    if (!lease!.isActive || (_text?.isDisposed ?? _inline!.isDisposed)) {
       throw StateError('Composition paragraph lease is retired');
     }
   }
 
   ({int startLine, int endLine}) lineWindow(ForumBodyParagraphWindow window) =>
-      _text?.lineWindow(window) ?? _inline!.lineWindow(window);
+      _emphasisEntries?.paragraph.lineWindow(window) ??
+      _text?.lineWindow(window) ??
+      _inline!.lineWindow(window);
   ({double height, int coverageStartUtf16, int coverageEndUtf16}) fragment(
     int start,
     int end,
   ) {
+    final emphasis = _emphasisEntries;
+    if (emphasis != null) {
+      final view = emphasis.paragraph.fragment(start, end);
+      return (
+        height: view.height,
+        coverageStartUtf16: view.coverageStartUtf16,
+        coverageEndUtf16: view.coverageEndUtf16,
+      );
+    }
     final text = _text;
     if (text != null) {
       final view = text.fragment(start, end);

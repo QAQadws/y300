@@ -38,9 +38,9 @@ final class ForumBodyEmphasisFragmentInputPreparation {
     required this.startLine,
     required this.endLine,
     required void Function() ensureOwner,
-    this.maxGroups = 512,
-    int maxCommands = 8192,
-    double maxHeight = 32768,
+    this.maxGroups = defaultMaxGroups,
+    int maxCommands = defaultMaxCommands,
+    double maxHeight = defaultMaxHeight,
   }) : _paragraph = paragraph,
        _ensureOwner = ensureOwner {
     try {
@@ -68,6 +68,9 @@ final class ForumBodyEmphasisFragmentInputPreparation {
       rethrow;
     }
   }
+  static const defaultMaxGroups = 512;
+  static const defaultMaxCommands = 8192;
+  static const defaultMaxHeight = 32768.0;
   final int startLine, endLine, maxGroups;
   ForumBodyEmphasisParagraphMetrics? _paragraph;
   ForumBodyEmphasisParagraphFragment? _selection;
