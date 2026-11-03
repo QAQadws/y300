@@ -127,11 +127,13 @@ final class ForumBodyRubyGlyphTreeBindingPreparation {
     required ForumBodyRubyGlyphTreeGeometry geometry,
     required ForumBodyParagraphCache cache,
     required void Function() ensureOwner,
+    void Function()? ensureVisibleOwner,
     required TextScaler expectedTextScaler,
     Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
   }) : _geometry = geometry,
        _cache = cache,
-       _ensureOwner = ensureOwner {
+       _ensureOwner = ensureOwner,
+       _ensureVisibleOwner = ensureVisibleOwner ?? ensureOwner {
     _worker = ForumBodyRubyTreePreparation(
       input: geometry.metrics.input._glyphTree,
       metrics: geometry.metrics._value,
@@ -143,7 +145,7 @@ final class ForumBodyRubyGlyphTreeBindingPreparation {
   }
   ForumBodyRubyGlyphTreeGeometry? _geometry;
   ForumBodyParagraphCache? _cache;
-  void Function()? _ensureOwner;
+  void Function()? _ensureOwner, _ensureVisibleOwner;
   ForumBodyRubyTreePreparation? _worker;
   ForumBodyRubyTreeLayout? _tree;
   List<ForumBodyRubyGlyphTreeBoundSource> _sources = [];
@@ -206,12 +208,13 @@ final class ForumBodyRubyGlyphTreeBindingPreparation {
             }
             parts++;
           case _GlyphBindingPhase.publish:
+            _checkVisibleOwner();
             _result = ForumBodyRubyGlyphTreeBinding._(
               _geometry!,
               _tree!,
               _sources,
               _bySource,
-              _ensureOwner!,
+              _ensureVisibleOwner!,
             );
             _sources = [];
             _bySource = {};
@@ -309,6 +312,7 @@ final class ForumBodyRubyGlyphTreeBindingPreparation {
     if (!isReady) {
       throw StateError('Ruby glyph binding preparation is incomplete');
     }
+    _checkVisibleOwner();
     final result = _result!;
     _result = null;
     _tree = null;
@@ -342,6 +346,11 @@ final class ForumBodyRubyGlyphTreeBindingPreparation {
     }
   }
 
+  void _checkVisibleOwner() {
+    _ensureVisibleOwner!();
+    _guard();
+  }
+
   void _drop() {
     _worker?.close();
     _worker = null;
@@ -350,6 +359,7 @@ final class ForumBodyRubyGlyphTreeBindingPreparation {
     _geometry = null;
     _cache = null;
     _ensureOwner = null;
+    _ensureVisibleOwner = null;
     _sources = [];
     _bySource = {};
   }

@@ -1,17 +1,47 @@
 import 'package:flutter/painting.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
+ForumBodyRubyTreeEmphasisPlan rubyTreeEmphasisPlanFixture(
+  String html,
+  ForumBodyParagraphCache cache, {
+  TextDirection direction = TextDirection.ltr,
+  TextScaler scaler = TextScaler.noScaling,
+  ForumBodyRubyGlyphTreeInput Function(ForumBodyRubyGlyphTreeInput)? mapInput,
+}) {
+  final placement = rubyTreeEmphasisPlacementFixture(
+    html,
+    cache,
+    direction: direction,
+    scaler: scaler,
+    mapInput: mapInput,
+  );
+  final work = ForumBodyRubyTreeEmphasisPlanPreparation(
+    placement: placement,
+    ensureOwner: () {},
+  );
+  try {
+    while (!work.isReady) {
+      work.advance(maxParts: 1);
+    }
+    return work.takePlan();
+  } finally {
+    work.close();
+  }
+}
+
 ForumBodyRubyTreeEmphasisPlacement rubyTreeEmphasisPlacementFixture(
   String html,
   ForumBodyParagraphCache cache, {
   TextDirection direction = TextDirection.ltr,
   TextScaler scaler = TextScaler.noScaling,
+  ForumBodyRubyGlyphTreeInput Function(ForumBodyRubyGlyphTreeInput)? mapInput,
 }) {
   final metrics = rubyTreeEmphasisMetricsFixture(
     html,
     cache,
     direction: direction,
     scaler: scaler,
+    mapInput: mapInput,
   );
   final bands = ForumBodyRubyTreeDecorationBandsPreparation(
     input: metrics,
@@ -45,12 +75,14 @@ ForumBodyRubyTreeEmphasisMetrics rubyTreeEmphasisMetricsFixture(
   ForumBodyParagraphCache cache, {
   TextDirection direction = TextDirection.ltr,
   TextScaler scaler = TextScaler.noScaling,
+  ForumBodyRubyGlyphTreeInput Function(ForumBodyRubyGlyphTreeInput)? mapInput,
 }) {
   final bands = rubyGlyphTreeBandsFixture(
     html,
     cache,
     direction: direction,
     scaler: scaler,
+    mapInput: mapInput,
   );
   final fonts = ForumBodyRubyEmptyAnnotationFontsPreparation(
     bands: bands,
