@@ -8,6 +8,7 @@ import '../paragraph/forum_body_indent_layout.dart';
 import '../paragraph/forum_body_horizontal_text_frame.dart';
 import '../paragraph/forum_body_paragraph_geometry.dart';
 import '../paragraph/forum_body_native_paragraph_layout.dart';
+import '../paragraph/forum_body_native_paragraph_painter.dart';
 import '../style/forum_body_style_options.dart';
 import '../style/forum_body_length.dart';
 import 'forum_body_inline_span_content.dart';
@@ -59,13 +60,13 @@ final class ForumBodyInlineSelection {
 }
 
 /// One native parent paragraph, containing ordinary text and opaque inline
-/// slots. Owns only its parent TextPainter; children are prepared separately.
+/// slots. Owns only its parent resource; children are prepared separately.
 /// Engine and display coordinates remain explicit in every line/fragment.
 final class ForumBodyInlineParagraphLayout
     implements ForumBodyNativeParagraphLayout {
   ForumBodyInlineParagraphLayout._({
     required this.projection,
-    required TextPainter painter,
+    required ForumBodyNativeParagraphPainter painter,
     required this.width,
     required this.height,
     required this.lines,
@@ -83,7 +84,7 @@ final class ForumBodyInlineParagraphLayout
        _paintOffset = paintOffset,
        _trimmedAtoms = trimmedAtoms,
        _spaceAllocations = spaceAllocations;
-  static const revision = 10;
+  static const revision = 11;
   final ForumBodyFirstLineIndentGeometry firstLineIndent;
 
   factory ForumBodyInlineParagraphLayout.create({
@@ -113,28 +114,25 @@ final class ForumBodyInlineParagraphLayout
       layoutMode,
     );
     final projection = content.projectionForLayout(layoutMode);
-    final painter =
-        TextPainter(
-          text: projection.hasSoftSpaces
-              ? content.textSpanWithDimensions(snapshot)
-              : content.textSpan,
-          textAlign: content.style.textAlign,
-          textDirection: content.style.textDirection,
-          textScaler: textScaler,
-          locale: content.style.textStyle.locale,
-          textWidthBasis: TextWidthBasis.parent,
-        )..setPlaceholderDimensions(
-          projection.hasSoftSpaces
-              ? [
-                  for (final (i, atom) in projection.atoms.indexed)
-                    if (!atom.isSoftSpace) snapshot[i],
-                ]
-              : snapshot,
-        );
+    final painter = ForumBodyNativeParagraphPainter(
+      text: projection.hasSoftSpaces
+          ? content.textSpanWithDimensions(snapshot)
+          : content.textSpan,
+      textAlign: content.style.textAlign,
+      textDirection: content.style.textDirection,
+      textScaler: textScaler,
+      locale: content.style.textStyle.locale,
+      placeholderDimensions: projection.hasSoftSpaces
+          ? [
+              for (final (i, atom) in projection.atoms.indexed)
+                if (!atom.isSoftSpace) snapshot[i],
+            ]
+          : snapshot,
+    );
     try {
       final indentGeometry = indent == 0
           ? const ForumBodyFirstLineIndentGeometry.none()
-          : layoutForumBodyFirstLineIndent(
+          : layoutForumBodyFirstLineIndentWithPainter(
               painter: painter,
               body: projection.hasSoftSpaces
                   ? content.textSpanWithDimensions(snapshot)
@@ -156,7 +154,7 @@ final class ForumBodyInlineParagraphLayout
           ForumBodyParagraphLayoutFailure.width,
         );
       }
-      final lines = forumBodyParagraphLines(
+      final lines = forumBodyParagraphLinesWithPainter(
         painter: painter,
         display: projection.display,
         inline: projection,
@@ -173,9 +171,7 @@ final class ForumBodyInlineParagraphLayout
           ForumBodyParagraphLayoutFailure.singleLine,
         );
       }
-      final nativeBoxes = List<TextBox>.unmodifiable(
-        painter.inlinePlaceholderBoxes ?? const [],
-      );
+      final nativeBoxes = painter.placeholderBoxes;
       final slots = _inlineSlots(
         painter,
         content,
@@ -412,7 +408,7 @@ final class ForumBodyInlineParagraphLayout
   /// Native source coordinates only. Current child style/interaction metadata
   /// belongs to the typed lease, not a reused engine's original input object.
   final HtmlInlineTextProjection projection;
-  final TextPainter _painter;
+  final ForumBodyNativeParagraphPainter _painter;
   final Offset _paintOffset;
 
   /// Physical edge reserve, independent of the first-line indent request.
@@ -454,6 +450,65 @@ final class ForumBodyInlineParagraphLayout
   bool get isDisposed => _disposed;
   void _ensureOpen() {
     if (_disposed) throw StateError('Inline parent layout is disposed');
+  }
+
+  /// Native engine coordinates, including the mechanical indent prefix. A
+  /// child slot/glue cannot authorize an ordinary parent's glyph. No display
+  /// grapheme normalization moves a governing scalar to another native row.
+  ForumBodyParagraphGlyphGeometry? glyphAtEngineUtf16(int engineUtf16) {
+    _ensureOpen();
+    RangeError.checkValidIndex(
+      engineUtf16,
+      projection.engineText,
+      'engineUtf16',
+    );
+    if (engineUtf16 < projection.enginePrefix.length) return null;
+    var low = 0, high = projection.atoms.length;
+    while (low < high) {
+      final middle = low + (high - low) ~/ 2;
+      if (projection.atoms[middle].engineEndUtf16 <= engineUtf16) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    if (low < projection.atoms.length &&
+        projection.atoms[low].engineUtf16 <= engineUtf16) {
+      return null;
+    }
+    final glyph = _painter.glyphInfoAt(engineUtf16),
+        line = _painter.getLineNumberAt(engineUtf16);
+    if (glyph == null || line == null) return null;
+    final range = glyph.graphemeClusterCodeUnitRange;
+    if (line < 0 ||
+        line >= lines.length ||
+        range.start > engineUtf16 ||
+        range.end <= engineUtf16) {
+      throw const ForumBodyParagraphLayoutException(
+        ForumBodyParagraphLayoutFailure.coverage,
+      );
+    }
+    return ForumBodyParagraphGlyphGeometry(
+      lineIndex: line,
+      fontBounds: glyph.graphemeClusterLayoutBounds.shift(_paintOffset),
+      engineClusterRange: range,
+      direction: glyph.writingDirection,
+    );
+  }
+
+  /// Full native engine query, retaining actual order and duplicate frames.
+  /// These numeric boxes do not qualify child sources or legal page breaks.
+  List<ForumBodyParagraphMaximumLineFrame> queryMaximumLineFrames() {
+    _ensureOpen();
+    return List.unmodifiable([
+      for (final frame in _painter.maximumLineFrames(
+        projection.engineText.length,
+      ))
+        (
+          top: frame.top + _paintOffset.dy,
+          bottom: frame.bottom + _paintOffset.dy,
+        ),
+    ]);
   }
 
   /// Paint only the ordinary parent glyphs. The consumer must paint prepared
@@ -635,7 +690,7 @@ final class ForumBodyInlineParagraphLayout
 /// rows decide whether it survives; a trimmed marker never grows a page frame.
 ({List<TextBox> boxes, Uint8List? trimmed, Float64List? allocations})
 _inlineSlots(
-  TextPainter painter,
+  ForumBodyNativeParagraphPainter painter,
   ForumBodyInlineSpanContent content,
   HtmlInlineTextProjection projection,
   List<PlaceholderDimensions> dimensions,

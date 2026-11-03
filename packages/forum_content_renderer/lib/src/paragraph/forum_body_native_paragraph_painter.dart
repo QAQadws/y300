@@ -17,13 +17,20 @@ final class ForumBodyNativeParagraphPainter
     required this.textScaler,
     this.locale,
     this.strutStyle,
-  }) : _text = text;
+    List<PlaceholderDimensions>? placeholderDimensions,
+  }) : _text = text,
+       _placeholderDimensions = placeholderDimensions == null
+           ? null
+           : List.unmodifiable(placeholderDimensions);
   TextSpan _text;
   final TextAlign textAlign;
   final TextDirection textDirection;
   final TextScaler textScaler;
   final Locale? locale;
   final StrutStyle? strutStyle;
+  // Child layouts already applied their own font scaling. TextSpan forwards
+  // these physical dimensions to its placeholders without scaling them again.
+  final List<PlaceholderDimensions>? _placeholderDimensions;
   ui.Paragraph? _paragraph;
   List<ui.LineMetrics>? _metrics;
   List<ForumBodyParagraphLineRange>? _ranges;
@@ -91,7 +98,11 @@ final class ForumBodyNativeParagraphPainter
             strutStyle: strutStyle,
           ),
         );
-        _text.build(builder, textScaler: textScaler);
+        _text.build(
+          builder,
+          textScaler: textScaler,
+          dimensions: _placeholderDimensions,
+        );
         final built = builder.build();
         if (_disposed) {
           built.dispose();
@@ -127,6 +138,16 @@ final class ForumBodyNativeParagraphPainter
   }
 
   double get height => _laidOut.height;
+  List<TextBox> get placeholderBoxes => List.unmodifiable([
+    for (final box in _laidOut.getBoxesForPlaceholders())
+      TextBox.fromLTRBD(
+        box.left + _paintOffset.dx,
+        box.top,
+        box.right + _paintOffset.dx,
+        box.bottom,
+        box.direction,
+      ),
+  ]);
   double computeDistanceToActualBaseline(TextBaseline baseline) =>
       switch (baseline) {
         TextBaseline.alphabetic => _laidOut.alphabeticBaseline,
