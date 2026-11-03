@@ -32,12 +32,16 @@ final class _Curve extends TextScaler {
 ForumBodyInlineEmphasisTextInput _input({
   String prefix = _prefix,
   String suffix = '文<br><br>',
+  String base = 'AB',
+  String annotation = 'xy',
   TextDirection direction = TextDirection.ltr,
   bool indent = false,
 }) {
   final content = mixedInlineInput(
     prefix: prefix,
     suffix: suffix,
+    base: base,
+    annotation: annotation,
     direction: direction.name,
     paragraphStyle: 'text-emphasis:circle;line-height:.4;white-space:pre-wrap',
     reader: ForumBodyReaderStyle(
@@ -81,12 +85,14 @@ ForumBodyParagraphCache _cache() {
   ForumBodyInlineParagraphLease parent, {
   int quantum = 1,
   int maxBoxes = 4096,
+  int maxGlyphQueries = 16384,
 }) {
   final work = ForumBodyInlineEmphasisGeometryPreparation(
     input: input,
     parent: parent,
     ensureOwner: () {},
     maxBoxes: maxBoxes,
+    maxGlyphQueries: maxGlyphQueries,
   );
   var parts = 0;
   try {
@@ -104,6 +110,9 @@ ForumBodyParagraphCache _cache() {
 }
 
 List<Object> _values(ForumBodyInlineEmphasisTextGeometry geometry) => [
+  geometry.lines,
+  geometry.parentFontBounds,
+  geometry.atomLineIndices,
   for (final t in geometry.targets)
     [
       t.unit,
@@ -179,6 +188,34 @@ void main() {
               same(parent.nativeInputIdentity),
             );
             expect(geometry.lineCount, layout.lineCount);
+            expect(geometry.lines, same(layout.lines));
+            final expectedFonts = List<Rect?>.filled(layout.lineCount, null);
+            final atomOffsets = {
+              for (final atom in layout.projection.atoms)
+                for (var n = atom.engineUtf16; n < atom.engineEndUtf16; n++) n,
+            };
+            var offset = 0;
+            for (final scalar in layout.projection.engineText.runes) {
+              if (offset >= layout.projection.enginePrefix.length &&
+                  !atomOffsets.contains(offset)) {
+                final glyph = raw.getGlyphInfoAt(offset),
+                    row = raw.getLineNumberAt(offset);
+                if (glyph != null) {
+                  expect(row, isNotNull);
+                  final bounds = glyph.graphemeClusterLayoutBounds.shift(
+                    origin,
+                  );
+                  expectedFonts[row!] =
+                      expectedFonts[row]?.expandToInclude(bounds) ?? bounds;
+                }
+              }
+              offset += scalar > 0xffff ? 2 : 1;
+            }
+            expect(geometry.parentFontBounds, expectedFonts);
+            expect(geometry.atomLineIndices, [
+              for (final atom in layout.projection.atoms)
+                raw.getLineNumberAt(atom.engineUtf16),
+            ]);
             expect(_values(geometry), _values(batched));
             expect(geometry.targets, hasLength(input.units.length));
             var spanning = 0, governingLater = 0;
@@ -240,6 +277,15 @@ void main() {
               cache.activeLeases,
             ), before);
             expect(() => geometry.targets.clear(), throwsUnsupportedError);
+            expect(() => geometry.lines.clear(), throwsUnsupportedError);
+            expect(
+              () => geometry.parentFontBounds.clear(),
+              throwsUnsupportedError,
+            );
+            expect(
+              () => geometry.atomLineIndices.clear(),
+              throwsUnsupportedError,
+            );
             expect(
               () => geometry.targets.first.boxes.clear(),
               throwsUnsupportedError,
@@ -248,6 +294,7 @@ void main() {
             cache.clearUnpinned();
             expect(cache.activeLeases, 0);
             expect(geometry.targets.first.unit, same(input.units.first));
+            expect(geometry.parentFontBounds, expectedFonts);
           },
         );
       }
@@ -454,11 +501,151 @@ void main() {
       dimensions: _dimensions,
     );
     addTearDown(parent.release);
-    final result = _geometry(input, parent, maxBoxes: 0).value;
+    final result = _geometry(
+      input,
+      parent,
+      maxBoxes: 0,
+      maxGlyphQueries: 0,
+    ).value;
     expect(result.targets, isEmpty);
     expect(result.lineCount, parent.layout.lineCount);
+    expect(result.parentFontBounds, [null]);
+    expect(result.atomLineIndices, [0]);
     expect(cache.activeLeases, 1);
   });
+  test('unmarked parent fonts participate even with no marker targets', () {
+    final input = _input(
+          prefix: '<span style="font-size:66px;text-emphasis:none">。 </span>',
+          suffix: '<span style="text-emphasis:none">😀</span>',
+        ),
+        cache = _cache();
+    final parent = cache.acquireInline(
+      content: input.glyphInput.glyphs,
+      width: 500,
+      dimensions: _dimensions,
+    );
+    addTearDown(parent.release);
+    final value = _geometry(input, parent).value;
+    expect(value.targets, isEmpty);
+    expect(value.parentFontBounds.single, isNotNull);
+    final font = value.parentFontBounds.single!;
+    expect(
+      font.height,
+      greaterThan(
+        parent.layout.lines.single.bottom - parent.layout.lines.single.top,
+      ),
+    );
+    final engine = parent.layout.projection.engineText;
+    for (var i = 0; i < engine.length; i++) {
+      final glyph = parent.layout.glyphAtEngineUtf16(i);
+      if (glyph != null) {
+        expect(font.expandToInclude(glyph.fontBounds), font);
+      }
+    }
+  });
+  test('scalar query budget skips surrogate tails and complete child text', () {
+    final input = _input(
+          prefix: '😀',
+          suffix: '',
+          base: '基' * 512,
+          annotation: '注' * 512,
+        ),
+        cache = _cache();
+    final parent = cache.acquireInline(
+      content: input.glyphInput.glyphs,
+      width: 100,
+      dimensions: _dimensions,
+    );
+    addTearDown(parent.release);
+    final before = (
+      cache.layoutBuildCount,
+      cache.pictureBuildCount,
+      cache.hitCount,
+      cache.activeLeases,
+    );
+    final value = _geometry(input, parent, maxGlyphQueries: 1).value;
+    expect(value.targets, hasLength(1));
+    expect(value.parentFontBounds.single, isNotNull);
+    expect(value.atomLineIndices, [0]);
+    expect(
+      () => _geometry(input, parent, maxGlyphQueries: 0),
+      throwsA(
+        isA<ForumBodyEmphasisGeometryException>().having(
+          (e) => e.failure,
+          'failure',
+          ForumBodyEmphasisGeometryFailure.limit,
+        ),
+      ),
+    );
+    expect(
+      () => ForumBodyInlineEmphasisGeometryPreparation(
+        input: input,
+        parent: parent,
+        ensureOwner: () {},
+        maxGlyphQueries: -1,
+      ),
+      throwsArgumentError,
+    );
+    expect((
+      cache.layoutBuildCount,
+      cache.pictureBuildCount,
+      cache.hitCount,
+      cache.activeLeases,
+    ), before);
+  });
+  for (final direction in TextDirection.values) {
+    for (final width in [35.0, 300.0]) {
+      test(
+        'actual child and soft-slot rows exclude parent fonts $direction/$width',
+        () {
+          final f = RubySoftSpaceRowFixture(direction: direction, gapSize: 10);
+          addTearDown(f.close);
+          final prep = ForumBodyInlineEmphasisTextPreparation(
+            content: f.content,
+            ensureOwner: () {},
+          );
+          late ForumBodyInlineEmphasisTextInput input;
+          try {
+            while (!prep.isReady) {
+              prep.advance(maxParts: 1);
+            }
+            input = prep.takeInput();
+          } finally {
+            prep.close();
+          }
+          final parent = f.parent(width, [
+            for (final a in f.atoms) a.placeholderDimensions,
+          ]);
+          try {
+            final value = _geometry(
+              input,
+              parent,
+              maxGlyphQueries: 0,
+              maxBoxes: 0,
+            ).value;
+            expect(value.parentFontBounds, everyElement(isNull));
+            expect(value.atomLineIndices, [
+              for (final atom in parent.layout.projection.atoms)
+                parent.layout.lines.indexWhere(
+                  (l) =>
+                      atom.engineUtf16 >= l.engineCoverageStartUtf16 &&
+                      atom.engineUtf16 < l.engineCoverageEndUtf16,
+                ),
+            ]);
+            expect(value.atomLineIndices.every((i) => i >= 0), isTrue);
+            expect(
+              parent.layout.trimmedAtomIndices,
+              width == 35 ? [1] : isEmpty,
+            );
+            expect(f.cache.activeLeases, 1);
+          } finally {
+            parent.release();
+          }
+          expect(f.cache.activeLeases, 0);
+        },
+      );
+    }
+  }
   test('every row, query, box and ready publication checks its owner', () {
     final input = _input(
           prefix: 'A e<span style="font-size:31px">́</span>',

@@ -1,33 +1,52 @@
 part of 'forum_body_emphasis_text_geometry.dart';
 
-/// Actual parent-only target geometry, retaining original units and opaque
-/// native input identity. No borrowed handle, cache or owner survives capture.
+/// Actual parent-only targets, physical glyph fonts and child-slot rows,
+/// retaining original units and opaque native input identity. No borrowed
+/// handle, cache or owner survives capture.
 final class ForumBodyInlineEmphasisTextGeometry {
   ForumBodyInlineEmphasisTextGeometry._(
     this.input,
     this.nativeInputIdentity,
-    this.lineCount,
+    this.lines,
+    List<Rect?> parentFontBounds,
+    List<int> atomLineIndices,
     List<ForumBodyEmphasisTargetGeometry> targets,
-  ) : targets = UnmodifiableListView(targets);
-  static const revision = 1;
+  ) : parentFontBounds = UnmodifiableListView(parentFontBounds),
+      atomLineIndices = UnmodifiableListView(atomLineIndices),
+      targets = UnmodifiableListView(targets);
+  static const revision = 2;
   final ForumBodyInlineEmphasisTextInput input;
   final Object nativeInputIdentity;
-  final int lineCount;
+  final List<ForumBodyParagraphLine> lines;
+  int get lineCount => lines.length;
+
+  /// Actual ordinary-parent glyph envelopes, including unmarked text. Null
+  /// means no queried parent glyph on that row, not a zero-sized root font.
+  /// Child bases/annotations and empty font struts must be combined separately.
+  final List<Rect?> parentFontBounds;
+
+  /// Actual engine row of each original opaque/glue slot. Trimmed soft slots
+  /// still have an engine row; these indices do not qualify child visibility.
+  final List<int> atomLineIndices;
   final List<ForumBodyEmphasisTargetGeometry> targets;
 }
 
 /// Borrows the exact qualified parent. Each unit consumes one row, selection,
-/// box, governing query or publication; it never releases the caller's lease.
+/// box, scalar font query, governing query or publication. Child content and
+/// mechanical prefixes are skipped; the caller's lease is never released.
 final class ForumBodyInlineEmphasisGeometryPreparation {
   ForumBodyInlineEmphasisGeometryPreparation({
     required ForumBodyInlineEmphasisTextInput input,
     required ForumBodyInlineParagraphLease parent,
     required void Function() ensureOwner,
     this.maxBoxes = 4096,
+    this.maxGlyphQueries = 16384,
   }) : _input = input,
        _parent = parent,
        _ensureOwner = ensureOwner {
-    if (maxBoxes < 0) throw ArgumentError.value(maxBoxes);
+    if (maxBoxes < 0 || maxGlyphQueries < 0) {
+      throw ArgumentError('Invalid inline geometry budget');
+    }
     try {
       _guard();
       if (!identical(parent.content, input.glyphInput.glyphs)) {
@@ -43,12 +62,16 @@ final class ForumBodyInlineEmphasisGeometryPreparation {
       rethrow;
     }
   }
-  final int maxBoxes;
+  final int maxBoxes, maxGlyphQueries;
   ForumBodyInlineEmphasisTextInput? _input;
   ForumBodyInlineParagraphLease? _parent;
   void Function()? _ensureOwner;
   Object? _nativeInputIdentity;
   int _lineCount = 0, _line = 0, _unit = 0, _box = 0, _boxCount = 0;
+  int _engine = -1, _atom = 0, _atomLine = 0, _glyphQueries = 0;
+  List<Rect?>? _parentFontBounds = [];
+  List<int>? _atomLines = [];
+  bool _parentScanned = false;
   int? _unitEndLine;
   List<TextBox>? _boxes;
   Rect? _bounds;
@@ -67,13 +90,19 @@ final class ForumBodyInlineEmphasisGeometryPreparation {
       _guard();
       while (used < maxParts && !isReady) {
         final input = _input!;
-        if (_unit == input.units.length) {
+        if (!_parentScanned) {
+          _scanParent();
+        } else if (_unit == input.units.length) {
           _result = ForumBodyInlineEmphasisTextGeometry._(
             input,
             _nativeInputIdentity!,
-            _lineCount,
+            _parent!.layout.lines,
+            _parentFontBounds!,
+            _atomLines!,
             _targets!,
           );
+          _parentFontBounds = null;
+          _atomLines = null;
           _targets = null;
         } else {
           final unit = input.units[_unit];
@@ -175,6 +204,66 @@ final class ForumBodyInlineEmphasisGeometryPreparation {
     }
   }
 
+  void _scanParent() {
+    if (_parentFontBounds!.length < _lineCount) {
+      _parentFontBounds!.add(null);
+      return;
+    }
+    final layout = _parent!.layout, projection = layout.projection;
+    if (_engine < 0) {
+      _engine = projection.enginePrefix.length;
+      return;
+    }
+    if (_engine == projection.engineText.length) {
+      if (_atom != projection.atoms.length) {
+        throw const ForumBodyEmphasisGeometryException(
+          ForumBodyEmphasisGeometryFailure.source,
+        );
+      }
+      _parentScanned = true;
+      return;
+    }
+    if (_atom < projection.atoms.length &&
+        projection.atoms[_atom].engineUtf16 == _engine) {
+      if (_engine >= _row(_atomLine).engineCoverageEndUtf16) {
+        _atomLine++;
+        return;
+      }
+      if (_engine < _row(_atomLine).engineCoverageStartUtf16) {
+        throw const ForumBodyEmphasisGeometryException(
+          ForumBodyEmphasisGeometryFailure.line,
+        );
+      }
+      _atomLines!.add(_atomLine);
+      _engine = projection.atoms[_atom++].engineEndUtf16;
+      return;
+    }
+    if (_glyphQueries >= maxGlyphQueries) {
+      throw const ForumBodyEmphasisGeometryException(
+        ForumBodyEmphasisGeometryFailure.limit,
+      );
+    }
+    _glyphQueries++;
+    final glyph = layout.glyphAtEngineUtf16(_engine);
+    _guard();
+    if (glyph != null) {
+      _checkInlineTargetRect(glyph.fontBounds);
+      final index = glyph.lineIndex, old = _parentFontBounds![glyph.lineIndex];
+      _parentFontBounds![index] =
+          old?.expandToInclude(glyph.fontBounds) ?? glyph.fontBounds;
+    }
+    // Advance a raw engine scalar, not a normalized display grapheme. Styled
+    // prepend/combining scalars can have distinct native rows within one unit.
+    final text = projection.engineText, first = text.codeUnitAt(_engine);
+    final pair =
+        first >= 0xd800 &&
+        first <= 0xdbff &&
+        _engine + 1 < text.length &&
+        text.codeUnitAt(_engine + 1) >= 0xdc00 &&
+        text.codeUnitAt(_engine + 1) <= 0xdfff;
+    _engine += pair ? 2 : 1;
+  }
+
   ForumBodyParagraphLine _row(int index) {
     if (index < 0 || index >= _lineCount) {
       throw const ForumBodyEmphasisGeometryException(
@@ -216,6 +305,8 @@ final class ForumBodyInlineEmphasisGeometryPreparation {
     _parent = null;
     _ensureOwner = null;
     _nativeInputIdentity = null;
+    _parentFontBounds = null;
+    _atomLines = null;
     _targets = null;
     _boxes = null;
     _bounds = null;
