@@ -13,11 +13,13 @@ final class ForumBodyInlineParagraphRequest extends ForumBodyNativeRequest {
     required this.content,
     required List<PlaceholderDimensions> dimensions,
     this.layoutMode = ForumBodyParagraphLayoutMode.wrap,
+    this.rowIsolationPitch,
   }) : dimensions = List.unmodifiable(dimensions);
 
   final ForumBodyInlineSpanContent content;
   final List<PlaceholderDimensions> dimensions;
   final ForumBodyParagraphLayoutMode layoutMode;
+  final double? rowIsolationPitch;
 
   @override
   ForumBodyInlineParagraphLease? acquire(
@@ -32,6 +34,7 @@ final class ForumBodyInlineParagraphRequest extends ForumBodyNativeRequest {
           dimensions: dimensions,
           textScaler: textScaler,
           layoutMode: layoutMode,
+          rowIsolationPitch: rowIsolationPitch,
         )
       : cache.acquireInline(
           content: content,
@@ -39,6 +42,7 @@ final class ForumBodyInlineParagraphRequest extends ForumBodyNativeRequest {
           dimensions: dimensions,
           textScaler: textScaler,
           layoutMode: layoutMode,
+          rowIsolationPitch: rowIsolationPitch,
         );
 
   @override
@@ -53,6 +57,7 @@ final class ForumBodyInlineParagraphRequest extends ForumBodyNativeRequest {
     dimensions: dimensions,
     textScaler: textScaler,
     layoutMode: layoutMode,
+    rowIsolationPitch: rowIsolationPitch,
     minimumLineCount: minimumLineCount,
   );
 }

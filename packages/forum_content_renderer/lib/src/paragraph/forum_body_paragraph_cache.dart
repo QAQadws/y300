@@ -290,12 +290,14 @@ final class ForumBodyParagraphCache {
     required List<PlaceholderDimensions> dimensions,
     TextScaler textScaler = TextScaler.noScaling,
     ForumBodyParagraphLayoutMode layoutMode = ForumBodyParagraphLayoutMode.wrap,
+    double? rowIsolationPitch,
   }) => _acquireInline(
     content: content,
     width: width,
     dimensions: dimensions,
     textScaler: textScaler,
     layoutMode: layoutMode,
+    rowIsolationPitch: rowIsolationPitch,
     allowBuild: true,
   )!;
 
@@ -307,12 +309,14 @@ final class ForumBodyParagraphCache {
     required List<PlaceholderDimensions> dimensions,
     TextScaler textScaler = TextScaler.noScaling,
     ForumBodyParagraphLayoutMode layoutMode = ForumBodyParagraphLayoutMode.wrap,
+    double? rowIsolationPitch,
   }) => _acquireInline(
     content: content,
     width: width,
     dimensions: dimensions,
     textScaler: textScaler,
     layoutMode: layoutMode,
+    rowIsolationPitch: rowIsolationPitch,
     allowBuild: false,
   );
 
@@ -322,6 +326,7 @@ final class ForumBodyParagraphCache {
     required List<PlaceholderDimensions> dimensions,
     required TextScaler textScaler,
     required ForumBodyParagraphLayoutMode layoutMode,
+    required double? rowIsolationPitch,
     required bool allowBuild,
   }) {
     if (_closed) throw StateError('Paragraph cache is closed');
@@ -332,19 +337,31 @@ final class ForumBodyParagraphCache {
       dimensions: snapshot,
       textScaler: textScaler,
       layoutMode: layoutMode,
+      rowIsolationPitch: rowIsolationPitch,
     );
     if (_closed) throw StateError('Paragraph cache is closed');
-    final key = _InlineLayoutKey(content, width, scales, snapshot, layoutMode);
+    final key = _InlineLayoutKey(
+      content,
+      width,
+      scales,
+      snapshot,
+      layoutMode,
+      rowIsolationPitch,
+    );
     final entry = _acquireEntry(
       key: key,
       allowBuild: allowBuild,
-      minimumBytes: _minimumInlineEstimatedBytes(content) + key.indentBytes,
+      minimumBytes:
+          _minimumInlineEstimatedBytes(content) +
+          key.indentBytes +
+          key.isolationBytes,
       build: () => ForumBodyInlineParagraphLayout.create(
         content: content,
         width: width,
         dimensions: snapshot,
         textScaler: textScaler,
         layoutMode: layoutMode,
+        rowIsolationPitch: rowIsolationPitch,
       ),
     );
     return entry == null
@@ -465,6 +482,25 @@ final class ForumBodyParagraphCache {
     try {
       final recorded = paragraph.layout.preparePaint();
       if (!ownsLease(lease)) throw StateError('Text lease is retired');
+      if (recorded) _pictureBuilds++;
+      return recorded;
+    } finally {
+      _preparingPicture = false;
+    }
+  }
+
+  /// Stage and discard the first drawing of an actual isolated mixed parent,
+  /// just as for isolated text. Ordinary parents need no recording work.
+  bool prepareInlineParentPaint(ForumBodyInlineParagraphLease lease) {
+    if (!ownsLease(lease)) {
+      throw StateError('Inline parent is retired or foreign');
+    }
+    if (lease.layout.isPaintPrepared) return false;
+    if (_preparingPicture) throw StateError('Picture preparation is reentrant');
+    _preparingPicture = true;
+    try {
+      final recorded = lease.layout.preparePaint();
+      if (!ownsLease(lease)) throw StateError('Inline parent is retired');
       if (recorded) _pictureBuilds++;
       return recorded;
     } finally {
@@ -908,6 +944,7 @@ final class ForumBodyParagraphBudgetProbe {
     required int minimumLineCount,
     required TextScaler textScaler,
     ForumBodyParagraphLayoutMode layoutMode = ForumBodyParagraphLayoutMode.wrap,
+    double? rowIsolationPitch,
   }) {
     final cache = _cache;
     if (cache == null || cache.isClosed) {
@@ -921,22 +958,32 @@ final class ForumBodyParagraphBudgetProbe {
       dimensions: snapshot,
       textScaler: textScaler,
       layoutMode: layoutMode,
+      rowIsolationPitch: rowIsolationPitch,
     );
     if (!identical(_cache, cache) || cache.isClosed) {
       throw StateError('Paragraph budget probe is retired');
     }
-    final key = _InlineLayoutKey(content, width, scales, snapshot, layoutMode);
+    final key = _InlineLayoutKey(
+      content,
+      width,
+      scales,
+      snapshot,
+      layoutMode,
+      rowIsolationPitch,
+    );
     _include(
       cache,
       key,
       _minimumInlineEstimatedBytes(content) +
           key.indentBytes +
+          key.isolationBytes +
           minimumLineCount * 96,
       // Both line-frame arrays and optional trim/allocation arrays are bounded
       // by these pure input counts; no paint or native request is performed.
       inputEstimate:
           _minimumInlineEstimatedBytes(content) +
           key.indentBytes +
+          key.isolationBytes +
           minimumLineCount * 128 +
           content.projection.atoms.length * 9,
     );
@@ -1128,6 +1175,17 @@ final class ForumBodyInlineParagraphLease
   /// Always the current child styles/interactions, not a cached engine's input.
   final ForumBodyInlineSpanContent content;
 
+  /// Current cache/source and all actual text/slot/scaler inputs, excluding only
+  /// the explicit isolation pitch. A numeric layout/key alone cannot bind rows.
+  bool hasSameSourceAndInputsExceptRowIsolation(
+    ForumBodyInlineParagraphLease other,
+  ) =>
+      hasSameActiveOwner(other) &&
+      identical(content, other.content) &&
+      (_entry.key as _InlineLayoutKey)._hasSameTextInputs(
+        other._entry.key as _InlineLayoutKey,
+      );
+
   /// Drop a provisional shape only when this is its last handle. Existing
   /// aliases keep their actual layout and ordinary cache lifetime unchanged.
   void releaseProvisional() {
@@ -1312,6 +1370,7 @@ final class _InlineLayoutKey {
     Map<double, double> scales,
     List<PlaceholderDimensions> dimensions,
     ForumBodyParagraphLayoutMode layoutMode,
+    double? rowIsolationPitch,
   ) : this._(
         content,
         requestWidth,
@@ -1319,6 +1378,7 @@ final class _InlineLayoutKey {
         dimensions,
         layoutMode,
         content.resolveFirstLineIndent(requestWidth, scales, layoutMode),
+        rowIsolationPitch,
       );
 
   _InlineLayoutKey._(
@@ -1328,6 +1388,7 @@ final class _InlineLayoutKey {
     List<PlaceholderDimensions> dimensions,
     this.layoutMode,
     this.indentAdvance,
+    this.rowIsolationPitch,
   ) : width = layoutMode == ForumBodyParagraphLayoutMode.intrinsicSingleLine
           ? 0
           : requestWidth,
@@ -1375,6 +1436,8 @@ final class _InlineLayoutKey {
   final List<(double, double)> scales;
   final List<(double, double, double)> dimensions;
   final double indentAdvance;
+  final double? rowIsolationPitch;
+  int get isolationBytes => rowIsolationPitch == null ? 0 : 32;
   int get indentBytes => indentAdvance > 0
       ? ForumBodyNativeSpaceSpan.nonBreakingText.length * 96
       : 0;
@@ -1382,6 +1445,10 @@ final class _InlineLayoutKey {
   @override
   bool operator ==(Object other) =>
       other is _InlineLayoutKey &&
+      rowIsolationPitch == other.rowIsolationPitch &&
+      _hasSameTextInputs(other);
+
+  bool _hasSameTextInputs(_InlineLayoutKey other) =>
       identity == other.identity &&
       path == other.path &&
       fontRevision == other.fontRevision &&
@@ -1421,6 +1488,7 @@ final class _InlineLayoutKey {
     indentAdvance,
     Object.hashAll(scales),
     Object.hashAll(dimensions),
+    rowIsolationPitch,
   );
 }
 

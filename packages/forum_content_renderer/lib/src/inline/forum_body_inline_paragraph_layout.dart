@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
 import 'package:html_pagination_core/html_pagination_core.dart';
@@ -73,6 +74,8 @@ final class ForumBodyInlineParagraphLayout
     required this.atomBoxes,
     required this.dimensions,
     required this.firstLineIndent,
+    required this.rowIsolationPitch,
+    required this.nativeFontClearance,
     required Offset paintOffset,
     required Float64List frameTops,
     required Float64List frameBottoms,
@@ -84,8 +87,13 @@ final class ForumBodyInlineParagraphLayout
        _paintOffset = paintOffset,
        _trimmedAtoms = trimmedAtoms,
        _spaceAllocations = spaceAllocations;
-  static const revision = 11;
+  static const revision = 12;
   final ForumBodyFirstLineIndentGeometry firstLineIndent;
+  final double? rowIsolationPitch;
+
+  /// Whole-source native font/slot clearance. Isolated row selectors must also
+  /// qualify actual shadows, decorations and adjacent rows before clipping.
+  final double nativeFontClearance;
 
   factory ForumBodyInlineParagraphLayout.create({
     required ForumBodyInlineSpanContent content,
@@ -93,6 +101,7 @@ final class ForumBodyInlineParagraphLayout
     required List<PlaceholderDimensions> dimensions,
     TextScaler textScaler = TextScaler.noScaling,
     ForumBodyParagraphLayoutMode layoutMode = ForumBodyParagraphLayoutMode.wrap,
+    double? rowIsolationPitch,
   }) {
     final snapshot = List<PlaceholderDimensions>.unmodifiable(dimensions);
     final scales = validateInputs(
@@ -101,6 +110,7 @@ final class ForumBodyInlineParagraphLayout
       dimensions: snapshot,
       textScaler: textScaler,
       layoutMode: layoutMode,
+      rowIsolationPitch: rowIsolationPitch,
     );
     final intrinsic =
         layoutMode == ForumBodyParagraphLayoutMode.intrinsicSingleLine;
@@ -122,6 +132,17 @@ final class ForumBodyInlineParagraphLayout
       textDirection: content.style.textDirection,
       textScaler: textScaler,
       locale: content.style.textStyle.locale,
+      // Physical pitch, compensated at the actual scaled root font. Never
+      // introduce a synthetic font size into the captured nonlinear scaler.
+      strutStyle: rowIsolationPitch == null
+          ? null
+          : StrutStyle.fromTextStyle(
+              content.style.textStyle,
+              height:
+                  rowIsolationPitch / scales[content.style.textStyle.fontSize]!,
+              leading: 0,
+              forceStrutHeight: true,
+            ),
       placeholderDimensions: projection.hasSoftSpaces
           ? [
               for (final (i, atom) in projection.atoms.indexed)
@@ -153,6 +174,34 @@ final class ForumBodyInlineParagraphLayout
         throw const ForumBodyParagraphLayoutException(
           ForumBodyParagraphLayoutFailure.width,
         );
+      }
+      var clearance = scales.values.reduce((a, b) => a > b ? a : b);
+      if (rowIsolationPitch != null) {
+        if (!painter.height.isFinite || painter.height > 1048576) {
+          throw const ForumBodyParagraphLayoutException(
+            ForumBodyParagraphLayoutFailure.isolation,
+          );
+        }
+        for (final row in painter.computeLineMetrics()) {
+          if (row.unscaledAscent > clearance) clearance = row.unscaledAscent;
+        }
+        for (final box in painter.getBoxesForSelection(
+          TextSelection(
+            baseOffset: 0,
+            extentOffset: projection.engineText.length,
+          ),
+        )) {
+          if (!box.top.isFinite ||
+              !box.bottom.isFinite ||
+              box.bottom < box.top) {
+            throw const ForumBodyParagraphLayoutException(
+              ForumBodyParagraphLayoutFailure.isolation,
+            );
+          }
+          if (box.bottom - box.top > clearance) {
+            clearance = box.bottom - box.top;
+          }
+        }
       }
       final lines = forumBodyParagraphLinesWithPainter(
         painter: painter,
@@ -211,16 +260,27 @@ final class ForumBodyInlineParagraphLayout
           );
         }
         if (slots.trimmed?[i] == 1) continue;
+        final verticalTolerance = rowIsolationPitch == null
+            ? 1e-3
+            : forumBodyNativeVerticalBoxTolerance(
+                box,
+                lines[lineIndex].baseline,
+              );
         if ((box.right - box.left - dimension.size.width).abs() > 1e-3 ||
-            (box.bottom - box.top - dimension.size.height).abs() > 1e-3 ||
+            (box.bottom - box.top - dimension.size.height).abs() >
+                verticalTolerance ||
             (box.top + dimension.baselineOffset! - lines[lineIndex].baseline)
                     .abs() >
-                1e-3 ||
-            box.top < lines[lineIndex].top - 1e-3 ||
-            box.bottom > lines[lineIndex].bottom + 1e-3) {
+                verticalTolerance ||
+            (rowIsolationPitch == null &&
+                (box.top < lines[lineIndex].top - 1e-3 ||
+                    box.bottom > lines[lineIndex].bottom + 1e-3))) {
           throw const ForumBodyParagraphLayoutException(
             ForumBodyParagraphLayoutFailure.coverage,
           );
+        }
+        if (rowIsolationPitch != null && dimension.size.height > clearance) {
+          clearance = dimension.size.height;
         }
         if (box.top < frameTops[lineIndex]) frameTops[lineIndex] = box.top;
         final childBottom = box.top + dimension.size.height;
@@ -282,6 +342,11 @@ final class ForumBodyInlineParagraphLayout
         }
       }
       final paintOffset = Offset(inset, -top);
+      if (rowIsolationPitch != null && bottom - top > 1048576) {
+        throw const ForumBodyParagraphLayoutException(
+          ForumBodyParagraphLayoutFailure.isolation,
+        );
+      }
       // Adjacent native row intervals can overlap at fractional slot edges.
       // Monotone envelopes contain every owned child in O(1) per fragment;
       // baselines and full-paragraph geometry are never rounded or summed.
@@ -312,6 +377,8 @@ final class ForumBodyInlineParagraphLayout
               ),
         dimensions: snapshot,
         firstLineIndent: indentGeometry,
+        rowIsolationPitch: rowIsolationPitch,
+        nativeFontClearance: clearance,
         paintOffset: paintOffset,
         frameTops: frameTops,
         frameBottoms: frameBottoms,
@@ -335,10 +402,20 @@ final class ForumBodyInlineParagraphLayout
     required List<PlaceholderDimensions> dimensions,
     required TextScaler textScaler,
     ForumBodyParagraphLayoutMode layoutMode = ForumBodyParagraphLayoutMode.wrap,
+    double? rowIsolationPitch,
   }) {
     if (!width.isFinite || width <= 0 || width > 16384) {
       throw const ForumBodyParagraphLayoutException(
         ForumBodyParagraphLayoutFailure.width,
+      );
+    }
+    if (rowIsolationPitch != null &&
+        (!rowIsolationPitch.isFinite ||
+            rowIsolationPitch <= 0 ||
+            rowIsolationPitch > 16384 ||
+            layoutMode != ForumBodyParagraphLayoutMode.wrap)) {
+      throw const ForumBodyParagraphLayoutException(
+        ForumBodyParagraphLayoutFailure.isolation,
       );
     }
     if (layoutMode == ForumBodyParagraphLayoutMode.fitSingleLine) {
@@ -556,7 +633,46 @@ final class ForumBodyInlineParagraphLayout
   /// children at atomBoxes; this method alone is not a readable page delivery.
   void paintParent(Canvas canvas, Offset offset) {
     _ensureOpen();
+    if (!isPaintPrepared) {
+      throw StateError('Isolated inline parent paint is not prepared');
+    }
     _painter.paint(canvas, offset + _paintOffset);
+  }
+
+  bool get isPaintPrepared =>
+      !isDisposed && (rowIsolationPitch == null || _isolationPaintPrepared);
+  bool _isolationPaintPrepared = false, _preparingPaint = false;
+  bool preparePaint() {
+    _ensureOpen();
+    if (_preparingPaint) {
+      throw StateError('Inline parent paint preparation is reentrant');
+    }
+    if (isPaintPrepared) return false;
+    _preparingPaint = true;
+    ui.PictureRecorder? recorder;
+    ui.Picture? picture;
+    try {
+      recorder = ui.PictureRecorder();
+      _painter.paint(Canvas(recorder), _paintOffset);
+      picture = recorder.endRecording();
+      recorder = null;
+      _ensureOpen();
+      final finished = picture;
+      picture = null;
+      finished.dispose();
+      _ensureOpen();
+      _isolationPaintPrepared = true;
+      return true;
+    } finally {
+      try {
+        if (recorder != null && recorder.isRecording) {
+          recorder.endRecording().dispose();
+        }
+        picture?.dispose();
+      } finally {
+        _preparingPaint = false;
+      }
+    }
   }
 
   ForumBodyInlineHit hitAt(Offset offset) => _hitAt(offset);
@@ -699,6 +815,11 @@ final class ForumBodyInlineParagraphLayout
 
   ForumBodyInlineParagraphFragment fragment(int startLine, int endLine) {
     _ensureOpen();
+    if (rowIsolationPitch != null) {
+      throw const ForumBodyParagraphLayoutException(
+        ForumBodyParagraphLayoutFailure.isolation,
+      );
+    }
     RangeError.checkValueInInterval(
       startLine,
       0,

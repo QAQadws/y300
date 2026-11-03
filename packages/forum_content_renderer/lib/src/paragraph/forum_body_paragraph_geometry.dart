@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+import 'dart:typed_data';
+
 import 'package:flutter/painting.dart';
 import 'package:html_pagination_core/html_pagination_core.dart';
 
@@ -20,6 +23,52 @@ enum ForumBodyParagraphWindow {
   beforeTerminalEmptyLine,
   terminalEmptyLine,
 }
+
+/// Native TextBox endpoints are encoded as Float32, while row baselines are
+/// returned separately. Bound endpoint/baseline rounding at large isolated
+/// coordinates; this is physical validation, never a source-boundary tolerance.
+double forumBodyNativeVerticalBoxTolerance(TextBox box, double baseline) {
+  final coordinate = math.max(
+    baseline.abs(),
+    math.max(box.top.abs(), box.bottom.abs()),
+  );
+  if (!coordinate.isFinite) {
+    throw const ForumBodyParagraphLayoutException(
+      ForumBodyParagraphLayoutFailure.isolation,
+    );
+  }
+  final native = ByteData(4)..setFloat32(0, coordinate);
+  final exponent = (native.getUint32(0) >> 23) & 0xff;
+  if (exponent == 255) {
+    throw const ForumBodyParagraphLayoutException(
+      ForumBodyParagraphLayoutFailure.isolation,
+    );
+  }
+  final ulp = math.pow(2, exponent == 0 ? -149 : exponent - 150).toDouble();
+  return math.max(1e-3, 4 * ulp);
+}
+
+/// Source/engine ranges and horizontal layout must survive vertical isolation
+/// unchanged. Physical vertical geometry is intentionally checked separately.
+bool forumBodyHaveSameParagraphLineInputs(
+  ForumBodyParagraphLine a,
+  ForumBodyParagraphLine b,
+) =>
+    a.startUtf16 == b.startUtf16 &&
+    a.endUtf16 == b.endUtf16 &&
+    a.coverageStartUtf16 == b.coverageStartUtf16 &&
+    a.coverageEndUtf16 == b.coverageEndUtf16 &&
+    a.engineStartUtf16 == b.engineStartUtf16 &&
+    a.engineEndUtf16 == b.engineEndUtf16 &&
+    a.engineCoverageStartUtf16 == b.engineCoverageStartUtf16 &&
+    a.engineCoverageEndUtf16 == b.engineCoverageEndUtf16 &&
+    a.unpaintedTrailingSpaceStartUtf16 == b.unpaintedTrailingSpaceStartUtf16 &&
+    a.engineUnpaintedTrailingSpaceStartUtf16 ==
+        b.engineUnpaintedTrailingSpaceStartUtf16 &&
+    a.canBreakBefore == b.canBreakBefore &&
+    a.canBreakAfter == b.canBreakAfter &&
+    a.left == b.left &&
+    a.width == b.width;
 
 /// Actual vertical output from one native maximum-height selection box.
 /// The top may include leading adjustment; it is not a row flow origin.

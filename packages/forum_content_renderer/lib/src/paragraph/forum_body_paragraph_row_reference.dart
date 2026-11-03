@@ -1,6 +1,8 @@
 import 'forum_body_paragraph_cache.dart';
 import 'forum_body_paragraph_content.dart';
 import 'forum_body_paragraph_layout.dart';
+import 'forum_body_paragraph_geometry.dart'
+    show forumBodyHaveSameParagraphLineInputs;
 
 enum ForumBodyParagraphRowReferenceFailure { source, geometry, limit }
 
@@ -135,22 +137,7 @@ final class ForumBodyParagraphRowReferencePreparation {
   void _verifyRow(ForumBodyParagraphLine a, ForumBodyParagraphLine b) {
     // Struts may move vertical geometry only. Keep engine paint/coverage and
     // legal source boundaries distinct, including hard breaks/trailing spaces.
-    if (a.startUtf16 != b.startUtf16 ||
-        a.endUtf16 != b.endUtf16 ||
-        a.coverageStartUtf16 != b.coverageStartUtf16 ||
-        a.coverageEndUtf16 != b.coverageEndUtf16 ||
-        a.engineStartUtf16 != b.engineStartUtf16 ||
-        a.engineEndUtf16 != b.engineEndUtf16 ||
-        a.engineCoverageStartUtf16 != b.engineCoverageStartUtf16 ||
-        a.engineCoverageEndUtf16 != b.engineCoverageEndUtf16 ||
-        a.unpaintedTrailingSpaceStartUtf16 !=
-            b.unpaintedTrailingSpaceStartUtf16 ||
-        a.engineUnpaintedTrailingSpaceStartUtf16 !=
-            b.engineUnpaintedTrailingSpaceStartUtf16 ||
-        a.canBreakBefore != b.canBreakBefore ||
-        a.canBreakAfter != b.canBreakAfter ||
-        a.left != b.left ||
-        a.width != b.width) {
+    if (!forumBodyHaveSameParagraphLineInputs(a, b)) {
       _fail(ForumBodyParagraphRowReferenceFailure.geometry);
     }
     for (final line in [a, b]) {
