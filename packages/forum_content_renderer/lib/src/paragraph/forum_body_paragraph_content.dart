@@ -2,6 +2,7 @@ import 'dart:collection';
 import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../document/forum_body_document.dart';
@@ -248,7 +249,8 @@ final class ForumBodyParagraphContent {
       for (final part in projection.parts)
         _span(
           text: part.text,
-          style: forumBodyPaintTextStyle(runs[part.runIndex].style),
+          style: runs[part.runIndex].style.textStyle,
+          resolved: runs[part.runIndex].style,
         ),
     ],
   );
@@ -257,14 +259,23 @@ final class ForumBodyParagraphContent {
     required TextStyle style,
     String? text,
     List<InlineSpan>? children,
-  }) => paintLayer == ForumBodyParagraphPaintLayer.decoration
-      ? _ForumBodyDecorationSpan(
-          sourceColor: style.color,
-          style: _paintStyle(style),
-          text: text,
-          children: children,
-        )
-      : TextSpan(style: _paintStyle(style), text: text, children: children);
+    ForumBodyResolvedStyle? resolved,
+  }) {
+    final visible = resolved == null
+        ? style
+        : forumBodyPaintTextStyle(resolved);
+    final hidden = resolved?.visibilityHidden ?? false;
+    return paintLayer != ForumBodyParagraphPaintLayer.all || hidden
+        ? _ForumBodyLayerSpan(
+            sourceStyle: style,
+            layer: paintLayer,
+            hidden: hidden,
+            style: _paintStyle(visible),
+            text: text,
+            children: children,
+          )
+        : TextSpan(style: visible, text: text, children: children);
+  }
 
   TextStyle _paintStyle(TextStyle visible) => switch (paintLayer) {
     ForumBodyParagraphPaintLayer.all => visible,

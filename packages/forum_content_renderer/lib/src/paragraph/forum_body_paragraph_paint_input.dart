@@ -14,7 +14,7 @@ final class ForumBodyParagraphPaintInput {
       foreground = _derive(original, ForumBodyParagraphPaintLayer.foreground),
       decoration = _derive(original, ForumBodyParagraphPaintLayer.decoration);
 
-  static const revision = 2;
+  static const revision = 3;
   final ForumBodyParagraphContent original, background, foreground, decoration;
 
   static ForumBodyParagraphContent _derive(
@@ -27,6 +27,47 @@ final class ForumBodyParagraphPaintInput {
     }
     return ForumBodyParagraphContent._paintLayer(original, layer);
   }
+}
+
+// Generated transparent Paints have identity equality. Compare the original
+// style plus the explicit derivation instead, so rebuilding an equal input
+// doesn't miss every native phase. Caller-provided Paints keep their original
+// TextStyle identity semantics; native building still uses the derived style.
+final class _ForumBodyLayerSpan extends _ForumBodyDecorationSpan {
+  _ForumBodyLayerSpan({
+    required this.sourceStyle,
+    required this.layer,
+    required this.hidden,
+    required super.style,
+    super.text,
+    super.children,
+  }) : super(
+         sourceColor: layer == ForumBodyParagraphPaintLayer.decoration
+             ? sourceStyle.color
+             : null,
+       );
+  final TextStyle sourceStyle;
+  final ForumBodyParagraphPaintLayer layer;
+  final bool hidden;
+  @override
+  RenderComparison compareTo(InlineSpan other) =>
+      this == other ? RenderComparison.identical : super.compareTo(other);
+  @override
+  bool operator ==(Object other) =>
+      other is _ForumBodyLayerSpan &&
+      sourceStyle == other.sourceStyle &&
+      layer == other.layer &&
+      hidden == other.hidden &&
+      text == other.text &&
+      listEquals(children, other.children);
+  @override
+  int get hashCode => Object.hash(
+    sourceStyle,
+    layer,
+    hidden,
+    text,
+    Object.hashAll(children ?? const []),
+  );
 }
 
 /// Preserve native color below the transparent foreground override. An explicit

@@ -105,6 +105,69 @@ void main() {
     )..addFont(rootBundle.load('assets/fonts/inline_space.ttf'))).load();
   });
 
+  for (final layer in ForumBodyParagraphPaintLayer.values) {
+    test('equivalent independent $layer inputs share native fonts', () {
+      final first = _content(), second = _content(), cache = _cache();
+      ForumBodyParagraphContent select(ForumBodyParagraphContent original) {
+        final phases = ForumBodyParagraphPaintInput(original);
+        return switch (layer) {
+          ForumBodyParagraphPaintLayer.all => original,
+          ForumBodyParagraphPaintLayer.background => phases.background,
+          ForumBodyParagraphPaintLayer.foreground => phases.foreground,
+          ForumBodyParagraphPaintLayer.decoration => phases.decoration,
+        };
+      }
+
+      final a = select(first), b = select(second);
+      expect(a.textSpan, b.textSpan);
+      expect(a.textSpan.hashCode, b.textSpan.hashCode);
+      expect(a.textSpan.compareTo(b.textSpan), RenderComparison.identical);
+      final lease = cache.acquire(
+        content: a,
+        width: 140,
+        rowIsolationPitch: 256,
+      );
+      final hit = cache.tryAcquireCached(
+        content: b,
+        width: 140,
+        rowIsolationPitch: 256,
+      );
+      expect(hit, isNotNull);
+      expect(hit!.content, same(b));
+      expect(hit.nativeInputIdentity, lease.nativeInputIdentity);
+      expect(cache.layoutBuildCount, 1);
+      expect(cache.pictureBuildCount, 0);
+      lease.release();
+      hit.release();
+      expect(cache.activeLeases, 0);
+    });
+  }
+
+  test('caller Paint identity remains part of every native phase', () {
+    TextStyle style() => TextStyle(
+      fontFamily: 'Ahem',
+      fontSize: 20,
+      foreground: Paint()..color = const Color(0xff123456),
+    );
+    final a = _content(readerTextStyle: style()),
+        b = _content(readerTextStyle: style());
+    final first = ForumBodyParagraphPaintInput(a),
+        second = ForumBodyParagraphPaintInput(b);
+    final cache = _cache();
+    final pairs = [
+      (a, b),
+      (first.background, second.background),
+      (first.foreground, second.foreground),
+      (first.decoration, second.decoration),
+    ];
+    for (final pair in pairs) {
+      expect(pair.$1.textSpan, isNot(pair.$2.textSpan));
+      final lease = cache.acquire(content: pair.$1, width: 140);
+      expect(cache.tryAcquireCached(content: pair.$2, width: 140), isNull);
+      lease.release();
+    }
+  });
+
   for (final direction in TextDirection.values) {
     for (final scaler in [TextScaler.noScaling, const _Nonlinear()]) {
       for (final width in [1.0, 140.0]) {
