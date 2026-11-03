@@ -160,7 +160,8 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
       throw ArgumentError('Invalid inline page input');
     }
     final retained = Set<ForumBodyParagraphContent>.identity()
-      ..addAll(content.contexts.map((item) => item.content));
+      ..addAll(content.contexts.map((item) => item.content))
+      ..addAll(rubyAtoms.expand((atom) => atom.glyphContexts));
     final checkedBands = Set<ForumBodyTextBandContent>.identity();
     if (this.rootFonts.length > rubyAtoms.length ||
         this.rootFonts.keys.any(
@@ -183,6 +184,8 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
     }
     for (final (index, plan) in rubyAtoms.indexed) {
       final root = switch (plan) {
+        ForumBodyRubyTreeEmphasisAtomPlan(:final request) =>
+          request.sourceTree.rootGroup.font,
         ForumBodyRubyTreePlan(:final request) => request.rootGroup.font,
         ForumBodyRubyColumnPlan(:final request) => request.rootBox,
         ForumBodyRubySegmentPlan(:final request) => request.rootBox,
@@ -192,6 +195,7 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
         throw ArgumentError('Ruby root font snapshot differs from request');
       }
       final background = switch (plan) {
+        ForumBodyRubyTreeEmphasisAtomPlan() => null,
         ForumBodyRubyTreePlan() => null,
         ForumBodyRubyColumnPlan(:final request) => request.background,
         ForumBodyRubySegmentPlan(:final request) => request.background,
@@ -215,6 +219,10 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
         );
       }
       final target = switch (plan) {
+        ForumBodyRubyTreeEmphasisAtomPlan(:final format) => (
+          size: format.frame.size,
+          baseline: format.frame.baseline,
+        ),
         ForumBodyRubyTreePlan(:final metrics) => (
           size: metrics.rootAtom.size,
           baseline: metrics.rootAtom.baseline,
@@ -306,17 +314,10 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
   @override
   late final retainedTextCodeUnits =
       textCodeUnits +
-      rubyAtoms.whereType<ForumBodyRubyTreePlan>().fold<int>(
-        0,
-        (sum, atom) => sum + atom.request.extraTextCodeUnits,
-      );
+      rubyAtoms.fold<int>(0, (sum, atom) => sum + atom.extraTextCodeUnits);
   @override
   late final retainedRuns =
-      runCount +
-      rubyAtoms.whereType<ForumBodyRubyTreePlan>().fold<int>(
-        0,
-        (sum, atom) => sum + atom.request.extraRuns,
-      );
+      runCount + rubyAtoms.fold<int>(0, (sum, atom) => sum + atom.extraRuns);
   // Intrinsic shaping ignores a valid request width. Preserve an empty physical
   // frame's zero width while still passing native input admission explicitly.
   @override

@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/painting.dart';
 import '../inline/forum_body_ruby_group_preparation.dart';
 import '../inline/forum_body_emphasis_line_layout.dart';
+import '../inline/forum_body_ruby_atom_plan.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import 'forum_body_prepared_text_fragment.dart';
 import 'forum_body_inline_page_preparation.dart';
@@ -113,7 +114,11 @@ final class ForumBodyTextPagePreparation {
   ) : _initialProbePending = _inputs.any(
         (input) =>
             input is ForumBodyEmphasisPageContent ||
-            input is ForumBodyFittedEmphasisPageContent,
+            input is ForumBodyFittedEmphasisPageContent ||
+            (input is ForumBodyInlinePageContent &&
+                input.rubyAtoms.any(
+                  (atom) => atom is ForumBodyRubyTreeEmphasisAtomPlan,
+                )),
       );
   ForumBodyParagraphCache? _cache;
   final ForumBodyTextPageSnapshot snapshot;
@@ -434,9 +439,11 @@ final class ForumBodyTextPagePreparation {
       cache: cache,
       textScaler: _textScaler!,
       ensureOwner: _guard,
+      ensureVisibleOwner: _ensureOwner!,
       ownedPageLeases: () => _ownedLeases.toList(growable: false),
     );
     final step = active.advance(cachedOnly: cachedOnly, maxParts: maxParts);
+    _waiting = active.waitingForLayoutBudget;
     final view = step.view;
     if (view != null) {
       _inline = null;
