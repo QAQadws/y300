@@ -8,15 +8,17 @@ ForumBodyRubyTreeEmphasisPlan rubyTreeEmphasisPlanFixture(
   TextScaler scaler = TextScaler.noScaling,
   ForumBodyRubyGlyphTreeInput Function(ForumBodyRubyGlyphTreeInput)? mapInput,
 }) {
-  final placement = rubyTreeEmphasisPlacementFixture(
+  final metrics = rubyGlyphTreeMetricsFixture(
     html,
     cache,
     direction: direction,
     scaler: scaler,
     mapInput: mapInput,
   );
-  final work = ForumBodyRubyTreeEmphasisPlanPreparation(
-    placement: placement,
+  final work = ForumBodyRubyTreeEmphasisFormatPreparation(
+    glyphMetrics: metrics,
+    cache: cache,
+    expectedTextScaler: scaler,
     ensureOwner: () {},
   );
   try {
@@ -115,9 +117,54 @@ ForumBodyRubyTreeEmphasisMetrics rubyTreeEmphasisMetricsFixture(
   }
 }
 
+ForumBodyRubyGlyphTreeBands rubyGlyphTreeBandsFixture(
+  String html,
+  ForumBodyParagraphCache cache, {
+  TextDirection direction = TextDirection.ltr,
+  TextScaler scaler = TextScaler.noScaling,
+  String sourceId = 'ruby-glyph-tree-fixture',
+  String fontRevision = 'ruby-glyph-tree-ahem',
+  ForumBodyRubyGlyphTreeInput Function(ForumBodyRubyGlyphTreeInput)? mapInput,
+}) {
+  final metrics = rubyGlyphTreeMetricsFixture(
+    html,
+    cache,
+    direction: direction,
+    scaler: scaler,
+    sourceId: sourceId,
+    fontRevision: fontRevision,
+    mapInput: mapInput,
+  );
+  final positions = ForumBodyRubyGlyphTreeGeometryPreparation(
+    metrics: metrics,
+    ensureOwner: () {},
+  );
+  late ForumBodyRubyGlyphTreeGeometry geometry;
+  try {
+    while (!positions.isReady) {
+      positions.advance(maxParts: 1);
+    }
+    geometry = positions.takeGeometry();
+  } finally {
+    positions.close();
+  }
+  final bands = ForumBodyRubyGlyphTreeBandsPreparation(
+    geometry: geometry,
+    ensureOwner: () {},
+  );
+  try {
+    while (!bands.isReady) {
+      bands.advance(maxParts: 1);
+    }
+    return bands.takeBands();
+  } finally {
+    bands.close();
+  }
+}
+
 /// Real parser/source/measurement pipeline shared by tree-format tests. A
 /// request transform can attach an actual band before measuring that same graph.
-ForumBodyRubyGlyphTreeBands rubyGlyphTreeBandsFixture(
+ForumBodyRubyGlyphTreeMetrics rubyGlyphTreeMetricsFixture(
   String html,
   ForumBodyParagraphCache cache, {
   TextDirection direction = TextDirection.ltr,
@@ -172,38 +219,12 @@ ForumBodyRubyGlyphTreeBands rubyGlyphTreeBandsFixture(
     ensureOwner: () {},
     textScaler: scaler,
   );
-  late ForumBodyRubyGlyphTreeMetrics metrics;
   try {
     while (!measure.isReady) {
       measure.advance(maxParts: 1);
     }
-    metrics = measure.takeMetrics();
+    return measure.takeMetrics();
   } finally {
     measure.close();
-  }
-  final positions = ForumBodyRubyGlyphTreeGeometryPreparation(
-    metrics: metrics,
-    ensureOwner: () {},
-  );
-  late ForumBodyRubyGlyphTreeGeometry geometry;
-  try {
-    while (!positions.isReady) {
-      positions.advance(maxParts: 1);
-    }
-    geometry = positions.takeGeometry();
-  } finally {
-    positions.close();
-  }
-  final bands = ForumBodyRubyGlyphTreeBandsPreparation(
-    geometry: geometry,
-    ensureOwner: () {},
-  );
-  try {
-    while (!bands.isReady) {
-      bands.advance(maxParts: 1);
-    }
-    return bands.takeBands();
-  } finally {
-    bands.close();
   }
 }

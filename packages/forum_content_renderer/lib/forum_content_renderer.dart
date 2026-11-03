@@ -95,6 +95,7 @@ export 'src/inline/forum_body_ruby_tree_child_geometry.dart'
         ForumBodyRubyTreeChildGeometry,
         ForumBodyRubyTreeNodePosition;
 export 'src/inline/forum_body_ruby_tree_layout.dart' show ForumBodyRubyTreeHit;
+export 'src/inline/forum_body_ruby_tree_emphasis_format_preparation.dart';
 export 'src/inline/forum_body_ruby_atom_plan.dart';
 export 'src/inline/forum_body_ruby_segment_metrics_preparation.dart';
 export 'src/inline/forum_body_ruby_segment_preparation.dart';
