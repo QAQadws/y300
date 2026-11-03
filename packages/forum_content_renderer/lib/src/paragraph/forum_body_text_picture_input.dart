@@ -25,6 +25,19 @@ final class ForumBodyTextPictureInput {
   }
   static const revision = 8;
   static const maximumCommands = 32768;
+  static const baseEstimatedInputBytes = 4096;
+  static const baseEstimatedPictureBytes = 4096;
+
+  /// Pure bytes retained by a drawing input's opaque key, not the native font
+  /// layout's cost or permission to use its source. Uses the same accounting
+  /// as construction, including whole-parent metadata for a selected strip.
+  static int estimateRetainedMetadataBytesFor(Object nativeInputIdentity) {
+    if (nativeInputIdentity is! _NativeInputIdentity) {
+      throw ArgumentError('Unknown native text picture input');
+    }
+    return _textPictureInputBytes(nativeInputIdentity);
+  }
+
   final List<ForumBodyTextPictureCommand> commands;
   final int _keyRevision, _hash;
 
@@ -189,8 +202,8 @@ final class _TextPictureInputWriter {
   List<ForumBodyTextPictureCommand>? _commands = [];
   final _inputs = <_NativeInputIdentity>{};
   final _hash = _TextPictureCommandHash();
-  int _inputBytes = 4096;
-  int _pictureBytes = 4096;
+  int _inputBytes = ForumBodyTextPictureInput.baseEstimatedInputBytes;
+  int _pictureBytes = ForumBodyTextPictureInput.baseEstimatedPictureBytes;
   void add(ForumBodyTextPictureCommand command) {
     final commands =
         _commands ?? (throw StateError('Picture input writer is retired'));
@@ -200,12 +213,8 @@ final class _TextPictureInputWriter {
     _validateTextPictureCommand(command);
     final identity = command.nativeInputIdentity as _NativeInputIdentity;
     commands.add(command);
-    _inputBytes +=
-        128 +
-        (command.paragraphRow == null ? 0 : 64) +
-        (command.physicalLine == null ? 0 : 192) +
-        command.translationDepth * 64;
-    _pictureBytes += 256 + command.translationDepth * 64;
+    _inputBytes += command.estimatedInputBytes;
+    _pictureBytes += command.estimatedPictureBytes;
     if (_inputs.add(identity)) _inputBytes += _textPictureInputBytes(identity);
     _hash.add(command);
   }

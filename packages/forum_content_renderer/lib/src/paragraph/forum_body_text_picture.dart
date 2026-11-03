@@ -43,6 +43,17 @@ final class ForumBodyTextPictureCommand {
   }
 
   int get translationDepth => _translation?.depth ?? 0;
+  static const translationInputEstimatedBytes = 64;
+  static const translationPictureEstimatedBytes = 64;
+
+  /// Command-only retention; the unique opaque native metadata is separate.
+  int get estimatedInputBytes =>
+      128 +
+      (paragraphRow == null ? 0 : 64) +
+      (physicalLine == null ? 0 : 192) +
+      translationDepth * translationInputEstimatedBytes;
+  int get estimatedPictureBytes =>
+      256 + translationDepth * translationPictureEstimatedBytes;
   Offset get sceneOffset => (_translation?.total ?? Offset.zero) + offset;
   Iterable<Offset> get translations sync* {
     var current = _translation;
