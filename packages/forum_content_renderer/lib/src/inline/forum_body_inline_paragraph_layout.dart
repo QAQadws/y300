@@ -412,8 +412,7 @@ final class ForumBodyInlineParagraphLayout
     if (rowIsolationPitch != null &&
         (!rowIsolationPitch.isFinite ||
             rowIsolationPitch <= 0 ||
-            rowIsolationPitch > 16384 ||
-            layoutMode != ForumBodyParagraphLayoutMode.wrap)) {
+            rowIsolationPitch > 16384)) {
       throw const ForumBodyParagraphLayoutException(
         ForumBodyParagraphLayoutFailure.isolation,
       );

@@ -48,6 +48,35 @@ double forumBodyNativeVerticalBoxTolerance(TextBox box, double baseline) {
   return math.max(1e-3, 4 * ulp);
 }
 
+/// Compare two actual font frames across a known physical baseline shift.
+/// Native Float32 endpoints may round independently; horizontal geometry and
+/// source identity remain exact and must be qualified by the caller.
+bool forumBodyHaveSameShiftedNativeFontBounds(
+  Rect original,
+  Rect actual, {
+  required double originalBaseline,
+  required double actualBaseline,
+}) {
+  double tolerance(Rect rect, double baseline) =>
+      forumBodyNativeVerticalBoxTolerance(
+        TextBox.fromLTRBD(
+          rect.left,
+          rect.top,
+          rect.right,
+          rect.bottom,
+          TextDirection.ltr,
+        ),
+        baseline,
+      );
+  final delta = actualBaseline - originalBaseline;
+  final vertical =
+      tolerance(original, originalBaseline) + tolerance(actual, actualBaseline);
+  return actual.left == original.left &&
+      actual.right == original.right &&
+      (actual.top - original.top - delta).abs() <= vertical &&
+      (actual.bottom - original.bottom - delta).abs() <= vertical;
+}
+
 /// Source/engine ranges and horizontal layout must survive vertical isolation
 /// unchanged. Physical vertical geometry is intentionally checked separately.
 bool forumBodyHaveSameParagraphLineInputs(

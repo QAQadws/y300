@@ -406,27 +406,15 @@ final class ForumBodyInlineEmphasisReflowPreparation {
   }
 
   void _verifyFontRect(Rect original, Rect actual, int row) {
-    final ref = _reference!, delta = ref.baselineDeltas[row];
-    double tolerance(Rect r, double baseline) =>
-        forumBodyNativeVerticalBoxTolerance(
-          TextBox.fromLTRBD(
-            r.left,
-            r.top,
-            r.right,
-            r.bottom,
-            TextDirection.ltr,
-          ),
-          baseline,
-        );
+    final ref = _reference!;
     // Both captured native font endpoints may have Float32 rounding. Retain
     // actual final geometry; this tolerance never changes a source boundary.
-    final vertical =
-        tolerance(original, ref.originalLines[row].baseline) +
-        tolerance(actual, ref.finalLines[row].baseline);
-    if (actual.left != original.left ||
-        actual.right != original.right ||
-        (actual.top - original.top - delta).abs() > vertical ||
-        (actual.bottom - original.bottom - delta).abs() > vertical) {
+    if (!forumBodyHaveSameShiftedNativeFontBounds(
+      original,
+      actual,
+      originalBaseline: ref.originalLines[row].baseline,
+      actualBaseline: ref.finalLines[row].baseline,
+    )) {
       throw const ForumBodyEmphasisLineException(
         ForumBodyEmphasisLineFailure.geometry,
       );

@@ -26,10 +26,14 @@ final class ForumBodyInlineEmphasisParentMetrics {
     this.reflow,
     this.geometry,
     this.textScaler,
+    this.requestWidth,
   );
   final ForumBodyInlineEmphasisReflowReference reflow;
   final ForumBodyInlineEmphasisTextGeometry geometry;
   final TextScaler textScaler;
+
+  /// Native request constraint; intrinsic output width may be smaller.
+  final double requestWidth;
   Map<double, double> get effectiveScales =>
       (textScaler as _CapturedInlineScaler).values;
   ForumBodyInlinePageContent get page => reflow.children.page;
@@ -411,6 +415,7 @@ final class ForumBodyInlineEmphasisParentPreparation {
                 value.reference,
                 value.geometry,
                 _scaler!,
+                width,
               );
               _phase = _ParentPhase.releaseOriginal;
             }

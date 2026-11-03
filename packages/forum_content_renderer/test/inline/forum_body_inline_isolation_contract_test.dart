@@ -499,7 +499,7 @@ void main() {
           width: 140,
           dimensions: _dimensions,
           rowIsolationPitch: 128,
-          layoutMode: ForumBodyParagraphLayoutMode.intrinsicSingleLine,
+          layoutMode: ForumBodyParagraphLayoutMode.fitSingleLine,
         ),
         throwsA(isA<ForumBodyParagraphLayoutException>()),
       );
