@@ -10,6 +10,8 @@ final class ForumBodyEmphasisLineMetrics {
     required this.requestWidth,
     required this.textScaler,
     required this.baseOffset,
+    required this.baseFontBounds,
+    required this.baseAlphabeticBaseline,
     required this.fontBounds,
     required this.width,
     required this.height,
@@ -34,6 +36,11 @@ final class ForumBodyEmphasisLineMetrics {
   final TextScaler textScaler;
   Map<double, double> get effectiveScales => (textScaler as _LineScaler).values;
   final Offset baseOffset;
+
+  /// Actual base geometry before decorations or enclosing-line translation.
+  /// Ruby must stack its annotations around this box, not around the markers.
+  final Rect baseFontBounds;
+  final double baseAlphabeticBaseline;
   final Rect fontBounds;
   final double width;
   final double height;

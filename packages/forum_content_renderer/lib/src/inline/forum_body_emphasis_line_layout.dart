@@ -50,6 +50,10 @@ final class ForumBodyEmphasisLineMark {
     required this.fontBounds,
     required this.fitScale,
     required this.lineIndex,
+    required this.baseRelativeOffset,
+    required this.baseRelativeAlphabeticBaseline,
+    required this.scaledFontBounds,
+    required this.scaledAlphabeticBaseline,
   });
   final int unitIndex;
   final ForumBodyEmphasisMarkInput input;
@@ -59,6 +63,13 @@ final class ForumBodyEmphasisLineMark {
 
   /// Actual governing physical row in this component's source context.
   final int lineIndex;
+
+  /// Preserve the original local font geometry and placement. Composing ruby
+  /// must not recover fractional local coordinates by subtracting a later frame.
+  final Offset baseRelativeOffset;
+  final double baseRelativeAlphabeticBaseline;
+  final Rect scaledFontBounds;
+  final double scaledAlphabeticBaseline;
 }
 
 /// One prepared actual base with source-free decorations. Owns the base source

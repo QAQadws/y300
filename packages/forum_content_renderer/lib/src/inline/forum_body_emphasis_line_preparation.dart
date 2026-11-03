@@ -251,6 +251,7 @@ final class ForumBodyEmphasisLinePreparation {
   ForumBodyEmphasisTextGeometry? _geometry;
   List<TextBox>? _fontBoxes;
   Rect? _envelope;
+  Rect? _baseFontBounds;
   Offset _baseOffset = Offset.zero;
   double _height = 0;
   final _alignments = <int, _LineMarkAlignment>{};
@@ -512,6 +513,7 @@ final class ForumBodyEmphasisLinePreparation {
                 _envelope = _envelope!.expandToInclude(box);
               } else {
                 _fontBoxes = null;
+                _baseFontBounds = _envelope;
                 _index = 0;
                 _phase = _LinePhase.marks;
               }
@@ -641,6 +643,14 @@ final class ForumBodyEmphasisLinePreparation {
             case _LinePhase.commands:
               if (_index < _rawMarks.length) {
                 final raw = _rawMarks[_index++];
+                final font = _markLeases[raw.mark].layout;
+                final fontRect = font.fontBounds;
+                final side = input
+                    .content
+                    .runs[input.units[raw.unit].runIndex]
+                    .style
+                    .textEmphasis
+                    .side;
                 final offset = raw.offset + _baseOffset;
                 _checkOffset(offset);
                 _commands.add(
@@ -658,6 +668,17 @@ final class ForumBodyEmphasisLinePreparation {
                     fontBounds: raw.bounds.shift(_baseOffset),
                     fitScale: _fitScale,
                     lineIndex: raw.line,
+                    baseRelativeOffset: raw.offset,
+                    baseRelativeAlphabeticBaseline: _alignments[raw.line]!
+                        .baseline(side),
+                    scaledFontBounds: Rect.fromLTRB(
+                      fontRect.left * _fitScale,
+                      fontRect.top * _fitScale,
+                      fontRect.right * _fitScale,
+                      fontRect.bottom * _fitScale,
+                    ),
+                    scaledAlphabeticBaseline:
+                        font.alphabeticBaseline * _fitScale,
                   ),
                 );
                 if (_expected != null) {
@@ -668,6 +689,13 @@ final class ForumBodyEmphasisLinePreparation {
                       actual.input != expected.input ||
                       actual.offset != expected.offset ||
                       actual.fontBounds != expected.fontBounds ||
+                      actual.baseRelativeOffset !=
+                          expected.baseRelativeOffset ||
+                      actual.baseRelativeAlphabeticBaseline !=
+                          expected.baseRelativeAlphabeticBaseline ||
+                      actual.scaledFontBounds != expected.scaledFontBounds ||
+                      actual.scaledAlphabeticBaseline !=
+                          expected.scaledAlphabeticBaseline ||
                       actual.fitScale != expected.fitScale) {
                     _mismatch();
                   }
@@ -693,6 +721,9 @@ final class ForumBodyEmphasisLinePreparation {
               if (_expected != null) {
                 final expected = _expected!;
                 if (_baseOffset != expected.baseOffset ||
+                    _baseFontBounds != expected.baseFontBounds ||
+                    base.alphabeticBaseline !=
+                        expected.baseAlphabeticBaseline ||
                     bounds != expected.fontBounds ||
                     base.width != expected.width ||
                     _height != expected.height ||
@@ -712,6 +743,8 @@ final class ForumBodyEmphasisLinePreparation {
                   requestWidth: width,
                   textScaler: _scaler!,
                   baseOffset: _baseOffset,
+                  baseFontBounds: _baseFontBounds!,
+                  baseAlphabeticBaseline: base.alphabeticBaseline,
                   fontBounds: bounds,
                   width: base.width,
                   height: _height,

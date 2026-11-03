@@ -136,6 +136,7 @@ final class ForumBodyRubyGroupMetrics {
     required this.size,
     required this.baseline,
     required this.baseOffset,
+    required this.baseFontBounds,
     required this.baseBandTop,
     required this.baseBandBottom,
     required this.baseFontBaseline,
@@ -218,6 +219,9 @@ final class ForumBodyRubyGroupMetrics {
   final Size size;
   final double baseline;
   final Offset baseOffset;
+
+  /// The original measured child, before row alignment and annotation stacks.
+  final Rect baseFontBounds;
 
   /// Allocated row envelope used to partition hits between base and layers.
   /// A smaller base's own glyph bounds must not move a shared level boundary.

@@ -212,6 +212,7 @@ final class ForumBodyRubyColumnAlignment {
           column.baseOffset.dx,
           over - column.baseFontBaseline,
         ),
+        baseFontBounds: column.baseFontBounds,
         baseBandTop: over - level.baseAscent,
         baseBandBottom: over + level.baseDescent,
         baseFontBaseline: column.baseFontBaseline,

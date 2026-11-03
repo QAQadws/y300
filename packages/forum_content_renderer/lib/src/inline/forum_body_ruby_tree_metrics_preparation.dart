@@ -112,6 +112,7 @@ final class ForumBodyRubyTreeMetrics {
     final old = root.group;
     if (old == null ||
         old.size.width != value.size.width ||
+        old.baseFontBounds != value.baseFontBounds ||
         old.baseFontBaseline != value.baseFontBaseline ||
         old.baseAscent != value.baseAscent ||
         old.baseDescent != value.baseDescent ||

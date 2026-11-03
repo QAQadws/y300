@@ -97,6 +97,7 @@ export 'src/inline/forum_body_emphasis_text_input.dart';
 export 'src/inline/forum_body_emphasis_row_input.dart';
 export 'src/inline/forum_body_emphasis_text_geometry.dart';
 export 'src/inline/forum_body_emphasis_line_layout.dart';
+export 'src/inline/forum_body_ruby_base_emphasis_geometry.dart';
 export 'src/inline/forum_body_emphasis_row_allocation.dart';
 export 'src/inline/forum_body_emphasis_paragraph_metrics.dart';
 export 'src/inline/forum_body_fitted_emphasis_plan.dart';

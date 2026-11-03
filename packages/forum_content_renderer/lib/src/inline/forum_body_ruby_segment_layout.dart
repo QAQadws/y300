@@ -399,6 +399,7 @@ final class ForumBodyRubySegmentLayout {
       a.size == b.size &&
       _near(a.baseline, b.baseline) &&
       a.baseOffset == b.baseOffset &&
+      a.baseFontBounds == b.baseFontBounds &&
       _near(a.baseAscent, b.baseAscent) &&
       _near(a.baseDescent, b.baseDescent) &&
       _near(a.baseFontBaseline, b.baseFontBaseline) &&

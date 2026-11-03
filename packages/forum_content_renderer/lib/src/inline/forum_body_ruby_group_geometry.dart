@@ -185,6 +185,7 @@ final class ForumBodyRubyGroupGeometry {
           (_width - _baseBounds!.width) / 2 - _baseBounds!.left,
           over - _baseFontBaseline,
         ),
+        baseFontBounds: _baseBounds!,
         baseBandTop: over - (level?.baseAscent ?? _baseAscent),
         baseBandBottom: over + (level?.baseDescent ?? _baseDescent),
         baseFontBaseline: _baseFontBaseline,
