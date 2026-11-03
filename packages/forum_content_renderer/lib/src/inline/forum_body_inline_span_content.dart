@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
@@ -10,6 +11,9 @@ import '../paragraph/forum_body_paragraph_content.dart';
 import '../style/forum_body_paint_text_style.dart';
 import '../style/forum_body_style_options.dart';
 import 'forum_body_native_space_span.dart';
+
+part 'forum_body_inline_emphasis_glyph_input.dart';
+part 'forum_body_inline_parent_cursor.dart';
 
 /// Exact independently projected input retained for source-bound child binding.
 /// These are display coordinates, never inferred from equal text or HTML.
@@ -37,8 +41,25 @@ final class ForumBodyInlineSpanContent {
     required List<ForumBodyInlineContext> contexts,
     required List<ForumBodyParagraphRun> runs,
     required this.appliesFirstLineIndent,
-  }) : contexts = List.unmodifiable(contexts),
+  }) : _sourceMapping = null,
+       contexts = List.unmodifiable(contexts),
        runs = List.unmodifiable(runs);
+
+  // Only the retired glyph writer may transfer its table. Contexts and source
+  // mappings belong to the original parent, including every real child window.
+  ForumBodyInlineSpanContent._emphasisGlyphs(
+    ForumBodyInlineSpanContent original,
+    this.style,
+    List<ForumBodyParagraphRun> runs,
+  ) : identity = original.identity,
+      path = original.path,
+      fontRevision = original.fontRevision,
+      styleRevision = original.styleRevision,
+      projection = original.projection,
+      contexts = original.contexts,
+      runs = UnmodifiableListView(runs),
+      appliesFirstLineIndent = original.appliesFirstLineIndent,
+      _sourceMapping = original;
 
   static const revision = 9;
 
@@ -160,6 +181,7 @@ final class ForumBodyInlineSpanContent {
   final int styleRevision;
   final ForumBodyResolvedStyle style;
   final bool appliesFirstLineIndent;
+  final ForumBodyInlineSpanContent? _sourceMapping;
   final HtmlInlineTextProjection projection;
   final List<ForumBodyParagraphRun> runs;
   final List<ForumBodyInlineContext> contexts;
@@ -175,14 +197,15 @@ final class ForumBodyInlineSpanContent {
   HtmlInlineTextProjection projectionForLayout(
     ForumBodyParagraphLayoutMode layoutMode,
   ) =>
-      forumBodyHasFirstLineIndent(
-        style: style,
-        displayText: projection.display.text,
-        appliesFirstLineIndent: appliesFirstLineIndent,
-        layoutMode: layoutMode,
-      )
-      ? _indentedProjection
-      : projection;
+      _sourceMapping?.projectionForLayout(layoutMode) ??
+      (forumBodyHasFirstLineIndent(
+            style: style,
+            displayText: projection.display.text,
+            appliesFirstLineIndent: appliesFirstLineIndent,
+            layoutMode: layoutMode,
+          )
+          ? _indentedProjection
+          : projection);
 
   late final _indentedProjection = HtmlInlineTextProjection.build(
     display: projection.display,
@@ -328,45 +351,30 @@ final class ForumBodyInlineSpanContent {
   }) {
     final children = <InlineSpan>[];
     final parentRunIndices = <int>{};
-    final parts = projection.display.parts;
     final atoms = projection.atoms;
-    var partIndex = 0;
-    var atomIndex = 0;
-    var cursor = 0;
-    while (cursor < projection.display.text.length) {
-      if (atomIndex < atoms.length &&
-          cursor == atoms[atomIndex].displayStartUtf16) {
+    final cursor = _InlineParentCursor(projection);
+    while (!cursor.isComplete) {
+      final piece = cursor.advance();
+      if (piece == null) continue;
+      if (piece.atomIndex case final atomIndex?) {
         children.add(
           atoms[atomIndex].isSoftSpace
               ? ForumBodyNativeSpaceSpan(dimensions?[atomIndex].size.width ?? 0)
               : const _NativeInlinePlaceholder(),
         );
-        cursor = atoms[atomIndex++].displayEndUtf16;
         continue;
       }
-      while (partIndex < parts.length &&
-          parts[partIndex].utf16Start + parts[partIndex].text.length <=
-              cursor) {
-        partIndex++;
-      }
-      final part = parts[partIndex];
-      parentRunIndices.add(part.runIndex);
-      final partEnd = part.utf16Start + part.text.length;
-      final end =
-          atomIndex < atoms.length &&
-              atoms[atomIndex].displayStartUtf16 < partEnd
-          ? atoms[atomIndex].displayStartUtf16
-          : partEnd;
+      final runIndex = piece.runIndex!;
+      parentRunIndices.add(runIndex);
       children.add(
         TextSpan(
-          text: part.text.substring(
-            cursor - part.utf16Start,
-            end - part.utf16Start,
+          text: projection.display.text.substring(
+            piece.startUtf16,
+            piece.endUtf16,
           ),
-          style: forumBodyPaintTextStyle(runs[part.runIndex].style),
+          style: forumBodyPaintTextStyle(runs[runIndex].style),
         ),
       );
-      cursor = end;
     }
     return (
       span: TextSpan(
