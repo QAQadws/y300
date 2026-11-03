@@ -82,6 +82,31 @@ enum _TreePlacementPhase {
   closed,
 }
 
+/// Explicit outward movement of one already measured root row. Keep a signed
+/// delta from its original local baseline, never reconstruct that native local
+/// value by subtracting a large parent's global glyph origin.
+final class ForumBodyRubyRootEmphasisShift {
+  ForumBodyRubyRootEmphasisShift({
+    required this.original,
+    this.over = 0,
+    this.under = 0,
+  }) {
+    final row = original.rowForId(original.input.contexts.first.physicalRow);
+    if (!over.isFinite ||
+        !under.isFinite ||
+        over > 0 ||
+        under < 0 ||
+        over < -16384 ||
+        under > 16384 ||
+        row.overBaseline == null && over != 0 ||
+        row.underBaseline == null && under != 0) {
+      throw ArgumentError('Invalid outward root emphasis shift');
+    }
+  }
+  final ForumBodyRubyTreeEmphasisPlacement original;
+  final double over, under;
+}
+
 /// Align each physical row/side once. Solve annotation rows before their bases
 /// so an explicitly marked annotation's decorations also stay inside the base
 /// marks. Each part visits one context, source, marker or row; no native work.
@@ -89,9 +114,18 @@ final class ForumBodyRubyTreeEmphasisPlacementPreparation {
   ForumBodyRubyTreeEmphasisPlacementPreparation({
     required ForumBodyRubyTreeDecorationBands input,
     required void Function() ensureOwner,
+    ForumBodyRubyRootEmphasisShift? rootShift,
   }) : _input = input,
        _ensureOwner = ensureOwner,
-       _bounds = input.bounds;
+       _bounds = input.bounds,
+       _rootShift = rootShift {
+    if (rootShift != null && !identical(rootShift.original.input, input)) {
+      throw const ForumBodyEmphasisLineException(
+        ForumBodyEmphasisLineFailure.source,
+      );
+    }
+  }
+  ForumBodyRubyRootEmphasisShift? _rootShift;
   ForumBodyRubyTreeDecorationBands? _input;
   void Function()? _ensureOwner;
   Rect _bounds;
@@ -137,7 +171,10 @@ final class ForumBodyRubyTreeEmphasisPlacementPreparation {
             }
           case _TreePlacementPhase.rows:
             if (_index >= 0) {
-              final work = _work[_index--], row = work.solve();
+              final work = _work[_index--],
+                  row = work.solve(
+                    rootShift: work.parent == null ? _rootShift : null,
+                  );
               _rows.add(row);
               _byRow[row.id] = row;
               final bounds = row.subtreeMarkerBounds;
@@ -304,6 +341,7 @@ final class ForumBodyRubyTreeEmphasisPlacementPreparation {
 
   void _drop() {
     _input = null;
+    _rootShift = null;
     _ensureOwner = null;
     _work = [];
     _workByRow = {};
@@ -395,9 +433,40 @@ final class _TreeMarkerRowWork {
     }
   }
 
-  ForumBodyRubyTreeEmphasisRow solve() {
+  ForumBodyRubyTreeEmphasisRow solve({
+    ForumBodyRubyRootEmphasisShift? rootShift,
+  }) {
     var bounds = descendants;
-    final above = over.solve(over: true), below = under.solve(over: false);
+    var above = over.solve(over: true), below = under.solve(over: false);
+    if (rootShift != null) {
+      final expected = rootShift.original.rowForId(id);
+      if ((over.baseline == null) != (expected.overBaseline == null) ||
+          (under.baseline == null) != (expected.underBaseline == null) ||
+          over.baseline != null && expected.overBaseline! > over.baseline! ||
+          under.baseline != null && expected.underBaseline! < under.baseline!) {
+        throw const ForumBodyEmphasisLineException(
+          ForumBodyEmphasisLineFailure.metrics,
+        );
+      }
+      if (over.baseline != null) {
+        over.baseline = expected.overBaseline! + rootShift.over;
+        above = Rect.fromLTRB(
+          above!.left,
+          over.baseline! + over.top!,
+          above.right,
+          over.baseline! + over.bottom!,
+        );
+      }
+      if (under.baseline != null) {
+        under.baseline = expected.underBaseline! + rootShift.under;
+        below = Rect.fromLTRB(
+          below!.left,
+          under.baseline! + under.top!,
+          below.right,
+          under.baseline! + under.bottom!,
+        );
+      }
+    }
     if (above != null) bounds = bounds?.expandToInclude(above) ?? above;
     if (below != null) bounds = bounds?.expandToInclude(below) ?? below;
     return ForumBodyRubyTreeEmphasisRow._(
