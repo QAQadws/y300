@@ -463,15 +463,7 @@ final class ForumBodyInlineParagraphLayout
       'engineUtf16',
     );
     if (engineUtf16 < projection.enginePrefix.length) return null;
-    var low = 0, high = projection.atoms.length;
-    while (low < high) {
-      final middle = low + (high - low) ~/ 2;
-      if (projection.atoms[middle].engineEndUtf16 <= engineUtf16) {
-        low = middle + 1;
-      } else {
-        high = middle;
-      }
-    }
+    final low = _firstAtomEndingAfter(engineUtf16);
     if (low < projection.atoms.length &&
         projection.atoms[low].engineUtf16 <= engineUtf16) {
       return null;
@@ -509,6 +501,55 @@ final class ForumBodyInlineParagraphLayout
           bottom: frame.bottom + _paintOffset.dy,
         ),
     ]);
+  }
+
+  /// Full, legal display units belonging only to this parent. Reject child or
+  /// glue overlap instead of silently returning the ordinary subset. Native
+  /// geometry does not establish source coverage or a legal page break.
+  List<TextBox> parentSelectionBoxes(int startUtf16, int endUtf16) {
+    _ensureOpen();
+    RangeError.checkValidRange(
+      startUtf16,
+      endUtf16,
+      projection.display.text.length,
+    );
+    final start = projection.engineAtDisplayUtf16(startUtf16),
+        end = projection.engineAtDisplayUtf16(endUtf16);
+    if (!start.isExact || !end.isExact) {
+      throw const ForumBodyParagraphLayoutException(
+        ForumBodyParagraphLayoutFailure.coverage,
+      );
+    }
+    if (startUtf16 == endUtf16) return const [];
+    final atom = _firstAtomEndingAfter(start.engineUtf16);
+    if (atom < projection.atoms.length &&
+        projection.atoms[atom].engineUtf16 < end.engineUtf16) {
+      throw const ForumBodyParagraphLayoutException(
+        ForumBodyParagraphLayoutFailure.coverage,
+      );
+    }
+    return List.unmodifiable([
+      for (final box in _painter.getBoxesForSelection(
+        TextSelection(
+          baseOffset: start.engineUtf16,
+          extentOffset: end.engineUtf16,
+        ),
+      ))
+        _shiftBox(box, _paintOffset),
+    ]);
+  }
+
+  int _firstAtomEndingAfter(int engineUtf16) {
+    var low = 0, high = projection.atoms.length;
+    while (low < high) {
+      final middle = low + (high - low) ~/ 2;
+      if (projection.atoms[middle].engineEndUtf16 <= engineUtf16) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    return low;
   }
 
   /// Paint only the ordinary parent glyphs. The consumer must paint prepared
