@@ -23,6 +23,7 @@ import 'forum_body_text_layout.dart';
 
 part 'forum_body_text_picture.dart';
 part 'forum_body_text_picture_input.dart';
+part 'forum_body_text_picture_dependencies.dart';
 
 /// Content cannot fit the total budget; pinned pressure may clear when visible
 /// leases release. Callers must not spin/restart a source traversal for either.

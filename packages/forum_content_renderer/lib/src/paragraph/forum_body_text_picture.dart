@@ -175,7 +175,15 @@ final class ForumBodyTextPictureLease extends ForumBodyNativeParagraphLease {
   }
 }
 
-enum _TextPicturePhase { probe, lookup, record, ready, transferred, closed }
+enum _TextPicturePhase {
+  dependencies,
+  probe,
+  lookup,
+  record,
+  ready,
+  transferred,
+  closed,
+}
 
 /// Records bounded commands outside visible paint. Dependencies are qualified
 /// current same-owner text/mark leases; private aliases keep them pinned even if a
@@ -183,6 +191,8 @@ enum _TextPicturePhase { probe, lookup, record, ready, transferred, closed }
 /// A caller-owned page prefix participates in the same probe and late-growth
 /// classification without being aliased, retained by the result or released.
 final class ForumBodyTextPicturePreparation {
+  /// Immediately qualify and alias supplied resources. Callers may release
+  /// their original handles as soon as this constructor returns.
   ForumBodyTextPicturePreparation({
     required ForumBodyParagraphCache cache,
     required ForumBodyTextPictureInput input,
@@ -191,6 +201,50 @@ final class ForumBodyTextPicturePreparation {
     Iterable<ForumBodyEmphasisMarkLease> marks = const [],
     Iterable<ForumBodyParagraphRowView> paragraphRows = const [],
     Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
+  }) : this._(
+         cache: cache,
+         input: input,
+         text: text,
+         ensureOwner: ensureOwner,
+         marks: marks,
+         paragraphRows: paragraphRows,
+         additionalOwnedLeases: additionalOwnedLeases,
+         cooperative: false,
+       );
+
+  /// Index/adopt dependencies during [advance], rather than draining the whole
+  /// scene in the constructor. Keep the supplied iterables and caller leases
+  /// valid until [dependenciesReady]; after that private aliases pin the inputs.
+  /// This changes no native recording, ownership or budget qualification.
+  ForumBodyTextPicturePreparation.cooperative({
+    required ForumBodyParagraphCache cache,
+    required ForumBodyTextPictureInput input,
+    required Iterable<ForumBodyTextLease> text,
+    required void Function() ensureOwner,
+    Iterable<ForumBodyEmphasisMarkLease> marks = const [],
+    Iterable<ForumBodyParagraphRowView> paragraphRows = const [],
+    Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
+  }) : this._(
+         cache: cache,
+         input: input,
+         text: text,
+         ensureOwner: ensureOwner,
+         marks: marks,
+         paragraphRows: paragraphRows,
+         additionalOwnedLeases: additionalOwnedLeases,
+         cooperative: true,
+       );
+
+  ForumBodyTextPicturePreparation._({
+    required ForumBodyParagraphCache cache,
+    required ForumBodyTextPictureInput input,
+    required Iterable<ForumBodyTextLease> text,
+    required void Function() ensureOwner,
+    required Iterable<ForumBodyEmphasisMarkLease> marks,
+    required Iterable<ForumBodyParagraphRowView> paragraphRows,
+    required Iterable<ForumBodyNativeParagraphLease> Function()?
+    additionalOwnedLeases,
+    required bool cooperative,
   }) : _input = input,
        _cache = cache,
        _ensureOwner = ensureOwner,
@@ -198,89 +252,21 @@ final class ForumBodyTextPicturePreparation {
     try {
       _guard();
       _prefixStarted = additionalOwnedLeases == null;
-      final wanted = {
-        for (final command in input.commands) command._dependency,
-      };
-      // Caller input is bounded by the scene, including otherwise unused text.
-      var inspected = 0;
-      for (final resources in <Iterable<ForumBodyNativeParagraphLease>>[
-        text,
-        marks,
-      ]) {
-        for (final lease in resources) {
-          if (++inspected > input.commands.length) {
-            throw ArgumentError('Excess text picture dependencies');
-          }
-          _guard();
-          if (!cache.ownsLease(lease)) {
-            throw StateError('Foreign text picture dependency');
-          }
-          final key = (
-            identity: lease.nativeInputIdentity,
-            bandChildIndex: lease is ForumBodyTextBandChildLease
-                ? lease.childIndex
-                : null,
-            paragraphRow: null,
-          );
-          if (!wanted.contains(key)) {
-            throw ArgumentError('Unrequested text picture dependency');
-          }
-          if (!_resources.containsKey(key)) {
-            _resources[key] = switch (lease) {
-              ForumBodyTextLease() => cache._aliasTextLease(lease),
-              ForumBodyEmphasisMarkLease() => cache._aliasEmphasisMarkLease(
-                lease,
-              ),
-              _ => throw ArgumentError('Unsupported text picture resource'),
-            };
-          }
+      _assembly = _TextPictureDependencyWork(
+        cache: cache,
+        input: input,
+        text: text,
+        marks: marks,
+        rows: paragraphRows,
+        ensureOwner: _guard,
+      );
+      if (!cooperative) {
+        final work = _assembly!;
+        while (!work.isReady) {
+          work.advance();
         }
+        _completeDependencies();
       }
-      final rowParents =
-          <
-            ({Object identity, ForumBodyParagraphContent content}),
-            ForumBodyParagraphLease
-          >{};
-      for (final row in paragraphRows) {
-        if (++inspected > input.commands.length) {
-          throw ArgumentError('Excess text picture dependencies');
-        }
-        _guard();
-        final parent = row.parent;
-        if (!cache.ownsLease(parent) || !row.isPaintPrepared) {
-          throw StateError('Foreign or unprepared paragraph row');
-        }
-        final key = (
-          identity: row.nativeInputIdentity,
-          bandChildIndex: null,
-          paragraphRow: row.selector,
-        );
-        if (!wanted.contains(key)) {
-          throw ArgumentError('Unrequested paragraph row dependency');
-        }
-        if (!_resources.containsKey(key)) {
-          // Many qualified strips can borrow ONE actual parent alias. Keep
-          // current content identity separate even when native keys are equal.
-          final alias = rowParents.putIfAbsent((
-            identity: parent.nativeInputIdentity,
-            content: parent.content,
-          ), () => cache._aliasTextLease(parent) as ForumBodyParagraphLease);
-          _resources[key] = alias;
-          _rowViews[key] = ForumBodyParagraphRowView.bind(
-            parent: alias,
-            metrics: row.metrics,
-            ensureOwner: ensureOwner,
-          );
-        }
-      }
-      if (_resources.length != wanted.length) {
-        throw ArgumentError('Missing text picture dependency');
-      }
-      _dependencies =
-          (Set<ForumBodyNativeParagraphLease>.identity()
-                ..addAll(_resources.values))
-              .toList(growable: false);
-      _probe = cache.createBudgetProbe();
       _guard();
     } catch (_) {
       close();
@@ -295,14 +281,23 @@ final class ForumBodyTextPicturePreparation {
   Iterable<ForumBodyNativeParagraphLease> Function()? _additionalOwned;
   Iterator<ForumBodyNativeParagraphLease>? _prefix;
   bool _prefixStarted = false;
-  final _resources = <_TextPictureDependency, ForumBodyNativeParagraphLease>{};
-  final _rowViews = <_TextPictureDependency, ForumBodyParagraphRowView>{};
-  List<ForumBodyNativeParagraphLease> _dependencies = const [];
+  _TextPictureDependencyWork? _assembly;
+  _TextPictureDependencies? _binding;
+  Map<_TextPictureDependency, ForumBodyNativeParagraphLease> get _resources =>
+      _binding?.resources ?? const {};
+  Map<_TextPictureDependency, ForumBodyParagraphRowView> get _rowViews =>
+      _binding?.rows ?? const {};
+  List<ForumBodyNativeParagraphLease> get _dependencies =>
+      _binding?.leases ?? _assembly?.leases ?? const [];
+
+  /// All dependency inputs have transferred to private aliases. The caller's
+  /// borrowed handles may now be released; taking/closing this work retires it.
+  bool get dependenciesReady => _binding != null;
   ForumBodyParagraphBudgetProbe? _probe;
   ForumBodyTextPictureLease? _pending;
   ui.PictureRecorder? _recorder;
   Canvas? _canvas;
-  var _phase = _TextPicturePhase.probe;
+  var _phase = _TextPicturePhase.dependencies;
   var _index = 0;
   var _blockedAt = -1;
   var _operating = false;
@@ -343,6 +338,10 @@ final class ForumBodyTextPicturePreparation {
         final rejectedAt = cache.budgetRevision;
         try {
           switch (_phase) {
+            case _TextPicturePhase.dependencies:
+              final work = _assembly!;
+              work.advance();
+              if (work.isReady) _completeDependencies();
             case _TextPicturePhase.probe:
               if (!_prefixStarted) {
                 final prefix = _additionalOwned?.call() ?? const [];
@@ -551,7 +550,7 @@ final class ForumBodyTextPicturePreparation {
     _ensureOwner!();
     if (_cache == null ||
         _cache!.isClosed ||
-        _dependencies.any((lease) => !_cache!.ownsLease(lease)) ||
+        (_binding?.leases.any((lease) => !_cache!.ownsLease(lease)) ?? false) ||
         (_pending != null && !_cache!.ownsLease(_pending!))) {
       throw StateError('Text picture owner is retired');
     }
@@ -564,16 +563,22 @@ final class ForumBodyTextPicturePreparation {
     if (recorder != null) recorder.endRecording().dispose();
   }
 
+  void _completeDependencies() {
+    final work = _assembly!;
+    _binding = work.takeDependencies();
+    _assembly = null;
+    work.close();
+    _probe = _cache!.createBudgetProbe();
+    _phase = _TextPicturePhase.probe;
+    _guard();
+  }
+
   void _dropOwner() {
     _probe?.close();
     _probe = null;
-    final resources =
-        (Set<ForumBodyNativeParagraphLease>.identity()
-              ..addAll(_resources.values))
-            .toList(growable: false);
-    _resources.clear();
-    _rowViews.clear();
-    _dependencies = const [];
+    final assembly = _assembly, binding = _binding;
+    _assembly = null;
+    _binding = null;
     _ensureOwner = null;
     _additionalOwned = null;
     _prefix = null;
@@ -587,9 +592,12 @@ final class ForumBodyTextPicturePreparation {
       failure = error;
       stack = trace;
     }
-    for (final lease in resources) {
+    for (final close in <void Function()>[
+      if (assembly != null) assembly.close,
+      if (binding != null) binding.close,
+    ]) {
       try {
-        lease.release();
+        close();
       } catch (error, trace) {
         failure ??= error;
         stack ??= trace;

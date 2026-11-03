@@ -796,7 +796,7 @@ final class ForumBodyEmphasisLinePreparation {
                   pictures++;
                 }
               }
-              _pictureJob = ForumBodyTextPicturePreparation(
+              _pictureJob = ForumBodyTextPicturePreparation.cooperative(
                 cache: cache,
                 input: _numeric!.pictureInput,
                 text: _rowView == null ? [_base!] : const [],

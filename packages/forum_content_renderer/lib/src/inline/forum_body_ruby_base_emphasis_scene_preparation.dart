@@ -179,7 +179,7 @@ final class ForumBodyRubyBaseEmphasisScenePreparation {
               _binding = _binder!._takeGlyphBinding();
               _binder!.close();
               _binder = null;
-              _scene = ForumBodyTextPicturePreparation(
+              _scene = ForumBodyTextPicturePreparation.cooperative(
                 cache: cache,
                 input: plan.pictureInput,
                 text: [_binding!.source!],

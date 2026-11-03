@@ -189,7 +189,7 @@ final class ForumBodyEmphasisFragmentPreparation {
             }
           case _FragmentPhase.bind:
             if (_group == input.selection.endGroup) {
-              _sceneJob = ForumBodyTextPicturePreparation(
+              _sceneJob = ForumBodyTextPicturePreparation.cooperative(
                 cache: cache,
                 input: input.pictureInput,
                 text: const [],

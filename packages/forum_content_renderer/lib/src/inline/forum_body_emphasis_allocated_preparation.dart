@@ -368,7 +368,7 @@ final class ForumBodyEmphasisAllocatedPreparation {
                   input != _expectedScene!.pictureInput) {
                 ForumBodyEmphasisLinePreparation._mismatch();
               }
-              _sceneJob = ForumBodyTextPicturePreparation(
+              _sceneJob = ForumBodyTextPicturePreparation.cooperative(
                 cache: cache,
                 input: input,
                 text: const [],
