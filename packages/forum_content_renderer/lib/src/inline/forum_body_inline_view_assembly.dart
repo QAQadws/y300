@@ -15,6 +15,7 @@ final class ForumBodyInlineViewAssembly {
     Map<int, ForumBodyRubySegmentLayout> rubySegments = const {},
     Map<int, ForumBodyRubySoftSpaceLayout> rubySpaces = const {},
     Map<int, ForumBodyRubyTreeLayout> rubyTrees = const {},
+    Map<int, ForumBodyRubyTreeEmphasisLayout> rubyEmphasisTrees = const {},
     Map<int, ForumBodyRubyContainerFontBox> containerBackgrounds = const {},
     Map<int, ForumBodyRubyRootFontBox> rootFonts = const {},
     void Function()? ensureOwner,
@@ -24,6 +25,7 @@ final class ForumBodyInlineViewAssembly {
        _segments = Map.of(rubySegments),
        _spaces = Map.of(rubySpaces),
        _trees = Map.of(rubyTrees),
+       _emphasisTrees = Map.of(rubyEmphasisTrees),
        _backgroundFonts = Map.of(containerBackgrounds),
        _rootFonts = Map.of(rootFonts),
        _ensureOwner = ensureOwner;
@@ -33,6 +35,7 @@ final class ForumBodyInlineViewAssembly {
   Map<int, ForumBodyRubySegmentLayout> _segments;
   Map<int, ForumBodyRubySoftSpaceLayout> _spaces;
   Map<int, ForumBodyRubyTreeLayout> _trees;
+  Map<int, ForumBodyRubyTreeEmphasisLayout> _emphasisTrees;
   Map<int, ForumBodyRubyContainerFontBox> _backgroundFonts;
   Map<int, ForumBodyRubyRootFontBox> _rootFonts;
   final _backgroundRegions = _RubyBackgroundRegions();
@@ -61,6 +64,7 @@ final class ForumBodyInlineViewAssembly {
     for (final segment in _segments.values) ...segment.nativeLeases,
     for (final space in _spaces.values) ...space.nativeLeases,
     for (final tree in _trees.values) ...tree.nativeLeases,
+    for (final tree in _emphasisTrees.values) ...tree.nativeLeases,
   ];
 
   int advance({required int maxParts}) {
@@ -82,7 +86,8 @@ final class ForumBodyInlineViewAssembly {
                 _groups.isNotEmpty ||
                 _segments.isNotEmpty ||
                 _spaces.isNotEmpty ||
-                _trees.isNotEmpty) {
+                _trees.isNotEmpty ||
+                _emphasisTrees.isNotEmpty) {
               _fail(ForumBodyInlineViewFailure.coverage);
             }
           } else {
@@ -102,16 +107,18 @@ final class ForumBodyInlineViewAssembly {
             work += _binding!.advance(maxParts: maxParts - work);
           }
           if (_binding!.isComplete) {
-            final tree = _trees[_bindingIndex];
-            if (tree != null &&
-                _treeBackgroundIndex < tree.backgrounds.length) {
+            final backgrounds =
+                _trees[_bindingIndex]?.backgrounds ??
+                _emphasisTrees[_bindingIndex]?.backgrounds;
+            if (backgrounds != null &&
+                _treeBackgroundIndex < backgrounds.length) {
               if (work == maxParts) break;
               _appendTreeBackground(
                 _bindingIndex,
-                tree.backgrounds[_treeBackgroundIndex++],
+                backgrounds[_treeBackgroundIndex++],
               );
               work++;
-              if (_treeBackgroundIndex < tree.backgrounds.length) continue;
+              if (_treeBackgroundIndex < backgrounds.length) continue;
             }
             final child = _binding!.takeBinding();
             _bindings[_bindingIndex] = switch (_bindingFrame) {
@@ -137,10 +144,12 @@ final class ForumBodyInlineViewAssembly {
             final segment = _segments[atom.index];
             final space = _spaces[atom.index];
             final tree = _trees[atom.index];
+            final emphasisTree = _emphasisTrees[atom.index];
             if ((group != null ? 1 : 0) +
                         (segment != null ? 1 : 0) +
                         (space != null ? 1 : 0) +
-                        (tree != null ? 1 : 0) >
+                        (tree != null ? 1 : 0) +
+                        (emphasisTree != null ? 1 : 0) >
                     1 ||
                 atom.isSoftSpace != (space != null)) {
               _fail(ForumBodyInlineViewFailure.leases);
@@ -148,16 +157,22 @@ final class ForumBodyInlineViewAssembly {
             if (group == null &&
                 segment == null &&
                 space == null &&
-                tree == null) {
+                tree == null &&
+                emphasisTree == null) {
               _fail(ForumBodyInlineViewFailure.coverage);
             }
             final size =
-                group?.size ?? segment?.size ?? space?.size ?? tree!.size;
+                group?.size ??
+                segment?.size ??
+                space?.size ??
+                tree?.size ??
+                emphasisTree!.size;
             final baseline =
                 group?.baseline ??
                 segment?.baseline ??
                 space?.baseline ??
-                tree!.baseline;
+                tree?.baseline ??
+                emphasisTree!.baseline;
             final root = _rootFonts[atom.index];
             if (root != null) {
               final parent = _parent!.content;
@@ -175,6 +190,20 @@ final class ForumBodyInlineViewAssembly {
                         tree.metrics.root.font.alphabeticBaseline)) {
               _fail(ForumBodyInlineViewFailure.identity);
             }
+            if (emphasisTree != null) {
+              final metrics =
+                  emphasisTree.plan.placement.input.input.geometry.metrics;
+              if (root == null ||
+                  !identical(
+                    root.input,
+                    metrics.input.sourceTree.rootGroup.font,
+                  ) ||
+                  root.height != metrics.root.font.height ||
+                  root.alphabeticBaseline !=
+                      metrics.root.font.alphabeticBaseline) {
+                _fail(ForumBodyInlineViewFailure.identity);
+              }
+            }
             _bindingFrame = root?.enclose(
               childSize: size,
               childBaseline: baseline,
@@ -182,6 +211,7 @@ final class ForumBodyInlineViewAssembly {
             final frameSize = _bindingFrame?.size ?? size;
             final frameBaseline = _bindingFrame?.baseline ?? baseline;
             if (tree == null &&
+                emphasisTree == null &&
                 frameSize == size &&
                 frameBaseline == baseline) {
               _bindingFrame = null;
@@ -200,6 +230,7 @@ final class ForumBodyInlineViewAssembly {
               segment: segment,
               space: space,
               tree: tree,
+              emphasisTree: emphasisTree,
               own: _own,
             );
           }
@@ -209,7 +240,8 @@ final class ForumBodyInlineViewAssembly {
               _groups.length +
                   _segments.length +
                   _spaces.length +
-                  _trees.length) {
+                  _trees.length +
+                  _emphasisTrees.length) {
             _fail(ForumBodyInlineViewFailure.coverage);
           }
           _state = _ViewAssemblyState.ready;
@@ -320,6 +352,7 @@ final class ForumBodyInlineViewAssembly {
     _segments = const {};
     _spaces = const {};
     _trees = const {};
+    _emphasisTrees = const {};
     _bindings = {};
     _state = _ViewAssemblyState.transferred;
     _dropOwner();
@@ -354,6 +387,12 @@ final class ForumBodyInlineViewAssembly {
     if ((_state != _ViewAssemblyState.active && !isReady) || _cache!.isClosed) {
       throw StateError('Inline view owner is retired');
     }
+    for (final tree in _emphasisTrees.values) {
+      tree.ensureActive();
+    }
+    if (_state != _ViewAssemblyState.active && !isReady) {
+      throw StateError('Inline view owner is retired');
+    }
     // Cheap liveness checks follow existing group/segment ownership guards;
     // only source decisions/indexing are charged as numeric member work.
     for (final lease in _checked) {
@@ -382,10 +421,14 @@ final class ForumBodyInlineViewAssembly {
     for (final tree in _trees.values) {
       tree.close();
     }
+    for (final tree in _emphasisTrees.values) {
+      tree.close();
+    }
     _groups = const {};
     _segments = const {};
     _spaces = const {};
     _trees = const {};
+    _emphasisTrees = const {};
     _bindings = {};
     _parent?.release();
     _parent = null;
