@@ -1,6 +1,45 @@
 import 'package:flutter/painting.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
+ForumBodyRubyTreeEmphasisPlacement rubyTreeEmphasisPlacementFixture(
+  String html,
+  ForumBodyParagraphCache cache, {
+  TextDirection direction = TextDirection.ltr,
+  TextScaler scaler = TextScaler.noScaling,
+}) {
+  final metrics = rubyTreeEmphasisMetricsFixture(
+    html,
+    cache,
+    direction: direction,
+    scaler: scaler,
+  );
+  final bands = ForumBodyRubyTreeDecorationBandsPreparation(
+    input: metrics,
+    ensureOwner: () {},
+  );
+  late ForumBodyRubyTreeDecorationBands decoration;
+  try {
+    while (!bands.isReady) {
+      bands.advance(maxParts: 1);
+    }
+    decoration = bands.takeBands();
+  } finally {
+    bands.close();
+  }
+  final placement = ForumBodyRubyTreeEmphasisPlacementPreparation(
+    input: decoration,
+    ensureOwner: () {},
+  );
+  try {
+    while (!placement.isReady) {
+      placement.advance(maxParts: 1);
+    }
+    return placement.takePlacement();
+  } finally {
+    placement.close();
+  }
+}
+
 ForumBodyRubyTreeEmphasisMetrics rubyTreeEmphasisMetricsFixture(
   String html,
   ForumBodyParagraphCache cache, {

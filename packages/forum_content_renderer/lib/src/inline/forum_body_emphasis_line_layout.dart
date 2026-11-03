@@ -23,6 +23,8 @@ import 'forum_body_emphasis_row_input.dart';
 import 'forum_body_emphasis_row_allocation.dart';
 import 'forum_body_emphasis_paragraph_metrics.dart';
 import 'forum_body_ruby_base_emphasis_geometry.dart';
+import 'forum_body_ruby_tree_input.dart';
+import 'forum_body_ruby_root_box.dart';
 
 part 'forum_body_emphasis_line_preparation.dart';
 part 'forum_body_emphasis_line_metrics.dart';
@@ -34,6 +36,7 @@ part 'forum_body_emphasis_fragment_preparation.dart';
 part 'forum_body_ruby_base_emphasis_plan.dart';
 part 'forum_body_ruby_base_emphasis_layout.dart';
 part 'forum_body_ruby_base_emphasis_scene_preparation.dart';
+part 'forum_body_ruby_tree_emphasis_plan.dart';
 
 enum ForumBodyEmphasisLineFailure { source, lines, geometry, metrics }
 
