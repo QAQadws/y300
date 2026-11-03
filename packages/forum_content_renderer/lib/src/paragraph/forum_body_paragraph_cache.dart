@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show listEquals;
@@ -21,6 +22,7 @@ import 'forum_body_text_band_cache_key.dart';
 import 'forum_body_text_layout.dart';
 
 part 'forum_body_text_picture.dart';
+part 'forum_body_text_picture_input.dart';
 
 /// Content cannot fit the total budget; pinned pressure may clear when visible
 /// leases release. Callers must not spin/restart a source traversal for either.

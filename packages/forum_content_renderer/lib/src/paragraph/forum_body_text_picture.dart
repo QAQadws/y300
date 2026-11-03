@@ -103,102 +103,6 @@ final class ForumBodyTextPictureCommand {
   );
 }
 
-/// A finite draw list over actual opaque native inputs. No source authority,
-/// lease, painter, owner or callback is retained by this immutable cache key.
-final class ForumBodyTextPictureInput {
-  ForumBodyTextPictureInput._(this.commands, this.estimatedInputBytes);
-  factory ForumBodyTextPictureInput({
-    required List<ForumBodyTextPictureCommand> commands,
-    int maxCommands = 512,
-  }) {
-    if (maxCommands <= 0 || commands.isEmpty || commands.length > maxCommands) {
-      throw ArgumentError('Invalid text picture command budget');
-    }
-    final frozen = List<ForumBodyTextPictureCommand>.unmodifiable(commands);
-    final inputs = <_NativeInputIdentity>{};
-    for (final command in frozen) {
-      final identity = command.nativeInputIdentity;
-      if (identity is! _NativeInputIdentity ||
-          !command.offset.dx.isFinite ||
-          !command.offset.dy.isFinite ||
-          command.offset.dx.abs() > 32768 ||
-          command.offset.dy.abs() > 32768) {
-        throw ArgumentError('Invalid native text picture command');
-      }
-      if (!command.fitScale.isFinite ||
-          command.fitScale <= 0 ||
-          command.fitScale > 1) {
-        throw ArgumentError('Invalid native text picture fitting scale');
-      }
-      final key = identity._key;
-      if (key is ForumBodyTextBandCacheKey) {
-        final child = command.bandChildIndex;
-        if (child == null ||
-            child < 0 ||
-            child >= key.projections.length ||
-            command.paragraphRow != null) {
-          throw ArgumentError('Invalid native band picture selector');
-        }
-      } else if ((key is! _LayoutKey && key is! _EmphasisMarkKey) ||
-          command.bandChildIndex != null) {
-        throw ArgumentError('Text picture requires an actual text input');
-      }
-      final row = command.paragraphRow;
-      final physical = command.physicalLine;
-      if (physical != null &&
-          (row == null ||
-              !physical.matchesInput(
-                nativeInputIdentity: identity,
-                group: row,
-              ))) {
-        throw ArgumentError('Invalid physical line input');
-      }
-      for (final selected in [?row, ?physical?.selector]) {
-        if ((key is! _LayoutKey ||
-            key.rowIsolationPitch == null ||
-            selected.startLine < 0 ||
-            selected.endLine <= selected.startLine ||
-            !selected.originY.isFinite ||
-            !selected.clipTop.isFinite ||
-            !selected.clipBottom.isFinite ||
-            selected.clipBottom <= selected.clipTop ||
-            selected.originY.abs() > 1048576 ||
-            selected.clipTop.abs() > 1114112 ||
-            selected.clipBottom.abs() > 1114112)) {
-          throw ArgumentError('Invalid native paragraph row selector');
-        }
-      }
-      inputs.add(identity);
-    }
-    return ForumBodyTextPictureInput._(
-      frozen,
-      4096 +
-          frozen.length * 128 +
-          frozen.where((command) => command.paragraphRow != null).length * 64 +
-          frozen.where((command) => command.physicalLine != null).length * 192 +
-          inputs.fold(0, (sum, value) => sum + _textPictureInputBytes(value)),
-    );
-  }
-  final List<ForumBodyTextPictureCommand> commands;
-  static const revision = 6;
-
-  /// Conservative display-list admission, not font/native/GPU memory. Actual
-  /// engine picture bytes can grow this cost before the owner publishes it.
-  final int estimatedInputBytes;
-  int get estimatedPictureBytes => 4096 + commands.length * 256;
-  // The pure key keeps text/projection metadata after font entries are evicted.
-  // Charge that retention too, once per resource (not once per band child).
-  int get estimatedBytes => estimatedInputBytes + estimatedPictureBytes;
-  late final int _hash = Object.hash(revision, Object.hashAll(commands));
-  @override
-  int get hashCode => _hash;
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is ForumBodyTextPictureInput &&
-          listEquals(commands, other.commands);
-}
-
 /// An owned drawing resource only. Font/source qualification stays with the
 /// caller's actual text bindings, not with an equal-size or equal-text picture.
 final class ForumBodyTextPictureLease extends ForumBodyNativeParagraphLease {
@@ -282,6 +186,11 @@ final class ForumBodyTextPicturePreparation {
           }
         }
       }
+      final rowParents =
+          <
+            ({Object identity, ForumBodyParagraphContent content}),
+            ForumBodyParagraphLease
+          >{};
       for (final row in paragraphRows) {
         if (++inspected > input.commands.length) {
           throw ArgumentError('Excess text picture dependencies');
@@ -300,8 +209,12 @@ final class ForumBodyTextPicturePreparation {
           throw ArgumentError('Unrequested paragraph row dependency');
         }
         if (!_resources.containsKey(key)) {
-          final alias =
-              cache._aliasTextLease(parent) as ForumBodyParagraphLease;
+          // Many qualified strips can borrow ONE actual parent alias. Keep
+          // current content identity separate even when native keys are equal.
+          final alias = rowParents.putIfAbsent((
+            identity: parent.nativeInputIdentity,
+            content: parent.content,
+          ), () => cache._aliasTextLease(parent) as ForumBodyParagraphLease);
           _resources[key] = alias;
           _rowViews[key] = ForumBodyParagraphRowView.bind(
             parent: alias,
@@ -313,7 +226,10 @@ final class ForumBodyTextPicturePreparation {
       if (_resources.length != wanted.length) {
         throw ArgumentError('Missing text picture dependency');
       }
-      _dependencies = _resources.values.toList(growable: false);
+      _dependencies =
+          (Set<ForumBodyNativeParagraphLease>.identity()
+                ..addAll(_resources.values))
+              .toList(growable: false);
       _probe = cache.createBudgetProbe();
       _guard();
     } catch (_) {
@@ -590,7 +506,10 @@ final class ForumBodyTextPicturePreparation {
   void _dropOwner() {
     _probe?.close();
     _probe = null;
-    final resources = _resources.values.toList(growable: false);
+    final resources =
+        (Set<ForumBodyNativeParagraphLease>.identity()
+              ..addAll(_resources.values))
+            .toList(growable: false);
     _resources.clear();
     _rowViews.clear();
     _dependencies = const [];
