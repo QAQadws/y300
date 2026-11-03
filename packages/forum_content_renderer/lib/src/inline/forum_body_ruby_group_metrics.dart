@@ -7,6 +7,7 @@ import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../style/forum_body_style_options.dart' show ForumBodyRubySide;
 import 'forum_body_ruby_group_contract.dart';
+import 'forum_body_ruby_band_stack.dart';
 
 part 'forum_body_ruby_numeric_work.dart';
 part 'forum_body_ruby_segment_metrics.dart';
@@ -28,6 +29,7 @@ final class ForumBodyRubyAnnotationMetrics {
     this.offset = Offset.zero,
     this.bandTop = 0,
     this.bandBottom = 0,
+    this.bandBaseline = 0,
   });
 
   /// Borrows one actual native member. This value owns no glyph lease and is
@@ -104,6 +106,10 @@ final class ForumBodyRubyAnnotationMetrics {
   /// Shared level envelope in column coordinates, independent of glyph size.
   final double bandTop;
   final double bandBottom;
+
+  /// The allocated row baseline, including a shared row with no local glyph.
+  /// Unlike [fontBaseline], this is already in positioned column coordinates.
+  final double bandBaseline;
   double get ascent => hasAnnotation ? fontBaseline - bounds.top : 0;
   double get descent => hasAnnotation ? bounds.bottom - fontBaseline : 0;
 
@@ -125,6 +131,7 @@ final class ForumBodyRubyAnnotationMetrics {
     ),
     bandTop: baseline + top,
     bandBottom: baseline + bottom,
+    bandBaseline: baseline + relativeBaseline,
   );
 }
 

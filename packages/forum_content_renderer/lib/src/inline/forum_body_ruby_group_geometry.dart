@@ -228,14 +228,17 @@ final class _RubyStack {
   ({double baseline, double top, double bottom}) append(
     ForumBodyRubyAnnotationLevelMetrics item,
   ) {
-    if (!item.hasAnnotation) return (baseline: 0.0, top: 0.0, bottom: 0.0);
-    if (item.side == ForumBodyRubySide.over) {
-      final bottom = -over - item.gap;
-      over += item.gap + item.ascent + item.descent;
-      return (baseline: bottom - item.descent, top: -over, bottom: bottom);
-    }
-    final top = under + item.gap;
-    under += item.gap + item.ascent + item.descent;
-    return (baseline: top + item.ascent, top: top, bottom: under);
+    final value = forumBodyAdvanceRubyBandStack(
+      over: over,
+      under: under,
+      hasAnnotation: item.hasAnnotation,
+      side: item.side,
+      ascent: item.ascent,
+      descent: item.descent,
+      gap: item.gap,
+    );
+    over = value.over;
+    under = value.under;
+    return (baseline: value.baseline, top: value.top, bottom: value.bottom);
   }
 }

@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'dart:math' as math;
 
 import 'package:flutter/painting.dart';
 
@@ -27,6 +28,7 @@ import 'forum_body_ruby_tree_child_geometry.dart';
 import 'forum_body_emphasis_line_layout.dart';
 import 'forum_body_emphasis_mark.dart';
 import 'forum_body_text_band_layout.dart';
+import 'forum_body_ruby_band_stack.dart';
 
 part 'forum_body_ruby_tree_segment_input.dart';
 part 'forum_body_ruby_glyph_tree_input.dart';
@@ -35,6 +37,7 @@ part 'forum_body_ruby_glyph_tree_geometry.dart';
 part 'forum_body_ruby_glyph_tree_bands.dart';
 part 'forum_body_ruby_empty_annotation_fonts.dart';
 part 'forum_body_ruby_tree_emphasis_metrics.dart';
+part 'forum_body_ruby_tree_decoration_bands.dart';
 
 /// Internal postorder graph of real nested columns and segments. Source leaves
 /// stay in original base/annotation order; their IDs are not DOM offsets.

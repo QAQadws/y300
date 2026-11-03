@@ -1,6 +1,49 @@
 import 'package:flutter/painting.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
+ForumBodyRubyTreeEmphasisMetrics rubyTreeEmphasisMetricsFixture(
+  String html,
+  ForumBodyParagraphCache cache, {
+  TextDirection direction = TextDirection.ltr,
+  TextScaler scaler = TextScaler.noScaling,
+}) {
+  final bands = rubyGlyphTreeBandsFixture(
+    html,
+    cache,
+    direction: direction,
+    scaler: scaler,
+  );
+  final fonts = ForumBodyRubyEmptyAnnotationFontsPreparation(
+    bands: bands,
+    cache: cache,
+    ensureOwner: () {},
+    expectedTextScaler: scaler,
+  );
+  late ForumBodyRubyEmptyAnnotationFonts empty;
+  try {
+    while (!fonts.isReady) {
+      fonts.advance(maxParts: 1);
+    }
+    empty = fonts.takeFonts();
+  } finally {
+    fonts.close();
+  }
+  final metrics = ForumBodyRubyTreeEmphasisMetricsPreparation(
+    emptyFonts: empty,
+    cache: cache,
+    ensureOwner: () {},
+    expectedTextScaler: scaler,
+  );
+  try {
+    while (!metrics.isReady) {
+      metrics.advance(maxParts: 1);
+    }
+    return metrics.takeMetrics();
+  } finally {
+    metrics.close();
+  }
+}
+
 /// Real parser/source/measurement pipeline shared by tree-format tests. A
 /// request transform can attach an actual band before measuring that same graph.
 ForumBodyRubyGlyphTreeBands rubyGlyphTreeBandsFixture(

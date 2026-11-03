@@ -75,7 +75,13 @@ export 'src/inline/forum_body_ruby_tree_input.dart'
         ForumBodyRubyEmptyAnnotationFontsPreparation,
         ForumBodyRubyTreeEmphasisSourceMetrics,
         ForumBodyRubyTreeEmphasisMetrics,
-        ForumBodyRubyTreeEmphasisMetricsPreparation;
+        ForumBodyRubyTreeEmphasisMetricsPreparation,
+        ForumBodyRubyPhysicalRow,
+        ForumBodyRubyTreeDecorationBand,
+        ForumBodyRubyTreeDecorationNode,
+        ForumBodyRubyTreeDecorationContext,
+        ForumBodyRubyTreeDecorationBands,
+        ForumBodyRubyTreeDecorationBandsPreparation;
 export 'src/inline/forum_body_ruby_tree_child_geometry.dart'
     show
         ForumBodyRubyTreeBranch,
