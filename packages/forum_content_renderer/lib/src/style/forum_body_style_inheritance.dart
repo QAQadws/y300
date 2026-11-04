@@ -78,6 +78,7 @@ final class ForumBodyStyleInheritance {
       visibilityHidden: effective.visibilityHidden,
       quoteDecoration: effective.quoteDecoration,
       insideQuoteContainer: effective.insideQuoteContainer,
+      listStyle: effective.listStyle,
     );
   }
 }

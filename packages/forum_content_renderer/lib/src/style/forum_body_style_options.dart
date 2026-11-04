@@ -5,12 +5,14 @@ import 'forum_body_box_style.dart';
 import 'forum_body_ruby_position.dart';
 import 'forum_body_text_emphasis.dart';
 import 'forum_body_quote_decoration.dart';
+import 'forum_body_list_style.dart';
 import '../html_rendering/theme/forum_html_theme_context.dart';
 import '../document/forum_body_document.dart';
 
 export 'forum_body_ruby_position.dart';
 export 'forum_body_text_emphasis.dart';
 export 'forum_body_quote_decoration.dart';
+export 'forum_body_list_style.dart';
 
 enum ForumBodyStyleScope { asDefault, forceBody, forceAll }
 
@@ -129,6 +131,7 @@ final class ForumBodyResolvedStyle {
     this.alignmentFromReader = true,
     this.quoteDecoration,
     this.insideQuoteContainer = false,
+    this.listStyle = const ForumBodyListStyle(),
   });
   final TextStyle textStyle;
   final ForumBodyTextRole role;
@@ -154,6 +157,7 @@ final class ForumBodyResolvedStyle {
   final bool alignmentFromReader;
   final ForumBodyQuoteDecoration? quoteDecoration;
   final bool insideQuoteContainer;
+  final ForumBodyListStyle listStyle;
 
   ForumBodyResolvedStyle withTextEmphasis(ForumBodyTextEmphasis value) =>
       value == textEmphasis
@@ -183,6 +187,7 @@ final class ForumBodyResolvedStyle {
           alignmentFromReader: alignmentFromReader,
           quoteDecoration: quoteDecoration,
           insideQuoteContainer: insideQuoteContainer,
+          listStyle: listStyle,
         );
 }
 

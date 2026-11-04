@@ -8,8 +8,9 @@ import 'forum_body_language.dart';
 import 'forum_body_box_resolver.dart';
 import 'forum_body_style_options.dart';
 import 'forum_body_text_emphasis_resolver.dart';
+import 'forum_body_list_style_resolver.dart';
 
-const forumBodyStyleRevision = 17;
+const forumBodyStyleRevision = 18;
 ForumBodyLength forumBodyReaderIndent(
   ForumBodyReaderStyle reader,
   double size,
@@ -84,6 +85,9 @@ final class ForumBodyStyleBuilder {
     'padding-right',
     'padding-bottom',
     'padding-left',
+    'list-style',
+    'list-style-type',
+    'list-style-position',
   };
 
   ForumBodyResolvedStyle resolve(
@@ -554,6 +558,11 @@ final class ForumBodyStyleBuilder {
           ? ForumBodyQuoteDecoration(reader.linkColor)
           : null,
       insideQuoteContainer: parent.insideQuoteContainer || quoteClass,
+      listStyle: resolveForumBodyListStyle(
+        node: node,
+        parent: parent.listStyle,
+        onUnsupported: (property, value) => _issue(node, property, value),
+      ),
     );
   }
 
