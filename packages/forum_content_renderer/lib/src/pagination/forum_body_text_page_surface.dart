@@ -170,6 +170,12 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
         child: Stack(
           clipBehavior: Clip.hardEdge,
           children: [
+            if (_page.rules.isNotEmpty)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: CustomPaint(painter: _RulePainter(_page.rules)),
+                ),
+              ),
             if (_bindings.any(
               (binding) =>
                   binding is ForumBodyPreparedInlineFragment &&
@@ -197,6 +203,32 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
       );
     },
   );
+}
+
+final class _RulePainter extends CustomPainter {
+  const _RulePainter(this.rules);
+  final List<ForumBodyTextPageRule> rules;
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    try {
+      canvas.clipRect(Offset.zero & size, doAntiAlias: false);
+      final paint = Paint();
+      for (final rule in rules) {
+        paint.color = rule.color;
+        canvas.drawRect(
+          Rect.fromLTWH(rule.left, rule.top, rule.width, rule.thickness),
+          paint,
+        );
+      }
+    } finally {
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _RulePainter oldDelegate) =>
+      !identical(rules, oldDelegate.rules);
 }
 
 /// One page background plane keeps natural font-box overflow clipped to the

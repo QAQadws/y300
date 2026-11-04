@@ -8,7 +8,7 @@ enum NovelReaderNativePrefixState {
   closed,
 }
 
-enum NovelReaderNativePrefixMismatch { scope, truncated, page, fragment }
+enum NovelReaderNativePrefixMismatch { scope, truncated, page, fragment, rule }
 
 final class NovelReaderNativePrefixStep {
   const NovelReaderNativePrefixStep(
@@ -53,6 +53,7 @@ final class NovelReaderNativePrefixVerifier {
   final int prefixLength;
   int _page = 0;
   int _fragment = 0;
+  int _rule = 0;
   int _incomingLength = 0;
   bool _incomingComplete = false;
   NovelReaderNativePrefixState _state = NovelReaderNativePrefixState.active;
@@ -116,7 +117,8 @@ final class NovelReaderNativePrefixVerifier {
       final incoming = _incoming![_page];
       if (old.index != incoming.index ||
           old.usedHeight != incoming.usedHeight ||
-          old.fragments.length != incoming.fragments.length) {
+          old.fragments.length != incoming.fragments.length ||
+          old.rules.length != incoming.rules.length) {
         _fail(NovelReaderNativePrefixMismatch.page);
         break;
       }
@@ -130,9 +132,23 @@ final class NovelReaderNativePrefixVerifier {
         }
         _fragment++;
         fragments++;
+      } else if (_rule < old.rules.length) {
+        final a = old.rules[_rule], b = incoming.rules[_rule];
+        if (a.path != b.path ||
+            a.left != b.left ||
+            a.top != b.top ||
+            a.width != b.width ||
+            a.thickness != b.thickness ||
+            a.color != b.color) {
+          _fail(NovelReaderNativePrefixMismatch.rule);
+          break;
+        }
+        _rule++;
+        fragments++;
       }
-      if (_fragment == old.fragments.length) {
+      if (_fragment == old.fragments.length && _rule == old.rules.length) {
         _fragment = 0;
+        _rule = 0;
         _page++;
         pages++;
         if (_page == prefixLength) {

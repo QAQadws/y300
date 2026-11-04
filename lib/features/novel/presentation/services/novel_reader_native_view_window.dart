@@ -103,7 +103,7 @@ final class NovelReaderNativeViewWindow {
       _views.values.fold(0, (sum, view) => sum + view.coverage.points.length);
   int get retainedFragments => _views.values.fold(
     0,
-    (sum, view) => sum + view.snapshot[view.pageIndex].fragments.length,
+    (sum, view) => sum + view.snapshot[view.pageIndex].itemCount,
   );
   Stream<void> get changes => _closed
       ? const Stream<void>.empty()
@@ -321,7 +321,7 @@ final class NovelReaderNativeViewWindow {
   }
 
   bool _admit(NovelReaderNativePageView view) {
-    final fragments = view.snapshot[view.pageIndex].fragments.length;
+    final fragments = view.snapshot[view.pageIndex].itemCount;
     final points = view.coverage.points.length;
     if (fragments > limits.maxRetainedFragments ||
         points > limits.maxRetainedCoveragePoints) {

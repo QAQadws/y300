@@ -201,6 +201,18 @@ void main() {
     (native: false, mixed: false, fixture: null),
     (native: true, mixed: false, fixture: null),
     (native: true, mixed: true, fixture: null),
+    (
+      native: true,
+      mixed: true,
+      fixture: (
+        name: 'single-ruby-rule',
+        html: List.generate(
+          24,
+          (i) =>
+              '<p>第$i段，<ruby>星空<rt>ほしぞら</rt></ruby>下的合成正文继续阅读。</p><hr class="l">',
+        ).join(),
+      ),
+    ),
     for (final fixture in novelProfileRubyGapFixtures)
       (native: true, mixed: true, fixture: fixture),
     for (final fixture in novelProfileLanguageFixtures)
@@ -318,6 +330,15 @@ void main() {
         }
 
         var observation = await wait((value) => value.ready && value.complete);
+        if (scenario.fixture?.name == 'single-ruby-rule') {
+          expect(
+            observation.nativeController!.snapshot!.fold<int>(
+              0,
+              (count, page) => count + page.rules.length,
+            ),
+            24,
+          );
+        }
         void checkLanguages(ProfileReaderObservation current) {
           final expected = novelProfileExpectedLanguages(
             scenario.fixture?.name ?? '',

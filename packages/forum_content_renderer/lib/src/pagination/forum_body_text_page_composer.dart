@@ -1,5 +1,6 @@
 import 'dart:collection';
 import 'dart:math' as math;
+import 'dart:ui' show Color;
 
 import 'package:flutter/foundation.dart' show precisionErrorTolerance;
 import 'package:html_pagination_core/html_pagination_core.dart';
@@ -77,14 +78,37 @@ final class ForumBodyTextPageFragment {
   final ForumBodyTextPageFragmentKind kind;
 }
 
+/// Immutable paint geometry. A rule never contributes text, glyph coverage or
+/// a semantic reading position. Its path is only a document-local identity.
+final class ForumBodyTextPageRule {
+  const ForumBodyTextPageRule._({
+    required this.path,
+    required this.left,
+    required this.top,
+    required this.width,
+    required this.thickness,
+    required this.color,
+  });
+  final String path;
+  final double left;
+  final double top;
+  final double width;
+  final double thickness;
+  final Color color;
+}
+
 final class ForumBodyTextPage {
   ForumBodyTextPage._(
     this.index,
     List<ForumBodyTextPageFragment> fragments,
+    List<ForumBodyTextPageRule> rules,
     this.usedHeight,
-  ) : fragments = List.unmodifiable(fragments);
+  ) : fragments = List.unmodifiable(fragments),
+      rules = List.unmodifiable(rules);
   final int index;
   final List<ForumBodyTextPageFragment> fragments;
+  final List<ForumBodyTextPageRule> rules;
+  int get itemCount => fragments.length + rules.length;
   final double usedHeight;
 }
 
@@ -133,7 +157,7 @@ final class _PagePrefix extends ListBase<ForumBodyTextPage> {
       throw UnsupportedError('Read-only page prefix');
 }
 
-/// Text and mixed-inline composition over actual native line geometry.
+/// Text, mixed-inline and rule composition over actual native line geometry.
 /// The block layer resolves CSS/reader spacing and horizontal placement first;
 /// this class does not collapse margins or infer settings. It consumes at most
 /// one paragraph lease, releases it on completion/close/failure, and stops each
@@ -169,7 +193,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 13;
+  static const revision = 14;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;
@@ -189,9 +213,11 @@ final class ForumBodyTextPageComposer {
   _EmphasisSceneReservation? _lastSceneReservation;
   final _pages = <ForumBodyTextPage>[];
   final _draft = <ForumBodyTextPageFragment>[];
+  final _rules = <ForumBodyTextPageRule>[];
   ForumBodyTextPageSnapshot? _snapshot;
   _ActiveParagraph? _active;
   _ActivePadding? _padding;
+  _ActiveRule? _rule;
   int _nextParagraphIndex = 0;
   int _fragmentCount = 0;
   double _usedHeight = 0;
@@ -202,12 +228,18 @@ final class ForumBodyTextPageComposer {
   bool get isComplete => _complete;
   bool get isClosed => _closed;
   bool get needsInput =>
-      !_closed && !_complete && _active == null && _padding == null;
+      !_closed &&
+      !_complete &&
+      _active == null &&
+      _padding == null &&
+      _rule == null;
   bool get hasPendingPadding => _padding != null;
+  bool get hasPendingRule => _rule != null;
 
   /// Admission order only; consumed input can extend beyond the stable pages.
   /// This ordinal must not be persisted as a confirmed reading position.
   int get nextParagraphIndex => _nextParagraphIndex;
+  /// Text fragments and paint-only rules share the retained metadata budget.
   int get retainedFragmentCount => _fragmentCount;
   ForumBodyTextPageSnapshot get snapshot =>
       _snapshot ??= ForumBodyTextPageSnapshot._(
@@ -218,6 +250,81 @@ final class ForumBodyTextPageComposer {
         height,
         _complete,
       );
+
+  void appendRule({
+    required String path,
+    required double left,
+    required double width,
+    required double thickness,
+    required Color color,
+    double spaceBefore = 0,
+    double spaceAtPageStart = 0,
+  }) {
+    _ensureOpen();
+    if (!needsInput) throw StateError('Composition input is still pending');
+    if (!left.isFinite ||
+        !width.isFinite ||
+        width < 0 ||
+        !thickness.isFinite ||
+        thickness <= 0 ||
+        !spaceBefore.isFinite ||
+        !spaceAtPageStart.isFinite ||
+        spaceAtPageStart < 0) {
+      throw ArgumentError('Invalid rule composition inputs');
+    }
+    _rule = _ActiveRule(
+      path,
+      left,
+      width,
+      thickness,
+      color,
+      spaceBefore,
+      spaceAtPageStart,
+    );
+  }
+
+  /// A rule is indivisible. Stop after sealing an occupied page; the next
+  /// bounded advance places the same pending rule at the new page's start.
+  ({int pagesPublished, bool isComplete}) advanceRule() {
+    _ensureOpen();
+    final active = _rule;
+    if (active == null) throw StateError('No rule is pending');
+    final before = _pages.length;
+    try {
+      final atStart = _draft.isEmpty && _rules.isEmpty && _usedHeight == 0;
+      final gap = atStart ? active.spaceAtPageStart : active.spaceBefore;
+      final top = math.max(0.0, _flowHeight + gap);
+      final bottom = top + active.thickness;
+      if (!bottom.isFinite) _fail(ForumBodyTextPageFailure.invalidGeometry);
+      if (bottom > height) {
+        if (atStart) _fail(ForumBodyTextPageFailure.oversizedGroup);
+        _seal();
+        return (pagesPublished: 1, isComplete: false);
+      }
+      if (_fragmentCount >= maxFragments) {
+        _fail(ForumBodyTextPageFailure.fragmentLimit);
+      }
+      _rules.add(
+        ForumBodyTextPageRule._(
+          path: active.path,
+          left: active.left,
+          top: top,
+          width: active.width,
+          thickness: active.thickness,
+          color: active.color,
+        ),
+      );
+      _fragmentCount++;
+      _flowHeight = bottom;
+      _usedHeight = math.max(_usedHeight, bottom);
+      _rule = null;
+      if (_usedHeight == height) _seal();
+      return (pagesPublished: _pages.length - before, isComplete: true);
+    } catch (_) {
+      close();
+      rethrow;
+    }
+  }
 
   /// Ownership transfers only on success; rejected leases remain the caller's.
   /// Spacing is applied once before the paragraph, never on a continuation page.
@@ -726,8 +833,9 @@ final class ForumBodyTextPageComposer {
 
   void _seal() {
     if (_pages.length >= maxPages) _fail(ForumBodyTextPageFailure.pageLimit);
-    _pages.add(ForumBodyTextPage._(_pages.length, _draft, _usedHeight));
+    _pages.add(ForumBodyTextPage._(_pages.length, _draft, _rules, _usedHeight));
     _draft.clear();
+    _rules.clear();
     _usedNativeHandles = 0;
     _nativeEntries.clear();
     _nativeBytes = 0;
@@ -753,8 +861,10 @@ final class ForumBodyTextPageComposer {
     _active?.input.lease?.release();
     _active = null;
     _padding = null;
-    _fragmentCount -= _draft.length;
+    _rule = null;
+    _fragmentCount -= _draft.length + _rules.length;
     _draft.clear();
+    _rules.clear();
     _usedNativeHandles = 0;
     _nativeEntries.clear();
     _nativeBytes = 0;
@@ -765,6 +875,21 @@ final class ForumBodyTextPageComposer {
     _usedHeight = 0;
     _flowHeight = 0;
   }
+}
+
+final class _ActiveRule {
+  const _ActiveRule(
+    this.path,
+    this.left,
+    this.width,
+    this.thickness,
+    this.color,
+    this.spaceBefore,
+    this.spaceAtPageStart,
+  );
+  final String path;
+  final double left, width, thickness, spaceBefore, spaceAtPageStart;
+  final Color color;
 }
 
 /// One private typed adapter for the sole active input. Only numeric fragment

@@ -147,6 +147,31 @@ Matcher _failure(NovelReaderNativeCoverageFailure failure) => throwsA(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test(
+    'rules consume the page item budget without fabricating text coverage',
+    () {
+      final fixture = _Fixture('<hr style="margin:0"><hr style="margin:0">');
+      expect(fixture.session.snapshot.single.fragments, isEmpty);
+      expect(fixture.session.snapshot.single.itemCount, 2);
+      expect(
+        () => fixture.cursor(
+          0,
+          const [],
+          limits: const NovelReaderNativeCoverageLimits(maxFragments: 1),
+        ),
+        _failure(NovelReaderNativeCoverageFailure.budget),
+      );
+      final cursor = fixture.cursor(
+        0,
+        const [],
+        limits: const NovelReaderNativeCoverageLimits(maxFragments: 2),
+      );
+      addTearDown(cursor.close);
+      expect(_finish(cursor).points, isEmpty);
+      expect(fixture.cache.layoutBuildCount, 0);
+    },
+  );
+
   for (final direction in TextDirection.values) {
     test('fitted emphasis proves only original body source ($direction)', () {
       final fixture = _Fixture(

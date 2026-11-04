@@ -9,7 +9,7 @@ import 'forum_body_box_resolver.dart';
 import 'forum_body_style_options.dart';
 import 'forum_body_text_emphasis_resolver.dart';
 
-const forumBodyStyleRevision = 15;
+const forumBodyStyleRevision = 16;
 ForumBodyLength forumBodyReaderIndent(
   ForumBodyReaderStyle reader,
   double size,
@@ -720,6 +720,13 @@ final class ForumBodyStyleBuilder {
         ? ForumBodyInsets(
             top: ForumBodyLength(reader.paragraphBefore),
             bottom: ForumBodyLength(reader.paragraphAfter),
+          )
+        : property == 'margin' && node.kind == ForumBodyElementKind.rule
+        ? const ForumBodyInsets(
+            top: ForumBodyLength(.5, ForumBodyLengthUnit.em),
+            bottom: ForumBodyLength(.5, ForumBodyLengthUnit.em),
+            left: ForumBodyLength(0, ForumBodyLengthUnit.auto),
+            right: ForumBodyLength(0, ForumBodyLengthUnit.auto),
           )
         : property == 'padding' && node.kind == ForumBodyElementKind.editStatus
         ? const ForumBodyInsets(bottom: ForumBodyLength(8))

@@ -73,6 +73,23 @@ final class ForumBodyBlockFlowInline extends ForumBodyBlockFlowUnit {
   final double contentWidth;
 }
 
+/// A normal-flow thematic break. It has no text/source projection or native
+/// paragraph. Width and margins use the same resolved box as adjacent text.
+final class ForumBodyBlockFlowRule extends ForumBodyBlockFlowUnit {
+  const ForumBodyBlockFlowRule._(
+    super.identity,
+    this.path,
+    this.left,
+    this.width,
+    this.color,
+  ) : super._();
+  final String path;
+  final double left;
+  final double width;
+  final Color color;
+  double get thickness => 1;
+}
+
 /// Structural controls carry resolved horizontal geometry, not a final border
 /// rectangle. Adjoining child margins can still move a parent's first content;
 /// painting a container background requires the later block fragment layer.
@@ -87,7 +104,7 @@ final class ForumBodyBlockFlowBoundary extends ForumBodyBlockFlowUnit {
 /// Normal-flow geometry over the sole text cursor. Adjoining signed margins
 /// accumulate as max-positive + min-negative across empty blocks and ancestors;
 /// real line content or nonzero padding separates groups. Only active frames,
-/// one margin strut and at most three pending units are retained. No measuring,
+/// one margin strut and at most four pending units are retained. No measuring,
 /// native resource, HTML slice, persistent anchor or page publication is owned.
 /// Edit notices use the text cursor's fitted format. Mixed inline inputs retain
 /// the same block geometry without entering the ordinary shaping port. Other semantic containers
@@ -115,7 +132,7 @@ final class ForumBodyBlockFlowCursor {
       throw ArgumentError.value(width, 'width');
     }
   }
-  static const revision = 3;
+  static const revision = 4;
   final double width;
   final ForumBodyBlockEdgeMargins edgeMargins;
   final double _rootFontSize;
@@ -206,6 +223,7 @@ final class ForumBodyBlockFlowCursor {
           ForumBodyElementKind.container,
           ForumBodyElementKind.paragraph,
           ForumBodyElementKind.heading,
+          ForumBodyElementKind.rule,
           ForumBodyElementKind.editStatus,
           ForumBodyElementKind.inline,
           ForumBodyElementKind.unknown,
@@ -238,6 +256,27 @@ final class ForumBodyBlockFlowCursor {
           ForumBodyBlockSpaceKind.paddingTop,
           node.path,
         );
+        if (node.kind == ForumBodyElementKind.rule) {
+          if (event.style.textStyle.foreground != null) {
+            throw ForumBodyBlockFlowException(
+              ForumBodyBlockFlowFailure.geometry,
+              node.path,
+            );
+          }
+          _flushMargins();
+          _hasFlowContent = true;
+          _pending.add(
+            ForumBodyBlockFlowRule._(
+              identity,
+              node.path,
+              left,
+              box.contentWidth,
+              event.style.visibilityHidden
+                  ? const Color(0x00000000)
+                  : event.style.textStyle.color ?? const Color(0xff000000),
+            ),
+          );
+        }
       case ForumBodyTextFlowBoundaryKind.closeBlock:
         if (_frames.isEmpty ||
             !identical(_frames.last.event.node, event!.node)) {

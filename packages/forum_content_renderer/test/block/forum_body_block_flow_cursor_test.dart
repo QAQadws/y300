@@ -140,6 +140,7 @@ void main() {
           ForumBodyBlockFlowParagraph() =>
             'text:${unit.paragraph.content.projection.text}',
           ForumBodyBlockFlowInline() => 'inline:${unit.paragraph.index}',
+          ForumBodyBlockFlowRule() => 'rule:${unit.path}',
           ForumBodyBlockFlowBoundary() =>
             '${unit.boundary.kind.name}:${unit.boundary.event?.node.path}',
         },
@@ -253,6 +254,7 @@ void main() {
               ForumBodyBlockFlowParagraph() =>
                 '${unit.paragraph.index}:${unit.paragraph.content.projection.text}:${unit.paragraph.window}:${unit.contentLeft}:${unit.contentWidth}',
               ForumBodyBlockFlowInline() => 'inline:${unit.paragraph.index}',
+              ForumBodyBlockFlowRule() => 'rule:${unit.path}',
               ForumBodyBlockFlowBoundary() =>
                 '${unit.boundary.kind}:${unit.boundary.event?.node.path}:${unit.contentLeft}',
             },

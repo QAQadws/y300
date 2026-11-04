@@ -80,6 +80,7 @@ final class ForumBodyTextPageSessionStep {
     int? flowWorkDone,
     this.formatUnitsPrepared = 0,
     this.layoutsBuilt = 0,
+    this.rulesComposed = 0,
     required this.unitsRead,
     required this.linesInspected,
     required this.paragraphsAdmitted,
@@ -93,6 +94,7 @@ final class ForumBodyTextPageSessionStep {
   final int flowWorkDone;
   final int formatUnitsPrepared;
   final int layoutsBuilt;
+  final int rulesComposed;
   final int unitsRead;
   final int linesInspected;
   final int paragraphsAdmitted;
@@ -102,6 +104,7 @@ final class ForumBodyTextPageSessionStep {
   final bool waitingForLayoutBudget;
   final bool isComplete;
   bool get madeProgress =>
+      rulesComposed > 0 ||
       flowWorkDone > 0 ||
       formatUnitsPrepared > 0 ||
       layoutsBuilt > 0 ||
@@ -269,6 +272,7 @@ final class ForumBodyTextPageSession {
       int lines = 0,
       double padding = 0,
       bool completed = false,
+      int rules = 0,
     }) {
       _recordPublished();
       return ForumBodyTextPageSessionStep(
@@ -276,6 +280,7 @@ final class ForumBodyTextPageSession {
         flowWorkDone: work,
         formatUnitsPrepared: formatUnits,
         layoutsBuilt: _cache.layoutBuildCount - buildsBefore,
+        rulesComposed: rules,
         unitsRead: units,
         linesInspected: lines,
         paragraphsAdmitted: admitted,
@@ -405,6 +410,13 @@ final class ForumBodyTextPageSession {
           _margin = 0;
           admitted = 1;
         }
+        if (_composer.hasPendingRule) {
+          final step = _composer.advanceRule();
+          return result(
+            rules: step.isComplete ? 1 : 0,
+            completed: step.isComplete,
+          );
+        }
         if (_composer.hasPendingPadding) {
           final step = _composer.advancePadding();
           return result(
@@ -445,6 +457,16 @@ final class ForumBodyTextPageSession {
               throw StateError('Unordered inline input');
             }
             _pendingInline = unit;
+          case ForumBodyBlockFlowRule():
+            _composer.appendRule(
+              path: unit.path,
+              left: unit.left,
+              width: unit.width,
+              thickness: unit.thickness,
+              color: unit.color,
+              spaceBefore: _margin,
+            );
+            _margin = 0;
           case ForumBodyBlockFlowBoundary():
             if (unit.boundary.kind ==
                 ForumBodyTextFlowBoundaryKind.endDocument) {

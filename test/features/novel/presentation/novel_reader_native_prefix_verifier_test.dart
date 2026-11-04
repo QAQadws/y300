@@ -32,6 +32,50 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const html = '<p>ab</p><p>cd</p><p>ef</p>';
 
+  test('rule-only retry pages compare every paint item within the existing work budget', () {
+    final source = List.filled(9, '<hr style="margin:0">').join();
+    final old = NativeReaderTestFixture(source, height: 4);
+    final next = NativeReaderTestFixture(source, height: 4, layoutId: 'retry');
+    final verifier = _verifier(old.session.snapshot, next.session.snapshot);
+    var compared = 0;
+    while (verifier.state == NovelReaderNativePrefixState.active) {
+      final step = verifier.advance(maxPages: 1, maxFragments: 1);
+      expect(step.fragmentsCompared, lessThanOrEqualTo(1));
+      compared += step.fragmentsCompared;
+    }
+    expect(compared, 9);
+    expect(verifier.state, NovelReaderNativePrefixState.matched);
+  });
+
+  test(
+    'same geometry cannot hide changed rule paint under a stale fingerprint',
+    () {
+      ForumBodyReaderStyle reader(Color color) => ForumBodyReaderStyle(
+        textStyle: TextStyle(fontSize: 10, color: color),
+        fontRevision: 'same',
+        linkColor: color,
+      );
+      const source = '<hr style="margin:0">';
+      final old = NativeReaderTestFixture(
+        source,
+        reader: reader(const Color(0xffff0000)),
+      );
+      final next = NativeReaderTestFixture(
+        source,
+        reader: reader(const Color(0xff0000ff)),
+        layoutId: 'retry',
+      );
+      final verifier = _verifier(old.session.snapshot, next.session.snapshot);
+      _compareAvailable(verifier);
+      expect(verifier.state, NovelReaderNativePrefixState.mismatched);
+      expect(verifier.mismatch, NovelReaderNativePrefixMismatch.rule);
+      expect(
+        old.session.snapshot.single.rules.single.color,
+        const Color(0xffff0000),
+      );
+    },
+  );
+
   test(
     'a new request matches fixed prefix incrementally without new shaping',
     () {

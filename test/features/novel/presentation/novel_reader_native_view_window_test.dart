@@ -44,6 +44,41 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
+    'rule-only pages consume the same retained item budget as text fragments',
+    () async {
+      final fixture = NativeReaderTestFixture(
+        '<hr style="margin:0"><hr style="margin:0">',
+      );
+      final accepted = _window(
+        fixture,
+        limits: const NovelReaderNativeViewWindowLimits(
+          radius: 0,
+          maxRetainedFragments: 2,
+        ),
+      );
+      await accepted.prepareAvailable();
+      expect(accepted.retainedPageCount, 1);
+      expect(accepted.retainedFragments, 2);
+      expect(accepted.retainedCoveragePoints, 0);
+      accepted.close();
+      final rejected = _window(
+        fixture,
+        limits: const NovelReaderNativeViewWindowLimits(
+          radius: 0,
+          maxRetainedFragments: 1,
+        ),
+      );
+      await expectLater(
+        rejected.prepareAvailable(),
+        throwsA(isA<NovelReaderNativeViewWindowBudgetException>()),
+      );
+      expect(rejected.retainedFragments, 0);
+      expect(fixture.session.activeIssuedLeases, 0);
+      expect(fixture.cache.layoutBuildCount, 0);
+    },
+  );
+
+  test(
     'a same-hash view from another actual session cannot be adopted',
     () async {
       final first = NativeReaderTestFixture(_html, width: 20, height: 10);

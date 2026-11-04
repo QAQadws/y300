@@ -94,7 +94,7 @@ final class NovelReaderNativePageCoverageCursor {
     if (anchors.identity != snapshot.identity) {
       _fail(NovelReaderNativeCoverageFailure.identity);
     }
-    if (snapshot[pageIndex].fragments.length > limits.maxFragments) {
+    if (snapshot[pageIndex].itemCount > limits.maxFragments) {
       _fail(NovelReaderNativeCoverageFailure.budget);
     }
     validateForumBodyPreparedTextPageBinding(
