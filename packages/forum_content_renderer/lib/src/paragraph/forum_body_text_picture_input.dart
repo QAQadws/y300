@@ -24,7 +24,7 @@ final class ForumBodyTextPictureInput {
       writer.close();
     }
   }
-  static const revision = 11;
+  static const revision = 12;
   static const maximumNestingDepth = 32;
   static const maximumCommands = 32768;
   static const baseEstimatedInputBytes = 4096;
@@ -407,32 +407,54 @@ void _validateTextPictureCommand(ForumBodyTextPictureCommand command) {
 
 // An immutable bounded transform chain keeps Canvas's actual nested float
 // operations in the key. Equal sums alone do not prove identical native pixels.
-final class _TextPictureTranslation {
-  _TextPictureTranslation(this.offset, this.inner)
-    : depth = (inner?.depth ?? 0) + 1,
-      total = offset + (inner?.total ?? Offset.zero),
-      _hash = Object.hash(offset, inner) {
-    if (depth > ForumBodyTextPictureCommand.maximumTranslationDepth ||
-        !offset.dx.isFinite ||
-        !offset.dy.isFinite ||
-        offset.dx.abs() > 32768 ||
-        offset.dy.abs() > 32768 ||
+final class _TextPictureTransform {
+  factory _TextPictureTransform.translation(
+    Offset offset,
+    _TextPictureTransform? inner,
+  ) => _TextPictureTransform._(offset, null, inner);
+  factory _TextPictureTransform.clip(Rect clip, _TextPictureTransform? inner) =>
+      _TextPictureTransform._(null, clip, inner);
+  _TextPictureTransform._(this.offset, this.clip, this.inner)
+    : translationDepth =
+          (inner?.translationDepth ?? 0) + (offset == null ? 0 : 1),
+      clipDepth = (inner?.clipDepth ?? 0) + (clip == null ? 0 : 1),
+      total = (offset ?? Offset.zero) + (inner?.total ?? Offset.zero),
+      _hash = Object.hash(offset, clip, inner) {
+    if (translationDepth >
+            ForumBodyTextPictureCommand.maximumTranslationDepth ||
+        clipDepth > ForumBodyTextPictureCommand.maximumClipDepth ||
+        (offset != null &&
+            (!offset!.dx.isFinite ||
+                !offset!.dy.isFinite ||
+                offset!.dx.abs() > 32768 ||
+                offset!.dy.abs() > 32768)) ||
+        (clip != null &&
+            (!clip!.isFinite ||
+                clip!.right < clip!.left ||
+                clip!.bottom < clip!.top ||
+                clip!.left.abs() > 32768 ||
+                clip!.top.abs() > 32768 ||
+                clip!.right.abs() > 32768 ||
+                clip!.bottom.abs() > 32768)) ||
         !total.dx.isFinite ||
         !total.dy.isFinite ||
         total.dx.abs() > 32768 ||
         total.dy.abs() > 32768) {
-      throw ArgumentError('Invalid text picture translation');
+      throw ArgumentError('Invalid text picture transform');
     }
   }
-  final Offset offset, total;
-  final _TextPictureTranslation? inner;
-  final int depth, _hash;
+  final Offset? offset;
+  final Rect? clip;
+  final Offset total;
+  final _TextPictureTransform? inner;
+  final int translationDepth, clipDepth, _hash;
   @override
   int get hashCode => _hash;
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is _TextPictureTranslation &&
+      other is _TextPictureTransform &&
           offset == other.offset &&
+          clip == other.clip &&
           inner == other.inner;
 }

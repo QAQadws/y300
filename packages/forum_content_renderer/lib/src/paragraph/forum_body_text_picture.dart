@@ -28,8 +28,8 @@ final class ForumBodyTextPictureCommand {
     this.physicalLine,
     this.inlineRow,
     this.fitScale = 1,
-  }) : _translation = null;
-  const ForumBodyTextPictureCommand._translated({
+  }) : _transform = null;
+  const ForumBodyTextPictureCommand._transformed({
     required this.nativeInputIdentity,
     required this.offset,
     required this.fitScale,
@@ -37,30 +37,43 @@ final class ForumBodyTextPictureCommand {
     required this.paragraphRow,
     required this.physicalLine,
     required this.inlineRow,
-    required _TextPictureTranslation translation,
-  }) : _translation = translation;
+    required _TextPictureTransform transform,
+  }) : _transform = transform;
   static const maximumTranslationDepth = 8;
-  final _TextPictureTranslation? _translation;
+  static const maximumClipDepth = 32;
+  final _TextPictureTransform? _transform;
 
   /// Preserve the original native transform order. Adding two double offsets
   /// before Canvas records them can change float precision and shadow pixels.
   ForumBodyTextPictureCommand translated(Offset by) {
     if (by == Offset.zero) return this;
-    return ForumBodyTextPictureCommand._translated(
-      nativeInputIdentity: nativeInputIdentity,
-      offset: offset,
-      fitScale: fitScale,
-      bandChildIndex: bandChildIndex,
-      paragraphRow: paragraphRow,
-      physicalLine: physicalLine,
-      inlineRow: inlineRow,
-      translation: _TextPictureTranslation(by, _translation),
-    );
+    return _withTransform(_TextPictureTransform.translation(by, _transform));
   }
 
-  int get translationDepth => _translation?.depth ?? 0;
+  /// Wraps the command in an explicit hard viewport clip in the enclosing
+  /// coordinate system. Calls retain their order relative to [translated] and
+  /// fitting; intersecting rectangles beforehand can change native edge pixels.
+  ForumBodyTextPictureCommand clipped(Rect bounds) =>
+      _withTransform(_TextPictureTransform.clip(bounds, _transform));
+
+  ForumBodyTextPictureCommand _withTransform(_TextPictureTransform transform) =>
+      ForumBodyTextPictureCommand._transformed(
+        nativeInputIdentity: nativeInputIdentity,
+        offset: offset,
+        fitScale: fitScale,
+        bandChildIndex: bandChildIndex,
+        paragraphRow: paragraphRow,
+        physicalLine: physicalLine,
+        inlineRow: inlineRow,
+        transform: transform,
+      );
+
+  int get translationDepth => _transform?.translationDepth ?? 0;
+  int get clipDepth => _transform?.clipDepth ?? 0;
   static const translationInputEstimatedBytes = 64;
   static const translationPictureEstimatedBytes = 64;
+  static const clipInputEstimatedBytes = 96;
+  static const clipPictureEstimatedBytes = 96;
 
   /// Command-only retention; the unique opaque native metadata is separate.
   int get estimatedInputBytes =>
@@ -69,14 +82,25 @@ final class ForumBodyTextPictureCommand {
       (paragraphRow == null ? 0 : 64) +
       (physicalLine == null ? 0 : 192) +
       (inlineRow == null ? 0 : 128) +
-      translationDepth * translationInputEstimatedBytes;
+      translationDepth * translationInputEstimatedBytes +
+      clipDepth * clipInputEstimatedBytes;
   int get estimatedPictureBytes =>
-      256 + translationDepth * translationPictureEstimatedBytes;
-  Offset get sceneOffset => (_translation?.total ?? Offset.zero) + offset;
+      256 +
+      translationDepth * translationPictureEstimatedBytes +
+      clipDepth * clipPictureEstimatedBytes;
+  Offset get sceneOffset => (_transform?.total ?? Offset.zero) + offset;
   Iterable<Offset> get translations sync* {
-    var current = _translation;
+    var current = _transform;
     while (current != null) {
-      yield current.offset;
+      if (current.offset case final offset?) yield offset;
+      current = current.inner;
+    }
+  }
+
+  Iterable<Rect> get clips sync* {
+    var current = _transform;
+    while (current != null) {
+      if (current.clip case final clip?) yield clip;
       current = current.inner;
     }
   }
@@ -197,7 +221,7 @@ final class ForumBodyTextPictureCommand {
           paragraphRow == other.paragraphRow &&
           physicalLine == other.physicalLine &&
           inlineRow == other.inlineRow &&
-          _translation == other._translation &&
+          _transform == other._transform &&
           fitScale == other.fitScale;
   @override
   int get hashCode => Object.hash(
@@ -208,7 +232,7 @@ final class ForumBodyTextPictureCommand {
     physicalLine,
     inlineRow,
     fitScale,
-    _translation,
+    _transform,
   );
 }
 
@@ -478,17 +502,18 @@ final class ForumBodyTextPicturePreparation {
                 final command = input.commands[_index++];
                 final canvas = _canvas!;
                 final fitted = command.fitScale != 1;
-                final saved = fitted || command._translation != null;
+                final saved = fitted || command._transform != null;
                 if (saved) {
                   canvas.save();
                 }
-                var translation = command._translation;
-                while (translation != null) {
-                  canvas.translate(
-                    translation.offset.dx,
-                    translation.offset.dy,
-                  );
-                  translation = translation.inner;
+                var transform = command._transform;
+                while (transform != null) {
+                  if (transform.offset case final offset?) {
+                    canvas.translate(offset.dx, offset.dy);
+                  } else {
+                    canvas.clipRect(transform.clip!, doAntiAlias: false);
+                  }
+                  transform = transform.inner;
                 }
                 if (fitted) {
                   canvas.translate(command.offset.dx, command.offset.dy);
