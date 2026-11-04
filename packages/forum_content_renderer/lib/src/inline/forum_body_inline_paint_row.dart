@@ -5,8 +5,9 @@ import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_paragraph_row.dart';
 import 'forum_body_inline_emphasis_paint_reference.dart';
 import 'forum_body_inline_emphasis_row_allocation.dart';
+import 'forum_body_inline_paragraph_layout.dart';
 
-/// Pure physical paint identity; no text window, source group, native resource
+/// Pure physical paint identity; no source group, native resource
 /// or callback can be recovered from it. A picture must bind the actual row.
 final class ForumBodyInlinePaintRowSelector {
   const ForumBodyInlinePaintRowSelector._(
@@ -15,13 +16,19 @@ final class ForumBodyInlinePaintRowSelector {
     this.clipTop,
     this.clipBottom,
     this.isEmpty,
-    this.nativeOffset,
-  );
+    this.nativeOffset, {
+    this.windowEndLine,
+  });
   final Object nativeInputIdentity;
   final int lineIndex;
   final double clipTop, clipBottom;
   final bool isEmpty;
   final Offset nativeOffset;
+
+  /// Non-null only for an actual natural parent fragment. The fragment itself
+  /// remains in the borrowed view; its source capability never enters this key.
+  final int? windowEndLine;
+  bool get isNaturalWindow => windowEndLine != null;
   bool matchesInput(Object identity) => nativeInputIdentity == identity;
   @override
   bool operator ==(Object other) =>
@@ -29,6 +36,7 @@ final class ForumBodyInlinePaintRowSelector {
       other is ForumBodyInlinePaintRowSelector &&
           nativeInputIdentity == other.nativeInputIdentity &&
           lineIndex == other.lineIndex &&
+          windowEndLine == other.windowEndLine &&
           clipTop == other.clipTop &&
           clipBottom == other.clipBottom &&
           isEmpty == other.isEmpty &&
@@ -37,6 +45,7 @@ final class ForumBodyInlinePaintRowSelector {
   int get hashCode => Object.hash(
     nativeInputIdentity,
     lineIndex,
+    windowEndLine,
     clipTop,
     clipBottom,
     isEmpty,
@@ -44,13 +53,51 @@ final class ForumBodyInlinePaintRowSelector {
   );
 }
 
-/// Borrowed, source-qualified actual parent strip for the common scene worker.
+/// Borrowed actual parent strip or natural row window for the common scene worker.
 /// Its pure selector retains the qualified allocation-to-native translation.
 /// Command offsets are scene-local; a long isolated parent's virtual coordinate
 /// is not mistaken for a huge visible scene origin or an independent text row.
 final class ForumBodyInlinePaintRowView {
-  ForumBodyInlinePaintRowView._(this.parent, this.selector, this._ensureOwner) {
+  ForumBodyInlinePaintRowView._(
+    this.parent,
+    this.selector,
+    this._ensureOwner, {
+    ForumBodyInlineParagraphFragment? naturalWindow,
+  }) : _naturalWindow = naturalWindow {
     _guard();
+  }
+
+  /// Paints ONLY this actual natural parent's legal row window. Atomic children,
+  /// their outer viewport clip and current source bindings belong to the caller.
+  /// Keep Fragment.paintParent as the unique authority for fractional clipping
+  /// and offset arithmetic; isolated phase strips cannot stand in for it.
+  factory ForumBodyInlinePaintRowView.naturalWindow({
+    required ForumBodyInlineParagraphLease parent,
+    required int startLine,
+    required int endLine,
+    required void Function() ensureOwner,
+  }) {
+    ensureOwner();
+    if (!parent.isActive) {
+      throw StateError('Natural inline paint parent is retired');
+    }
+    // This also rejects isolated/paint-layer parents and illegal row boundaries.
+    final window = parent.layout.fragment(startLine, endLine);
+    return ForumBodyInlinePaintRowView._(
+      parent,
+      ForumBodyInlinePaintRowSelector._(
+        parent.nativeInputIdentity,
+        startLine,
+        window.top,
+        window.bottom,
+        window.coverageStartUtf16 == window.coverageEndUtf16 &&
+            window.engineCoverageStartUtf16 == window.engineCoverageEndUtf16,
+        Offset(0, -window.top),
+        windowEndLine: endLine,
+      ),
+      ensureOwner,
+      naturalWindow: window,
+    );
   }
   factory ForumBodyInlinePaintRowView.glyphs({
     required ForumBodyInlineParagraphLease parent,
@@ -147,6 +194,7 @@ final class ForumBodyInlinePaintRowView {
   final ForumBodyInlineParagraphLease parent;
   final ForumBodyInlinePaintRowSelector selector;
   final void Function() _ensureOwner;
+  final ForumBodyInlineParagraphFragment? _naturalWindow;
   bool _painting = false;
   bool get isPaintPrepared => parent.isActive && parent.layout.isPaintPrepared;
   Object get nativeInputIdentity {
@@ -171,7 +219,14 @@ final class ForumBodyInlinePaintRowView {
         !selector.matchesInput(parent.nativeInputIdentity)) {
       _source();
     }
-    return ForumBodyInlinePaintRowView._(parent, selector, ensureOwner);
+    return ForumBodyInlinePaintRowView._(
+      parent,
+      selector,
+      ensureOwner,
+      naturalWindow: selector.windowEndLine == null
+          ? null
+          : parent.layout.fragment(selector.lineIndex, selector.windowEndLine!),
+    );
   }
 
   void paint(Canvas canvas, Offset offset) {
@@ -184,6 +239,11 @@ final class ForumBodyInlinePaintRowView {
       }
       if (!isPaintPrepared) {
         throw StateError('Inline row paint is not prepared');
+      }
+      if (_naturalWindow case final window?) {
+        window.paintParent(canvas, offset);
+        _guard();
+        return;
       }
       if (selector.isEmpty) return;
       canvas.save();

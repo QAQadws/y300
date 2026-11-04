@@ -24,7 +24,7 @@ final class ForumBodyTextPictureInput {
       writer.close();
     }
   }
-  static const revision = 10;
+  static const revision = 11;
   static const maximumNestingDepth = 32;
   static const maximumCommands = 32768;
   static const baseEstimatedInputBytes = 4096;
@@ -344,7 +344,11 @@ void _validateTextPictureCommand(ForumBodyTextPictureCommand command) {
   if (key is _InlineLayoutKey) {
     if (inline == null ||
         !inline.matchesInput(identity) ||
-        key.rowIsolationPitch == null ||
+        (inline.isNaturalWindow
+            ? key.rowIsolationPitch != null ||
+                  key.paintLayer != ForumBodyParagraphPaintLayer.all ||
+                  inline.windowEndLine! <= inline.lineIndex
+            : key.rowIsolationPitch == null) ||
         command.bandChildIndex != null ||
         command.paragraphRow != null ||
         command.physicalLine != null ||
