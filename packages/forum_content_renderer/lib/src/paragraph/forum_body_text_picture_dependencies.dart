@@ -54,7 +54,7 @@ final class _TextPictureDependencyWork {
     required ForumBodyParagraphCache cache,
     required ForumBodyTextPictureInput input,
     required Iterable<ForumBodyTextLease> text,
-    required Iterable<ForumBodyEmphasisMarkLease> marks,
+    required Iterable<ForumBodyDecorationTextLease> marks,
     required Iterable<ForumBodyTextPictureLease> pictures,
     required Iterable<ForumBodyParagraphRowView> rows,
     required Iterable<ForumBodyInlinePaintRowView> inlineRows,
@@ -70,7 +70,7 @@ final class _TextPictureDependencyWork {
   ForumBodyParagraphCache? _cache;
   ForumBodyTextPictureInput? _input;
   Iterable<ForumBodyTextLease>? _text;
-  Iterable<ForumBodyEmphasisMarkLease>? _marks;
+  Iterable<ForumBodyDecorationTextLease>? _marks;
   Iterable<ForumBodyTextPictureLease>? _pictures;
   Iterable<ForumBodyParagraphRowView>? _rows;
   Iterable<ForumBodyInlinePaintRowView>? _inlineRows;
@@ -196,7 +196,9 @@ final class _TextPictureDependencyWork {
     if (!_resources.containsKey(key)) {
       final alias = switch (lease) {
         ForumBodyTextLease() => cache._aliasTextLease(lease),
-        ForumBodyEmphasisMarkLease() => cache._aliasEmphasisMarkLease(lease),
+        ForumBodyDecorationTextLease() => cache._aliasDecorationTextLease(
+          lease,
+        ),
         ForumBodyTextPictureLease() => cache._aliasPictureLease(lease),
         _ => throw ArgumentError('Unsupported text picture resource'),
       };

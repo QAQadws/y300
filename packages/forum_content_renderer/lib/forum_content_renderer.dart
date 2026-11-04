@@ -158,7 +158,8 @@ export 'src/paragraph/forum_body_text_request.dart';
 export 'src/paragraph/forum_body_native_request.dart';
 export 'src/inline/forum_body_inline_paragraph_request.dart';
 export 'src/inline/forum_body_emphasis_mark.dart'
-    show ForumBodyEmphasisMarkInput;
+    show ForumBodyEmphasisMarkInput, ForumBodyDecorationTextInput;
+export 'src/decoration/forum_body_decoration_text_request.dart';
 export 'src/inline/forum_body_emphasis_mark_request.dart';
 export 'src/inline/forum_body_emphasis_text_input.dart';
 export 'src/inline/forum_body_emphasis_row_input.dart';

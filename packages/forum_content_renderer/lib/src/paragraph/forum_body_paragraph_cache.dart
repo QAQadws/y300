@@ -113,10 +113,42 @@ final class ForumBodyParagraphCache {
     TextScaler scaler,
     bool allowBuild,
   ) {
+    final entry = _acquireDecorationEntry(input, scaler, allowBuild);
+    return entry == null
+        ? null
+        : ForumBodyEmphasisMarkLease._(this, entry, input);
+  }
+
+  ForumBodyDecorationTextLease acquireDecorationText({
+    required ForumBodyDecorationTextInput input,
+    TextScaler textScaler = TextScaler.noScaling,
+  }) => _acquireDecorationText(input, textScaler, true)!;
+
+  ForumBodyDecorationTextLease? tryAcquireDecorationTextCached({
+    required ForumBodyDecorationTextInput input,
+    TextScaler textScaler = TextScaler.noScaling,
+  }) => _acquireDecorationText(input, textScaler, false);
+
+  ForumBodyDecorationTextLease? _acquireDecorationText(
+    ForumBodyDecorationTextInput input,
+    TextScaler scaler,
+    bool allowBuild,
+  ) {
+    final entry = _acquireDecorationEntry(input, scaler, allowBuild);
+    return entry == null
+        ? null
+        : ForumBodyDecorationTextLease._(this, entry, input);
+  }
+
+  _LayoutEntry? _acquireDecorationEntry(
+    ForumBodyDecorationTextInput input,
+    TextScaler scaler,
+    bool allowBuild,
+  ) {
     if (_closed) throw StateError('Paragraph cache is closed');
     final scaled = ForumBodyEmphasisMarkLayout.resolveScale(input, scaler);
     if (_closed) throw StateError('Paragraph cache is closed');
-    final entry = _acquireEntry(
+    return _acquireEntry(
       key: _EmphasisMarkKey(input, scaled),
       allowBuild: allowBuild,
       minimumBytes: input.estimatedInputBytes + 112,
@@ -126,9 +158,6 @@ final class ForumBodyParagraphCache {
         scaledFontSize: scaled,
       ),
     );
-    return entry == null
-        ? null
-        : ForumBodyEmphasisMarkLease._(this, entry, input);
   }
 
   /// A prepared text scene shares this owner's entry/byte budget. A miss never
@@ -193,13 +222,15 @@ final class ForumBodyParagraphCache {
     return alias;
   }
 
-  ForumBodyEmphasisMarkLease _aliasEmphasisMarkLease(
-    ForumBodyEmphasisMarkLease lease,
+  ForumBodyDecorationTextLease _aliasDecorationTextLease(
+    ForumBodyDecorationTextLease lease,
   ) {
     if (!ownsLease(lease)) throw StateError('Emphasis mark owner is retired');
     lease._entry.leases++;
     _leases++;
-    return ForumBodyEmphasisMarkLease._(this, lease._entry, lease.input);
+    return lease is ForumBodyEmphasisMarkLease
+        ? ForumBodyEmphasisMarkLease._(this, lease._entry, lease.input)
+        : ForumBodyDecorationTextLease._(this, lease._entry, lease.input);
   }
 
   ForumBodyInlineParagraphLease _aliasInlineLease(
@@ -904,6 +935,11 @@ final class ForumBodyParagraphBudgetProbe {
   void includeEmphasisMark({
     required ForumBodyEmphasisMarkInput input,
     required TextScaler textScaler,
+  }) => includeDecorationText(input: input, textScaler: textScaler);
+
+  void includeDecorationText({
+    required ForumBodyDecorationTextInput input,
+    required TextScaler textScaler,
   }) {
     final cache = _cache;
     if (cache == null || cache.isClosed) {
@@ -1132,14 +1168,25 @@ sealed class ForumBodyTextLease extends ForumBodyNativeParagraphLease {
 }
 
 /// Decoration resources expose neither source content nor text-selection API.
-final class ForumBodyEmphasisMarkLease extends ForumBodyNativeParagraphLease {
-  ForumBodyEmphasisMarkLease._(super.owner, super.entry, this.input)
+base class ForumBodyDecorationTextLease extends ForumBodyNativeParagraphLease {
+  ForumBodyDecorationTextLease._(super.owner, super.entry, this.input)
     : super._();
-  final ForumBodyEmphasisMarkInput input;
+  final ForumBodyDecorationTextInput input;
   ForumBodyEmphasisMarkLayout get layout {
     if (!isActive) throw StateError('Emphasis mark lease is retired');
     return _entry.layout as ForumBodyEmphasisMarkLayout;
   }
+}
+
+final class ForumBodyEmphasisMarkLease extends ForumBodyDecorationTextLease {
+  ForumBodyEmphasisMarkLease._(
+    super.owner,
+    super.entry,
+    ForumBodyEmphasisMarkInput super.input,
+  ) : super._();
+  @override
+  ForumBodyEmphasisMarkInput get input =>
+      super.input as ForumBodyEmphasisMarkInput;
 }
 
 final class ForumBodyParagraphLease extends ForumBodyTextLease {
@@ -1316,7 +1363,7 @@ final class _NativeInputIdentity {
 
 final class _EmphasisMarkKey {
   const _EmphasisMarkKey(this.input, this.scaled);
-  final ForumBodyEmphasisMarkInput input;
+  final ForumBodyDecorationTextInput input;
   final double scaled;
   @override
   bool operator ==(Object other) =>

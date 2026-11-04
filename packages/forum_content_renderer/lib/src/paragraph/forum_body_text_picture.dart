@@ -121,6 +121,16 @@ final class ForumBodyTextPictureCommand {
     ForumBodyEmphasisMarkLease mark,
     Offset offset, {
     double fitScale = 1,
+  }) => ForumBodyTextPictureCommand.fromDecorationText(
+    mark,
+    offset,
+    fitScale: fitScale,
+  );
+
+  factory ForumBodyTextPictureCommand.fromDecorationText(
+    ForumBodyDecorationTextLease mark,
+    Offset offset, {
+    double fitScale = 1,
   }) => ForumBodyTextPictureCommand(
     nativeInputIdentity: mark.nativeInputIdentity,
     offset: offset,
@@ -281,7 +291,7 @@ final class ForumBodyTextPicturePreparation {
     required ForumBodyTextPictureInput input,
     required Iterable<ForumBodyTextLease> text,
     required void Function() ensureOwner,
-    Iterable<ForumBodyEmphasisMarkLease> marks = const [],
+    Iterable<ForumBodyDecorationTextLease> marks = const [],
     Iterable<ForumBodyTextPictureLease> pictures = const [],
     Iterable<ForumBodyParagraphRowView> paragraphRows = const [],
     Iterable<ForumBodyInlinePaintRowView> inlineRows = const [],
@@ -308,7 +318,7 @@ final class ForumBodyTextPicturePreparation {
     required ForumBodyTextPictureInput input,
     required Iterable<ForumBodyTextLease> text,
     required void Function() ensureOwner,
-    Iterable<ForumBodyEmphasisMarkLease> marks = const [],
+    Iterable<ForumBodyDecorationTextLease> marks = const [],
     Iterable<ForumBodyTextPictureLease> pictures = const [],
     Iterable<ForumBodyParagraphRowView> paragraphRows = const [],
     Iterable<ForumBodyInlinePaintRowView> inlineRows = const [],
@@ -331,7 +341,7 @@ final class ForumBodyTextPicturePreparation {
     required ForumBodyTextPictureInput input,
     required Iterable<ForumBodyTextLease> text,
     required void Function() ensureOwner,
-    required Iterable<ForumBodyEmphasisMarkLease> marks,
+    required Iterable<ForumBodyDecorationTextLease> marks,
     required Iterable<ForumBodyTextPictureLease> pictures,
     required Iterable<ForumBodyParagraphRowView> paragraphRows,
     required Iterable<ForumBodyInlinePaintRowView> inlineRows,
@@ -541,7 +551,7 @@ final class ForumBodyTextPicturePreparation {
                     switch (_resources[command._dependency]!) {
                       case ForumBodyTextLease resource:
                         resource.layout.paint(canvas, offset);
-                      case ForumBodyEmphasisMarkLease resource:
+                      case ForumBodyDecorationTextLease resource:
                         resource.layout.paint(canvas, offset);
                       case ForumBodyTextPictureLease resource:
                         resource.paint(canvas, offset);
