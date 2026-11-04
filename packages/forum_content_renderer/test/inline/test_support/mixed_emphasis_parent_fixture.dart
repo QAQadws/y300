@@ -22,6 +22,69 @@ final class MixedEmphasisCurve extends TextScaler {
   double get textScaleFactor => throw StateError('Use actual font sizes');
 }
 
+typedef MixedEmphasisAllocatedSource = ({
+  ForumBodyInlineEmphasisRowAllocation allocation,
+  ForumBodyInlineParagraphLease natural,
+  ForumBodyInlineParagraphLease source,
+});
+
+/// Actual whole-source measurement/isolation/allocation, without acquiring
+/// paint layers. Both returned parents stay borrowed by the tested operation.
+MixedEmphasisAllocatedSource measureMixedEmphasisAllocatedSource(
+  MixedEmphasisParentFixture fixture,
+  ForumBodyParagraphCache cache, {
+  TextScaler scaler = TextScaler.noScaling,
+}) {
+  final parent = ForumBodyInlineEmphasisParentPreparation(
+    input: fixture.input,
+    cache: cache,
+    textScaler: scaler,
+    ensureOwner: () {},
+  );
+  try {
+    while (!parent.isReady) {
+      parent.advance(maxParts: 32);
+    }
+    final natural = parent.takeMeasurement();
+    addTearDown(natural.parent.release);
+    final iso = ForumBodyInlineEmphasisIsolationPreparation(
+      metrics: natural.metrics,
+      natural: natural.parent,
+      cache: cache,
+      ensureOwner: () {},
+    );
+    try {
+      while (!iso.isReady) {
+        iso.advance(maxParts: 32);
+      }
+      final isolated = iso.takeMeasurement();
+      addTearDown(isolated.parent.release);
+      final work = ForumBodyInlineEmphasisRowAllocationPreparation(
+        input: isolated.metrics,
+        natural: natural.parent,
+        isolated: isolated.parent,
+        ensureOwner: () {},
+      );
+      try {
+        while (!work.isReady) {
+          work.advance(maxParts: 32);
+        }
+        return (
+          allocation: work.takeAllocation(),
+          natural: natural.parent,
+          source: isolated.parent,
+        );
+      } finally {
+        work.close();
+      }
+    } finally {
+      iso.close();
+    }
+  } finally {
+    parent.close();
+  }
+}
+
 typedef MixedEmphasisParentMeasurement = ({
   ForumBodyInlinePageContent plan,
   ForumBodyInlineEmphasisGlyphInput glyphInput,

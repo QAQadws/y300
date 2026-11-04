@@ -51,72 +51,34 @@ _Input _input(
     parentStyle: parentStyle,
     layoutMode: layoutMode,
   );
-  final p = ForumBodyInlineEmphasisParentPreparation(
-    input: fixture.input,
-    cache: cache,
-    textScaler: scaler,
-    ensureOwner: () {},
-  );
-  try {
-    while (!p.isReady) {
-      p.advance(maxParts: 32);
-    }
-    final natural = p.takeMeasurement();
-    addTearDown(natural.parent.release);
-    final iso = ForumBodyInlineEmphasisIsolationPreparation(
-      metrics: natural.metrics,
-      natural: natural.parent,
-      cache: cache,
-      ensureOwner: () {},
+  final source = measureMixedEmphasisAllocatedSource(
+        fixture,
+        cache,
+        scaler: scaler,
+      ),
+      allocation = source.allocation,
+      paint = ForumBodyInlinePaintInput(source.source.content);
+  final phases = [paint.background, paint.foreground, paint.decoration].map((
+    content,
+  ) {
+    final lease = cache.acquireInline(
+      content: content,
+      width: width,
+      dimensions: source.source.layout.dimensions,
+      textScaler: allocation.input.natural.textScaler,
+      layoutMode: allocation.input.request.layoutMode,
+      rowIsolationPitch: source.source.layout.rowIsolationPitch,
     );
-    try {
-      while (!iso.isReady) {
-        iso.advance(maxParts: 32);
-      }
-      final isolated = iso.takeMeasurement();
-      addTearDown(isolated.parent.release);
-      final work = ForumBodyInlineEmphasisRowAllocationPreparation(
-        input: isolated.metrics,
-        natural: natural.parent,
-        isolated: isolated.parent,
-        ensureOwner: () {},
-      );
-      try {
-        while (!work.isReady) {
-          work.advance(maxParts: 32);
-        }
-        final allocation = work.takeAllocation(),
-            paint = ForumBodyInlinePaintInput(isolated.parent.content);
-        final phases = [paint.background, paint.foreground, paint.decoration]
-            .map((content) {
-              final lease = cache.acquireInline(
-                content: content,
-                width: width,
-                dimensions: isolated.parent.layout.dimensions,
-                textScaler: natural.metrics.textScaler,
-                layoutMode: isolated.metrics.request.layoutMode,
-                rowIsolationPitch: isolated.parent.layout.rowIsolationPitch,
-              );
-              addTearDown(lease.release);
-              return lease;
-            })
-            .toList();
-        return (
-          allocation: allocation,
-          natural: natural.parent,
-          source: isolated.parent,
-          paint: paint,
-          phases: phases,
-        );
-      } finally {
-        work.close();
-      }
-    } finally {
-      iso.close();
-    }
-  } finally {
-    p.close();
-  }
+    addTearDown(lease.release);
+    return lease;
+  }).toList();
+  return (
+    allocation: allocation,
+    natural: source.natural,
+    source: source.source,
+    paint: paint,
+    phases: phases,
+  );
 }
 
 ForumBodyInlineEmphasisPaintReferencePreparation _work(
