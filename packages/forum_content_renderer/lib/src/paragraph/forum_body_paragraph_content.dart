@@ -761,11 +761,13 @@ final class _ParagraphCollector {
             ForumBodyElementKind.heading,
             ForumBodyElementKind.container,
             ForumBodyElementKind.editStatus,
+            ForumBodyElementKind.code,
           }.contains(node.kind);
       final ordinaryInline =
           const {
             ForumBodyElementKind.inline,
             ForumBodyElementKind.unknown,
+            ForumBodyElementKind.code,
           }.contains(node.kind) &&
           style.display == ForumBodyDisplay.inline &&
           _inlineBoxIsEmpty(style);

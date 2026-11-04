@@ -10,7 +10,7 @@ import 'forum_body_style_options.dart';
 import 'forum_body_text_emphasis_resolver.dart';
 import 'forum_body_list_style_resolver.dart';
 
-const forumBodyStyleRevision = 19;
+const forumBodyStyleRevision = 20;
 ForumBodyLength forumBodyReaderIndent(
   ForumBodyReaderStyle reader,
   double size,
@@ -355,7 +355,8 @@ final class ForumBodyStyleBuilder {
         value('text-align') ?? node.attributes['align']?.toLowerCase();
     var alignment = parent.textAlign;
     var alignmentFromReader = parent.alignmentFromReader;
-    if (heading != null && alignmentFromReader) {
+    if ((heading != null || node.kind == ForumBodyElementKind.code) &&
+        alignmentFromReader) {
       alignment = TextAlign.start;
       alignmentFromReader = false;
     }
@@ -389,7 +390,7 @@ final class ForumBodyStyleBuilder {
         _ => _unsupported(node, 'direction', rawDirection, direction),
       };
     }
-    var whiteSpace = role == ForumBodyTextRole.code
+    var whiteSpace = node.kind == ForumBodyElementKind.code
         ? ForumBodyWhiteSpace.preWrap
         : parent.whiteSpace;
     final rawWhiteSpace = value('white-space');
@@ -399,7 +400,7 @@ final class ForumBodyStyleBuilder {
         'pre' => ForumBodyWhiteSpace.pre,
         'pre-wrap' => ForumBodyWhiteSpace.preWrap,
         'pre-line' => ForumBodyWhiteSpace.preLine,
-        'inherit' || 'unset' => whiteSpace,
+        'inherit' || 'unset' => parent.whiteSpace,
         _ => _unsupported(node, 'white-space', rawWhiteSpace, whiteSpace),
       };
     }
@@ -592,8 +593,10 @@ final class ForumBodyStyleBuilder {
     ForumBodyElementKind.heading => ForumBodyTextRole.heading,
     ForumBodyElementKind.quote => ForumBodyTextRole.quote,
     ForumBodyElementKind.code => ForumBodyTextRole.code,
-    ForumBodyElementKind.list ||
-    ForumBodyElementKind.listItem => ForumBodyTextRole.list,
+    // Discuz code lines use OL/LI for source-free line numbers. Their layout
+    // is still a list, but text must keep the code font and reader exceptions.
+    ForumBodyElementKind.list || ForumBodyElementKind.listItem =>
+      parent == ForumBodyTextRole.code ? parent : ForumBodyTextRole.list,
     ForumBodyElementKind.table ||
     ForumBodyElementKind.tableCell => ForumBodyTextRole.table,
     ForumBodyElementKind.rubyText ||

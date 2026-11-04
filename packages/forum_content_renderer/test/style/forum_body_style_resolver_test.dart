@@ -51,6 +51,53 @@ ForumBodyResolvedStyle byId(
 }
 
 void main() {
+  test('code line lists keep monospace and code reader-policy exceptions', () {
+    final result = resolve(
+      '<div style="font-size:12px"><div class="blockcode" id="code">'
+      '<div><ol id="lines"><li id="line"><span id="text">  first();</span>'
+      '</li></ol></div></div><ul><li id="ordinary">item</li></ul></div>',
+      options: reader(
+        indent: const ForumBodyLength(2, ForumBodyLengthUnit.em),
+        policy: ForumBodyStylePolicy({
+          ForumBodyStyleProperty.fontSize: ForumBodyStyleScope.forceBody,
+          ForumBodyStyleProperty.textAlign: ForumBodyStyleScope.forceBody,
+          ForumBodyStyleProperty.textIndent: ForumBodyStyleScope.forceBody,
+        }),
+      ),
+    );
+    for (final id in ['code', 'lines', 'line', 'text']) {
+      final style = byId(result, id);
+      expect(style.role, ForumBodyTextRole.code);
+      expect(style.textStyle.fontFamily, 'monospace');
+      expect(style.textStyle.fontSize, 12);
+      expect(style.whiteSpace, ForumBodyWhiteSpace.preWrap);
+      expect(style.textAlign, TextAlign.start);
+      expect(style.indent, ForumBodyLength.zero);
+    }
+    expect(byId(result, 'line').display, ForumBodyDisplay.listItem);
+    expect(byId(result, 'ordinary').role, ForumBodyTextRole.list);
+    expect(byId(result, 'ordinary').textStyle.fontFamily, 'ReaderFont');
+  });
+
+  test('code whitespace defaults belong to elements, not every descendant', () {
+    for (final (css, expected) in [
+      ('normal', ForumBodyWhiteSpace.normal),
+      ('pre-line', ForumBodyWhiteSpace.preLine),
+      ('pre', ForumBodyWhiteSpace.pre),
+      ('pre-wrap', ForumBodyWhiteSpace.preWrap),
+    ]) {
+      final result = resolve(
+        '<pre id="pre" style="white-space:$css"><span id="span"> x </span>'
+        '<code id="inherit" style="white-space:inherit"> y </code></pre>'
+        '<code id="unset" style="white-space:unset"> z </code>',
+      );
+      for (final id in ['pre', 'span', 'inherit']) {
+        expect(byId(result, id).whiteSpace, expected);
+      }
+      expect(byId(result, 'unset').whiteSpace, ForumBodyWhiteSpace.normal);
+    }
+  });
+
   test(
     'heavy forced body weights retain emphasis and restore excluded author roles',
     () {

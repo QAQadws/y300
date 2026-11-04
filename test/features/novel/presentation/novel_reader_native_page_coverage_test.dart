@@ -146,6 +146,31 @@ Matcher _failure(NovelReaderNativeCoverageFailure failure) => throwsA(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test('code whitespace and line numbers preserve canonical glyph coverage', () {
+    for (final html in [
+      '<pre>  AB\n\n  CD\n</pre>',
+      '<div class="blockcode"><ol><li>  AB\n\n  CD\n</li><li></li></ol></div>',
+    ]) {
+      final fixture = _Fixture(html, height: 20);
+      final sources = <int>{};
+      expect(fixture.session.snapshot.length, greaterThan(1));
+      for (var page = 0; page < fixture.session.snapshot.length; page++) {
+        final fragments = fixture.prepareFragments(page);
+        try {
+          final coverage = _finish(fixture.preparedCursor(page, fragments));
+          expect(coverage.hasClippedGlyphs, isFalse);
+          sources.addAll(coverage.points.map((p) => p.sourceRune));
+        } finally {
+          for (final fragment in fragments) {
+            fragment.close();
+          }
+        }
+      }
+      expect(sources, containsAll([2, 3, 8, 9]));
+      expect(fixture.cache.activeLeases, 0);
+    }
+  });
+
   test('list pictures fit the page without contributing source proof for empty items', () {
     for (final html in [
       '<ol><li></li></ol><p>ab</p>',

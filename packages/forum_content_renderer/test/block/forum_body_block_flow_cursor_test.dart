@@ -282,7 +282,6 @@ void main() {
 
   for (final html in [
     '<img style="display:block" src="x">',
-    '<pre>code</pre>',
     '<table><tr><td>x</td></tr></table>',
   ]) {
     test(
