@@ -23,7 +23,7 @@ final class ForumBodyTextPictureInput {
       writer.close();
     }
   }
-  static const revision = 8;
+  static const revision = 9;
   static const maximumCommands = 32768;
   static const baseEstimatedInputBytes = 4096;
   static const baseEstimatedPictureBytes = 4096;
@@ -37,6 +37,7 @@ final class ForumBodyTextPictureInput {
     }
     final key = nativeInputIdentity._key;
     if (key is! _LayoutKey &&
+        key is! _InlineLayoutKey &&
         key is! _EmphasisMarkKey &&
         key is! ForumBodyTextBandCacheKey) {
       throw ArgumentError('Drawing metadata requires an actual font input');
@@ -290,7 +291,31 @@ void _validateTextPictureCommand(ForumBodyTextPictureCommand command) {
     throw ArgumentError('Invalid native text picture fitting scale');
   }
   final key = identity._key;
-  if (key is ForumBodyTextBandCacheKey) {
+  final inline = command.inlineRow;
+  if (key is _InlineLayoutKey) {
+    if (inline == null ||
+        !inline.matchesInput(identity) ||
+        key.rowIsolationPitch == null ||
+        command.bandChildIndex != null ||
+        command.paragraphRow != null ||
+        command.physicalLine != null ||
+        inline.lineIndex < 0 ||
+        !inline.clipTop.isFinite ||
+        !inline.clipBottom.isFinite ||
+        inline.clipTop.abs() > 1114112 ||
+        inline.clipBottom.abs() > 1114112 ||
+        !inline.nativeOffset.dx.isFinite ||
+        !inline.nativeOffset.dy.isFinite ||
+        inline.nativeOffset.dx.abs() > 1114112 ||
+        inline.nativeOffset.dy.abs() > 1114112 ||
+        (inline.isEmpty
+            ? inline.clipBottom < inline.clipTop
+            : inline.clipBottom <= inline.clipTop)) {
+      throw ArgumentError('Invalid native inline row selector');
+    }
+  } else if (inline != null) {
+    throw ArgumentError('Inline selector requires its actual native parent');
+  } else if (key is ForumBodyTextBandCacheKey) {
     final child = command.bandChildIndex;
     if (child == null ||
         child < 0 ||

@@ -3,14 +3,21 @@ part of 'forum_body_paragraph_cache.dart';
 /// Own each actual alias once even when several row selectors borrow it.
 /// Mutable assembly storage transfers here without a final scan or copy.
 final class _TextPictureDependencies {
-  _TextPictureDependencies(this.resources, this.rows, this.leases);
+  _TextPictureDependencies(
+    this.resources,
+    this.rows,
+    this.inlineRows,
+    this.leases,
+  );
   Map<_TextPictureDependency, ForumBodyNativeParagraphLease> resources;
   Map<_TextPictureDependency, ForumBodyParagraphRowView> rows;
+  Map<_TextPictureDependency, ForumBodyInlinePaintRowView> inlineRows;
   List<ForumBodyNativeParagraphLease> leases;
   void close() {
     final owned = leases;
     resources = {};
     rows = {};
+    inlineRows = {};
     leases = [];
     Object? failure;
     StackTrace? stack;
@@ -31,6 +38,7 @@ enum _PictureDependencyPhase {
   text,
   marks,
   rows,
+  inlineRows,
   publish,
   ready,
   transferred,
@@ -47,24 +55,34 @@ final class _TextPictureDependencyWork {
     required Iterable<ForumBodyTextLease> text,
     required Iterable<ForumBodyEmphasisMarkLease> marks,
     required Iterable<ForumBodyParagraphRowView> rows,
+    required Iterable<ForumBodyInlinePaintRowView> inlineRows,
     required void Function() ensureOwner,
   }) : _cache = cache,
        _input = input,
        _text = text,
        _marks = marks,
        _rows = rows,
+       _inlineRows = inlineRows,
        _ensureOwner = ensureOwner;
   ForumBodyParagraphCache? _cache;
   ForumBodyTextPictureInput? _input;
   Iterable<ForumBodyTextLease>? _text;
   Iterable<ForumBodyEmphasisMarkLease>? _marks;
   Iterable<ForumBodyParagraphRowView>? _rows;
+  Iterable<ForumBodyInlinePaintRowView>? _inlineRows;
   Iterator<ForumBodyNativeParagraphLease>? _iterator;
   Iterator<ForumBodyParagraphRowView>? _rowIterator;
+  Iterator<ForumBodyInlinePaintRowView>? _inlineIterator;
   void Function()? _ensureOwner;
   Set<_TextPictureDependency> _wanted = {};
   Map<_TextPictureDependency, ForumBodyNativeParagraphLease> _resources = {};
   Map<_TextPictureDependency, ForumBodyParagraphRowView> _rowViews = {};
+  Map<_TextPictureDependency, ForumBodyInlinePaintRowView> _inlineViews = {};
+  Map<
+    ({Object identity, ForumBodyInlineSpanContent content}),
+    ForumBodyInlineParagraphLease
+  >
+  _inlineParents = {};
   Map<
     ({Object identity, ForumBodyParagraphContent content}),
     ForumBodyParagraphLease
@@ -91,13 +109,21 @@ final class _TextPictureDependencyWork {
         _advanceResources();
       case _PictureDependencyPhase.rows:
         _advanceRows();
+      case _PictureDependencyPhase.inlineRows:
+        _advanceInlineRows();
       case _PictureDependencyPhase.publish:
         if (_resources.length != _wanted.length) {
           throw ArgumentError('Missing text picture dependency');
         }
-        _result = _TextPictureDependencies(_resources, _rowViews, _aliases);
+        _result = _TextPictureDependencies(
+          _resources,
+          _rowViews,
+          _inlineViews,
+          _aliases,
+        );
         _resources = {};
         _rowViews = {};
+        _inlineViews = {};
         _aliases = [];
         _phase = _PictureDependencyPhase.ready;
         _dropInputs();
@@ -148,6 +174,7 @@ final class _TextPictureDependencyWork {
           ? lease.childIndex
           : null,
       paragraphRow: null,
+      inlineRow: null,
     );
     if (!_wanted.contains(key)) {
       throw ArgumentError('Unrequested text picture dependency');
@@ -180,7 +207,7 @@ final class _TextPictureDependencyWork {
       } else {
         _rows = null;
         _rowIterator = null;
-        _phase = _PictureDependencyPhase.publish;
+        _phase = _PictureDependencyPhase.inlineRows;
       }
     }
   }
@@ -196,6 +223,7 @@ final class _TextPictureDependencyWork {
       identity: identity,
       bandChildIndex: null,
       paragraphRow: row.selector,
+      inlineRow: null,
     );
     if (!_wanted.contains(key)) {
       throw ArgumentError('Unrequested paragraph row dependency');
@@ -230,6 +258,59 @@ final class _TextPictureDependencyWork {
     }
   }
 
+  void _advanceInlineRows() {
+    final current = _inlineIterator;
+    if (current == null) {
+      final next = _inlineRows!.iterator;
+      _guard();
+      _inlineIterator = next;
+    } else {
+      final more = current.moveNext();
+      _guard();
+      if (more) {
+        final row = current.current;
+        _guard();
+        _count();
+        _adoptInlineRow(row);
+      } else {
+        _inlineRows = null;
+        _inlineIterator = null;
+        _phase = _PictureDependencyPhase.publish;
+      }
+    }
+  }
+
+  void _adoptInlineRow(ForumBodyInlinePaintRowView row) {
+    final cache = _cache!, parent = row.parent;
+    if (!cache.ownsLease(parent) || !row.isPaintPrepared) {
+      throw StateError('Foreign or unprepared inline row');
+    }
+    final identity = row.nativeInputIdentity;
+    _guard();
+    final key = (
+      identity: identity,
+      bandChildIndex: null,
+      paragraphRow: null,
+      inlineRow: row.selector,
+    );
+    if (!_wanted.contains(key)) {
+      throw ArgumentError('Unrequested inline row dependency');
+    }
+    if (!_resources.containsKey(key)) {
+      final parentKey = (identity: identity, content: parent.content);
+      var alias = _inlineParents[parentKey];
+      if (alias == null) {
+        alias = cache._aliasInlineLease(parent);
+        _aliases.add(alias);
+        _inlineParents[parentKey] = alias;
+      }
+      _resources[key] = alias;
+      final bound = row.bindAlias(parent: alias, ensureOwner: _ensureOwner!);
+      _guard();
+      _inlineViews[key] = bound;
+    }
+  }
+
   _TextPictureDependencies takeDependencies() {
     _guard();
     if (!isReady) throw StateError('Text picture dependencies are incomplete');
@@ -257,10 +338,13 @@ final class _TextPictureDependencyWork {
     _text = null;
     _marks = null;
     _rows = null;
+    _inlineRows = null;
     _iterator = null;
     _rowIterator = null;
+    _inlineIterator = null;
     _wanted = {};
     _rowParents = {};
+    _inlineParents = {};
   }
 
   void close() {
@@ -270,10 +354,16 @@ final class _TextPictureDependencyWork {
     }
     _phase = _PictureDependencyPhase.closed;
     final result = _result,
-        owned = _TextPictureDependencies(_resources, _rowViews, _aliases);
+        owned = _TextPictureDependencies(
+          _resources,
+          _rowViews,
+          _inlineViews,
+          _aliases,
+        );
     _result = null;
     _resources = {};
     _rowViews = {};
+    _inlineViews = {};
     _aliases = [];
     _dropInputs();
     _cache = null;

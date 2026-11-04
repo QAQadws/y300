@@ -4,6 +4,7 @@ typedef _TextPictureDependency = ({
   Object identity,
   int? bandChildIndex,
   ForumBodyParagraphRowSelector? paragraphRow,
+  ForumBodyInlinePaintRowSelector? inlineRow,
 });
 
 final class ForumBodyTextPictureCommand {
@@ -13,6 +14,7 @@ final class ForumBodyTextPictureCommand {
     this.bandChildIndex,
     this.paragraphRow,
     this.physicalLine,
+    this.inlineRow,
     this.fitScale = 1,
   }) : _translation = null;
   const ForumBodyTextPictureCommand._translated({
@@ -22,6 +24,7 @@ final class ForumBodyTextPictureCommand {
     required this.bandChildIndex,
     required this.paragraphRow,
     required this.physicalLine,
+    required this.inlineRow,
     required _TextPictureTranslation translation,
   }) : _translation = translation;
   static const maximumTranslationDepth = 8;
@@ -38,6 +41,7 @@ final class ForumBodyTextPictureCommand {
       bandChildIndex: bandChildIndex,
       paragraphRow: paragraphRow,
       physicalLine: physicalLine,
+      inlineRow: inlineRow,
       translation: _TextPictureTranslation(by, _translation),
     );
   }
@@ -51,6 +55,7 @@ final class ForumBodyTextPictureCommand {
       128 +
       (paragraphRow == null ? 0 : 64) +
       (physicalLine == null ? 0 : 192) +
+      (inlineRow == null ? 0 : 128) +
       translationDepth * translationInputEstimatedBytes;
   int get estimatedPictureBytes =>
       256 + translationDepth * translationPictureEstimatedBytes;
@@ -125,10 +130,20 @@ final class ForumBodyTextPictureCommand {
   final int? bandChildIndex;
   final ForumBodyParagraphRowSelector? paragraphRow;
   final ForumBodyParagraphPhysicalLineSelector? physicalLine;
+  final ForumBodyInlinePaintRowSelector? inlineRow;
+  factory ForumBodyTextPictureCommand.fromInlineRow(
+    ForumBodyInlinePaintRowView row,
+    Offset offset,
+  ) => ForumBodyTextPictureCommand(
+    nativeInputIdentity: row.nativeInputIdentity,
+    offset: offset,
+    inlineRow: row.selector,
+  );
   _TextPictureDependency get _dependency => (
     identity: nativeInputIdentity,
     bandChildIndex: bandChildIndex,
     paragraphRow: paragraphRow,
+    inlineRow: inlineRow,
   );
   @override
   bool operator ==(Object other) =>
@@ -139,6 +154,7 @@ final class ForumBodyTextPictureCommand {
           bandChildIndex == other.bandChildIndex &&
           paragraphRow == other.paragraphRow &&
           physicalLine == other.physicalLine &&
+          inlineRow == other.inlineRow &&
           _translation == other._translation &&
           fitScale == other.fitScale;
   @override
@@ -148,6 +164,7 @@ final class ForumBodyTextPictureCommand {
     bandChildIndex,
     paragraphRow,
     physicalLine,
+    inlineRow,
     fitScale,
     _translation,
   );
@@ -200,6 +217,7 @@ final class ForumBodyTextPicturePreparation {
     required void Function() ensureOwner,
     Iterable<ForumBodyEmphasisMarkLease> marks = const [],
     Iterable<ForumBodyParagraphRowView> paragraphRows = const [],
+    Iterable<ForumBodyInlinePaintRowView> inlineRows = const [],
     Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
   }) : this._(
          cache: cache,
@@ -208,6 +226,7 @@ final class ForumBodyTextPicturePreparation {
          ensureOwner: ensureOwner,
          marks: marks,
          paragraphRows: paragraphRows,
+         inlineRows: inlineRows,
          additionalOwnedLeases: additionalOwnedLeases,
          cooperative: false,
        );
@@ -223,6 +242,7 @@ final class ForumBodyTextPicturePreparation {
     required void Function() ensureOwner,
     Iterable<ForumBodyEmphasisMarkLease> marks = const [],
     Iterable<ForumBodyParagraphRowView> paragraphRows = const [],
+    Iterable<ForumBodyInlinePaintRowView> inlineRows = const [],
     Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
   }) : this._(
          cache: cache,
@@ -231,6 +251,7 @@ final class ForumBodyTextPicturePreparation {
          ensureOwner: ensureOwner,
          marks: marks,
          paragraphRows: paragraphRows,
+         inlineRows: inlineRows,
          additionalOwnedLeases: additionalOwnedLeases,
          cooperative: true,
        );
@@ -242,6 +263,7 @@ final class ForumBodyTextPicturePreparation {
     required void Function() ensureOwner,
     required Iterable<ForumBodyEmphasisMarkLease> marks,
     required Iterable<ForumBodyParagraphRowView> paragraphRows,
+    required Iterable<ForumBodyInlinePaintRowView> inlineRows,
     required Iterable<ForumBodyNativeParagraphLease> Function()?
     additionalOwnedLeases,
     required bool cooperative,
@@ -258,6 +280,7 @@ final class ForumBodyTextPicturePreparation {
         text: text,
         marks: marks,
         rows: paragraphRows,
+        inlineRows: inlineRows,
         ensureOwner: _guard,
       );
       if (!cooperative) {
@@ -287,6 +310,8 @@ final class ForumBodyTextPicturePreparation {
       _binding?.resources ?? const {};
   Map<_TextPictureDependency, ForumBodyParagraphRowView> get _rowViews =>
       _binding?.rows ?? const {};
+  Map<_TextPictureDependency, ForumBodyInlinePaintRowView>
+  get _inlineRowViews => _binding?.inlineRows ?? const {};
   List<ForumBodyNativeParagraphLease> get _dependencies =>
       _binding?.leases ?? _assembly?.leases ?? const [];
 
@@ -424,7 +449,10 @@ final class ForumBodyTextPicturePreparation {
                 try {
                   final offset = fitted ? Offset.zero : command.offset;
                   final row = _rowViews[command._dependency];
-                  if (row != null) {
+                  final inlineRow = _inlineRowViews[command._dependency];
+                  if (inlineRow != null) {
+                    inlineRow.paint(canvas, offset);
+                  } else if (row != null) {
                     final physical = command.physicalLine;
                     if (physical == null) {
                       row.paint(canvas, offset);
@@ -634,6 +662,20 @@ int _textPictureInputBytes(_NativeInputIdentity input) {
         spans(key.span) * 256 +
         key.isolationBytes +
         key.scales.length * 16;
+  }
+  if (key is _InlineLayoutKey) {
+    // Whole input metadata survives with the picture after fonts are evicted.
+    // Count original display/projection plus native slot/indent/span tables;
+    // selecting one physical row never reduces the retained parent metadata.
+    return 4096 +
+        key.projection.display.text.length * 96 +
+        key.projection.engineText.length * 2 +
+        spans(key.span) * 256 +
+        key.projection.atoms.length * 160 +
+        key.dimensions.length * 48 +
+        key.scales.length * 16 +
+        key.isolationBytes +
+        key.indentBytes;
   }
   final band = key as ForumBodyTextBandCacheKey;
   return 4096 +

@@ -9,6 +9,7 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 import '../document/forum_body_document.dart';
 import '../inline/forum_body_inline_paragraph_layout.dart';
 import '../inline/forum_body_inline_span_content.dart';
+import '../inline/forum_body_inline_paint_row.dart';
 import '../inline/forum_body_emphasis_mark.dart';
 import '../inline/forum_body_text_band_content.dart';
 import '../inline/forum_body_text_band_layout.dart';
@@ -199,6 +200,17 @@ final class ForumBodyParagraphCache {
     lease._entry.leases++;
     _leases++;
     return ForumBodyEmphasisMarkLease._(this, lease._entry, lease.input);
+  }
+
+  ForumBodyInlineParagraphLease _aliasInlineLease(
+    ForumBodyInlineParagraphLease lease,
+  ) {
+    if (!ownsLease(lease) || !lease.layout.isPaintPrepared) {
+      throw StateError('Inline picture requires current prepared text');
+    }
+    lease._entry.leases++;
+    _leases++;
+    return ForumBodyInlineParagraphLease._(this, lease._entry, lease.content);
   }
 
   /// Proves the supplied live handle belongs to this reading owner. Does not
