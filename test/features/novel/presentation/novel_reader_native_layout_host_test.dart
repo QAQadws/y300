@@ -281,15 +281,27 @@ void main() {
       final reader = _Reader(
         html: List.filled(
           6,
-          '<p style="font-size:2px">${'A' * 1000}</p>',
+          // Keep natural font boxes roomy: this fixture isolates page byte
+          // admission, rather than the separate tight-row font-frame budget.
+          '<p style="font-size:2px;line-height:2">${'A' * 1000}</p>',
         ).join(),
         maxParagraphEstimatedBytes: 500000,
       );
       await _show(tester, reader, startsAtBeginning: true, height: 400);
       await tester.pumpAndSettle();
-      expect(reader.statuses.last.phase, NovelReaderNativeHostPhase.reading);
+      expect(
+        reader.statuses.last.phase,
+        NovelReaderNativeHostPhase.reading,
+        reason: '${reader.statuses.last.error}',
+      );
       final controller = reader.statuses.last.controller!;
       expect(controller.snapshot!.length, 3);
+      expect(
+        controller.snapshot!.every(
+          (page) => page.fragments.length == 2 && page.usedHeight < 400,
+        ),
+        isTrue,
+      );
       final cache = reader.owner.acquireCache();
       try {
         expect(controller.requestPage(1), isTrue);
