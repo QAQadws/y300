@@ -92,6 +92,50 @@ void _samePixels(Uint8List actual, Uint8List expected) {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   for (final direction in TextDirection.values) {
+    for (final scale in [1.0, 2.0]) {
+      test(
+        'positive tracking keeps terminal glyph boxes inside fractional widths ($direction, $scale)',
+        () {
+          final text = List.filled(52, '漢').join();
+          final content = _input(
+            .25,
+            direction,
+            html: '<p style="font-size:18.5px">$text</p>',
+          );
+          for (final pair in [
+            for (final count in [3, 6, 19])
+              for (final gap in [0.0, .125]) (count, gap),
+          ]) {
+            final width = pair.$1 * (18.5 * scale + .25) + pair.$2;
+            final layout = ForumBodyParagraphLayout.create(
+              content: content,
+              width: width,
+              textScaler: TextScaler.linear(scale),
+            );
+            try {
+              for (var i = 0; i < text.length; i++) {
+                for (final box in layout.selectionBoxes(i, i + 1)) {
+                  expect(
+                    box.left,
+                    greaterThanOrEqualTo(-.001),
+                    reason: 'width=$width, offset=$i',
+                  );
+                  expect(
+                    box.right,
+                    lessThanOrEqualTo(width + .001),
+                    reason: 'width=$width, offset=$i',
+                  );
+                }
+              }
+            } finally {
+              layout.dispose();
+            }
+          }
+        },
+      );
+    }
+  }
+  for (final direction in TextDirection.values) {
     for (final spacing in [-2.0, -1.25, 0.0, .5]) {
       for (final scale in [1.0, 2.0]) {
         test(
@@ -104,7 +148,7 @@ void main() {
               textScaler: TextScaler.linear(scale),
             );
             addTearDown(layout.dispose);
-            final inset = spacing < 0 ? -spacing : 0.0;
+            final inset = spacing.abs();
             expect(layout.horizontalInset, inset);
             expect(layout.firstLineIndent.layoutPasses, 1);
             expect(layout.lines.length, greaterThan(1));
@@ -139,36 +183,39 @@ void main() {
       }
     }
     for (final dpr in [1.0, 3.0]) {
-      test(
-        'negative tracking loses no pixels at either clip edge ($direction, $dpr)',
-        () async {
-          final content = _input(-1.25, direction);
-          final layout = ForumBodyParagraphLayout.create(
-            content: content,
-            width: 120,
-          );
-          addTearDown(layout.dispose);
-          final control = TextPainter(
-            text: TextSpan(text: _text, style: content.style.textStyle),
-            textDirection: direction,
-          )..layout(minWidth: 117.5, maxWidth: 117.5);
-          addTearDown(control.dispose);
-          final expected = await _raster(
-            120,
-            layout.height,
-            dpr,
-            (canvas) => control.paint(canvas, const Offset(1.25, 0)),
-          );
-          final actual = await _raster(
-            120,
-            layout.height,
-            dpr,
-            (canvas) => layout.paint(canvas, Offset.zero),
-            clipped: true,
-          );
-          _samePixels(actual, expected);
-        },
-      );
+      for (final spacing in [-1.25, .25]) {
+        test(
+          'tracking loses no pixels at either clip edge ($direction, $dpr, $spacing)',
+          () async {
+            final content = _input(spacing, direction);
+            final inset = spacing.abs();
+            final layout = ForumBodyParagraphLayout.create(
+              content: content,
+              width: 120,
+            );
+            addTearDown(layout.dispose);
+            final control = TextPainter(
+              text: TextSpan(text: _text, style: content.style.textStyle),
+              textDirection: direction,
+            )..layout(minWidth: 120 - 2 * inset, maxWidth: 120 - 2 * inset);
+            addTearDown(control.dispose);
+            final expected = await _raster(
+              120,
+              layout.height,
+              dpr,
+              (canvas) => control.paint(canvas, Offset(inset, 0)),
+            );
+            final actual = await _raster(
+              120,
+              layout.height,
+              dpr,
+              (canvas) => layout.paint(canvas, Offset.zero),
+              clipped: true,
+            );
+            _samePixels(actual, expected);
+          },
+        );
+      }
     }
   }
   for (final mode in [

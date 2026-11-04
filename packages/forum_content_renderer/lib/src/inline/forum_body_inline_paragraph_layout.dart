@@ -88,7 +88,7 @@ final class ForumBodyInlineParagraphLayout
        _paintOffset = paintOffset,
        _trimmedAtoms = trimmedAtoms,
        _spaceAllocations = spaceAllocations;
-  static const revision = 12;
+  static const revision = 13;
   final ForumBodyFirstLineIndentGeometry firstLineIndent;
   final double? rowIsolationPitch;
 

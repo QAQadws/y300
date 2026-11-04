@@ -158,7 +158,7 @@ void main() {
               width: 600,
             );
             addTearDown(layout.dispose);
-            final inset = number < 0 ? -number : 0.0;
+            final inset = number.abs();
             expect(layout.horizontalInset, inset);
             final control = TextPainter(
               text: TextSpan(text: text, style: content.style.textStyle),

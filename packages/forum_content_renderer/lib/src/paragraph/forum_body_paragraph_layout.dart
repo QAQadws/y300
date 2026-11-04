@@ -230,7 +230,7 @@ final class ForumBodyParagraphLayout
     return scales;
   }
 
-  static const backendRevision = 11;
+  static const backendRevision = 12;
 
   /// Native-only requested baseline separation, in logical pixels after actual
   /// font scaling. It is neither the author's line height nor page allocation.

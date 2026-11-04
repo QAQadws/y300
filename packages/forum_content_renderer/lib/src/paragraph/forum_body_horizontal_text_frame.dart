@@ -1,9 +1,9 @@
 import '../style/forum_body_style_options.dart';
 import 'forum_body_paragraph_geometry.dart';
 
-/// Negative tracking can paint beyond either line edge even when native line
-/// metrics fit. RTL alignment can expose a full tracking advance, not just the
-/// half-advance seen at an LTR edge. Tracking remains in logical pixels.
+/// Tracking can extend native glyph boxes beyond a fitted line's edge. Positive
+/// tracking retains a trailing half-advance at fractional wrap boundaries; RTL
+/// and negative tracking can expose a full advance. Tracking stays in logical pixels.
 /// Reserve both edges before wrapping; never clamp the resulting glyph boxes.
 double forumBodyHorizontalTextInset(Iterable<ForumBodyResolvedStyle> styles) {
   var inset = 0.0;
@@ -14,7 +14,7 @@ double forumBodyHorizontalTextInset(Iterable<ForumBodyResolvedStyle> styles) {
         ForumBodyParagraphLayoutFailure.width,
       );
     }
-    final overhang = -spacing;
+    final overhang = spacing.abs();
     if (overhang > inset) inset = overhang;
   }
   return inset;

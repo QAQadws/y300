@@ -234,7 +234,11 @@ void main() {
             scope == NovelReaderStyleScope.forceAll ||
             (scope == NovelReaderStyleScope.forceBody && tag == 'p');
         expect(
-          layout.selectionBoxes(0, 1).single.left,
+          layout.selectionBoxes(0, 1).single.left - layout.horizontalInset,
+          closeTo(forced ? 40 : 10, .001),
+        );
+        expect(
+          layout.firstLineIndent.appliedAdvance,
           closeTo(forced ? 40 : 10, .001),
         );
       }
