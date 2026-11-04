@@ -1,3 +1,4 @@
+import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:html/dom.dart' as dom;
@@ -17,6 +18,89 @@ ForumBodyDocument parse(
 );
 
 void main() {
+  test(
+    'Discuz code toolbar is hidden without deleting source or event diagnostics',
+    () {
+      const code =
+          r'''<div class="blockcode"><div id="code_a1B"><ol><li>  code(); </li></ol></div><em onclick="copycode($('code_a1B'));">Copy code</em></div>''';
+      final parser = _CountingParser();
+      final document = parse(
+        '<p>A</p>$code<p>Z</p>',
+        parser: ForumBodyParser(fragmentParser: parser),
+      );
+      final control = document.descendants
+          .whereType<ForumBodyElement>()
+          .singleWhere((node) => node.tag == 'em');
+      expect(control.kind, ForumBodyElementKind.hidden);
+      expect(control.attributes, isNot(contains('onclick')));
+      expect(document.sourceText, 'A  code(); Copy codeZ');
+      expect(control.source.runeStart, 'A  code(); '.runes.length);
+      expect(
+        document.nodeAtPath('2/0')!.source.runeStart,
+        'A  code(); Copy code'.runes.length,
+      );
+      expect(
+        document.issues.map((i) => i.code),
+        contains(ForumBodyIssueCode.removedEventAttribute),
+      );
+      expect(parser.calls, 1);
+      final styles = const ForumBodyStyleResolver().resolve(
+        document,
+        ForumBodyReaderStyle(
+          textStyle: const TextStyle(fontSize: 10),
+          fontRevision: 'code-chrome',
+          linkColor: const Color(0xff0000ff),
+        ),
+      );
+      expect(styles.byPath[control.path]!.hidden, isTrue);
+    },
+  );
+
+  test(
+    'code toolbar accepts only its adjacent wrapper and actual copy handler',
+    () {
+      const code =
+          r'''<div class="blockcode"><div id="code_a1B"><ol><li>x</li></ol></div><em onclick="copycode($('code_a1B'));">Copy code</em></div>''';
+      for (final html in [
+        code,
+        code.replaceFirst('</div><em', '</div> \n<!--gap--><em'),
+        code.replaceFirst('Copy code', '複製程式碼'),
+        code.replaceFirst(
+          r"copycode($('code_a1B'));",
+          r''' copycode( $( &quot;code_a1B&quot; ) ) ; ''',
+        ),
+      ]) {
+        final control = parse(html).descendants
+            .whereType<ForumBodyElement>()
+            .singleWhere((node) => node.tag == 'em');
+        expect(control.kind, ForumBodyElementKind.hidden, reason: html);
+      }
+      for (final html in [
+        code.replaceFirst('class="blockcode"', 'class="ordinary"'),
+        code.replaceFirst('id="code_a1B"', 'id="code_z9Z"'),
+        code.replaceAll('code_a1B', 'unrelated'),
+        code.replaceFirst(r''' onclick="copycode($('code_a1B'));"''', ''),
+        code.replaceFirst(
+          r"copycode($('code_a1B'));",
+          r"copycode($('code_a1B')); other();",
+        ),
+        code.replaceFirst('</div><em', '</div>authored text<em'),
+        code.replaceFirst('<ol><li>x</li></ol>', '<p>x</p>'),
+        code.replaceFirst(
+          '<ol><li>x</li></ol>',
+          '<ol><li>x</li></ol><ol><li>y</li></ol>',
+        ),
+        '<p><em>Copy code</em></p>',
+        r'''<div class="blockcode"><ol><li><em onclick="copycode($('code_a1B'));">authored</em></li></ol></div>''',
+      ]) {
+        final control = parse(html).descendants
+            .whereType<ForumBodyElement>()
+            .singleWhere((node) => node.tag == 'em');
+        expect(control.kind, ForumBodyElementKind.inline, reason: html);
+      }
+    },
+  );
+
   for (final sample in forumBodyCases) {
     test(
       'IR preserves source content and coordinate coverage: ${sample.id}',

@@ -221,6 +221,30 @@ void main() {
     },
   );
 
+  test(
+    'verified code toolbar has no page text but authored caption survives',
+    () {
+      final first = '  ${'first(); ' * 100}';
+      const last = '\tlast();  ';
+      final f = _Fixture(
+        '<div class="blockcode"><div id="code_a1B"><ol><li>$first'
+        '</li><li></li><li>$last</li></ol></div>'
+        r'''<em onclick="copycode($('code_a1B'));">Copy code</em></div>'''
+        '<p><em>Copy code</em> tail</p>',
+      );
+      f.drain();
+      expect(f.session.snapshot.length, greaterThan(2));
+      expect(f.collectText(), '$first${last}Copy code tail');
+      expect(f.document.sourceText, '$first${last}Copy codeCopy code tail');
+      expect(
+        f.session.snapshot
+            .expand((p) => p.fragments)
+            .where((f) => f.listMarker != null),
+        hasLength(3),
+      );
+    },
+  );
+
   testWidgets(
     'visible inline code tap resolves its actual source after preserved spaces',
     (tester) async {

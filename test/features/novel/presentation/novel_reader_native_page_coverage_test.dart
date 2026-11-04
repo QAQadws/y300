@@ -146,6 +146,37 @@ Matcher _failure(NovelReaderNativeCoverageFailure failure) => throwsA(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'hidden Discuz toolbar preserves following canonical source coverage',
+    () {
+      final fixture = _Fixture(
+        '<p>AB</p><div class="blockcode"><div id="code_a1B"><ol><li>  CD</li></ol></div>'
+        r'''<em onclick="copycode($('code_a1B'));">Copy code</em></div>'''
+        '<p>EF</p>',
+        height: 20,
+      );
+      final sources = <int>{};
+      expect(fixture.anchors.unmappedPaths, isEmpty);
+      for (var page = 0; page < fixture.session.snapshot.length; page++) {
+        final fragments = fixture.prepareFragments(page);
+        try {
+          final coverage = _finish(fixture.preparedCursor(page, fragments));
+          expect(coverage.hasClippedGlyphs, isFalse);
+          sources.addAll(coverage.points.map((p) => p.sourceRune));
+        } finally {
+          for (final fragment in fragments) {
+            fragment.close();
+          }
+        }
+      }
+      // The caption still occupies [6, 15) in the original source. Neither its
+      // interior nor source-free line numbers can prove a reading position.
+      expect(sources, containsAll([0, 1, 4, 5, 15, 16]));
+      expect(sources.where((s) => s > 6 && s < 15), isEmpty);
+      expect(fixture.cache.activeLeases, 0);
+    },
+  );
+
   test('code whitespace and line numbers preserve canonical glyph coverage', () {
     for (final html in [
       '<pre>  AB\n\n  CD\n</pre>',

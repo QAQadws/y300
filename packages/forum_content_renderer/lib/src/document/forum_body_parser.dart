@@ -7,6 +7,7 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 import '../html_rendering/theme/css_inline_style_declarations.dart';
 import 'forum_body_document.dart';
+import 'forum_body_discuz_code_chrome.dart';
 
 final class ForumBodyParseLimits {
   const ForumBodyParseLimits({
@@ -36,7 +37,7 @@ final class ForumBodyParser {
     this.fragmentParser = const DefaultHtmlFragmentParser(),
     this.limits = const ForumBodyParseLimits(),
   });
-  static const revision = 2;
+  static const revision = 3;
   final HtmlFragmentParser fragmentParser;
   final ForumBodyParseLimits limits;
 
@@ -122,12 +123,23 @@ final class _BodyBuilder {
   final styles = <String, ForumBodyAuthorStyle>{};
   final codec = CssInlineStyleDeclarationCodec.scoped();
 
-  List<ForumBodyNode> children(List<dom.Node> nodes, String prefix) => [
-    for (var i = 0; i < nodes.length; i++)
-      ?node(nodes[i], prefix.isEmpty ? '$i' : '$prefix/$i'),
-  ];
+  List<ForumBodyNode> children(List<dom.Node> nodes, String prefix) {
+    final result = <ForumBodyNode>[];
+    dom.Element? preceding;
+    for (var i = 0; i < nodes.length; i++) {
+      final raw = nodes[i];
+      final value = node(raw, prefix.isEmpty ? '$i' : '$prefix/$i', preceding);
+      if (value != null) result.add(value);
+      if (raw is dom.Element) {
+        preceding = raw;
+      } else if (raw is dom.Text && raw.data.trim().isNotEmpty) {
+        preceding = null;
+      }
+    }
+    return result;
+  }
 
-  ForumBodyNode? node(dom.Node node, String path) {
+  ForumBodyNode? node(dom.Node node, String path, dom.Element? preceding) {
     if (_isActive(node)) {
       issues.add(ForumBodyIssue(ForumBodyIssueCode.removedActiveContent, path));
       return null;
@@ -171,7 +183,7 @@ final class _BodyBuilder {
         attributes[name] = entry.value;
       }
     }
-    final kind = _kind(node);
+    final kind = _kind(node, preceding);
     if (kind == ForumBodyElementKind.unknown) {
       issues.add(ForumBodyIssue(ForumBodyIssueCode.unknownElement, path));
     }
@@ -221,7 +233,11 @@ final class _BodyBuilder {
     return number != null && number.isFinite && number > 0 ? number : null;
   }
 
-  ForumBodyElementKind _kind(dom.Element node) {
+  ForumBodyElementKind _kind(dom.Element node, dom.Element? preceding) {
+    if (forumBodyIsDiscuzCodeCopyControl(node, preceding)) {
+      // Preserve its real source/path; hidden chrome owns no visible text.
+      return ForumBodyElementKind.hidden;
+    }
     final classes = node.classes;
     for (final entry in const {
       'showcollapse_box': ForumBodyElementKind.collapse,
