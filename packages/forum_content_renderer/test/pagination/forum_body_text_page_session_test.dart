@@ -556,15 +556,17 @@ void main() {
   );
 
   test(
-    'unsupported container decoration is explicit and never silently painted as plain text',
+    'container background becomes separate paint metadata, not text style',
     () {
       final fixture = _Fixture('<div style="background:red">a</div>');
       final session = fixture.session();
+      _advance(session);
       expect(
-        () => _advance(session),
-        _failure(ForumBodyTextPageSessionFailure.decoration),
+        session.snapshot.single.backgrounds.single.color,
+        const Color(0xffff0000),
       );
-      expect(session.state, ForumBodyTextPageSessionState.failed);
+      expect(session.snapshot.single.fragments, hasLength(1));
+      expect(fixture.cache.activeLeases, 0);
     },
   );
 

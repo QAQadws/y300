@@ -14,6 +14,7 @@ import '../paragraph/forum_body_paragraph_layout.dart';
 import 'forum_body_source_hint.dart';
 
 part 'forum_body_emphasis_scene_reservation.dart';
+part 'forum_body_text_page_background.dart';
 
 enum ForumBodyTextPageFailure {
   oversizedGroup,
@@ -24,6 +25,7 @@ enum ForumBodyTextPageFailure {
   nativeEntryLimit,
   nativeByteLimit,
   sceneLimit,
+  backgroundDepth,
 }
 
 enum ForumBodyTextPageFragmentKind {
@@ -102,13 +104,16 @@ final class ForumBodyTextPage {
     this.index,
     List<ForumBodyTextPageFragment> fragments,
     List<ForumBodyTextPageRule> rules,
+    List<ForumBodyTextPageBackground> backgrounds,
     this.usedHeight,
   ) : fragments = List.unmodifiable(fragments),
-      rules = List.unmodifiable(rules);
+      rules = List.unmodifiable(rules),
+      backgrounds = List.unmodifiable(backgrounds);
   final int index;
   final List<ForumBodyTextPageFragment> fragments;
   final List<ForumBodyTextPageRule> rules;
-  int get itemCount => fragments.length + rules.length;
+  final List<ForumBodyTextPageBackground> backgrounds;
+  int get itemCount => fragments.length + rules.length + backgrounds.length;
   final double usedHeight;
 }
 
@@ -157,7 +162,8 @@ final class _PagePrefix extends ListBase<ForumBodyTextPage> {
       throw UnsupportedError('Read-only page prefix');
 }
 
-/// Text, mixed-inline and rule composition over actual native line geometry.
+/// Text, mixed-inline, rule and block-background composition over actual native
+/// line geometry.
 /// The block layer resolves CSS/reader spacing and horizontal placement first;
 /// this class does not collapse margins or infer settings. It consumes at most
 /// one paragraph lease, releases it on completion/close/failure, and stops each
@@ -193,7 +199,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 14;
+  static const revision = 15;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;
@@ -214,6 +220,7 @@ final class ForumBodyTextPageComposer {
   final _pages = <ForumBodyTextPage>[];
   final _draft = <ForumBodyTextPageFragment>[];
   final _rules = <ForumBodyTextPageRule>[];
+  final _backgrounds = _PageBackgrounds();
   ForumBodyTextPageSnapshot? _snapshot;
   _ActiveParagraph? _active;
   _ActivePadding? _padding;
@@ -239,7 +246,8 @@ final class ForumBodyTextPageComposer {
   /// Admission order only; consumed input can extend beyond the stable pages.
   /// This ordinal must not be persisted as a confirmed reading position.
   int get nextParagraphIndex => _nextParagraphIndex;
-  /// Text fragments and paint-only rules share the retained metadata budget.
+
+  /// Text, rules and box backgrounds share the retained metadata budget.
   int get retainedFragmentCount => _fragmentCount;
   ForumBodyTextPageSnapshot get snapshot =>
       _snapshot ??= ForumBodyTextPageSnapshot._(
@@ -250,6 +258,35 @@ final class ForumBodyTextPageComposer {
         height,
         _complete,
       );
+
+  /// Open only at a block boundary. Its collapsed top is resolved lazily by
+  /// actual padding/text/rule placement; opening alone cannot paint a margin.
+  void openBackground({
+    required String path,
+    required double left,
+    required double width,
+    required Color color,
+  }) {
+    _ensureOpen();
+    if (!needsInput) throw StateError('Composition input is still pending');
+    if (!left.isFinite ||
+        !width.isFinite ||
+        !(left + width).isFinite ||
+        width < 0) {
+      throw ArgumentError('Invalid background geometry');
+    }
+    _backgrounds.open(path, left, width, color);
+  }
+
+  void closeBackground(String path) {
+    _ensureOpen();
+    if (!needsInput) throw StateError('Composition input is still pending');
+    _backgrounds.close(path, _flowHeight);
+  }
+
+  void _touchBackgrounds(double top) {
+    _fragmentCount += _backgrounds.touch(top, maxFragments - _fragmentCount);
+  }
 
   void appendRule({
     required String path,
@@ -301,6 +338,7 @@ final class ForumBodyTextPageComposer {
         _seal();
         return (pagesPublished: 1, isComplete: false);
       }
+      _touchBackgrounds(top);
       if (_fragmentCount >= maxFragments) {
         _fail(ForumBodyTextPageFailure.fragmentLimit);
       }
@@ -515,6 +553,7 @@ final class ForumBodyTextPageComposer {
         active.started = true;
       }
       final consumed = math.min(active.remaining, height - _flowHeight);
+      _touchBackgrounds(_flowHeight);
       _flowHeight += consumed;
       _usedHeight = math.max(_usedHeight, _flowHeight);
       final after = active.remaining - consumed;
@@ -768,6 +807,10 @@ final class ForumBodyTextPageComposer {
           height: fragmentHeight,
           kind: layout.kind,
         );
+        _touchBackgrounds(top);
+        if (!continuation && _fragmentCount >= maxFragments) {
+          _fail(ForumBodyTextPageFailure.fragmentLimit);
+        }
         if (continuation) {
           _draft[_draft.length - 1] = fragment;
         } else {
@@ -821,6 +864,7 @@ final class ForumBodyTextPageComposer {
   void finish() {
     _ensureOpen();
     if (!needsInput) throw StateError('Composition input is still pending');
+    if (!_backgrounds.isBalanced) throw StateError('Unclosed page background');
     try {
       if (_draft.isNotEmpty || _usedHeight > 0) _seal();
       _complete = true;
@@ -833,7 +877,15 @@ final class ForumBodyTextPageComposer {
 
   void _seal() {
     if (_pages.length >= maxPages) _fail(ForumBodyTextPageFailure.pageLimit);
-    _pages.add(ForumBodyTextPage._(_pages.length, _draft, _rules, _usedHeight));
+    _pages.add(
+      ForumBodyTextPage._(
+        _pages.length,
+        _draft,
+        _rules,
+        _backgrounds.seal(height),
+        _usedHeight,
+      ),
+    );
     _draft.clear();
     _rules.clear();
     _usedNativeHandles = 0;
@@ -862,9 +914,10 @@ final class ForumBodyTextPageComposer {
     _active = null;
     _padding = null;
     _rule = null;
-    _fragmentCount -= _draft.length + _rules.length;
+    _fragmentCount -= _draft.length + _rules.length + _backgrounds.itemCount;
     _draft.clear();
     _rules.clear();
+    _backgrounds.clear();
     _usedNativeHandles = 0;
     _nativeEntries.clear();
     _nativeBytes = 0;

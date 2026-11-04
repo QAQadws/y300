@@ -92,7 +92,7 @@ final class ForumBodyBlockFlowRule extends ForumBodyBlockFlowUnit {
 
 /// Structural controls carry resolved horizontal geometry, not a final border
 /// rectangle. Adjoining child margins can still move a parent's first content;
-/// painting a container background requires the later block fragment layer.
+/// the page composer resolves its actual background start and continuation.
 final class ForumBodyBlockFlowBoundary extends ForumBodyBlockFlowUnit {
   ForumBodyBlockFlowBoundary._(this.boundary, this.box, this.contentLeft)
     : super._(boundary.identity);

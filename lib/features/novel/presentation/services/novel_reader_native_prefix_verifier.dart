@@ -8,7 +8,14 @@ enum NovelReaderNativePrefixState {
   closed,
 }
 
-enum NovelReaderNativePrefixMismatch { scope, truncated, page, fragment, rule }
+enum NovelReaderNativePrefixMismatch {
+  scope,
+  truncated,
+  page,
+  fragment,
+  rule,
+  background,
+}
 
 final class NovelReaderNativePrefixStep {
   const NovelReaderNativePrefixStep(
@@ -54,6 +61,7 @@ final class NovelReaderNativePrefixVerifier {
   int _page = 0;
   int _fragment = 0;
   int _rule = 0;
+  int _background = 0;
   int _incomingLength = 0;
   bool _incomingComplete = false;
   NovelReaderNativePrefixState _state = NovelReaderNativePrefixState.active;
@@ -118,7 +126,8 @@ final class NovelReaderNativePrefixVerifier {
       if (old.index != incoming.index ||
           old.usedHeight != incoming.usedHeight ||
           old.fragments.length != incoming.fragments.length ||
-          old.rules.length != incoming.rules.length) {
+          old.rules.length != incoming.rules.length ||
+          old.backgrounds.length != incoming.backgrounds.length) {
         _fail(NovelReaderNativePrefixMismatch.page);
         break;
       }
@@ -145,10 +154,27 @@ final class NovelReaderNativePrefixVerifier {
         }
         _rule++;
         fragments++;
+      } else if (_background < old.backgrounds.length) {
+        final a = old.backgrounds[_background],
+            b = incoming.backgrounds[_background];
+        if (a.path != b.path ||
+            a.left != b.left ||
+            a.top != b.top ||
+            a.width != b.width ||
+            a.height != b.height ||
+            a.color != b.color) {
+          _fail(NovelReaderNativePrefixMismatch.background);
+          break;
+        }
+        _background++;
+        fragments++;
       }
-      if (_fragment == old.fragments.length && _rule == old.rules.length) {
+      if (_fragment == old.fragments.length &&
+          _rule == old.rules.length &&
+          _background == old.backgrounds.length) {
         _fragment = 0;
         _rule = 0;
+        _background = 0;
         _page++;
         pages++;
         if (_page == prefixLength) {

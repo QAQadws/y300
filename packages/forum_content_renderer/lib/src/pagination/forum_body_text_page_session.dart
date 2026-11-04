@@ -475,10 +475,22 @@ final class ForumBodyTextPageSession {
               _state = ForumBodyTextPageSessionState.complete;
               return result(completed: true);
             }
-            if ((unit.boundary.event?.style.boxBackground?.a ?? 0) > 0) {
-              throw const ForumBodyTextPageSessionException(
-                ForumBodyTextPageSessionFailure.decoration,
-              );
+            final event = unit.boundary.event!;
+            final background = event.style.visibilityHidden
+                ? null
+                : event.style.boxBackground;
+            if ((background?.a ?? 0) > 0) {
+              if (unit.boundary.kind ==
+                  ForumBodyTextFlowBoundaryKind.openBlock) {
+                _composer.openBackground(
+                  path: event.node.path,
+                  left: unit.contentLeft - unit.box!.padding.left,
+                  width: unit.box!.borderBoxWidth,
+                  color: background!,
+                );
+              } else {
+                _composer.closeBackground(event.node.path);
+              }
             }
         }
       }

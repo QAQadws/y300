@@ -170,6 +170,14 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
         child: Stack(
           clipBehavior: Clip.hardEdge,
           children: [
+            if (_page.backgrounds.isNotEmpty)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    painter: _BlockBackgroundPainter(_page.backgrounds),
+                  ),
+                ),
+              ),
             if (_page.rules.isNotEmpty)
               Positioned.fill(
                 child: IgnorePointer(
@@ -203,6 +211,37 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
       );
     },
   );
+}
+
+final class _BlockBackgroundPainter extends CustomPainter {
+  const _BlockBackgroundPainter(this.backgrounds);
+  final List<ForumBodyTextPageBackground> backgrounds;
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    try {
+      canvas.clipRect(Offset.zero & size, doAntiAlias: false);
+      final paint = Paint();
+      for (final background in backgrounds) {
+        paint.color = background.color;
+        canvas.drawRect(
+          Rect.fromLTWH(
+            background.left,
+            background.top,
+            background.width,
+            background.height,
+          ),
+          paint,
+        );
+      }
+    } finally {
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _BlockBackgroundPainter oldDelegate) =>
+      !identical(backgrounds, oldDelegate.backgrounds);
 }
 
 final class _RulePainter extends CustomPainter {
