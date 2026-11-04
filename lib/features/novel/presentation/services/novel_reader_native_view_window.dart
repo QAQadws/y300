@@ -125,11 +125,18 @@ final class NovelReaderNativeViewWindow {
         view.snapshot.identity != snapshot.identity ||
         view.snapshot.layoutId != snapshot.layoutId ||
         view.pageIndex >= snapshot.length ||
-        !identical(view.snapshot[view.pageIndex], snapshot[view.pageIndex]) ||
-        _active != null) {
+        !identical(view.snapshot[view.pageIndex], snapshot[view.pageIndex])) {
       throw StateError('Native target view scope changed');
     }
     if (identical(_views[_center], view)) return;
+    // A proved navigation target takes priority over unfinished window work.
+    // Retire its task identity before cancellation can resume the serial drive.
+    if (_active case final active?) {
+      _revision++;
+      _active = null;
+      _activePage = null;
+      active.close();
+    }
     _remove(_center);
     if (!_admit(view)) throw const NovelReaderNativeViewWindowBudgetException();
     _views[_center] = view;
@@ -260,6 +267,10 @@ final class NovelReaderNativeViewWindow {
           _active = job;
           _activePage = page;
           ready = await job.run();
+          if (!identical(_active, job)) {
+            ready.close();
+            ready = null;
+          }
         } on NovelReaderNativeViewBudgetDeferred {
           if (!_closed && revision == _revision) {
             _deferred[page] = (

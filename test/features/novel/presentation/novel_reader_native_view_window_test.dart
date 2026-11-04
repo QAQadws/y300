@@ -43,6 +43,59 @@ NovelReaderNativeViewWindow _window(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  for (final pendingPage in [0, 1]) {
+    test(
+      'proved target preempts pending page $pendingPage without a late replacement',
+      () async {
+        final fixture = NativeReaderTestFixture(_html, width: 20, height: 10);
+        final replacement = await NovelReaderNativePageViewJob(
+          session: fixture.session,
+          anchors: fixture.anchors,
+          pageIndex: 0,
+          parent: fixture.parent,
+          scheduler: NovelReaderNativeWorkScheduler(nextFrame: () async {}),
+        ).run();
+        addTearDown(replacement.close);
+        final started = Completer<void>();
+        final frame = Completer<void>();
+        var frames = 0;
+        final window = _window(
+          fixture,
+          scheduler: NovelReaderNativeWorkScheduler(
+            nextFrame: () {
+              if (++frames == pendingPage + 1) {
+                started.complete();
+                return frame.future;
+              }
+              return Future.value();
+            },
+          ),
+        );
+        final run = window.prepareAvailable();
+        await started.future;
+        final previous = window.viewForPage(0);
+        final mounted = previous?.takeLeases() ?? <ForumBodyParagraphLease>[];
+        try {
+          window.adoptTarget(replacement);
+          expect(window.viewForPage(0), same(replacement));
+        } finally {
+          frame.complete();
+          await run;
+          for (final lease in mounted) {
+            expect(lease.isActive, isTrue);
+            lease.release();
+          }
+        }
+        expect(window.viewForPage(0), same(replacement));
+        expect(window.retainedPageCount, 2);
+        expect(fixture.session.pendingPreparationCount, 0);
+        expect(fixture.session.reservedViewLeases, 0);
+        window.close();
+        expect(fixture.session.activeIssuedLeases, 0);
+      },
+    );
+  }
+
   test(
     'rule-only pages consume the same retained item budget as text fragments',
     () async {
