@@ -30,6 +30,10 @@ export 'src/inline/forum_body_inline_logical_paint_rows.dart';
 export 'src/inline/forum_body_inline_emphasis_paint_reference.dart';
 export 'src/inline/forum_body_inline_emphasis_paint_view.dart';
 export 'src/inline/forum_body_inline_emphasis_paint_preparation.dart';
+export 'src/pagination/forum_body_inline_page_preparation.dart'
+    show
+        ForumBodyInlineEmphasisChildView,
+        ForumBodyInlineEmphasisChildPreparation;
 export 'src/inline/forum_body_inline_paragraph_view.dart'
     show
         ForumBodyInlineParagraphView,

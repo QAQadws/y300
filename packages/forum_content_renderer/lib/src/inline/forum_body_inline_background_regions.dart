@@ -4,6 +4,7 @@ part of 'forum_body_inline_paragraph_view.dart';
 /// Building is charged with each already-bounded visible atom binding.
 final class _RubyBackgroundRegions {
   var _rects = <({Rect rect, ForumBodyRubyContainerFontBox font})>[];
+  var _rows = <int>[];
   final _indices =
       <(String, int), ({int index, ForumBodyRubyContainerFontBox font})>{};
   void add(ForumBodyRubyContainerFontBox font, int row, Rect rect) {
@@ -13,6 +14,7 @@ final class _RubyBackgroundRegions {
     if (old == null) {
       _indices[key] = (index: _rects.length, font: font);
       _rects.add((rect: rect, font: font));
+      _rows.add(row);
     } else {
       if (old.font.background.color != font.background.color ||
           old.font.background.fontStrut.style.textStyle !=
@@ -28,15 +30,24 @@ final class _RubyBackgroundRegions {
     }
   }
 
-  List<({Rect rect, ForumBodyRubyContainerFontBox font})> take() {
-    final result = UnmodifiableListView(_rects);
+  ({
+    List<({Rect rect, ForumBodyRubyContainerFontBox font})> surfaces,
+    List<int> rows,
+  })
+  take() {
+    final result = (
+      surfaces: UnmodifiableListView(_rects),
+      rows: UnmodifiableListView(_rows),
+    );
     _rects = [];
+    _rows = [];
     _indices.clear();
     return result;
   }
 
   void clear() {
     _rects.clear();
+    _rows.clear();
     _indices.clear();
   }
 }

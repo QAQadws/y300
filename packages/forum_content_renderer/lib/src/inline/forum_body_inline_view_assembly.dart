@@ -339,13 +339,15 @@ final class ForumBodyInlineViewAssembly {
   ForumBodyInlineParagraphView takeView() => _operate(() {
     _guard();
     if (!isReady) throw StateError('Inline view assembly is incomplete');
+    final backgrounds = _backgroundRegions.take();
     final result = _fragment == null
         ? ForumBodyInlineParagraphView._empty(_parent!)
         : ForumBodyInlineParagraphView._(
             _parent!,
             _fragment!,
             UnmodifiableMapView(_bindings),
-            _backgroundRegions.take(),
+            backgrounds.surfaces,
+            backgrounds.rows,
           );
     _parent = null;
     _groups = const {};

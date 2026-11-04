@@ -40,6 +40,7 @@ final class ForumBodyInlineParagraphView {
     ForumBodyInlineParagraphFragment fragment,
     this._children,
     this._backgrounds,
+    this._backgroundRows,
   ) : _fragment = fragment,
       width = fragment.layout.width,
       height = fragment.height,
@@ -53,6 +54,7 @@ final class ForumBodyInlineParagraphView {
       _fragment = null,
       _children = const {},
       _backgrounds = const [],
+      _backgroundRows = const [],
       width = parent.layout.width,
       height = parent.layout.height,
       startLine = 0,
@@ -99,6 +101,40 @@ final class ForumBodyInlineParagraphView {
   ForumBodyInlineParagraphFragment? _fragment;
   Map<int, _RubyBinding> _children;
   List<({Rect rect, ForumBodyRubyContainerFontBox font})> _backgrounds;
+  List<int> _backgroundRows;
+
+  /// Actual parent row ownership of each already-bound container surface.
+  /// Coordinates remain local to this natural source window; allocation is
+  /// supplied by the containing format, never inferred from these rectangles.
+  List<({int lineIndex, Rect rect, ForumBodyRubyContainerFontBox font})>
+  get backgroundRows {
+    _ensureActive();
+    return _InlineBackgroundRowView(_backgrounds, _backgroundRows);
+  }
+
+  bool matchesCurrentParent(ForumBodyInlineParagraphLease parent) {
+    _ensureActive();
+    return parent.isActive &&
+        _parent!.hasSameActiveOwner(parent) &&
+        identical(_parent!.content, parent.content) &&
+        _parent!.nativeInputIdentity == parent.nativeInputIdentity &&
+        identical(_parent!.layout.lines, parent.layout.lines);
+  }
+
+  /// Replays one ACTUALLY bound complete child at its parent-slot origin.
+  /// Hidden/off-window or trimmed atoms cannot acquire visible authority here.
+  /// No parent glyph/background, viewport clip, shaping or recording is added.
+  void paintBoundAtomAt(Canvas canvas, Offset origin, int atomIndex) {
+    _ensureActive();
+    if (!origin.dx.isFinite || !origin.dy.isFinite) {
+      throw ArgumentError.value(origin);
+    }
+    final binding = _children[atomIndex];
+    if (binding == null) _fail(ForumBodyInlineViewFailure.coverage);
+    binding.paint(canvas, origin);
+    _ensureActive();
+  }
+
   List<({Rect rect, ForumBodyRubyContainerFontBox font})>
   get backgroundSurfaces {
     _ensureActive();
@@ -425,9 +461,37 @@ final class ForumBodyInlineParagraphView {
     }
     _children = const {};
     _backgrounds = const [];
+    _backgroundRows = const [];
     _fragment = null;
     parent.release();
   }
+}
+
+final class _InlineBackgroundRowView
+    extends
+        ListBase<
+          ({int lineIndex, Rect rect, ForumBodyRubyContainerFontBox font})
+        > {
+  _InlineBackgroundRowView(this.surfaces, this.rows);
+  final List<({Rect rect, ForumBodyRubyContainerFontBox font})> surfaces;
+  final List<int> rows;
+  @override
+  int get length => surfaces.length;
+  @override
+  set length(int value) => throw UnsupportedError('Read-only backgrounds');
+  @override
+  ({int lineIndex, Rect rect, ForumBodyRubyContainerFontBox font}) operator [](
+    int index,
+  ) => (
+    lineIndex: rows[index],
+    rect: surfaces[index].rect,
+    font: surfaces[index].font,
+  );
+  @override
+  void operator []=(
+    int index,
+    ({int lineIndex, Rect rect, ForumBodyRubyContainerFontBox font}) value,
+  ) => throw UnsupportedError('Read-only backgrounds');
 }
 
 final class _InlineBackgroundColorView

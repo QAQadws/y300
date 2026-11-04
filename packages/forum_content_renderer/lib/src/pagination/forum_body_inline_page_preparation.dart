@@ -4,6 +4,10 @@ import 'package:flutter/painting.dart';
 
 import '../document/forum_body_document.dart';
 import '../inline/forum_body_inline_paragraph_view.dart';
+import '../inline/forum_body_inline_paragraph_layout.dart';
+import '../inline/forum_body_inline_emphasis_row_allocation.dart';
+import '../inline/forum_body_ruby_container_background.dart';
+import '../inline/forum_body_emphasis_allocation_geometry.dart';
 import '../inline/forum_body_ruby_atom_plan.dart';
 import '../inline/forum_body_ruby_group_layout.dart';
 import '../inline/forum_body_ruby_group_preparation.dart';
@@ -15,10 +19,55 @@ import '../inline/forum_body_emphasis_line_layout.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_paragraph_layout.dart';
+import '../paragraph/forum_body_native_budget_input.dart';
 import 'forum_body_source_hint.dart';
 import 'forum_body_text_page_binding.dart';
 import 'forum_body_text_page_composer.dart';
 import 'forum_body_text_page_content.dart';
+
+part 'forum_body_inline_emphasis_child_preparation.dart';
+
+/// The standard page and a qualified current-source child transaction consume
+/// the same numeric window. No manufactured public page/coverage is published.
+final class _InlinePreparationWindow {
+  _InlinePreparationWindow.page(ForumBodyTextPageFragment f)
+    : path = f.path,
+      fontRevision = f.fontRevision,
+      styleRevision = f.styleRevision,
+      startLine = f.startLine,
+      endLine = f.endLine,
+      coverageStartUtf16 = f.coverageStartUtf16,
+      coverageEndUtf16 = f.coverageEndUtf16,
+      sourceHint = f.sourceHint,
+      width = f.width,
+      height = f.height;
+  _InlinePreparationWindow.current(
+    ForumBodyInlineParagraphLease parent,
+    ForumBodyInlineParagraphFragment f,
+  ) : path = parent.content.path,
+      fontRevision = parent.content.fontRevision,
+      styleRevision = parent.content.styleRevision,
+      startLine = f.startLine,
+      endLine = f.endLine,
+      coverageStartUtf16 = f.coverageStartUtf16,
+      coverageEndUtf16 = f.coverageEndUtf16,
+      sourceHint = forumBodySourceHint(
+        parent.content.projection.display,
+        f.coverageStartUtf16,
+        f.coverageEndUtf16,
+      ),
+      width = parent.layout.width,
+      height = f.height;
+  final String? path;
+  final String fontRevision;
+  final int styleRevision,
+      startLine,
+      endLine,
+      coverageStartUtf16,
+      coverageEndUtf16;
+  final ({int runeStart, int runeEnd})? sourceHint;
+  final double width, height;
+}
 
 /// Format-local resource preparation borrowed by the sole page transaction.
 /// One call acquires a parent, advances one pair, or binds the completed view.
@@ -26,21 +75,65 @@ import 'forum_body_text_page_content.dart';
 final class ForumBodyInlinePagePreparation {
   ForumBodyInlinePagePreparation({
     required ForumBodyInlinePageContent input,
-    required this.fragment,
+    required ForumBodyTextPageFragment fragment,
     required this.identity,
     required ForumBodyParagraphCache cache,
     required TextScaler textScaler,
     required void Function() ensureOwner,
     void Function()? ensureVisibleOwner,
     required Iterable<ForumBodyNativeParagraphLease> Function() ownedPageLeases,
-  }) : _input = input,
+  }) : _fragment = fragment,
+       _window = _InlinePreparationWindow.page(fragment),
+       _input = input,
        _cache = cache,
        _textScaler = textScaler,
        _ensureOwner = ensureOwner,
        _ensureVisibleOwner = ensureVisibleOwner ?? ensureOwner,
        _ownedPageLeases = ownedPageLeases;
+
+  // Only the qualified mixed-emphasis child coordinator can enter here. It
+  // supplies its own actual natural parent alias and original source derivation.
+  ForumBodyInlinePagePreparation._current({
+    required ForumBodyInlinePageContent input,
+    required ForumBodyInlineParagraphLease parent,
+    required ForumBodyInlineParagraphFragment window,
+    required this.identity,
+    required ForumBodyParagraphCache cache,
+    required TextScaler textScaler,
+    required void Function() ensureOwner,
+    required void Function() ensureVisibleOwner,
+    required Iterable<ForumBodyNativeParagraphLease> Function() ownedPageLeases,
+  }) : _fragment = null,
+       _window = _InlinePreparationWindow.current(parent, window),
+       _input = input,
+       _cache = cache,
+       _textScaler = textScaler,
+       _ensureOwner = ensureOwner,
+       _ensureVisibleOwner = ensureVisibleOwner,
+       _ownedPageLeases = ownedPageLeases,
+       _parent = parent {
+    try {
+      _guard();
+      if (!identical(parent.layout, window.layout)) {
+        throw const ForumBodyTextPageSurfaceException(
+          ForumBodyTextPageSurfaceFailure.identity,
+        );
+      }
+      _validateParent(input, parent);
+      _validatingParent = input.content.projection.atoms.isNotEmpty;
+    } catch (_) {
+      close();
+      rethrow;
+    }
+  }
   ForumBodyInlinePageContent? _input;
-  final ForumBodyTextPageFragment fragment;
+  final ForumBodyTextPageFragment? _fragment;
+  final _InlinePreparationWindow _window;
+  ForumBodyTextPageFragment get fragment =>
+      _fragment ??
+      (throw StateError(
+        'Current-source children have no published page fragment',
+      ));
   final ForumBodyIdentity identity;
   ForumBodyParagraphCache? _cache;
   TextScaler? _textScaler;
@@ -176,8 +269,8 @@ final class ForumBodyInlinePagePreparation {
       _binding = ForumBodyInlineViewAssembly(
         cache: cache,
         parent: _parent!,
-        startLine: fragment.startLine,
-        endLine: fragment.endLine,
+        startLine: _window.startLine,
+        endLine: _window.endLine,
         rubyGroups: _groups,
         rubySegments: _segments,
         rubySpaces: _spaces,
@@ -332,8 +425,8 @@ final class ForumBodyInlinePagePreparation {
       final trimmed = _input!.trimmedAtomIndices.contains(atom.index);
       final nativeTrimmed = _parent!.layout.isAtomTrimmed(atom.index);
       final visible =
-          atom.displayEndUtf16 > fragment.coverageStartUtf16 &&
-          atom.displayStartUtf16 < fragment.coverageEndUtf16 &&
+          atom.displayEndUtf16 > _window.coverageStartUtf16 &&
+          atom.displayStartUtf16 < _window.coverageEndUtf16 &&
           !trimmed;
       final nativeVisible =
           native.engineUtf16 >= _engineStart &&
@@ -347,8 +440,8 @@ final class ForumBodyInlinePagePreparation {
           native.displayEndUtf16 != atom.displayEndUtf16 ||
           visible != nativeVisible ||
           (visible &&
-              (atom.displayStartUtf16 < fragment.coverageStartUtf16 ||
-                  atom.displayEndUtf16 > fragment.coverageEndUtf16))) {
+              (atom.displayStartUtf16 < _window.coverageStartUtf16 ||
+                  atom.displayEndUtf16 > _window.coverageEndUtf16))) {
         throw const ForumBodyTextPageSurfaceException(
           ForumBodyTextPageSurfaceFailure.geometry,
         );
@@ -389,9 +482,9 @@ final class ForumBodyInlinePagePreparation {
   ) {
     final content = lease.content;
     if (content.identity != identity ||
-        content.path != fragment.path ||
-        content.fontRevision != fragment.fontRevision ||
-        content.styleRevision != fragment.styleRevision) {
+        content.path != _window.path ||
+        content.fontRevision != _window.fontRevision ||
+        content.styleRevision != _window.styleRevision) {
       throw const ForumBodyTextPageSurfaceException(
         ForumBodyTextPageSurfaceFailure.identity,
       );
@@ -405,13 +498,13 @@ final class ForumBodyInlinePagePreparation {
         );
       }
       if (layout.lines.isEmpty) {
-        if (fragment.startLine != 0 ||
-            fragment.endLine != 0 ||
-            fragment.coverageStartUtf16 != 0 ||
-            fragment.coverageEndUtf16 != 0 ||
-            layout.width != fragment.width ||
-            layout.height != fragment.height ||
-            fragment.sourceHint != null ||
+        if (_window.startLine != 0 ||
+            _window.endLine != 0 ||
+            _window.coverageStartUtf16 != 0 ||
+            _window.coverageEndUtf16 != 0 ||
+            layout.width != _window.width ||
+            layout.height != _window.height ||
+            _window.sourceHint != null ||
             layout.projection.atoms.isNotEmpty) {
           throw const ForumBodyTextPageSurfaceException(
             ForumBodyTextPageSurfaceFailure.geometry,
@@ -419,13 +512,13 @@ final class ForumBodyInlinePagePreparation {
         }
         return;
       }
-      final view = layout.fragment(fragment.startLine, fragment.endLine);
+      final view = layout.fragment(_window.startLine, _window.endLine);
       if (layout.isDisposed ||
-          layout.width != fragment.width ||
-          view.height != fragment.height ||
-          view.coverageStartUtf16 != fragment.coverageStartUtf16 ||
-          view.coverageEndUtf16 != fragment.coverageEndUtf16 ||
-          fragment.sourceHint !=
+          layout.width != _window.width ||
+          view.height != _window.height ||
+          view.coverageStartUtf16 != _window.coverageStartUtf16 ||
+          view.coverageEndUtf16 != _window.coverageEndUtf16 ||
+          _window.sourceHint !=
               forumBodySourceHint(
                 content.projection.display,
                 view.coverageStartUtf16,
