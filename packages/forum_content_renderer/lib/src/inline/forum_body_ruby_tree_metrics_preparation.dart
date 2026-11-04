@@ -6,8 +6,6 @@ import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_text_request.dart';
 import '../paragraph/forum_body_text_request_preparation.dart';
 import '../paragraph/forum_body_native_request.dart';
-import '../pagination/forum_body_text_page_content.dart';
-import '../pagination/forum_body_text_page_composer.dart';
 import 'forum_body_inline_plan_preparation.dart';
 import 'forum_body_ruby_container_background.dart';
 import 'forum_body_ruby_group_metrics.dart';
@@ -204,23 +202,10 @@ final class ForumBodyRubyTreeContainerMetrics
   final ForumBodyRubyContainerFontBox? backgroundFont;
   final ForumBodyRubyAtomFrame frame;
   final ForumBodyRubyGroupMetrics? group;
-  final ForumBodyRubyInlineChildMetrics? inline;
+  final ForumBodyIntrinsicInlineMetrics? inline;
   final ForumBodyRubySegmentMetrics? segment;
   @override
   final ForumBodyRubyChildMetrics box;
-}
-
-final class ForumBodyRubyInlineChildMetrics {
-  const ForumBodyRubyInlineChildMetrics(
-    this.input,
-    this.fragment,
-    this.baseline,
-  );
-  final ForumBodyInlinePageContent input;
-  final ForumBodyTextPageFragment fragment;
-  final double baseline;
-  Size get size => Size(fragment.width, fragment.height);
-  int get nativeHandleCount => input.nativeHandleCountFor(fragment);
 }
 
 enum _State { active, ready, transferred, failed, closed }
@@ -449,7 +434,7 @@ final class ForumBodyRubyTreeMetricsPreparation {
   void _seal(
     ForumBodyRubyAtomFrame frame, {
     ForumBodyRubyGroupMetrics? group,
-    ForumBodyRubyInlineChildMetrics? inline,
+    ForumBodyIntrinsicInlineMetrics? inline,
     ForumBodyRubySegmentMetrics? segment,
   }) {
     _nodes.add(
@@ -504,62 +489,18 @@ final class ForumBodyRubyTreeMetricsPreparation {
     _waiting = step.waitingForLayoutBudget;
     _cacheMiss = work.cacheMiss;
     if (!work.isReady) return step.partsPrepared;
-    final ready = work.take();
+    final child = work.takeIntrinsicBox();
     _inline = null;
     work.close();
-    final lease = ready.lease;
-    try {
-      _guard();
-      final layout = lease.layout;
-      if (layout.lines.length != 1) {
-        throw StateError('Intrinsic ruby child is not one native row');
-      }
-      final baseline = layout.lines.single.baseline;
-      final composer = ForumBodyTextPageComposer(
-        identity: ready.content.identity,
-        layoutId: 'intrinsic-ruby-child',
-        // Capacity must be positive even for a zero physical native frame;
-        // the composed fragment retains the actual zero width/height.
-        width: layout.width == 0 ? 1 : layout.width,
-        height: layout.height == 0 ? 1 : layout.height,
-        maxPages: 1,
-        maxFragments: 1,
-      );
-      late ForumBodyTextPageFragment fragment;
-      try {
-        composer.appendInline(
-          lease: lease,
-          paragraphIndex: 0,
-          left: 0,
-          spaceBefore: 0,
-          spaceAtPageStart: 0,
-          nativeHandleCountInRange: ready.content.nativeHandleCountInRange,
-        );
-        composer.advance(maxLines: 1);
-        if (!composer.needsInput) {
-          throw StateError('Intrinsic ruby child exceeded one native row');
-        }
-        composer.finish();
-        fragment = composer.snapshot[0].fragments.single;
-      } finally {
-        composer.close();
-      }
-      final child = ForumBodyRubyInlineChildMetrics(
-        ready.content,
-        fragment,
-        baseline,
-      );
-      _nativeCount += child.nativeHandleCount;
-      _seal(
-        _font!.enclose(childSize: child.size, childBaseline: child.baseline),
-        inline: child,
-      );
-      _inlineScales = {};
-      _inlineFontsComplete = false;
-      return step.partsPrepared;
-    } finally {
-      lease.release();
-    }
+    _guard();
+    _nativeCount += child.nativeHandleCount;
+    _seal(
+      _font!.enclose(childSize: child.size, childBaseline: child.baseline),
+      inline: child,
+    );
+    _inlineScales = {};
+    _inlineFontsComplete = false;
+    return step.partsPrepared;
   }
 
   int _read(

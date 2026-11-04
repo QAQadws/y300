@@ -2,6 +2,7 @@ import 'package:flutter/painting.dart';
 
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../pagination/forum_body_text_page_content.dart';
+import '../pagination/forum_body_text_page_composer.dart';
 import '../paragraph/forum_body_text_request.dart';
 import 'forum_body_inline_plan_input.dart';
 import 'forum_body_inline_span_content.dart';
@@ -25,6 +26,8 @@ import 'forum_body_ruby_tree_metrics_preparation.dart';
 import 'forum_body_ruby_tree_input.dart';
 import 'forum_body_emphasis_line_layout.dart';
 import 'forum_body_ruby_tree_emphasis_format_preparation.dart';
+
+part 'forum_body_intrinsic_inline_metrics.dart';
 
 enum _State { active, ready, transferred, closed }
 
@@ -911,6 +914,59 @@ final class ForumBodyInlinePlanPreparation {
       throw StateError('Emphasis parent requires its qualified transfer');
     }
     return _take();
+  }
+
+  /// Consume the current intrinsic parent into a source-bound numeric box.
+  /// This retains the existing plan, but no lease/cache/owner. A future visible
+  /// consumer must reacquire and qualify the same plan through page preparation.
+  ForumBodyIntrinsicInlineMetrics takeIntrinsicBox() {
+    if (_input?.layoutMode !=
+            ForumBodyParagraphLayoutMode.intrinsicSingleLine ||
+        _parentGlyphs != null) {
+      throw StateError('Intrinsic box requires an ordinary intrinsic plan');
+    }
+    final ready = _take();
+    final lease = ready.lease;
+    try {
+      final layout = lease.layout;
+      if (layout.lines.length != 1) {
+        throw StateError('Intrinsic inline box is not one native row');
+      }
+      final composer = ForumBodyTextPageComposer(
+        identity: ready.content.identity,
+        layoutId: 'intrinsic-inline-box',
+        // Positive capacity admits a genuine empty native frame. The resulting
+        // fragment retains its original zero dimensions rather than fake text.
+        width: layout.width == 0 ? 1 : layout.width,
+        height: layout.height == 0 ? 1 : layout.height,
+        maxPages: 1,
+        maxFragments: 1,
+      );
+      try {
+        composer.appendInline(
+          lease: lease,
+          paragraphIndex: 0,
+          left: 0,
+          spaceBefore: 0,
+          spaceAtPageStart: 0,
+          nativeHandleCountInRange: ready.content.nativeHandleCountInRange,
+        );
+        composer.advance(maxLines: 1);
+        if (!composer.needsInput) {
+          throw StateError('Intrinsic inline box exceeded one native row');
+        }
+        composer.finish();
+        return ForumBodyIntrinsicInlineMetrics._(
+          ready.content,
+          composer.snapshot[0].fragments.single,
+          layout.lines.single.baseline,
+        );
+      } finally {
+        composer.close();
+      }
+    } finally {
+      lease.release();
+    }
   }
 
   ({
