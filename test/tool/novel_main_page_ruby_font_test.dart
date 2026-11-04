@@ -13,6 +13,7 @@ import 'package:y300/features/fonts/domain/services/font_file_validator.dart';
 import 'package:y300/features/fonts/domain/services/font_import_picker.dart';
 import 'package:y300/features/fonts/fonts.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_preferences.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
 import 'package:y300/features/novel/presentation/novel_reader_page.dart';
@@ -172,7 +173,7 @@ void main() {
         .load();
   });
   testWidgets(
-    'real imported font reaches single-level ruby, styles and restored source position',
+    'single-level ruby keeps imported font, typography, copies and restored position',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       final picker = _Picker();
@@ -398,6 +399,133 @@ void main() {
             isTrue,
           );
           expect(native, isNot(orderedEquals(beforePixels[text]!)));
+        }
+
+        // Exercise reflow through the real Reader after the font has loaded.
+        // These requests must reach the native ruby children as well as the
+        // parent, while previewing keeps the confirmed semantic position.
+        for (final mode in NovelReaderTextAlignMode.values) {
+          final previousKey = observation.paginationKey;
+          final previousController = observation.nativeController!;
+          final indent =
+              mode == NovelReaderTextAlignMode.start ||
+                  mode == NovelReaderTextAlignMode.justify
+              ? 2.0
+              : 0.0;
+          ProviderScope.containerOf(reader.currentContext!, listen: false)
+              .read(novelReaderControllerProvider(args).notifier)
+              .previewPreferences(
+                state().preferences.copyWith(
+                  fontSize: 24,
+                  lineHeight: 1.2,
+                  paragraphSpacing: 18,
+                  pagePadding: 24,
+                  typography: NovelReaderTypographyOverrides(
+                    firstLineIndent: NovelReaderFirstLineIndent(em: indent),
+                    letterSpacing: const NovelReaderLetterSpacing(
+                      logicalPixels: .75,
+                      scope: NovelReaderStyleScope.forceAll,
+                    ),
+                    wordSpacing: const NovelReaderWordSpacing(
+                      logicalPixels: 1.5,
+                      scope: NovelReaderStyleScope.forceAll,
+                    ),
+                    fontWeight: const NovelReaderFontWeight(
+                      value: 600,
+                      scope: NovelReaderStyleScope.forceAll,
+                    ),
+                    textAlignment: NovelReaderTextAlignment(mode: mode),
+                  ),
+                ),
+              );
+          await waitUntil(() {
+            final current = observeProfileReader(reader.currentContext!, args);
+            return current.ready &&
+                current.complete &&
+                current.paginationKey != previousKey;
+          });
+          observation = observeProfileReader(reader.currentContext!, args);
+          expect(previousController.isClosed, isTrue);
+          expect(_position(state().progressSnapshot), _position(before));
+          final page = observation.nativeController!.viewForPage(
+            observation.page!,
+          )!;
+          expect(page.coverage.locate(anchor), isNotNull);
+          expect(page.coverage.hasClippedGlyphs, isFalse);
+          var checkedRuby = false;
+          for (final fragment in _visibleInline(
+            reader.currentContext!,
+            observation,
+          )) {
+            final parent = fragment.nativeLeases
+                .whereType<ForumBodyInlineParagraphLease>()
+                .singleWhere(fragment.matchesCurrentParent);
+            expect(parent.content.style.textAlign, switch (mode) {
+              NovelReaderTextAlignMode.start => TextAlign.start,
+              NovelReaderTextAlignMode.justify => TextAlign.justify,
+              NovelReaderTextAlignMode.center => TextAlign.center,
+              NovelReaderTextAlignMode.end => TextAlign.end,
+            });
+            expect(parent.content.style.indent.value, indent);
+            expect(
+              parent.layout.firstLineIndent.requestedAdvance,
+              closeTo(indent * 24, 1e-6),
+            );
+            for (final lease
+                in fragment.nativeLeases.whereType<ForumBodyTextLease>()) {
+              for (final part in lease.content.projection.parts) {
+                final style = lease.content.runs[part.runIndex].style;
+                expect(style.textStyle.fontFamily, font.fontFamily);
+                expect(style.textStyle.letterSpacing, .75);
+                expect(style.textStyle.wordSpacing, 1.5);
+                expect(style.textStyle.fontWeight, FontWeight.w600);
+                checkedRuby |= style.role == ForumBodyTextRole.ruby;
+              }
+            }
+            final planned = page.snapshot[observation.page!].fragments
+                .singleWhere(
+                  (f) =>
+                      f.kind == ForumBodyTextPageFragmentKind.inline &&
+                      f.path == fragment.content.path &&
+                      f.coverageStartUtf16 == fragment.coverageStartUtf16 &&
+                      f.coverageEndUtf16 == fragment.coverageEndUtf16,
+                );
+            for (final window in fragment.content.contexts) {
+              for (final box in fragment.glyphBoxes(
+                window.startUtf16,
+                window.endUtf16,
+              )) {
+                final hit = fragment.sourceHitAt(box.toRect().center);
+                expect(hit.position.isExact, isTrue);
+                expect(hit.window, same(window));
+                final selection = forumBodyTextSelectionAt(
+                  binding: ForumBodyPreparedTextFragment.inline(fragment),
+                  fragment: planned,
+                  pageSize: Size(page.snapshot.width, page.snapshot.height),
+                  point: box.toRect().center,
+                );
+                expect(selection, isNotNull);
+                expect(
+                  selection!.text,
+                  fragment.content.projection.display.text.substring(
+                    window.startUtf16.clamp(
+                      fragment.coverageStartUtf16,
+                      fragment.coverageEndUtf16,
+                    ),
+                    window.endUtf16.clamp(
+                      fragment.coverageStartUtf16,
+                      fragment.coverageEndUtf16,
+                    ),
+                  ),
+                );
+                expect(
+                  selection.isAnnotation,
+                  window.content.style.role == ForumBodyTextRole.ruby,
+                );
+              }
+            }
+          }
+          expect(checkedRuby, isTrue);
         }
 
         final owner = observation.nativeOwner!;
