@@ -7,6 +7,55 @@ import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 
 void main() {
+  for (final scale in [1.0, 1.5, 3.0]) {
+    testWidgets('top overlay fits system text scale $scale', (tester) async {
+      var actionTaps = 0;
+      final controller = ReaderOverlayController()..showMenu();
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        _buildScaffold(
+          controller: controller,
+          textScaler: TextScaler.linear(scale),
+          topActions: [
+            ReaderToolbarAction(
+              id: 'search',
+              icon: Icons.search,
+              label: 'Search',
+              onPressed: () => actionTaps++,
+            ),
+          ],
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      final bar = tester.getRect(
+        find.byKey(const Key('shared-reader-top-overlay-bar')),
+      );
+      final title = tester.getRect(
+        find.byKey(const Key('shared-reader-top-title')),
+      );
+      final subtitle = tester.getRect(
+        find.byKey(const Key('shared-reader-top-subtitle')),
+      );
+      expect(title.top, greaterThanOrEqualTo(bar.top));
+      expect(title.bottom, lessThanOrEqualTo(subtitle.top));
+      expect(subtitle.bottom, lessThanOrEqualTo(bar.bottom));
+      expect(
+        MediaQuery.textScalerOf(
+          tester.element(find.byKey(const Key('shared-reader-top-title'))),
+        ).scale(16),
+        16 * scale,
+      );
+      await tester.tap(
+        find.byKey(const Key('shared-reader-top-action-search')),
+      );
+      expect(actionTaps, 1);
+      controller.hideMenu();
+      await tester.pumpAndSettle();
+      expect(controller.contentObscured.value, isFalse);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets(
     'body obstruction outlives desired visibility through slide out',
     (tester) async {
@@ -395,9 +444,16 @@ Widget _buildScaffold({
   ThemeData? theme,
   Duration animationDuration = Duration.zero,
   Key? overlayKey,
+  TextScaler? textScaler,
 }) {
   return LocalizedTestApp(
     theme: theme,
+    builder: textScaler == null
+        ? null
+        : (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+            child: child!,
+          ),
     home: Scaffold(
       body: ReaderOverlayScaffold(
         key: overlayKey,

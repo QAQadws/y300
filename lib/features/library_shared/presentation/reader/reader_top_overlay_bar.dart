@@ -18,8 +18,8 @@ class ReaderTopOverlayBar extends StatelessWidget {
       color: palette.chromeBackground,
       child: SafeArea(
         bottom: false,
-        child: SizedBox(
-          height: 64,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 64),
           child: Row(
             children: [
               IconButton(
@@ -39,6 +39,7 @@ class ReaderTopOverlayBar extends StatelessWidget {
                       vertical: 6,
                     ),
                     child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
