@@ -544,26 +544,46 @@ void main() {
       decoration: TextDecoration.underline,
     ),
   ]) {
-    test('logical parent paint requires phase binding $style', () {
-      final cache = _cache(),
-          input = _html(
-            cache,
-            'P${mixedEmphasisChildren[0]}Q',
-            textStyle: style,
+    for (final parentText in [true, false]) {
+      test(
+        'logical parent paint requires phase binding $style/$parentText',
+        () {
+          final cache = _cache(),
+              input = _html(
+                cache,
+                parentText
+                    ? 'P${mixedEmphasisChildren[0]}Q'
+                    : mixedEmphasisChildren[0],
+                textStyle: style,
+              );
+          final value = _finish(_work(input), cache).value;
+          _verify(value, input);
+          expect(value.requiresParentPaintPhases, isTrue);
+          for (final (i, row) in value.rows.indexed) {
+            final logical = input.input.logicalRows.rows[i].paintBounds?.shift(
+              row.logicalOffset,
+            );
+            if (logical != null) {
+              expect(row.paintBounds!.intersect(logical), logical);
+              expect(value.paintBounds!.intersect(logical), logical);
+            }
+          }
+          if (!parentText) {
+            expect(value.rows.single.parentFontBounds, isNull);
+            expect(value.rows.single.paintBounds, isNotNull);
+          }
+          expect(
+            () => ForumBodyInlineEmphasisAllocatedParentView.bind(
+              parent: input.isolated,
+              allocation: value,
+              ensureOwner: () {},
+            ),
+            throwsA(isA<ForumBodyEmphasisAllocationException>()),
           );
-      final value = _finish(_work(input), cache).value;
-      _verify(value, input);
-      expect(value.requiresParentPaintPhases, isTrue);
-      expect(
-        () => ForumBodyInlineEmphasisAllocatedParentView.bind(
-          parent: input.isolated,
-          allocation: value,
-          ensureOwner: () {},
-        ),
-        throwsA(isA<ForumBodyEmphasisAllocationException>()),
+          expect(cache.activeLeases, 2);
+        },
       );
-      expect(cache.activeLeases, 2);
-    });
+    }
   }
   test(
     'every advance and guard retirement leaves both borrowed leases active',

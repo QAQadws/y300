@@ -60,7 +60,7 @@ final class ForumBodyInlineEmphasisRowAllocation {
   ) : rows = UnmodifiableListView(rows),
       marks = UnmodifiableListView(marks),
       children = UnmodifiableListView(children);
-  static const revision = 1;
+  static const revision = 2;
   final ForumBodyInlineEmphasisIsolationMetrics input;
   final List<ForumBodyInlineEmphasisAllocatedRow> rows;
   final List<ForumBodyInlineEmphasisAllocatedMark> marks;
@@ -69,8 +69,8 @@ final class ForumBodyInlineEmphasisRowAllocation {
   final List<ForumBodyInlineEmphasisAllocatedChild?> children;
   final double height;
 
-  /// Conservative parent glyph paint envelope plus actual complete child and
-  /// marker frames. It can overflow logical flow, as authored shadows do.
+  /// Conservative parent glyph/logical paint plus complete child and marker
+  /// frames. It can overflow logical flow, as authored shadows do.
   final Rect? paintBounds;
 
   /// Logical backgrounds/decorations need their own physical paint offsets.
@@ -81,7 +81,6 @@ final class ForumBodyInlineEmphasisRowAllocation {
 enum _AllocationPhase {
   naturalFrames,
   isolatedFrames,
-  paintStyles,
   fonts,
   childBounds,
   markBounds,
@@ -139,6 +138,8 @@ final class ForumBodyInlineEmphasisRowAllocationPreparation {
       }
       if (input.rows.rows.length != ref.lineCount ||
           input.natural.geometry.parentFontBounds.length != ref.lineCount ||
+          input.logicalRows.rows.length != ref.lineCount ||
+          !identical(input.logicalRows.geometry, input.geometry) ||
           page.rubyAtoms.length != ref.atomLineIndices.length ||
           placement.marks.length != input.natural.text.units.length) {
         _source();
@@ -166,7 +167,6 @@ final class ForumBodyInlineEmphasisRowAllocationPreparation {
   double _height = 0;
   Rect? _paintBounds;
   bool _operating = false;
-  bool _requiresParentPaintPhases = false;
   bool get isReady => _phase == _AllocationPhase.ready;
 
   int advance({int maxParts = 32}) {
@@ -202,26 +202,10 @@ final class ForumBodyInlineEmphasisRowAllocationPreparation {
                 _phase = _AllocationPhase.isolatedFrames;
               } else {
                 _isolatedFrames = value;
-                _phase = _AllocationPhase.paintStyles;
-                _index = -1;
+                _next(_AllocationPhase.fonts);
               }
             }
             continue;
-          case _AllocationPhase.paintStyles:
-            final content = _isolated!.content;
-            if (_index < content.parentRuns.length) {
-              final style = _index < 0
-                  ? content.style.textStyle
-                  : content.parentRuns[_index].style.textStyle;
-              _requiresParentPaintPhases |=
-                  style.background != null ||
-                  style.backgroundColor != null ||
-                  (style.decoration != null &&
-                      style.decoration != TextDecoration.none);
-              _index++;
-            } else {
-              _next(_AllocationPhase.fonts);
-            }
           case _AllocationPhase.fonts:
             if (_index < input.reference.lineCount) {
               final font = input.natural.geometry.parentFontBounds[_index++];
@@ -320,7 +304,7 @@ final class ForumBodyInlineEmphasisRowAllocationPreparation {
               _children,
               _height,
               _paintBounds,
-              _requiresParentPaintPhases,
+              input.logicalRows.hasLogicalPaint,
             );
             _rows = [];
             _marks = [];
@@ -363,7 +347,11 @@ final class ForumBodyInlineEmphasisRowAllocationPreparation {
             _isolatedFrames!.nativeAlphabeticBaseline.roundToDouble(),
         glyphOffset = Offset(0, allocated.baseline - glyphBaseline),
         selector = input.rows.rows[index],
-        paintBounds = selector.paintBounds?.shift(glyphOffset);
+        logicalOffset = Offset(0, allocated.baseline - isolated.baseline),
+        paintBounds = _union(
+          selector.paintBounds?.shift(glyphOffset),
+          input.logicalRows.rows[index].paintBounds?.shift(logicalOffset),
+        );
     final font = input.natural.geometry.parentFontBounds[index];
     _rows.add(
       ForumBodyInlineEmphasisAllocatedRow._(
@@ -373,7 +361,7 @@ final class ForumBodyInlineEmphasisRowAllocationPreparation {
           baseline: allocated.baseline,
         ),
         naturalOffset: naturalOffset,
-        logicalOffset: Offset(0, allocated.baseline - isolated.baseline),
+        logicalOffset: logicalOffset,
         glyphOffset: glyphOffset,
         authoredAdvance: advance,
         isolatedGlyphBaseline: glyphBaseline,
@@ -512,7 +500,7 @@ final class ForumBodyInlineEmphasisAllocatedParentView {
   }
 }
 
-Rect _union(Rect? a, Rect b) => a?.expandToInclude(b) ?? b;
+Rect? _union(Rect? a, Rect? b) => b == null ? a : a?.expandToInclude(b) ?? b;
 void _rect(Rect rect) {
   if (!rect.isFinite || rect.width < 0 || rect.height < 0) {
     throw const ForumBodyEmphasisAllocationException(

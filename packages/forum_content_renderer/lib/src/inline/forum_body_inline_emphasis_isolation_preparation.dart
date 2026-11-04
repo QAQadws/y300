@@ -9,10 +9,11 @@ import 'forum_body_emphasis_line_layout.dart';
 import 'forum_body_emphasis_text_geometry.dart';
 import 'forum_body_inline_emphasis_parent_preparation.dart';
 import 'forum_body_inline_paragraph_request.dart';
+import 'forum_body_inline_logical_paint_rows.dart';
 import 'forum_body_inline_parent_rows.dart';
 import 'forum_body_inline_row_reference.dart';
 
-/// The final natural parent and its actual isolated glyph strips. Numeric
+/// The final natural parent and its actual glyph/logical paint strips. Numeric
 /// geometry only: physical allocation, child binding and visible scene/page
 /// admission are not established by this snapshot.
 final class ForumBodyInlineEmphasisIsolationMetrics {
@@ -21,11 +22,13 @@ final class ForumBodyInlineEmphasisIsolationMetrics {
     this.request,
     this.reference,
     this.rows,
+    this.logicalRows,
   );
   final ForumBodyInlineEmphasisParentMetrics natural;
   final ForumBodyInlineParagraphRequest request;
   final ForumBodyInlineRowReference reference;
   final ForumBodyInlineParentRows rows;
+  final ForumBodyInlineLogicalPaintRows logicalRows;
   ForumBodyInlineEmphasisTextGeometry get geometry => rows.geometry;
 }
 
@@ -41,13 +44,14 @@ enum _IsolationPhase {
   verifyTargets,
   verifyAtoms,
   rows,
+  logicalRows,
   ready,
   transferred,
   closed,
 }
 
 /// Borrows the source-qualified final natural parent. Owns only the current
-/// isolated parent and retries measured insufficient glyph gaps in place.
+/// isolated parent and retries measured insufficient paint gaps in place.
 /// No first paint or picture is prepared; the containing format retains the
 /// natural parent and is responsible for complete page/scene admission.
 final class ForumBodyInlineEmphasisIsolationPreparation {
@@ -117,6 +121,8 @@ final class ForumBodyInlineEmphasisIsolationPreparation {
   ForumBodyInlineEmphasisGeometryPreparation? _geometryWork;
   ForumBodyInlineEmphasisTextGeometry? _geometry;
   ForumBodyInlineParentRowPreparation? _rowWork;
+  ForumBodyInlineLogicalPaintRowPreparation? _logicalWork;
+  ForumBodyInlineParentRows? _rows;
   ForumBodyInlineEmphasisIsolationMetrics? _result;
   var _phase = _IsolationPhase.beginPrefix;
   double _pitch;
@@ -341,13 +347,32 @@ final class ForumBodyInlineEmphasisIsolationPreparation {
               used += work.advance(maxParts: maxParts - used);
               _guard();
               if (work.isReady) {
+                _rows = work.takeRows();
+                _rowWork = null;
+                _logicalWork = ForumBodyInlineLogicalPaintRowPreparation(
+                  parent: _pending!,
+                  geometry: _geometry!,
+                  ensureOwner: _guard,
+                  maxLines: maxLines,
+                  maxAtoms: maxAtoms,
+                );
+                _phase = _IsolationPhase.logicalRows;
+              }
+              continue;
+            case _IsolationPhase.logicalRows:
+              final work = _logicalWork!;
+              used += work.advance(maxParts: maxParts - used);
+              _guard();
+              if (work.isReady) {
                 _result = ForumBodyInlineEmphasisIsolationMetrics._(
                   _metrics!,
                   _request!,
                   _reference!,
+                  _rows!,
                   work.takeRows(),
                 );
-                _rowWork = null;
+                _rows = null;
+                _logicalWork = null;
                 _phase = _IsolationPhase.ready;
               }
               continue;
@@ -408,6 +433,9 @@ final class ForumBodyInlineEmphasisIsolationPreparation {
     if (next > 16384) throw error;
     _rowWork?.close();
     _rowWork = null;
+    _logicalWork?.close();
+    _logicalWork = null;
+    _rows = null;
     _geometry = null;
     _reference = null;
     final previous = _pending!;
@@ -490,6 +518,9 @@ final class ForumBodyInlineEmphasisIsolationPreparation {
     _geometryWork = null;
     _rowWork?.close();
     _rowWork = null;
+    _logicalWork?.close();
+    _logicalWork = null;
+    _rows = null;
     _releaseProbe();
     _metrics = null;
     _natural = null;

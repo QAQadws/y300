@@ -26,6 +26,7 @@ export 'src/inline/forum_body_inline_emphasis_isolation_preparation.dart';
 export 'src/inline/forum_body_inline_emphasis_row_allocation.dart';
 export 'src/inline/forum_body_inline_row_reference.dart';
 export 'src/inline/forum_body_inline_parent_rows.dart';
+export 'src/inline/forum_body_inline_logical_paint_rows.dart';
 export 'src/inline/forum_body_inline_paragraph_view.dart'
     show
         ForumBodyInlineParagraphView,
