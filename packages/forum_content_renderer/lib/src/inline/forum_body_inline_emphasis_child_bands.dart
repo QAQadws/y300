@@ -226,6 +226,8 @@ final class ForumBodyInlineEmphasisChildBandsPreparation {
     double baseline;
     Size size;
     switch (source) {
+      case ForumBodyTextBaselineAtomPlan():
+        _fail(ForumBodyEmphasisGeometryFailure.source);
       case ForumBodyRubyColumnPlan(:final metrics):
         if (metrics == null) _fail(ForumBodyEmphasisGeometryFailure.source);
         _group = metrics;

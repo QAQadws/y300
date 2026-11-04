@@ -24,6 +24,30 @@ sealed class _RubyBinding {
   void close();
 }
 
+final class _BaselineTextBinding extends _RubyBinding {
+  const _BaselineTextBinding(this.text, this.window);
+  final ForumBodyTextBaselineLayout text;
+  final ForumBodyInlineContext window;
+  @override
+  Size get size => text.metrics.size;
+  @override
+  double get baseline => text.metrics.baseline;
+  @override
+  bool get isActive => !text.isDisposed;
+  @override
+  Iterable<ForumBodyNativeParagraphLease> get nativeLeases => [text.lease];
+  @override
+  void paint(Canvas canvas, Offset offset) => text.paint(canvas, offset);
+  @override
+  _RubySourceHit sourceAt(Offset point) =>
+      (window: window, position: text.sourceAt(point));
+  @override
+  List<TextBox> selectionBoxes(int start, int end) =>
+      _selectRubyWindow(window, start, end, text.selectionBoxes);
+  @override
+  void close() => text.close();
+}
+
 final class _RubyTreeBinding extends _RubyBinding {
   const _RubyTreeBinding(this.tree, this.windows);
   final ForumBodyRubyTreeLayout tree;

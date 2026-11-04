@@ -156,6 +156,7 @@ export 'src/paragraph/forum_body_paragraph_row_reference.dart';
 export 'src/paragraph/forum_body_paragraph_cache.dart';
 export 'src/paragraph/forum_body_text_layout.dart';
 export 'src/inline/forum_body_text_baseline_layout.dart';
+export 'src/inline/forum_body_text_baseline_preparation.dart';
 export 'src/paragraph/forum_body_text_request.dart';
 export 'src/paragraph/forum_body_native_request.dart';
 export 'src/inline/forum_body_inline_paragraph_request.dart';

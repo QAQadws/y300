@@ -10,6 +10,8 @@ import '../inline/forum_body_inline_emphasis_row_allocation.dart';
 import '../inline/forum_body_ruby_container_background.dart';
 import '../inline/forum_body_emphasis_allocation_geometry.dart';
 import '../inline/forum_body_ruby_atom_plan.dart';
+import '../inline/forum_body_text_baseline_layout.dart';
+import '../inline/forum_body_text_baseline_preparation.dart';
 import '../inline/forum_body_ruby_group_layout.dart';
 import '../inline/forum_body_ruby_group_preparation.dart';
 import '../inline/forum_body_ruby_segment_layout.dart';
@@ -143,6 +145,8 @@ final class ForumBodyInlinePagePreparation {
   ForumBodyInlineParagraphLease? _parent;
   List<int> _indices = const [];
   final _groups = <int, ForumBodyRubyGroupLayout>{};
+  final _baselines = <int, ForumBodyTextBaselineLayout>{};
+  ForumBodyTextBaselinePreparation? _baseline;
   final _segments = <int, ForumBodyRubySegmentLayout>{};
   final _spaces = <int, ForumBodyRubySoftSpaceLayout>{};
   final _trees = <int, ForumBodyRubyTreeLayout>{};
@@ -168,6 +172,8 @@ final class ForumBodyInlinePagePreparation {
   Iterable<ForumBodyNativeParagraphLease> get nativeLeases => [
     ?_parent,
     for (final group in _groups.values) ...group.nativeLeases,
+    for (final text in _baselines.values) text.lease,
+    if (_baseline != null) ..._baseline!.nativeLeases,
     for (final segment in _segments.values) ...segment.nativeLeases,
     for (final space in _spaces.values) ...space.nativeLeases,
     for (final tree in _trees.values) ...tree.nativeLeases,
@@ -227,6 +233,30 @@ final class ForumBodyInlinePagePreparation {
       if (_nextGroup < _indices.length) {
         final index = _indices[_nextGroup];
         final atom = input.rubyAtoms[index];
+        if (atom is ForumBodyTextBaselineAtomPlan) {
+          final job = _baseline ??= ForumBodyTextBaselinePreparation(
+            cache: cache,
+            request: atom.request,
+            baselineShift: atom.metrics.baselineShift,
+            width: atom.maxWidth,
+            textScaler: _textScaler!,
+            ensureOwner: _guard,
+            expectedMetrics: atom.metrics,
+            additionalOwnedLeases: _ownedPageLeases,
+          );
+          final step = job.advance(maxParts: maxParts, cachedOnly: cachedOnly);
+          _workCount += step.partsPrepared;
+          _guard();
+          if (!job.isReady) {
+            final rejection = job.lastBudgetRejection;
+            if (rejection != null) throw rejection;
+            return (cacheMiss: job.cacheMiss, view: null);
+          }
+          _baselines[index] = job.takeLayout();
+          _baseline = null;
+          _nextGroup++;
+          return (cacheMiss: false, view: null);
+        }
         if (atom is ForumBodyRubyTreeEmphasisAtomPlan) {
           return _advanceEmphasisTree(index, atom, cachedOnly, maxParts);
         }
@@ -273,6 +303,7 @@ final class ForumBodyInlinePagePreparation {
         startLine: _window.startLine,
         endLine: _window.endLine,
         rubyGroups: _groups,
+        baselineTexts: _baselines,
         rubySegments: _segments,
         rubySpaces: _spaces,
         rubyTrees: _trees,
@@ -283,6 +314,7 @@ final class ForumBodyInlinePagePreparation {
       );
       _parent = null;
       _groups.clear();
+      _baselines.clear();
       _segments.clear();
       _spaces.clear();
       _trees.clear();
@@ -556,6 +588,8 @@ final class ForumBodyInlinePagePreparation {
     _binding?.close();
     _binding = null;
     _pair?.close();
+    _baseline?.close();
+    _baseline = null;
     _pair = null;
     _component?.close();
     _component = null;
@@ -577,6 +611,10 @@ final class ForumBodyInlinePagePreparation {
       group.close();
     }
     _groups.clear();
+    for (final text in _baselines.values) {
+      text.close();
+    }
+    _baselines.clear();
     for (final segment in _segments.values) {
       segment.close();
     }

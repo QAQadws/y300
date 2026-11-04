@@ -18,6 +18,7 @@ import 'forum_body_ruby_tree_layout.dart';
 import 'forum_body_emphasis_line_layout.dart';
 import 'forum_body_inline_paint_command.dart';
 import 'forum_body_inline_paint_row.dart';
+import 'forum_body_text_baseline_layout.dart';
 
 part 'forum_body_inline_ruby_binding.dart';
 part 'forum_body_inline_view_assembly.dart';

@@ -14,13 +14,14 @@ final class MixedPagePreparationFixture {
     int entries = 2,
     int bytes = 1 << 24,
     bool emptyAnnotations = false,
+    List<double>? baselineShifts,
   }) : cache = ForumBodyParagraphCache(
          maxEntries: entries,
          maxEstimatedBytes: bytes,
        ) {
     final roots = [
       for (var i = 0; i < pairs; i++)
-        '<span>b$i</span><span style="font-size:10px">${emptyAnnotations ? '' : 'r$i'}</span>',
+        '<span>b$i</span><span style="font-size:10px">${emptyAnnotations || baselineShifts != null ? '' : 'r$i'}</span>',
     ];
     final doc = const ForumBodyParser().parse(
       html: '<p>${roots.join()}</p>',
@@ -67,6 +68,18 @@ final class MixedPagePreparationFixture {
           ),
         ),
     ];
+    ForumBodyTextRequest request(int index) {
+      final content = contexts[index];
+      if (!batched || content.projection.text.isEmpty) {
+        return ForumBodyTextRequest.paragraph(content);
+      }
+      final batchedIndex = batchIndices[content]!;
+      return ForumBodyTextRequest.bandChild(
+        band: bands[batchedIndex ~/ 64],
+        childIndex: batchedIndex % 64,
+      );
+    }
+
     var offset = 0;
     final ranges = <({int startUtf16, int endUtf16})>[];
     for (var i = 0; i < pairs; i++) {
@@ -99,8 +112,31 @@ final class MixedPagePreparationFixture {
       maxFragments: 100,
     );
     final dimensions = <PlaceholderDimensions>[];
+    final baselineMetrics = <ForumBodyTextBaselineMetrics>[];
     try {
       for (var i = 0; i < pairs; i++) {
+        if (baselineShifts != null) {
+          final job = ForumBodyTextBaselinePreparation(
+            cache: planning,
+            request: request(i * 2),
+            baselineShift: baselineShifts[i],
+            width: 16384,
+            textScaler: TextScaler.noScaling,
+            ensureOwner: () {},
+            preparePaint: false,
+          );
+          try {
+            while (!job.isReady) {
+              job.advance(maxParts: 1);
+            }
+            final metrics = job.takeMetrics();
+            baselineMetrics.add(metrics);
+            dimensions.add(metrics.placeholderDimensions);
+          } finally {
+            job.close();
+          }
+          continue;
+        }
         final group = ForumBodyRubyGroupLayout.create(
           cache: planning,
           base: contexts[i * 2],
@@ -134,29 +170,29 @@ final class MixedPagePreparationFixture {
       composer.close();
       planning.close();
     }
-    ForumBodyTextRequest request(int index) {
-      final content = contexts[index];
-      if (!batched || content.projection.text.isEmpty) {
-        return ForumBodyTextRequest.paragraph(content);
-      }
-      final batchedIndex = batchIndices[content]!;
-      return ForumBodyTextRequest.bandChild(
-        band: bands[batchedIndex ~/ 64],
-        childIndex: batchedIndex % 64,
-      );
-    }
-
-    input = ForumBodyInlinePageContent(
-      content: content,
-      dimensions: dimensions,
-      rubyGroups: [
-        for (var i = 0; i < pairs; i++)
-          ForumBodyRubyPairRequest(
-            base: request(i * 2),
-            annotation: request(i * 2 + 1),
-          ),
-      ],
-    );
+    input = baselineShifts != null
+        ? ForumBodyInlinePageContent.atoms(
+            content: content,
+            dimensions: dimensions,
+            rubyAtoms: [
+              for (var i = 0; i < pairs; i++)
+                ForumBodyRubyAtomPlan.textBaseline(
+                  request: request(i * 2),
+                  metrics: baselineMetrics[i],
+                ),
+            ],
+          )
+        : ForumBodyInlinePageContent(
+            content: content,
+            dimensions: dimensions,
+            rubyGroups: [
+              for (var i = 0; i < pairs; i++)
+                ForumBodyRubyPairRequest(
+                  base: request(i * 2),
+                  annotation: request(i * 2 + 1),
+                ),
+            ],
+          );
   }
   final ForumBodyParagraphCache cache;
   late final List<ForumBodyParagraphContent> contexts;

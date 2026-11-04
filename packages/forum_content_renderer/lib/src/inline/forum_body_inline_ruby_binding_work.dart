@@ -7,6 +7,7 @@ final class _RubyBindingWork {
     required ForumBodyInlineSpanContent content,
     required int index,
     ForumBodyRubyGroupLayout? group,
+    ForumBodyTextBaselineLayout? baselineText,
     ForumBodyRubySegmentLayout? segment,
     ForumBodyRubySoftSpaceLayout? space,
     ForumBodyRubyTreeLayout? tree,
@@ -14,6 +15,7 @@ final class _RubyBindingWork {
     required void Function(ForumBodyNativeParagraphLease) own,
   }) : _cursor = content.openAtomicContexts(index),
        _group = group,
+       _baselineText = baselineText,
        _segment = segment,
        _space = space,
        _tree = tree,
@@ -24,6 +26,7 @@ final class _RubyBindingWork {
        _own = own;
   ForumBodyInlineAtomicContextCursor? _cursor;
   ForumBodyRubyGroupLayout? _group;
+  ForumBodyTextBaselineLayout? _baselineText;
   ForumBodyRubySegmentLayout? _segment;
   ForumBodyRubySoftSpaceLayout? _space;
   ForumBodyRubyTreeLayout? _tree;
@@ -53,7 +56,13 @@ final class _RubyBindingWork {
     if (maxParts <= 0) throw ArgumentError.value(maxParts);
     var work = 0;
     while (work < maxParts && !isComplete) {
-      if (_tree != null || _emphasisTree != null) {
+      if (_baselineText != null) {
+        final text = _baselineText!;
+        _own!(text.lease);
+        final window = _cursor!.resolve(text.content);
+        _cursor!.finish();
+        _result = _BaselineTextBinding(text, window);
+      } else if (_tree != null || _emphasisTree != null) {
         _emphasisTree?.ensureActive();
         if (!_treeLeasesDone) {
           if (_treeLeases!.moveNext()) {
@@ -166,6 +175,7 @@ final class _RubyBindingWork {
     _cursor?.close();
     _cursor = null;
     _group = null;
+    _baselineText = null;
     _segment = null;
     _space = null;
     _tree = null;

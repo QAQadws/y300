@@ -9,11 +9,17 @@ import 'forum_body_ruby_soft_space_contract.dart';
 import 'forum_body_ruby_tree_input.dart';
 import 'forum_body_ruby_tree_metrics_preparation.dart';
 import 'forum_body_emphasis_line_layout.dart';
+import 'forum_body_text_baseline_layout.dart';
 
 /// One actual parent placeholder's pure source requests and measured row target.
 /// No native lease, owner, scheduler or page lifecycle belongs to this value.
 sealed class ForumBodyRubyAtomPlan {
   const ForumBodyRubyAtomPlan._();
+  factory ForumBodyRubyAtomPlan.textBaseline({
+    required ForumBodyTextRequest request,
+    required ForumBodyTextBaselineMetrics metrics,
+    double maxWidth,
+  }) = ForumBodyTextBaselineAtomPlan;
   factory ForumBodyRubyAtomPlan.column({
     required ForumBodyRubyColumnRequest request,
     ForumBodyRubyLevelMetrics? level,
@@ -54,6 +60,33 @@ sealed class ForumBodyRubyAtomPlan {
 
   Iterable<ForumBodyNativeBudgetSlot> get nativeBudgetFootprint =>
       nativeFootprint;
+}
+
+/// A text box, not ruby or an annotation. It participates in the same parent
+/// slots and page budget while retaining exactly one original source context.
+final class ForumBodyTextBaselineAtomPlan extends ForumBodyRubyAtomPlan {
+  ForumBodyTextBaselineAtomPlan({
+    required this.request,
+    required this.metrics,
+    this.maxWidth = 16384,
+  }) : super._() {
+    if (!maxWidth.isFinite ||
+        maxWidth <= 0 ||
+        maxWidth > 16384 ||
+        metrics.size.width > maxWidth ||
+        metrics.size.height <= 0 ||
+        metrics.size.height > 16384 ||
+        request.content.layoutMode !=
+            ForumBodyParagraphLayoutMode.intrinsicSingleLine) {
+      throw ArgumentError('Invalid baseline text atom');
+    }
+  }
+  final ForumBodyTextRequest request;
+  final ForumBodyTextBaselineMetrics metrics;
+  @override
+  final double maxWidth;
+  @override
+  List<ForumBodyTextRequest> get nativeRequests => [request];
 }
 
 /// A complete tree format, distinct from its private glyph-only numeric plan.
