@@ -17,3 +17,14 @@ abstract interface class ForumBodyTextLayout {
   HtmlProjectedSourcePosition sourceAt(Offset offset);
   List<TextBox> selectionBoxes(int startUtf16, int endUtf16);
 }
+
+/// Includes the native frame and actual font overhang under tight line-height.
+/// This only queries an existing layout; it never shapes or prepares paint.
+Rect forumBodyTextLayoutBounds(ForumBodyTextLayout layout) {
+  if (layout.isDisposed) throw StateError('Text layout is retired');
+  var bounds = Rect.fromLTWH(0, 0, layout.width, layout.height);
+  for (final box in layout.selectionBoxes(0, layout.projection.text.length)) {
+    bounds = bounds.expandToInclude(box.toRect());
+  }
+  return bounds;
+}

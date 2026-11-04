@@ -5,6 +5,7 @@ import 'package:flutter/painting.dart';
 
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
+import '../paragraph/forum_body_text_layout.dart';
 import '../style/forum_body_style_options.dart' show ForumBodyRubySide;
 import 'forum_body_ruby_group_contract.dart';
 import 'forum_body_ruby_band_stack.dart';
@@ -299,17 +300,7 @@ final class ForumBodyRubyGroupMetrics {
   );
 
   static Rect _textBounds(ForumBodyTextLease lease) {
-    final layout = lease.layout;
-    var bounds = Rect.fromLTWH(0, 0, layout.width, layout.height);
-    // Author line-height can be smaller than actual fallback/large-run font
-    // boxes. Use this same native layout's bounds, never another font shape.
-    for (final box in layout.selectionBoxes(
-      0,
-      lease.content.projection.text.length,
-    )) {
-      bounds = bounds.expandToInclude(box.toRect());
-    }
-    return bounds;
+    return forumBodyTextLayoutBounds(lease.layout);
   }
 
   static Never _invalid() => throw const ForumBodyRubyGroupException(
