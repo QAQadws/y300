@@ -1176,6 +1176,41 @@ final class ForumBodyInlineParagraphLease
   /// Always the current child styles/interactions, not a cached engine's input.
   final ForumBodyInlineSpanContent content;
 
+  /// Exact current source/request qualification, using the same immutable
+  /// slot snapshot and native key as acquire/probe. Never acquires or shapes.
+  bool matchesNativeInputs({
+    required ForumBodyInlineSpanContent content,
+    required double width,
+    required List<PlaceholderDimensions> dimensions,
+    required TextScaler textScaler,
+    ForumBodyParagraphLayoutMode layoutMode = ForumBodyParagraphLayoutMode.wrap,
+    double? rowIsolationPitch,
+  }) {
+    if (!isActive) throw StateError('Inline paragraph lease is retired');
+    final snapshot = List<PlaceholderDimensions>.unmodifiable(dimensions);
+    final scales = ForumBodyInlineParagraphLayout.validateInputs(
+      content: content,
+      width: width,
+      dimensions: snapshot,
+      textScaler: textScaler,
+      layoutMode: layoutMode,
+      rowIsolationPitch: rowIsolationPitch,
+    );
+    if (!isActive) {
+      throw StateError('Inline paragraph lease retired during validation');
+    }
+    return identical(this.content, content) &&
+        _entry.key ==
+            _InlineLayoutKey(
+              content,
+              width,
+              scales,
+              snapshot,
+              layoutMode,
+              rowIsolationPitch,
+            );
+  }
+
   /// Current cache/source and all actual text/slot/scaler inputs, excluding only
   /// the explicit isolation pitch. A numeric layout/key alone cannot bind rows.
   bool hasSameSourceAndInputsExceptRowIsolation(

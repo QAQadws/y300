@@ -35,6 +35,7 @@ final class MixedEmphasisParentFixture {
     String child, {
     this.width = 300,
     TextDirection direction = TextDirection.ltr,
+    ForumBodyParagraphLayoutMode? layoutMode,
     String parentStyle = 'text-emphasis:circle;line-height:.4',
     String prefix = 'P',
     String suffix = 'Q',
@@ -72,7 +73,19 @@ final class MixedEmphasisParentFixture {
       flow.close();
     }
     final source = ForumBodyInlineSourcePreparation(
-      input: actual!,
+      input: layoutMode == null
+          ? actual!
+          : ForumBodyInlineFlowContent(
+              identity: actual!.identity,
+              path: actual.path,
+              fontRevision: actual.fontRevision,
+              styleRevision: actual.styleRevision,
+              style: actual.style,
+              layoutMode: layoutMode,
+              parts: actual.parts,
+              ignored: actual.ignored,
+              issues: actual.issues,
+            ),
       width: width,
       ensureOwner: () {},
     );
