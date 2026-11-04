@@ -56,10 +56,12 @@ final class ForumBodyBlockFlowParagraph extends ForumBodyBlockFlowUnit {
     this.paragraph,
     this.contentLeft,
     this.contentWidth,
+    this.listMarkers,
   ) : super._(paragraph.identity);
   final ForumBodyTextFlowParagraph paragraph;
   final double contentLeft;
   final double contentWidth;
+  final List<ForumBodyListItemMarker> listMarkers;
 }
 
 final class ForumBodyBlockFlowInline extends ForumBodyBlockFlowUnit {
@@ -67,8 +69,30 @@ final class ForumBodyBlockFlowInline extends ForumBodyBlockFlowUnit {
     this.paragraph,
     this.contentLeft,
     this.contentWidth,
+    this.listMarkers,
   ) : super._(paragraph.identity);
   final ForumBodyTextFlowInline paragraph;
+  final double contentLeft;
+  final double contentWidth;
+  final List<ForumBodyListItemMarker> listMarkers;
+}
+
+/// A first-content marker specification tied to the actual owning item.
+/// It has no paragraph projection, source coordinate or measured glyph box.
+final class ForumBodyListItemMarker {
+  ForumBodyListItemMarker._({
+    required this.listPath,
+    required this.itemPath,
+    required this.ordinal,
+    required this.style,
+    required this.contentLeft,
+    required this.contentWidth,
+  }) : text = style.listStyle.labelFor(ordinal);
+  final String? listPath;
+  final String itemPath;
+  final int ordinal;
+  final ForumBodyResolvedStyle style;
+  final String? text;
   final double contentLeft;
   final double contentWidth;
 }
@@ -132,13 +156,14 @@ final class ForumBodyBlockFlowCursor {
       throw ArgumentError.value(width, 'width');
     }
   }
-  static const revision = 5;
+  static const revision = 6;
   final double width;
   final ForumBodyBlockEdgeMargins edgeMargins;
   final double _rootFontSize;
   final TextDirection _rootDirection;
   final ForumBodyTextFlowCursor _flow;
   final _frames = <_Frame>[];
+  final _rootListCounter = _ListCounter(1, 1);
   final _pending = Queue<ForumBodyBlockFlowUnit>();
   final _issues = <ForumBodyStyleIssue>[];
   double _positiveMargin = 0;
@@ -192,6 +217,7 @@ final class ForumBodyBlockFlowCursor {
                 unit,
                 _frames.isEmpty ? 0 : _frames.last.contentLeft,
                 _frames.isEmpty ? width : _frames.last.box.contentWidth,
+                _takeListMarkers(),
               ),
             );
           case ForumBodyTextFlowInline():
@@ -202,6 +228,7 @@ final class ForumBodyBlockFlowCursor {
                 unit,
                 _frames.isEmpty ? 0 : _frames.last.contentLeft,
                 _frames.isEmpty ? width : _frames.last.box.contentWidth,
+                _takeListMarkers(),
               ),
             );
           case ForumBodyTextFlowBoundary():
@@ -224,6 +251,8 @@ final class ForumBodyBlockFlowCursor {
           ForumBodyElementKind.paragraph,
           ForumBodyElementKind.heading,
           ForumBodyElementKind.quote,
+          ForumBodyElementKind.list,
+          ForumBodyElementKind.listItem,
           ForumBodyElementKind.rule,
           ForumBodyElementKind.editStatus,
           ForumBodyElementKind.inline,
@@ -249,7 +278,49 @@ final class ForumBodyBlockFlowCursor {
             ForumBodyBlockBoxFailure.geometry,
           );
         }
-        _frames.add(_Frame(event, box, left));
+        final frame = _Frame(event, box, left);
+        if (node.kind == ForumBodyElementKind.list) {
+          final start = node.tag == 'ol'
+              ? _ordinalAttribute(node, 'start')
+              : null;
+          final reversed =
+              node.tag == 'ol' && node.attributes.containsKey('reversed');
+          // An implicit reversed count needs a bounded rendered-item prepass.
+          // Never guess a starting value or synchronously scan the subtree.
+          if (reversed && start == null) {
+            throw ForumBodyBlockFlowException(
+              ForumBodyBlockFlowFailure.structure,
+              node.path,
+            );
+          }
+          frame.counter = _ListCounter(start ?? 1, reversed ? -1 : 1);
+        }
+        if (event.style.display == ForumBodyDisplay.listItem) {
+          final owner = _frames.reversed
+              .where((frame) => frame.counter != null)
+              .firstOrNull;
+          final counter =
+              owner?.counter ??
+              (parent == null ? _rootListCounter : parent.implicitCounter);
+          final ordinal = counter.take(
+            node.tag == 'li' ? _ordinalAttribute(node, 'value') : null,
+          );
+          if (ordinal == null) {
+            throw ForumBodyBlockFlowException(
+              ForumBodyBlockFlowFailure.geometry,
+              node.path,
+            );
+          }
+          frame.marker = ForumBodyListItemMarker._(
+            listPath: owner?.event.node.path,
+            itemPath: node.path,
+            ordinal: ordinal,
+            style: event.style,
+            contentLeft: left,
+            contentWidth: box.contentWidth,
+          );
+        }
+        _frames.add(frame);
         _pending.add(ForumBodyBlockFlowBoundary._(unit, box, left));
         _margin(box.margin.top);
         _padding(
@@ -305,6 +376,33 @@ final class ForumBodyBlockFlowCursor {
     _negativeMargin = math.min(_negativeMargin, value);
   }
 
+  List<ForumBodyListItemMarker> _takeListMarkers() {
+    final result = <ForumBodyListItemMarker>[];
+    for (final frame in _frames) {
+      if (frame.marker case final marker?) {
+        result.add(marker);
+        frame.marker = null;
+      }
+    }
+    return List.unmodifiable(result);
+  }
+
+  static final _integerPrefix = RegExp(r'^[\t\n\f\r ]*([+-]?[0-9]+)');
+  static int? _ordinalAttribute(ForumBodyElement node, String attribute) {
+    final raw = node.attributes[attribute];
+    if (raw == null) return null;
+    final token = _integerPrefix.firstMatch(raw)?.group(1);
+    if (token == null) return null;
+    final value = int.tryParse(token, radix: 10);
+    if (value == null) {
+      throw ForumBodyBlockFlowException(
+        ForumBodyBlockFlowFailure.geometry,
+        node.path,
+      );
+    }
+    return value;
+  }
+
   static void _validateNormalFlow(ForumBodyElement node) {
     // These properties change the adjoining-margin contract or require box
     // geometry not represented by this ordinary port. Do not silently apply
@@ -336,6 +434,7 @@ final class ForumBodyBlockFlowCursor {
         'overflow-y' => !const {'visible', 'initial', 'unset'}.contains(raw),
         'display' => !const {
           'block',
+          'list-item',
           'inline',
           'none',
           'initial',
@@ -415,8 +514,29 @@ final class ForumBodyBlockFlowCursor {
 }
 
 final class _Frame {
-  const _Frame(this.event, this.box, this.contentLeft);
+  _Frame(this.event, this.box, this.contentLeft);
   final ForumBodyStyledFlowEvent event;
   final ForumBodyBlockBox box;
   final double contentLeft;
+  _ListCounter? counter;
+  _ListCounter? _implicitCounter;
+  _ListCounter get implicitCounter => _implicitCounter ??= _ListCounter(1, 1);
+  ForumBodyListItemMarker? marker;
+}
+
+final class _ListCounter {
+  _ListCounter(this._next, this.step);
+  int? _next;
+  final int step;
+  int? take(int? explicit) {
+    final value = explicit ?? _next;
+    if (value == null) return null;
+    final next = value + step;
+    // Overflow retires only the next automatic ordinal. A later explicit LI
+    // value may legitimately reset it; the final valid item does not fail.
+    _next = step > 0 && next <= value || step < 0 && next >= value
+        ? null
+        : next;
+    return value;
+  }
 }

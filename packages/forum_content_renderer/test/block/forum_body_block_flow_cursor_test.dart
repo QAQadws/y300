@@ -280,7 +280,6 @@ void main() {
   for (final html in [
     '<img style="display:block" src="x">',
     '<pre>code</pre>',
-    '<ul><li>item</li></ul>',
     '<table><tr><td>x</td></tr></table>',
   ]) {
     test(

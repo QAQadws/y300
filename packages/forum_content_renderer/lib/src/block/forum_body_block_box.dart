@@ -36,7 +36,8 @@ final class ForumBodyBlockBox {
     required TextDirection containingDirection,
     required double rootFontSize,
   }) {
-    if (style.display != ForumBodyDisplay.block) {
+    if (style.display != ForumBodyDisplay.block &&
+        style.display != ForumBodyDisplay.listItem) {
       throw const ForumBodyBlockBoxException(ForumBodyBlockBoxFailure.display);
     }
     final fontSize = style.textStyle.fontSize;

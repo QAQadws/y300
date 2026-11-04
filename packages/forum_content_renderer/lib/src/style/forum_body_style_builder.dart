@@ -10,7 +10,7 @@ import 'forum_body_style_options.dart';
 import 'forum_body_text_emphasis_resolver.dart';
 import 'forum_body_list_style_resolver.dart';
 
-const forumBodyStyleRevision = 18;
+const forumBodyStyleRevision = 19;
 ForumBodyLength forumBodyReaderIndent(
   ForumBodyReaderStyle reader,
   double size,
@@ -440,6 +440,7 @@ final class ForumBodyStyleBuilder {
       ForumBodyElementKind.tableRow => ForumBodyDisplay.tableRow,
       ForumBodyElementKind.tableCell => ForumBodyDisplay.tableCell,
       ForumBodyElementKind.media => ForumBodyDisplay.inlineBlock,
+      ForumBodyElementKind.listItem => ForumBodyDisplay.listItem,
       _ => ForumBodyDisplay.block,
     };
     if (node.tag == 'code') {
@@ -450,6 +451,7 @@ final class ForumBodyStyleBuilder {
       display = switch (rawDisplay) {
         'inline' => ForumBodyDisplay.inline,
         'block' => ForumBodyDisplay.block,
+        'list-item' => ForumBodyDisplay.listItem,
         'inline-block' => ForumBodyDisplay.inlineBlock,
         'none' => ForumBodyDisplay.none,
         'table' => ForumBodyDisplay.table,
@@ -519,6 +521,7 @@ final class ForumBodyStyleBuilder {
         role,
         parent.margin,
         quoteSurface: quoteSurface,
+        direction: direction,
       ),
       padding: _insets(
         node,
@@ -527,6 +530,7 @@ final class ForumBodyStyleBuilder {
         role,
         parent.padding,
         quoteSurface: quoteSurface,
+        direction: direction,
       ),
       box: const ForumBodyBoxResolver().resolveBoxStyle(
         node: node,
@@ -748,10 +752,12 @@ final class ForumBodyStyleBuilder {
     ForumBodyTextRole role,
     ForumBodyInsets parent, {
     required bool quoteSurface,
+    required TextDirection direction,
   }) {
     final isParagraph =
         node.kind == ForumBodyElementKind.paragraph ||
         node.kind == ForumBodyElementKind.heading ||
+        node.kind == ForumBodyElementKind.list ||
         quoteSurface;
     final defaults = property == 'margin' && isParagraph
         ? ForumBodyInsets(
@@ -764,6 +770,15 @@ final class ForumBodyStyleBuilder {
             bottom: ForumBodyLength(.5, ForumBodyLengthUnit.em),
             left: ForumBodyLength(0, ForumBodyLengthUnit.auto),
             right: ForumBodyLength(0, ForumBodyLengthUnit.auto),
+          )
+        : property == 'padding' && node.kind == ForumBodyElementKind.list
+        ? ForumBodyInsets(
+            left: direction == TextDirection.ltr
+                ? const ForumBodyLength(40)
+                : ForumBodyLength.zero,
+            right: direction == TextDirection.rtl
+                ? const ForumBodyLength(40)
+                : ForumBodyLength.zero,
           )
         : property == 'padding' && quoteSurface
         ? const ForumBodyInsets(

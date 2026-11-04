@@ -10,10 +10,13 @@ ForumBodyListStyle resolveForumBodyListStyle({
 }) {
   var type = parent.type;
   var position = parent.position;
-  if (node.kind == ForumBodyElementKind.list) {
-    type = node.tag == 'ol'
-        ? ForumBodyListMarkerType.decimal
-        : ForumBodyListMarkerType.disc;
+  if (node.kind == ForumBodyElementKind.list ||
+      node.kind == ForumBodyElementKind.listItem) {
+    if (node.kind == ForumBodyElementKind.list) {
+      type = node.tag == 'ol'
+          ? ForumBodyListMarkerType.decimal
+          : ForumBodyListMarkerType.disc;
+    }
     final hint = node.attributes['type']?.trim();
     final hinted = switch (hint) {
       '1' => ForumBodyListMarkerType.decimal,
@@ -26,7 +29,9 @@ ForumBodyListStyle resolveForumBodyListStyle({
     if (hinted != null) type = hinted;
     // Discuz emits ordered BBCode lists as UL, with these semantic classes.
     // The normal inline cascade below remains stronger than site defaults.
-    final classes = node.attributes['class']?.split(RegExp(r'\s+')) ?? const [];
+    final classes = node.kind == ForumBodyElementKind.list
+        ? node.attributes['class']?.split(RegExp(r'\s+')) ?? const []
+        : const <String>[];
     if (classes.contains('litype_1')) {
       type = ForumBodyListMarkerType.decimal;
     } else if (classes.contains('litype_2')) {

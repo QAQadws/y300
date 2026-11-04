@@ -36,6 +36,7 @@ enum ForumBodyWhiteSpace { normal, pre, preWrap, preLine }
 enum ForumBodyDisplay {
   inline,
   block,
+  listItem,
   inlineBlock,
   table,
   tableRow,

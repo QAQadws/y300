@@ -476,6 +476,16 @@ final class ForumBodyTextPageSession {
               return result(completed: true);
             }
             final event = unit.boundary.event!;
+            if ((event.node as ForumBodyElement).kind ==
+                    ForumBodyElementKind.list ||
+                event.style.display == ForumBodyDisplay.listItem) {
+              // List geometry is available in BlockFlow. Page admission must
+              // wait for complete marker budget/preparation and paint binding.
+              throw ForumBodyBlockFlowException(
+                ForumBodyBlockFlowFailure.structure,
+                event.node.path,
+              );
+            }
             final background = event.style.visibilityHidden
                 ? null
                 : event.style.boxBackground;

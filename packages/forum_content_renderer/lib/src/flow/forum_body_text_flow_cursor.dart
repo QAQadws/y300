@@ -65,11 +65,12 @@ final class ForumBodyTextFlowCursor {
     this.paragraphBuilder = const ForumBodyParagraphContentBuilder(),
     this.rubyLimits = const ForumBodyRubyContentLimits(),
   }) : _flow = ForumBodyStyledFlowCursor(document: document, reader: reader);
-  static const revision = 4;
+  static const revision = 5;
   final ForumBodyParagraphContentBuilder paragraphBuilder;
   final ForumBodyRubyContentLimits rubyLimits;
   final ForumBodyStyledFlowCursor _flow;
   final _blocks = <ForumBodyStyledFlowEvent>[];
+  final _emptyListItems = <String, ForumBodyParagraphSequence>{};
   final _issues = <ForumBodyStyleIssue>[];
   ForumBodyTextFlowSequence? _before;
   ForumBodyTextFlowSequence? _after;
@@ -118,6 +119,18 @@ final class ForumBodyTextFlowCursor {
         if (_boundaryPending) {
           if (_flushContext()) return _step(read, work);
           final event = _boundary;
+          if (event?.phase == ForumBodyFlowPhase.close) {
+            final empty = _emptyListItems.remove(event!.node.path);
+            if (empty != null) {
+              // This proof was opened while the real item was still active.
+              // Keep its actual empty source; the marker is never inserted.
+              _paragraph(
+                ForumBodyPlainSequenceContent(empty.finish()),
+                ForumBodyParagraphWindow.full,
+              );
+              return _step(read, work);
+            }
+          }
           _boundary = null;
           _boundaryPending = false;
           final kind = event == null
@@ -127,6 +140,12 @@ final class ForumBodyTextFlowCursor {
               : ForumBodyTextFlowBoundaryKind.closeBlock;
           if (kind == ForumBodyTextFlowBoundaryKind.openBlock) {
             _blocks.add(event!);
+            if (event.style.display == ForumBodyDisplay.listItem) {
+              _emptyListItems[event.node.path] = paragraphBuilder.openSequence(
+                _flow,
+                block: event,
+              );
+            }
           } else if (kind == ForumBodyTextFlowBoundaryKind.closeBlock) {
             if (_blocks.isEmpty || !identical(_blocks.last.node, event!.node)) {
               throw StateError('Unbalanced text flow block');
@@ -357,6 +376,9 @@ final class ForumBodyTextFlowCursor {
     ForumBodyTextFlowSequenceContent content,
     ForumBodyParagraphWindow window,
   ) {
+    for (final block in _blocks) {
+      _emptyListItems.remove(block.node.path)?.close();
+    }
     final index = _paragraphIndex++;
     _current = switch (content) {
       ForumBodyPlainSequenceContent() => ForumBodyTextFlowParagraph._(
@@ -377,6 +399,7 @@ final class ForumBodyTextFlowCursor {
       (event.node as ForumBodyElement).kind != ForumBodyElementKind.hardBreak &&
       const {
         ForumBodyDisplay.block,
+        ForumBodyDisplay.listItem,
         ForumBodyDisplay.table,
         ForumBodyDisplay.tableRow,
         ForumBodyDisplay.tableCell,
@@ -417,6 +440,10 @@ final class ForumBodyTextFlowCursor {
     _trimmedBreak = null;
     _followingEditStatusParent = null;
     _blocks.clear();
+    for (final proof in _emptyListItems.values) {
+      proof.close();
+    }
+    _emptyListItems.clear();
     _issues.clear();
     _current = null;
   }
