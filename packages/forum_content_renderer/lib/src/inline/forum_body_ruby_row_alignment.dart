@@ -190,6 +190,16 @@ final class ForumBodyRubyRowAlignment {
             }
             continue;
           }
+          if (column is ForumBodyTextBaselineAtomMetrics) {
+            _dimensions.add(column.placeholderDimensions);
+            _results.add(column);
+            parts++;
+            if (++_cursor == atoms.length) {
+              _cursor = 0;
+              _phase = _Phase.globalCheck;
+            }
+            continue;
+          }
           final id = (levelIds[_cursor], column.alignmentSignature);
           final union = _globalLevels.putIfAbsent(
             id,
@@ -208,6 +218,11 @@ final class ForumBodyRubyRowAlignment {
           }
         case _Phase.globalCheck:
           final column = atoms[_cursor];
+          if (column is ForumBodyTextBaselineAtomMetrics) {
+            parts++;
+            if (++_cursor == atoms.length) _phase = _Phase.done;
+            continue;
+          }
           final level =
               _globalLevels[(levelIds[_cursor], column.alignmentSignature)]!
                   .value;
@@ -236,6 +251,11 @@ final class ForumBodyRubyRowAlignment {
             final column = atoms[_cursor];
             final key = (_row, levelIds[_cursor], column.alignmentSignature);
             _atomRows[_cursor] = _row;
+            if (column is ForumBodyTextBaselineAtomMetrics) {
+              parts++;
+              _nextRowAtom();
+              continue;
+            }
             if (_trimmed.contains(_cursor)) {
               if (column is! ForumBodyRubySpaceMetrics) _invalid();
               _trimmedSeen++;
@@ -259,7 +279,8 @@ final class ForumBodyRubyRowAlignment {
             }
           }
         case _Phase.rowCheck:
-          if (_trimmed.contains(_cursor)) {
+          if (_trimmed.contains(_cursor) ||
+              atoms[_cursor] is ForumBodyTextBaselineAtomMetrics) {
             parts++;
             if (++_cursor == atoms.length) {
               _cursor = 0;

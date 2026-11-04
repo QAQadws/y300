@@ -144,6 +144,11 @@ final class ForumBodyParagraphContent {
   final int styleRevision;
   final ForumBodyResolvedStyle style;
   final ForumBodyParagraphLayoutMode layoutMode;
+  late final hasBaselineShift =
+      !style.baselineShift.isEmpty ||
+      projection.parts.any(
+        (part) => !runs[part.runIndex].style.baselineShift.isEmpty,
+      );
   final HtmlDisplayTextProjection projection;
   final List<ForumBodyParagraphRun> runs;
   final List<ForumBodyStyleIssue> issues;
@@ -212,6 +217,27 @@ final class ForumBodyParagraphContent {
     this,
     projection.slice(startUtf16: startUtf16, endUtf16: endUtf16),
     appliesFirstLineIndent,
+  );
+
+  /// An actual source/display window shaped as one inline child. Its root font
+  /// is the resolved child, not the containing block's larger native strut.
+  ForumBodyParagraphContent intrinsicDisplayWindow({
+    required int startUtf16,
+    required int endUtf16,
+    required ForumBodyResolvedStyle style,
+  }) => ForumBodyParagraphContent._(
+    identity: identity,
+    path: path,
+    fontRevision: fontRevision,
+    styleRevision: styleRevision,
+    style: style,
+    layoutMode: ForumBodyParagraphLayoutMode.intrinsicSingleLine,
+    projection: projection.slice(startUtf16: startUtf16, endUtf16: endUtf16),
+    runs: runs,
+    issues: issues,
+    isSourceFree: isSourceFree,
+    appliesFirstLineIndent: false,
+    paintLayer: paintLayer,
   );
 
   /// Resolve one actual whitespace context without changing source/run owners.

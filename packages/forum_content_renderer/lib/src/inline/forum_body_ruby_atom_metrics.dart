@@ -19,6 +19,21 @@ sealed class ForumBodyRubyAtomMetrics {
   PlaceholderDimensions get placeholderDimensions;
 }
 
+/// Baseline boxes keep their own geometry; they never join an annotation level.
+final class ForumBodyTextBaselineAtomMetrics extends ForumBodyRubyAtomMetrics {
+  const ForumBodyTextBaselineAtomMetrics(this.value);
+  final ForumBodyTextBaselineMetrics value;
+  @override
+  Size get size => value.size;
+  @override
+  double get baseline => value.baseline;
+  @override
+  String get alignmentSignature => 'text-baseline';
+  @override
+  PlaceholderDimensions get placeholderDimensions =>
+      value.placeholderDimensions;
+}
+
 final class ForumBodyRubySpaceMetrics extends ForumBodyRubyAtomMetrics {
   const ForumBodyRubySpaceMetrics(this.value);
   final ForumBodyRubySoftSpaceMetrics value;
@@ -93,7 +108,11 @@ final class ForumBodyRubyAtomAlignment {
              prepareResult: prepareResult,
            ),
          _ => null,
-       };
+       } {
+    if (atom is ForumBodyTextBaselineAtomMetrics) {
+      throw ArgumentError('Baseline text does not join ruby levels');
+    }
+  }
   final ForumBodyRubyColumnAlignment? _column;
   final ForumBodyRubySegmentAlignment? _segment;
   final ForumBodyRubySoftSpaceAlignment? _space;

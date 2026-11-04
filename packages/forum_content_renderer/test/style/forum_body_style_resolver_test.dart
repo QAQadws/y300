@@ -51,6 +51,73 @@ ForumBodyResolvedStyle byId(
 }
 
 void main() {
+  test(
+    'sup and sub resolve own alignment, smaller font and inherited placement',
+    () {
+      final r = resolve(
+        '<p><sup id="sup">2<span id="child">x</span></sup>'
+        '<sub id="sub">n</sub><span id="plain">end</span></p>',
+      );
+      final sup = byId(r, 'sup'),
+          child = byId(r, 'child'),
+          sub = byId(r, 'sub');
+      expect(sup.textStyle.fontSize, closeTo(20 / 1.2, 1e-9));
+      expect(sub.textStyle.fontSize, sup.textStyle.fontSize);
+      expect(child.textStyle.fontSize, sup.textStyle.fontSize);
+      expect(sup.lineHeight.factor, isNull);
+      expect(sup.lineHeight.pixels, isNull);
+      expect(sup.baselineAlignment, ForumBodyBaselineAlignment.superscript);
+      expect(child.baselineAlignment, ForumBodyBaselineAlignment.baseline);
+      expect(identical(child.baselineShift, sup.baselineShift), isTrue);
+      expect(sup.baselineShift.resolve(TextScaler.noScaling), 8);
+      expect(sub.baselineShift.resolve(TextScaler.noScaling), -4);
+      expect(byId(r, 'plain').baselineShift.isEmpty, isTrue);
+    },
+  );
+
+  test(
+    'author baseline reset and explicit sizing override tag defaults independently',
+    () {
+      final r = resolve(
+        '<p><sup id="flat" style="vertical-align:baseline;font-size:30px">x</sup>'
+        '<span id="raised" style="vertical-align:super;color:red">y</span>'
+        '<sub id="unset" style="vertical-align:unset">n</sub></p>',
+      );
+      expect(byId(r, 'flat').textStyle.fontSize, 30);
+      expect(byId(r, 'flat').baselineShift.isEmpty, isTrue);
+      expect(byId(r, 'raised').textStyle.fontSize, 20);
+      expect(byId(r, 'raised').textStyle.color, const Color(0xffff0000));
+      expect(
+        byId(r, 'raised').baselineShift.resolve(const TextScaler.linear(1.5)),
+        12,
+      );
+      expect(byId(r, 'unset').baselineShift.isEmpty, isTrue);
+      expect(r.styles.issues, isEmpty);
+    },
+  );
+
+  test(
+    'baseline references retain parent size through style policy boundaries',
+    () {
+      final r = resolve(
+        '<p><sup id="sup"><code id="code">x</code></sup></p>',
+        options: reader(
+          policy: ForumBodyStylePolicy({
+            ForumBodyStyleProperty.fontSize: ForumBodyStyleScope.forceBody,
+          }),
+        ),
+      );
+      final sup = byId(r, 'sup'), code = byId(r, 'code');
+      expect(sup.textStyle.fontSize, 20);
+      expect(identical(code.baselineShift, sup.baselineShift), isTrue);
+      expect(
+        sup.withTextEmphasis(const ForumBodyTextEmphasis()).baselineShift,
+        same(sup.baselineShift),
+      );
+      expect(code.baselineShift.resolve(TextScaler.noScaling), 8);
+    },
+  );
+
   test('code line lists keep monospace and code reader-policy exceptions', () {
     final result = resolve(
       '<div style="font-size:12px"><div class="blockcode" id="code">'

@@ -108,6 +108,185 @@ void main() {
     )..addFont(rootBundle.load('assets/fonts/inline_space.ttf'))).load();
   });
 
+  for (final scale in [TextScaler.noScaling, const _ScriptCurve()]) {
+    test(
+      'HTML sup/sub use actual native baselines, colors and local copy: $scale',
+      () {
+        final f = _Fixture(
+          '<p>A<sup style="font-size:12px;color:red"><b>2</b></sup>'
+          'B<sub style="font-size:14px">3</sub>C</p>',
+          width: 200,
+          height: 100,
+          textScaler: scale,
+        );
+        f.finish();
+        expect(f.session.snapshot, hasLength(1));
+        final fragments = f.prepare(0);
+        try {
+          final binding = fragments.single as ForumBodyPreparedInlineFragment;
+          final base = binding.lines.single.baseline;
+          expect(binding.projection.text, 'A2B3C');
+          for (final (text, shift) in [
+            ('2', scale.scale(20) * .4),
+            ('3', -scale.scale(20) * .2),
+          ]) {
+            final context = binding.view.content.contexts.singleWhere(
+              (c) => c.content.projection.text == text,
+            );
+            final actual = binding
+                .glyphBoxes(context.startUtf16, context.endUtf16)
+                .single;
+            final native = f.cache.acquire(
+              content: context.content,
+              width: 200,
+              textScaler: scale,
+            );
+            try {
+              final raw = native.layout.selectionBoxes(0, 1).single;
+              final baseline =
+                  native.layout.alphabeticBaseline + actual.top - raw.top;
+              expect(baseline, closeTo(base - shift, 1e-3));
+            } finally {
+              native.release();
+            }
+            final point = Offset(
+              actual.left + (actual.right - actual.left) * .25,
+              (actual.top + actual.bottom) * .5,
+            );
+            final copy = forumBodyTextSelectionAt(
+              binding: binding,
+              fragment: f.session.snapshot.single.fragments.single,
+              pageSize: const Size(200, 100),
+              point: point,
+            )!;
+            expect(copy.text, text);
+            expect(copy.isAnnotation, isFalse);
+            expect(copy.position.sourceRune, text == '2' ? 1 : 3);
+            final part = context.content.projection.parts.single;
+            final style = context.content.runs[part.runIndex].style;
+            expect(style.textStyle.fontFamily, 'Ahem');
+            if (text == '2') {
+              expect(style.textStyle.color, const Color(0xffff0000));
+              expect(style.textStyle.fontWeight, FontWeight.w700);
+            }
+          }
+        } finally {
+          for (final fragment in fragments) {
+            fragment.close();
+          }
+        }
+        expect(f.cache.activeLeases, 0);
+      },
+    );
+  }
+
+  test('script hard breaks remain parent rows with code whitespace intact', () {
+    for (final separator in ['\n', '\r\n', '\u2028']) {
+      final f = _Fixture(
+        '<pre>before<sup>A${separator}B</sup>after</pre>',
+        width: 250,
+        height: 100,
+      );
+      f.finish();
+      final fragments = f.prepare(0);
+      try {
+        final b = fragments.single as ForumBodyPreparedInlineFragment;
+        expect(b.projection.text, f.document.sourceText);
+        final a = b.projection.text.indexOf('A'),
+            next = b.projection.text.indexOf('B');
+        expect(
+          b.glyphBoxes(a, a + 1).single.top,
+          lessThan(b.glyphBoxes(next, next + 1).single.top),
+        );
+      } finally {
+        for (final f in fragments) {
+          f.close();
+        }
+      }
+    }
+  });
+
+  test(
+    'HTML scripts retain original text and source through multi-page composition',
+    () {
+      final f = _Fixture(
+        List.generate(
+          25,
+          (i) => '<p>段$i<sup>$i</sup>正文<sub>n</sub>。</p>',
+        ).join(),
+        width: 100,
+        height: 50,
+      );
+      f.finish();
+      expect(f.session.snapshot.length, greaterThan(3));
+      final display = StringBuffer();
+      final scriptSources = <int>{};
+      for (var page = 0; page < f.session.snapshot.length; page++) {
+        final fragments = f.prepare(page);
+        try {
+          for (final (i, binding) in fragments.indexed) {
+            final meta = f.session.snapshot[page].fragments[i];
+            display.write(
+              binding.projection.text.substring(
+                meta.coverageStartUtf16,
+                meta.coverageEndUtf16,
+              ),
+            );
+            if (binding is ForumBodyPreparedInlineFragment) {
+              for (final context in binding.view.content.contexts) {
+                if (!context.content.style.baselineShift.isEmpty &&
+                    context.content.projection.text.isNotEmpty &&
+                    context.startUtf16 >= meta.coverageStartUtf16 &&
+                    context.endUtf16 <= meta.coverageEndUtf16) {
+                  final box = binding
+                      .glyphBoxes(context.startUtf16, context.startUtf16 + 1)
+                      .first;
+                  expect(box.top, greaterThanOrEqualTo(-1e-3));
+                  expect(box.bottom, lessThanOrEqualTo(meta.height + 1e-3));
+                  final hit = binding.view.sourceAt(
+                    Offset(
+                      box.left + (box.right - box.left) * .25,
+                      (box.top + box.bottom) * .5,
+                    ),
+                  );
+                  expect(hit.isExact, isTrue);
+                  scriptSources.add(hit.sourceRune);
+                }
+              }
+            }
+          }
+        } finally {
+          for (final fragment in fragments) {
+            fragment.close();
+          }
+        }
+      }
+      expect(display.toString(), f.document.sourceText);
+      expect(scriptSources, hasLength(50));
+    },
+  );
+
+  test(
+    'baseline text stays independent beside single-layer ruby with soft gaps',
+    () {
+      final f = _Fixture(
+        '<p><sup>2</sup><ruby><rb>A</rb> <rb>B</rb>'
+        '<rtc><rt>x</rt> <rt>y</rt></rtc></ruby><sub>n</sub></p>',
+        width: 100,
+        height: 100,
+      );
+      f.finish();
+      for (var page = 0; page < f.session.snapshot.length; page++) {
+        final fragments = f.prepare(page);
+        for (final binding in fragments) {
+          expect(binding.isActive, isTrue);
+          binding.close();
+        }
+      }
+      expect(f.cache.activeLeases, 0);
+    },
+  );
+
   for (final direction in ['ltr', 'rtl']) {
     test(
       'full-width ruby reduces reader indent without changing actual page binding $direction',
@@ -2372,4 +2551,12 @@ final class _Scaler extends TextScaler {
   double scale(double size) => callback(size);
   @override
   double get textScaleFactor => 1;
+}
+
+final class _ScriptCurve extends TextScaler {
+  const _ScriptCurve();
+  @override
+  double scale(double size) => size * (size < 18 ? 1.7 : 1.2);
+  @override
+  double get textScaleFactor => 1.2;
 }

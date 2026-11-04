@@ -146,6 +146,33 @@ Matcher _failure(NovelReaderNativeCoverageFailure failure) => throwsA(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test('HTML script boxes keep canonical glyph proof including complete Unicode units', () {
+    for (final (html, expected, omitted) in [
+      ('<p>A<sup>2</sup>B<sub>n</sub>C</p>', [0, 1, 2, 3, 4, 5], <int>[]),
+      ('<p>A<sup>e\u0301😀</sup>B</p>', [0, 1, 3, 4, 5], [2]),
+    ]) {
+      final fixture = _Fixture(html);
+      final sources = <int>{};
+      expect(fixture.anchors.unmappedPaths, isEmpty);
+      for (var page = 0; page < fixture.session.snapshot.length; page++) {
+        final fragments = fixture.prepareFragments(page);
+        try {
+          final coverage = _finish(fixture.preparedCursor(page, fragments));
+          expect(coverage.hasClippedGlyphs, isFalse);
+          sources.addAll(coverage.points.map((p) => p.sourceRune));
+        } finally {
+          for (final f in fragments) {
+            f.close();
+          }
+        }
+      }
+      expect(sources, containsAll(expected));
+      for (final source in omitted) {
+        expect(sources, isNot(contains(source)));
+      }
+      expect(fixture.cache.activeLeases, 0);
+    }
+  });
   test(
     'hidden Discuz toolbar preserves following canonical source coverage',
     () {

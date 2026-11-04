@@ -41,7 +41,8 @@ void main() {
       final data = NovelMainPageProfileData();
       final id = data.add(
         '<p>before <ruby>BASE<rt>NOTE</rt></ruby> after.</p>'
-        '<div class="blockcode"><ol><li>  code(); </li></ol></div>',
+        '<div class="blockcode"><ol><li>  code(); </li></ol></div>'
+        '<p>script <sup>UP</sup> and <sub>DOWN</sub>.</p>',
       );
       final args = NovelReaderArgs(
         novelId: id.novelId,
@@ -213,6 +214,25 @@ void main() {
         navigator.currentState!.pop();
         await ready();
 
+        for (final text in ['UP', 'DOWN']) {
+          await longPressInline(text);
+          expect(selection().title, l10n.novelSelectionCopyTitle);
+          expect(selection().isCurrent!(), isTrue);
+          expect(
+            tester
+                .widget<Text>(
+                  find.byKey(const Key('novel-native-selection-copy-text')),
+                )
+                .data,
+            text,
+          );
+          (await selectAll())();
+          await tester.pumpAndSettle();
+          expect(writer.writes.last, text);
+          navigator.currentState!.pop();
+          await ready();
+        }
+
         final codeFinder = find.byWidgetPredicate(
           (w) =>
               w is ForumBodyParagraphSurface &&
@@ -243,14 +263,14 @@ void main() {
         );
         (await selectAll())();
         await tester.pumpAndSettle();
-        expect(writer.writes, ['BASE', 'NOTE', '  code(); ']);
+        expect(writer.writes, ['BASE', 'NOTE', 'UP', 'DOWN', '  code(); ']);
         final retired = await selectAll();
         navigator.currentState!.removeRoute(route);
         await tester.pumpAndSettle();
         expect(selection().isCurrent!(), isFalse);
         retired();
         await tester.pumpAndSettle();
-        expect(writer.writes, hasLength(3));
+        expect(writer.writes, hasLength(5));
         expect(owner.isClosed, isTrue);
         expect(owner.activeCacheHandles, 0);
         expect(owner.retainedCacheGenerations, 0);

@@ -10,7 +10,7 @@ import 'forum_body_style_options.dart';
 import 'forum_body_text_emphasis_resolver.dart';
 import 'forum_body_list_style_resolver.dart';
 
-const forumBodyStyleRevision = 20;
+const forumBodyStyleRevision = 21;
 ForumBodyLength forumBodyReaderIndent(
   ForumBodyReaderStyle reader,
   double size,
@@ -68,6 +68,7 @@ final class ForumBodyStyleBuilder {
     'direction',
     'white-space',
     'ruby-position',
+    'vertical-align',
     'text-indent',
     'display',
     'visibility',
@@ -118,6 +119,8 @@ final class ForumBodyStyleBuilder {
     if (heading != null) {
       const factors = [2.0, 1.5, 1.25, 1.0, 0.875, 0.75];
       size *= factors[int.parse(heading[1]!) - 1];
+    } else if (node.tag == 'sup' || node.tag == 'sub') {
+      size /= 1.2;
     } else if (node.tag == 'small') {
       size *= .85;
     } else if (node.kind == ForumBodyElementKind.editStatus) {
@@ -191,6 +194,8 @@ final class ForumBodyStyleBuilder {
         node.kind == ForumBodyElementKind.rubyText ||
             node.kind == ForumBodyElementKind.rubyAnnotationContainer
         ? const ForumBodyLineHeight.factor(1)
+        : node.tag == 'sup' || node.tag == 'sub'
+        ? const ForumBodyLineHeight.natural()
         : parent.lineHeight;
     final rawHeight = value('line-height');
     if (rawHeight != null) {
@@ -506,6 +511,28 @@ final class ForumBodyStyleBuilder {
       // their actual effective foreground, not a baked body-color snapshot.
       emphasis = emphasis.withColor(null);
     }
+    var baselineAlignment = switch (node.tag) {
+      'sup' => ForumBodyBaselineAlignment.superscript,
+      'sub' => ForumBodyBaselineAlignment.subscript,
+      _ => ForumBodyBaselineAlignment.baseline,
+    };
+    final rawBaseline = value('vertical-align');
+    if (rawBaseline != null) {
+      baselineAlignment = switch (rawBaseline) {
+        'baseline' ||
+        'initial' ||
+        'unset' => ForumBodyBaselineAlignment.baseline,
+        'sub' => ForumBodyBaselineAlignment.subscript,
+        'super' => ForumBodyBaselineAlignment.superscript,
+        'inherit' => parent.baselineAlignment,
+        _ => _unsupported(
+          node,
+          'vertical-align',
+          rawBaseline,
+          baselineAlignment,
+        ),
+      };
+    }
     return ForumBodyResolvedStyle(
       textStyle: style,
       role: role,
@@ -514,6 +541,13 @@ final class ForumBodyStyleBuilder {
       whiteSpace: whiteSpace,
       rubyPosition: rubyPosition,
       textEmphasis: emphasis,
+      baselineAlignment: baselineAlignment,
+      baselineShift: parent.baselineShift.append(
+        display == ForumBodyDisplay.inline
+            ? baselineAlignment
+            : ForumBodyBaselineAlignment.baseline,
+        parent.textStyle.fontSize ?? baseSize,
+      ),
       indent: indent,
       margin: _insets(
         node,

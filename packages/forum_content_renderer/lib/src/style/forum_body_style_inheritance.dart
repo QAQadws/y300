@@ -47,6 +47,8 @@ final class ForumBodyStyleInheritance {
       textDirection: effective.textDirection,
       whiteSpace: effective.whiteSpace,
       rubyPosition: effective.rubyPosition,
+      baselineAlignment: effective.baselineAlignment,
+      baselineShift: effective.baselineShift,
       textEmphasis: restore(ForumBodyStyleProperty.foreground)
           ? effective.textEmphasis.withColor(author.textEmphasis.color)
           : effective.textEmphasis,

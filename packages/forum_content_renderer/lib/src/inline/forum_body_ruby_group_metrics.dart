@@ -9,6 +9,7 @@ import '../paragraph/forum_body_text_layout.dart';
 import '../style/forum_body_style_options.dart' show ForumBodyRubySide;
 import 'forum_body_ruby_group_contract.dart';
 import 'forum_body_ruby_band_stack.dart';
+import 'forum_body_text_baseline_layout.dart';
 
 part 'forum_body_ruby_numeric_work.dart';
 part 'forum_body_ruby_segment_metrics.dart';

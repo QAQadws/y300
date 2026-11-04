@@ -359,6 +359,7 @@ int _pageHandleLimit(int issued) {
     usesQuoteTheme |= style.quoteDecoration != null;
     final size = style.textStyle.fontSize!;
     sizes.add(size);
+    sizes.addAll(style.baselineShift.referenceFontSizes);
     // Marks use half the unscaled author size, then the platform's actual
     // per-size scale. Sampling only body sizes cannot freeze nonlinear marks.
     if (style.textEmphasis.isEnabled) sizes.add(size * .5);

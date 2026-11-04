@@ -119,6 +119,78 @@ const _limits = ForumBodyTextPageSessionLimits(
 
 void main() {
   testWidgets(
+    'script displacement captures a parent font with no visible glyph run',
+    (tester) async {
+      final chapter = await _chapter(
+        '<p>A<span style="font-size:40px">'
+        '<sup style="font-size:12px">2</sup></span>B</p>',
+      );
+      final ordinary = await _scope(chapter, await _environment(tester));
+      final scaled = await _scope(
+        chapter,
+        await _environment(tester, scaler: _BranchScaler(1.5)),
+      );
+      expect(scaled.paginationKey, isNot(ordinary.paginationKey));
+      expect(scaled.textScaler.scale(40), 60);
+      for (final scope in [ordinary, scaled]) {
+        final cache = ForumBodyParagraphCache(
+          maxEntries: 8,
+          maxEstimatedBytes: 1 << 22,
+        );
+        final session = scope.openSession(
+          cache: cache,
+          layoutId: 'script-parent',
+          limits: _limits,
+        );
+        try {
+          for (var i = 0; !session.isComplete; i++) {
+            expect(i, lessThan(1000));
+            session.advance(maxEvents: 4, maxLines: 1);
+          }
+          final job = session.openPagePreparation(0);
+          try {
+            while (!job.isReady) {
+              job.advance(maxFragments: 1, maxParts: 1);
+            }
+            final fragments = job.takeFragments();
+            try {
+              final binding =
+                  fragments.single as ForumBodyPreparedInlineFragment;
+              final context = binding.view.content.contexts.singleWhere(
+                (c) => c.content.projection.text == '2',
+              );
+              final shift = context.content.style.baselineShift.resolve(
+                scope.textScaler,
+              );
+              expect(shift, identical(scope, scaled) ? 24 : 16);
+              final box = binding
+                  .glyphBoxes(context.startUtf16, context.endUtf16)
+                  .single;
+              expect(box.top, greaterThanOrEqualTo(-1e-3));
+              expect(
+                box.bottom,
+                lessThanOrEqualTo(
+                  session.snapshot.single.fragments.single.height + 1e-3,
+                ),
+              );
+            } finally {
+              for (final f in fragments) {
+                f.close();
+              }
+            }
+          } finally {
+            job.close();
+          }
+        } finally {
+          session.close();
+          cache.close();
+        }
+        expect(cache.activeLeases, 0);
+      }
+    },
+  );
+
+  testWidgets(
     'quote theme colors are frozen and invalidate native content without conflating the page canvas',
     (tester) async {
       final chapter = await _chapter(

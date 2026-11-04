@@ -6,6 +6,7 @@ import 'forum_body_ruby_position.dart';
 import 'forum_body_text_emphasis.dart';
 import 'forum_body_quote_decoration.dart';
 import 'forum_body_list_style.dart';
+import 'forum_body_baseline_shift.dart';
 import '../html_rendering/theme/forum_html_theme_context.dart';
 import '../document/forum_body_document.dart';
 
@@ -13,6 +14,7 @@ export 'forum_body_ruby_position.dart';
 export 'forum_body_text_emphasis.dart';
 export 'forum_body_quote_decoration.dart';
 export 'forum_body_list_style.dart';
+export 'forum_body_baseline_shift.dart';
 
 enum ForumBodyStyleScope { asDefault, forceBody, forceAll }
 
@@ -115,6 +117,8 @@ final class ForumBodyResolvedStyle {
     this.whiteSpace = ForumBodyWhiteSpace.normal,
     this.rubyPosition = ForumBodyRubyPosition.alternate,
     this.textEmphasis = const ForumBodyTextEmphasis(),
+    this.baselineAlignment = ForumBodyBaselineAlignment.baseline,
+    this.baselineShift = const ForumBodyBaselineShift.none(),
     this.indent = ForumBodyLength.zero,
     this.margin = const ForumBodyInsets(),
     this.padding = const ForumBodyInsets(),
@@ -141,6 +145,8 @@ final class ForumBodyResolvedStyle {
   final ForumBodyWhiteSpace whiteSpace;
   final ForumBodyRubyPosition rubyPosition;
   final ForumBodyTextEmphasis textEmphasis;
+  final ForumBodyBaselineAlignment baselineAlignment;
+  final ForumBodyBaselineShift baselineShift;
   final ForumBodyLength indent;
   final ForumBodyInsets margin;
   final ForumBodyInsets padding;
@@ -161,16 +167,26 @@ final class ForumBodyResolvedStyle {
   final ForumBodyListStyle listStyle;
 
   ForumBodyResolvedStyle withTextEmphasis(ForumBodyTextEmphasis value) =>
-      value == textEmphasis
+      _copy(textStyle, value);
+
+  ForumBodyResolvedStyle withTextStyle(TextStyle value) =>
+      _copy(value, textEmphasis);
+
+  ForumBodyResolvedStyle _copy(
+    TextStyle nextText,
+    ForumBodyTextEmphasis value,
+  ) => value == textEmphasis && nextText == textStyle
       ? this
       : ForumBodyResolvedStyle(
-          textStyle: textStyle,
+          textStyle: nextText,
           role: role,
           textAlign: textAlign,
           textDirection: textDirection,
           whiteSpace: whiteSpace,
           rubyPosition: rubyPosition,
           textEmphasis: value,
+          baselineAlignment: baselineAlignment,
+          baselineShift: baselineShift,
           indent: indent,
           margin: margin,
           padding: padding,

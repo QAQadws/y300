@@ -10,6 +10,7 @@ import 'forum_body_ruby_atom_plan.dart';
 import 'forum_body_ruby_atom_request.dart';
 import 'forum_body_ruby_group_metrics.dart';
 import 'forum_body_ruby_group_preparation.dart';
+import 'forum_body_text_baseline_preparation.dart';
 import 'forum_body_ruby_segment_metrics_preparation.dart';
 import 'forum_body_ruby_soft_space_layout.dart';
 import 'forum_body_ruby_row_alignment.dart';
@@ -105,6 +106,7 @@ final class ForumBodyInlinePlanPreparation {
   ForumBodyRubyRowAlignment? _alignment;
   final _retriedBands = Set<ForumBodyTextBandContent>.identity();
   ForumBodyRubyGroupPreparation? _pair;
+  ForumBodyTextBaselinePreparation? _baseline;
   ForumBodyRubySegmentMetricsPreparation? _segment;
   ForumBodyRubySoftSpacePreparation? _space;
   ForumBodyRubyTreeMetricsPreparation? _tree;
@@ -130,6 +132,7 @@ final class ForumBodyInlinePlanPreparation {
     ?_parent,
     ?_probe,
     if (_pair != null) ..._pair!.nativeLeases,
+    if (_baseline != null) ..._baseline!.nativeLeases,
     if (_segment != null) ..._segment!.nativeLeases,
     if (_space != null) ..._space!.nativeLeases,
     if (_tree != null) ..._tree!.nativeLeases,
@@ -245,6 +248,7 @@ final class ForumBodyInlinePlanPreparation {
               _tree?.failedRequest ??
               _space?.failedRequest ??
               _segment?.failedRequest ??
+              _baseline?.request ??
               (count != null && count < request.nativeRequests.length
                   ? request.nativeRequests[count]
                   : null);
@@ -304,6 +308,41 @@ final class ForumBodyInlinePlanPreparation {
     bool cachedOnly,
   ) {
     switch (request) {
+      case ForumBodyTextBaselineAtomRequest(
+        :final text,
+        :final shift,
+        :final maxWidth,
+      ):
+        if (_baseline == null) {
+          final resolved = shift.resolve(_textScaler!, ensureCurrent: _guard);
+          _guard();
+          _baseline = ForumBodyTextBaselinePreparation(
+            cache: _cache!,
+            request: text,
+            baselineShift: resolved,
+            width: maxWidth,
+            textScaler: _textScaler!,
+            ensureOwner: _guard,
+            preparePaint: false,
+            additionalOwnedLeases: _ownedPrefix,
+          );
+        }
+        final before = _cache!.layoutBuildCount;
+        final job = _baseline!;
+        final step = job.advance(maxParts: maxParts, cachedOnly: cachedOnly);
+        _cacheMiss = job.cacheMiss;
+        if (step.isReady) {
+          _metrics.add(ForumBodyTextBaselineAtomMetrics(job.takeMetrics()));
+          _closeMetric();
+        }
+        return ForumBodyRubyGroupPreparationStep(
+          partsPrepared: 0,
+          layoutsBuilt: _cache!.layoutBuildCount - before,
+          partsInspected: 0,
+          isReady: step.isReady,
+          waitingForLayoutBudget: step.waitingForLayoutBudget,
+          formatUnitsPrepared: step.partsPrepared,
+        );
       case ForumBodyRubyTreeEmphasisAtomRequest(:final value):
         if (_glyphCurrent == null) {
           final job = _glyph ??= ForumBodyRubyGlyphTreeMetricsPreparation(
@@ -529,6 +568,8 @@ final class ForumBodyInlinePlanPreparation {
     _tree?.close();
     _tree = null;
     _pair?.close();
+    _baseline?.close();
+    _baseline = null;
     _pair = null;
     _segment?.close();
     _segment = null;
@@ -778,6 +819,15 @@ final class ForumBodyInlinePlanPreparation {
         }
       } else {
         _atomPlans.add(switch ((request, alignment.results[index])) {
+          (
+            ForumBodyTextBaselineAtomRequest(:final text, :final maxWidth),
+            ForumBodyTextBaselineAtomMetrics(:final value),
+          ) =>
+            ForumBodyRubyAtomPlan.textBaseline(
+              request: text,
+              metrics: value,
+              maxWidth: maxWidth,
+            ),
           (
             ForumBodyRubyTreeAtomRequest(:final value),
             ForumBodyRubyComponentMetrics(value: final metrics),

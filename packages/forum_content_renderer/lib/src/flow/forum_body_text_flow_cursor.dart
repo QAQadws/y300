@@ -65,7 +65,7 @@ final class ForumBodyTextFlowCursor {
     this.paragraphBuilder = const ForumBodyParagraphContentBuilder(),
     this.rubyLimits = const ForumBodyRubyContentLimits(),
   }) : _flow = ForumBodyStyledFlowCursor(document: document, reader: reader);
-  static const revision = 6;
+  static const revision = 7;
   final ForumBodyParagraphContentBuilder paragraphBuilder;
   final ForumBodyRubyContentLimits rubyLimits;
   final ForumBodyStyledFlowCursor _flow;

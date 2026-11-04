@@ -5,6 +5,7 @@ import 'forum_body_ruby_soft_space_request.dart';
 import 'forum_body_ruby_container_background.dart';
 import 'forum_body_ruby_root_box.dart';
 import 'forum_body_ruby_tree_input.dart';
+import '../style/forum_body_baseline_shift.dart';
 
 /// Internal pre-measurement variant of an actual parent atom. It borrows the
 /// existing immutable requests; numeric targets only enter the later AtomPlan.
@@ -32,6 +33,23 @@ sealed class ForumBodyRubyAtomRequest {
   ForumBodyRubyAtomRequest mapRequests(
     ForumBodyTextRequest Function(ForumBodyTextRequest) map,
   );
+}
+
+final class ForumBodyTextBaselineAtomRequest extends ForumBodyRubyAtomRequest {
+  const ForumBodyTextBaselineAtomRequest(this.text, this.shift, this.maxWidth);
+  final ForumBodyTextRequest text;
+  final ForumBodyBaselineShift shift;
+  final double maxWidth;
+  @override
+  List<ForumBodyTextRequest> get nativeRequests => [text];
+  @override
+  ForumBodyRubyContainerBackground? get background => null;
+  @override
+  ForumBodyRubyRootBoxInput? get rootBox => null;
+  @override
+  ForumBodyRubyAtomRequest mapRequests(
+    ForumBodyTextRequest Function(ForumBodyTextRequest) map,
+  ) => ForumBodyTextBaselineAtomRequest(map(text), shift, maxWidth);
 }
 
 final class ForumBodyRubyTreeEmphasisAtomRequest

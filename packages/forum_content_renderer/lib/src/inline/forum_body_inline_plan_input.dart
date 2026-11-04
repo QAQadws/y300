@@ -40,7 +40,7 @@ final class ForumBodyInlinePlanInput {
             .atoms
             .map((atom) => atom.engineUtf16),
       );
-  static const revision = 26;
+  static const revision = 27;
 
   factory ForumBodyInlinePlanInput(
     ForumBodyInlineFlowContent input,
@@ -162,12 +162,119 @@ final class ForumBodyInlinePlanInput {
       lastPlain = null;
     }
 
+    void appendSourceText(ForumBodyParagraphContent context) {
+      if (!context.hasBaselineShift || context.projection.text.isEmpty) {
+        sourceOrder.add(appendPlain(context));
+        return;
+      }
+      void emitSingle(int start, int end, ForumBodyResolvedStyle style) {
+        if (start == end) return;
+        if (context.projection.sourceAtUtf16(start).displayUtf16 != start ||
+            context.projection.sourceAtUtf16(end).displayUtf16 != end) {
+          _unsupported(context.path);
+        }
+        if (style.baselineShift.isEmpty) {
+          sourceOrder.add(
+            appendPlain(
+              context.displayWindow(startUtf16: start, endUtf16: end),
+            ),
+          );
+          return;
+        }
+        var window = context.intrinsicDisplayWindow(
+          startUtf16: start,
+          endUtf16: end,
+          style: style.withTextStyle(
+            context.style.textStyle.copyWith(
+              fontSize: style.textStyle.fontSize,
+              height: style.textStyle.height,
+            ),
+          ),
+        );
+        if (forumBodyInlineHasCollapsibleEdge(window, leading: true)) {
+          sourceOrder.add(appendPlain(windowForumBodyInlineText(window, 0, 1)));
+          window = windowForumBodyInlineText(
+            window,
+            1,
+            window.projection.text.length,
+          );
+        }
+        ForumBodyParagraphContent? tail;
+        if (window.projection.text.isNotEmpty &&
+            forumBodyInlineHasCollapsibleEdge(window, leading: false)) {
+          final length = window.projection.text.length;
+          tail = windowForumBodyInlineText(window, length - 1, length);
+          window = windowForumBodyInlineText(window, 0, length - 1);
+        }
+        if (window.projection.text.isNotEmpty) {
+          final from = offset;
+          sourceOrder.add(append(window));
+          atoms.add((startUtf16: from, endUtf16: offset));
+          requestsByAtom.add(
+            ForumBodyTextBaselineAtomRequest(
+              ForumBodyTextRequest.paragraph(window),
+              style.baselineShift,
+              width,
+            ),
+          );
+          levelIds.add(-1);
+          previousCollapsibleSpace = false;
+          atLineStart = false;
+          lastPlain = null;
+        }
+        if (tail != null) sourceOrder.add(appendPlain(tail));
+      }
+
+      void emit(int start, int end, ForumBodyResolvedStyle style) {
+        if (style.baselineShift.isEmpty) {
+          emitSingle(start, end, style);
+          return;
+        }
+        final text = context.projection.text;
+        var from = start;
+        for (var i = start; i < end; i++) {
+          final unit = text.codeUnitAt(i);
+          if (!forumBodyIsDisplayLineBreak(unit) &&
+              unit != 0x0d &&
+              unit != 0x85) {
+            continue;
+          }
+          emitSingle(from, i, style);
+          final next =
+              unit == 0x0d && i + 1 < end && text.codeUnitAt(i + 1) == 0x0a
+              ? i + 2
+              : i + 1;
+          sourceOrder.add(
+            appendPlain(context.displayWindow(startUtf16: i, endUtf16: next)),
+          );
+          from = next;
+          i = next - 1;
+        }
+        emitSingle(from, end, style);
+      }
+
+      var start = 0, end = 0;
+      ForumBodyResolvedStyle? current;
+      for (final part in context.projection.parts) {
+        final style = context.runs[part.runIndex].style;
+        if (current != null &&
+            !identical(current.baselineShift, style.baselineShift)) {
+          emit(start, end, current);
+          start = end;
+        }
+        current = style;
+        end += part.text.length;
+      }
+      if (current != null) emit(start, end, current);
+    }
+
     for (final part in input.parts) {
       switch (part) {
         case ForumBodyInlineFlowText():
-          sourceOrder.add(appendPlain(part.content));
+          appendSourceText(part.content);
         case ForumBodyInlineFlowRuby():
           final group = part.group;
+          if (!group.style.baselineShift.isEmpty) _unsupported(group.rootPath);
           final levelId = roots.putIfAbsent(group.rootPath, () => roots.length);
           if (group.identity != input.identity ||
               group.fontRevision != input.fontRevision ||
@@ -665,6 +772,9 @@ final class ForumBodyInlinePlanInput {
     }
     final bands = Set<ForumBodyTextBandContent>.identity();
     for (final atom in atoms) {
+      if (atom is ForumBodyTextBaselineAtomRequest) {
+        yield* atom.shift.referenceFontSizes;
+      }
       if (atom.rootBox case final root?) {
         yield root.fontStrut.style.textStyle.fontSize!;
       }

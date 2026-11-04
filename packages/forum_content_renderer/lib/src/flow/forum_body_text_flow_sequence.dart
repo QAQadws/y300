@@ -71,6 +71,7 @@ final class ForumBodyTextFlowSequence {
   void appendEvent(ForumBodyStyledFlowEvent event) {
     _ensureOpen();
     final plain = _plain ??= _openPlain();
+    if (!event.style.baselineShift.isEmpty) _mixed = true;
     final before = (plain.inputCodeUnits, plain.runCount);
     plain.appendEvent(event);
     charge(plain.inputCodeUnits - before.$1, plain.runCount - before.$2);

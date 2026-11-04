@@ -67,6 +67,7 @@ export 'src/inline/forum_body_ruby_group_metrics.dart'
         ForumBodyRubyColumnMetrics,
         ForumBodyRubyComponentMetrics,
         ForumBodyRubySpaceMetrics,
+        ForumBodyTextBaselineAtomMetrics,
         ForumBodyRubySoftSpaceMetrics,
         ForumBodyRubySoftSpaceMeasuredMember,
         ForumBodyRubySoftSpacePlacedMember;

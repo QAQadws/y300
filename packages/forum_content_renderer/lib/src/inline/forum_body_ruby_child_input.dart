@@ -117,9 +117,11 @@ ForumBodyRubyChildInput _resolve(
   ForumBodyResolvedStyle style,
   List<ForumBodyRubyInlineContent> parts,
 ) {
+  if (!style.baselineShift.isEmpty) _unsupported(path);
   for (final part in parts) {
     switch (part) {
       case ForumBodyRubyTextContent(:final content):
+        if (content.hasBaselineShift) _unsupported(content.path);
         if (content.identity != group.identity ||
             content.fontRevision != group.fontRevision ||
             content.styleRevision != group.styleRevision) {
