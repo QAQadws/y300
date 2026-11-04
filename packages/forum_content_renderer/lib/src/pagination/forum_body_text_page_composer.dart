@@ -10,6 +10,7 @@ import '../style/forum_body_quote_decoration.dart';
 import '../inline/forum_body_inline_paragraph_layout.dart';
 import '../inline/forum_body_emphasis_paragraph_metrics.dart';
 import '../inline/forum_body_fitted_emphasis_plan.dart';
+import '../inline/forum_body_inline_font_frame_plan.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_layout.dart';
 import 'forum_body_source_hint.dart';
@@ -409,6 +410,7 @@ final class ForumBodyTextPageComposer {
     required double spaceAtPageStart,
     ForumBodyParagraphWindow window = ForumBodyParagraphWindow.full,
     ForumBodyListMarkerPlan? listMarkers,
+    ForumBodyInlineFontFramePlan? fontFrames,
     int Function(int startUtf16, int endUtf16)? nativeHandleCountInRange,
     Iterable<Object> Function(int startUtf16, int endUtf16)?
     nativeEntriesInRange,
@@ -420,6 +422,7 @@ final class ForumBodyTextPageComposer {
       nativeHandleCountInRange,
       nativeEntriesInRange,
       nativeCostsInRange,
+      fontFrames,
     ),
     paragraphIndex: paragraphIndex,
     left: left,
@@ -694,10 +697,35 @@ final class ForumBodyTextPageComposer {
               : _EmphasisSceneReservation(
                   emphasis.inLines(firstLine, end).first.group.top,
                 );
-          sceneAddition = scene.propose(emphasis.inLines(active.nextLine, end));
+          sceneAddition = scene.propose(
+            emphasis
+                .inLines(active.nextLine, end)
+                .map((p) => p.sceneContribution),
+          );
           if (!sceneAddition.withinLimits ||
               fragmentHeight >
                   ForumBodyEmphasisFragmentInputPreparation.defaultMaxHeight) {
+            if (_draft.isEmpty && _usedHeight == 0) {
+              _fail(ForumBodyTextPageFailure.sceneLimit);
+            }
+            _seal();
+            return _result(inspected, pagesBefore, false);
+          }
+        }
+        final frames = layout._frames;
+        if (frames != null) {
+          scene = continuation
+              ? _lastSceneReservation!
+              : _EmphasisSceneReservation(
+                  frames.lines[firstLine].top,
+                  maxGroups: frames.lines.length,
+                  maxCommands: ForumBodyTextPictureInput.maximumCommands,
+                );
+          sceneAddition = scene.propose([
+            for (var row = active.nextLine; row < end; row++)
+              frames.sceneContributionForRow(row),
+          ]);
+          if (!sceneAddition.withinLimits || fragmentHeight > 32768) {
             if (_draft.isEmpty && _usedHeight == 0) {
               _fail(ForumBodyTextPageFailure.sceneLimit);
             }
@@ -710,8 +738,10 @@ final class ForumBodyTextPageComposer {
             : 0;
         final proposedSceneEntries =
             _sceneEntries +
-            (scene == null ? 0 : 1) -
-            (continuation && _lastSceneReservation != null ? 1 : 0);
+            (sceneAddition == null || sceneAddition.commands == 0 ? 0 : 1) -
+            (continuation && (_lastSceneReservation?.estimatedBytes ?? 0) > 0
+                ? 1
+                : 0);
         final proposedSceneBytes =
             _sceneBytes -
             replacedSceneBytes +
@@ -721,6 +751,13 @@ final class ForumBodyTextPageComposer {
             ? 0
             : emphasis != null
             ? 2
+            : frames != null
+            ? frames.preparationParentHandleCount(firstLine, end) +
+                  frames.allocation.input.natural.page.nativeHandleCountInRange(
+                    view?.coverageStartUtf16 ?? 0,
+                    view?.coverageEndUtf16 ?? 0,
+                  ) -
+                  1
             : layout.nativeHandleCountInRange?.call(
                     view?.coverageStartUtf16 ?? 0,
                     view?.coverageEndUtf16 ?? 0,
@@ -1025,6 +1062,7 @@ final class _CompositionParagraph {
       _inline = null,
       _emphasisEntries = null,
       _fitted = null,
+      _frames = null,
       _emphasisGuard = null,
       identity = current.content.identity,
       path = current.content.path,
@@ -1041,6 +1079,7 @@ final class _CompositionParagraph {
     this.nativeHandleCountInRange,
     this.nativeEntriesInRange,
     this.nativeCostsInRange,
+    this._frames,
   ) : lease = current,
       _text = null,
       _inline = current.layout,
@@ -1052,7 +1091,20 @@ final class _CompositionParagraph {
       fontRevision = current.content.fontRevision,
       styleRevision = current.content.styleRevision,
       projection = current.content.projection.display,
-      kind = ForumBodyTextPageFragmentKind.inline;
+      kind = ForumBodyTextPageFragmentKind.inline {
+    final frames = _frames;
+    if (frames != null &&
+        (!identical(
+              frames.allocation.input.reference.naturalLines,
+              current.layout.lines,
+            ) ||
+            !identical(frames.source.content, current.content) ||
+            frames.width != current.layout.width)) {
+      throw ArgumentError(
+        'Allocated composition requires the current natural parent',
+      );
+    }
+  }
   _CompositionParagraph.emphasis(
     ForumBodyEmphasisParagraphNativeEntries entries,
     void Function() ensureOwner,
@@ -1061,6 +1113,7 @@ final class _CompositionParagraph {
       _inline = null,
       _emphasisEntries = entries,
       _fitted = null,
+      _frames = null,
       _emphasisGuard = ensureOwner,
       nativeHandleCountInRange = null,
       nativeEntriesInRange = null,
@@ -1084,6 +1137,7 @@ final class _CompositionParagraph {
       _inline = null,
       _emphasisEntries = null,
       _fitted = plan,
+      _frames = null,
       _emphasisGuard = ensureOwner,
       nativeHandleCountInRange = ((_, _) => 2),
       nativeEntriesInRange = null,
@@ -1095,6 +1149,7 @@ final class _CompositionParagraph {
       projection = plan.content.projection,
       kind = ForumBodyTextPageFragmentKind.fittedEmphasis;
   final ForumBodyFittedEmphasisPlan? _fitted;
+  final ForumBodyInlineFontFramePlan? _frames;
   final ForumBodyEmphasisParagraphNativeEntries? _emphasisEntries;
   final void Function()? _emphasisGuard;
   final int Function(int startUtf16, int endUtf16)? nativeHandleCountInRange;
@@ -1114,21 +1169,25 @@ final class _CompositionParagraph {
   final HtmlDisplayTextProjection projection;
   final ForumBodyTextPageFragmentKind kind;
   double get width =>
+      _frames?.width ??
       _fitted?.metrics.width ??
       _emphasisEntries?.paragraph.width ??
       _text?.width ??
       _inline!.width;
   double get height =>
+      _frames?.height ??
       _fitted?.metrics.height ??
       _emphasisEntries?.paragraph.height ??
       _text?.height ??
       _inline!.height;
   List<ForumBodyParagraphLine> get lines =>
+      _frames?.lines ??
       _fitted?.lines ??
       _emphasisEntries?.paragraph.lines ??
       _text?.lines ??
       _inline!.lines;
   double get alphabeticBaseline =>
+      (_frames?.lines.first.baseline) ??
       _fitted?.metrics.alphabeticBaseline ??
       _emphasisEntries?.paragraph.alphabeticBaseline ??
       _text?.alphabeticBaseline ??
@@ -1185,6 +1244,14 @@ final class _CompositionParagraph {
     final text = _text;
     if (text != null) {
       final view = text.fragment(start, end);
+      return (
+        height: view.height,
+        coverageStartUtf16: view.coverageStartUtf16,
+        coverageEndUtf16: view.coverageEndUtf16,
+      );
+    }
+    if (_frames case final frames?) {
+      final view = frames.fragment(start, end);
       return (
         height: view.height,
         coverageStartUtf16: view.coverageStartUtf16,

@@ -5,11 +5,17 @@ part of 'forum_body_text_page_composer.dart';
 /// keys. Only newly consumed complete groups are inspected, avoiding repeated
 /// construction/scanning of a growing merged command list.
 final class _EmphasisSceneReservation {
-  _EmphasisSceneReservation(this.firstTop);
+  _EmphasisSceneReservation(
+    this.firstTop, {
+    this.maxGroups = ForumBodyEmphasisFragmentInputPreparation.defaultMaxGroups,
+    this.maxCommands =
+        ForumBodyEmphasisFragmentInputPreparation.defaultMaxCommands,
+  });
   final double firstTop;
+  final int maxGroups, maxCommands;
   final _metadata = <Object, int>{};
   int _commands = 0, _groups = 0, _input = 0, _picture = 0, _metadataBytes = 0;
-  int get estimatedBytes => _groups == 0
+  int get estimatedBytes => _commands == 0
       ? 0
       : ForumBodyTextPictureInput.baseEstimatedInputBytes +
             ForumBodyTextPictureInput.baseEstimatedPictureBytes +
@@ -18,7 +24,7 @@ final class _EmphasisSceneReservation {
             _metadataBytes;
 
   _EmphasisSceneAddition propose(
-    Iterable<ForumBodyEmphasisGroupNativeEntries> added,
+    Iterable<ForumBodyTextSceneContribution> added,
   ) {
     var commands = _commands,
         groups = _groups,
@@ -28,7 +34,9 @@ final class _EmphasisSceneReservation {
     var depthFits = true;
     final metadata = <Object, int>{};
     for (final part in added) {
-      final translated = part.group.top != firstTop;
+      final translated =
+          part.translationOriginY != null &&
+          part.translationOriginY != firstTop;
       groups++;
       commands += part.commandCount;
       input +=
@@ -63,6 +71,8 @@ final class _EmphasisSceneReservation {
       metadataBytes,
       metadata,
       depthFits,
+      maxGroups,
+      maxCommands,
     );
   }
 
@@ -85,19 +95,20 @@ final class _EmphasisSceneAddition {
     this.metadataBytes,
     this.metadata,
     this.depthFits,
+    this.maxGroups,
+    this.maxCommands,
   );
   final int commands, groups, input, picture, metadataBytes;
   final Map<Object, int> metadata;
   final bool depthFits;
+  final int maxGroups, maxCommands;
   bool get withinLimits =>
-      depthFits &&
-      groups > 0 &&
-      groups <= ForumBodyEmphasisFragmentInputPreparation.defaultMaxGroups &&
-      commands <= ForumBodyEmphasisFragmentInputPreparation.defaultMaxCommands;
-  int get estimatedBytes =>
-      ForumBodyTextPictureInput.baseEstimatedInputBytes +
-      ForumBodyTextPictureInput.baseEstimatedPictureBytes +
-      input +
-      picture +
-      metadataBytes;
+      depthFits && groups > 0 && groups <= maxGroups && commands <= maxCommands;
+  int get estimatedBytes => commands == 0
+      ? 0
+      : ForumBodyTextPictureInput.baseEstimatedInputBytes +
+            ForumBodyTextPictureInput.baseEstimatedPictureBytes +
+            input +
+            picture +
+            metadataBytes;
 }

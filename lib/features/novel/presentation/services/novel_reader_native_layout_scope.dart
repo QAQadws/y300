@@ -292,6 +292,7 @@ List<int> _nativeRevisions() => [
   ForumBodyTextPageComposer.revision,
   ForumBodyTextPageSession.inlinePlanRevision,
   ForumBodyTextPageSession.paragraphPlanRevision,
+  ForumBodyTextPageSession.inlineFontFrameRevision,
   ForumBodyEmphasisParagraphMetrics.revision,
   ForumBodyEmphasisRowAllocation.revision,
   ForumBodyEmphasisLineMetrics.revision,

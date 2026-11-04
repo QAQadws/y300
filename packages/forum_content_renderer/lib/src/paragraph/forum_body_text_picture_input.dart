@@ -76,6 +76,18 @@ typedef ForumBodyPositionedTextPictureInput = ({
   Offset offset,
 });
 
+/// Numeric reservation for one bounded part of a growing scene. Null origin
+/// means native row selectors are rebased directly and need no outer command
+/// translation. Metadata comes from actual drawing keys, never fake scene keys.
+typedef ForumBodyTextSceneContribution = ({
+  double? translationOriginY,
+  Map<Object, int> retainedMetadata,
+  int commandCount,
+  int inputCommandBytes,
+  int pictureCommandBytes,
+  int maximumTranslationDepth,
+});
+
 enum _InputCompositionState { active, ready, transferred, closed }
 
 /// Pure composition of existing command inputs. One part reads one source,

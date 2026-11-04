@@ -644,6 +644,35 @@ final class ForumBodyInlineParagraphLayout
     ]);
   }
 
+  /// Native-only font probe between actual opaque slots. Engine boundaries do
+  /// not become display/source slices or readable coverage; the caller owns
+  /// complete legal row groups. Each call makes one native selection query.
+  List<TextBox> parentFontBoxesAtEngineRange(int start, int end) {
+    _ensureSource();
+    RangeError.checkValidRange(start, end, projection.engineText.length);
+    if (start < projection.enginePrefix.length) {
+      throw const ForumBodyParagraphLayoutException(
+        ForumBodyParagraphLayoutFailure.coverage,
+      );
+    }
+    final atom = _firstAtomEndingAfter(start);
+    if (start < end &&
+        atom < projection.atoms.length &&
+        projection.atoms[atom].engineUtf16 < end) {
+      throw const ForumBodyParagraphLayoutException(
+        ForumBodyParagraphLayoutFailure.coverage,
+      );
+    }
+    if (start == end) return const [];
+    return List.unmodifiable(
+      _painter
+          .getBoxesForSelection(
+            TextSelection(baseOffset: start, extentOffset: end),
+          )
+          .map((box) => _shiftBox(box, _paintOffset)),
+    );
+  }
+
   int _firstAtomEndingAfter(int engineUtf16) {
     var low = 0, high = projection.atoms.length;
     while (low < high) {

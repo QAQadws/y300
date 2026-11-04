@@ -508,11 +508,15 @@ void main() {
         ).join(),
         width: 100,
         height: 50,
+        // CJK fallback can exceed the 1.0 authored row. Complete frame paint
+        // needs its real phase/query resources as well as the script children.
+        entries: 16,
       );
       f.finish();
       expect(f.session.snapshot.length, greaterThan(3));
       final display = StringBuffer();
       final scriptSources = <int>{};
+      var allocated = 0;
       for (var page = 0; page < f.session.snapshot.length; page++) {
         final fragments = f.prepare(page);
         try {
@@ -525,6 +529,11 @@ void main() {
               ),
             );
             if (binding is ForumBodyPreparedInlineFragment) {
+              if (binding.nativeLeases.any(
+                (p) => p is ForumBodyTextPictureLease,
+              )) {
+                allocated++;
+              }
               for (final context in binding.view.content.contexts) {
                 if (!context.content.style.baselineShift.isEmpty &&
                     context.content.projection.text.isNotEmpty &&
@@ -553,6 +562,7 @@ void main() {
           }
         }
       }
+      expect(allocated, greaterThan(0));
       expect(display.toString(), f.document.sourceText);
       expect(scriptSources, hasLength(50));
     },

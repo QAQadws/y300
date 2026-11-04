@@ -521,7 +521,7 @@ void main() {
     expect(tail.points.map((point) => point.sourceRune).toSet(), {23, 24});
   });
 
-  test('mixed coverage rejects clipped glyphs even when UI selection boxes are clipped inside the frame', () {
+  test('tight mixed rows preserve full raw glyphs and source coverage', () {
     final fixture = _Fixture(
       '<p style="line-height:.25">X<ruby>A<rt>x</rt></ruby>Z</p>',
       width: 20,
@@ -534,7 +534,9 @@ void main() {
     expect(clipped, isNotEmpty);
     expect(actual, isNotEmpty);
     expect(
-      actual.any((box) => box.bottom > mixed.view.height || box.top < 0),
+      actual.every(
+        (box) => box.bottom <= mixed.view.height + 1e-3 && box.top >= -1e-3,
+      ),
       isTrue,
     );
     expect(
@@ -542,8 +544,8 @@ void main() {
       isTrue,
     );
     final coverage = _finish(fixture.preparedCursor(0, fragments));
-    expect(coverage.hasClippedGlyphs, isTrue);
-    expect(coverage.points.where((point) => point.sourceRune == 4), isEmpty);
+    expect(coverage.hasClippedGlyphs, isFalse);
+    expect(coverage.points.where((point) => point.sourceRune == 4), isNotEmpty);
   });
 
   test('hidden annotation glyphs cannot prove source positions through the parent atom', () {

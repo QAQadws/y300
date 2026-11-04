@@ -6,7 +6,6 @@ import '../block/forum_body_block_flow_cursor.dart';
 import '../document/forum_body_document.dart';
 import '../flow/forum_body_text_flow_cursor.dart';
 import '../inline/forum_body_inline_plan_input.dart';
-import '../inline/forum_body_inline_plan_preparation.dart';
 import '../inline/forum_body_ruby_content.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
@@ -16,6 +15,8 @@ import 'forum_body_text_page_preparation.dart';
 import 'forum_body_prepared_text_fragment.dart';
 import 'forum_body_text_page_content.dart';
 import 'forum_body_inline_native_entries.dart';
+import 'forum_body_inline_page_admission.dart';
+import '../inline/forum_body_inline_font_frame_plan.dart';
 import 'forum_body_emphasis_page_admission.dart';
 import 'forum_body_list_marker_plan.dart';
 
@@ -130,6 +131,7 @@ final class ForumBodyTextPageSessionStep {
 final class ForumBodyTextPageSession {
   static const inlinePlanRevision = ForumBodyInlinePlanInput.revision;
   static const paragraphPlanRevision = 1;
+  static const inlineFontFrameRevision = ForumBodyInlineFontFramePlan.revision;
   factory ForumBodyTextPageSession({
     required ForumBodyDocument document,
     required ForumBodyReaderStyle reader,
@@ -213,7 +215,7 @@ final class ForumBodyTextPageSession {
   ForumBodyBlockFlowListItemStart? _pendingListItem;
   ForumBodyEmphasisPageAdmission? _paragraphAdmission;
   ForumBodyBlockFlowInline? _pendingInline;
-  ForumBodyInlinePlanPreparation? _inlinePreparation;
+  ForumBodyInlinePageAdmission? _inlinePreparation;
   ({ForumBodyInlinePageContent content, ForumBodyInlineParagraphLease lease})?
   _readyInline;
   ForumBodyInlineNativeEntriesPreparation? _entryPreparation;
@@ -467,7 +469,9 @@ final class ForumBodyTextPageSession {
               spaceAtPageStart: 0,
               window: mixed.paragraph.window,
               listMarkers: _listPlan,
-              nativeHandleCountInRange: ready.content.nativeHandleCountInRange,
+              nativeHandleCountInRange:
+                  ready.content.nativePreparationHandleCountInRange,
+              fontFrames: ready.content.fontFrames,
               nativeEntriesInRange: entries?.inRange,
               nativeCostsInRange: entries?.costsInRange,
             );
@@ -751,17 +755,14 @@ final class ForumBodyTextPageSession {
     }
   }
 
-  ForumBodyInlinePlanPreparation _openInlinePlan(
-    ForumBodyBlockFlowInline mixed,
-  ) {
-    return ForumBodyInlinePlanPreparation.fromFlow(
+  ForumBodyInlinePageAdmission _openInlinePlan(ForumBodyBlockFlowInline mixed) {
+    return ForumBodyInlinePageAdmission(
       input: mixed.paragraph.content,
       width: mixed.contentWidth,
       cache: _cache,
       textScaler: _textScaler,
       ensureOwner: _ensureActivePlan,
-      validateInput: (input) =>
-          _content.checkCounts(input.retainedTextCodeUnits, input.retainedRuns),
+      validateCounts: _content.checkCounts,
     );
   }
 

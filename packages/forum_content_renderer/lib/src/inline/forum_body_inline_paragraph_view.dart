@@ -198,10 +198,12 @@ final class ForumBodyInlineParagraphView {
     }
     final clip = offset & Size(width, height);
     if (_fontFrames case final frames?) {
-      yield ForumBodyInlinePaintCommand.picture(
-        frames.picture,
-        offset,
-      ).clipped(clip);
+      if (frames.picture case final picture?) {
+        yield ForumBodyInlinePaintCommand.picture(
+          picture,
+          offset,
+        ).clipped(clip);
+      }
     } else {
       final row = ForumBodyInlinePaintRowView.naturalWindow(
         parent: _parent!,
@@ -286,7 +288,7 @@ final class ForumBodyInlineParagraphView {
 
   Iterable<ForumBodyNativeParagraphLease> get nativeLeases => [
     ?_parent,
-    if (_fontFrames case final frames?) ...[frames.isolated, frames.picture],
+    if (_fontFrames case final frames?) ...[frames.isolated, ?frames.picture],
     for (final binding in _children.values) ...binding.nativeLeases,
   ];
 
@@ -310,7 +312,7 @@ final class ForumBodyInlineParagraphView {
       // antialiased rectangular viewport compounds alpha at fractional edges.
       canvas.clipRect(offset & Size(width, height), doAntiAlias: false);
       if (_fontFrames case final frames?) {
-        frames.picture.paint(canvas, offset);
+        frames.picture?.paint(canvas, offset);
       } else {
         _fragment!.paintParent(canvas, offset);
       }

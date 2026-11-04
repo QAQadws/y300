@@ -7,6 +7,7 @@ import '../paragraph/forum_body_paragraph_cache.dart';
 import 'forum_body_prepared_text_fragment.dart';
 import 'forum_body_inline_page_preparation.dart';
 import 'forum_body_emphasis_page_preparation.dart';
+import 'forum_body_inline_font_frame_page_preparation.dart';
 import 'forum_body_text_page_binding.dart';
 import 'forum_body_text_page_composer.dart';
 import 'forum_body_text_page_content.dart';
@@ -119,9 +120,10 @@ final class ForumBodyTextPagePreparation {
             input is ForumBodyEmphasisPageContent ||
             input is ForumBodyFittedEmphasisPageContent ||
             (input is ForumBodyInlinePageContent &&
-                input.rubyAtoms.any(
-                  (atom) => atom is ForumBodyRubyTreeEmphasisAtomPlan,
-                )),
+                (input.fontFrames != null ||
+                    input.rubyAtoms.any(
+                      (atom) => atom is ForumBodyRubyTreeEmphasisAtomPlan,
+                    ))),
       );
   ForumBodyParagraphCache? _cache;
   final ForumBodyTextPageSnapshot snapshot;
@@ -142,6 +144,8 @@ final class ForumBodyTextPagePreparation {
   ForumBodyListMarkerPicturePreparation? _list;
   final _emphasis = <int, ForumBodyEmphasisPagePreparation>{};
   ForumBodyEmphasisPagePreparation? _activeEmphasis;
+  final _fontFrames = <int, ForumBodyInlineFontFramePagePreparation>{};
+  ForumBodyInlineFontFramePagePreparation? _activeFontFrame;
   ForumBodyEmphasisLinePreparation? _fitted;
   int _fittedWork = 0;
   bool _initialProbePending;
@@ -155,7 +159,8 @@ final class ForumBodyTextPagePreparation {
       (_list?.workCount ?? 0) +
       _fittedWork +
       (_inline?.workCount ?? 0) +
-      (_activeEmphasis?.workCount ?? 0);
+      (_activeEmphasis?.workCount ?? 0) +
+      (_activeFontFrame?.workCount ?? 0);
   ForumBodyParagraphBudgetProbe? _budgetProbe;
   Iterator<_PageBudgetPart>? _probeWork;
   _PageBudgetPart? _nextProbePart;
@@ -188,6 +193,7 @@ final class ForumBodyTextPagePreparation {
       yield* active.nativeLeases;
     }
     if (_activeEmphasis != null) yield* _activeEmphasis!.nativeLeases;
+    if (_activeFontFrame != null) yield* _activeFontFrame!.nativeLeases;
     if (_fitted != null) yield* _fitted!.nativeLeases;
   }
 
@@ -470,6 +476,24 @@ final class ForumBodyTextPagePreparation {
       _completedWork++;
       return true;
     }
+    if (input is ForumBodyInlinePageContent && input.fontFrames != null) {
+      final active = _activeFontFrame ??= _fontFramePart(index, input);
+      final step = active.advance(cachedOnly: cachedOnly, maxParts: maxParts);
+      _waiting = step.waiting;
+      if (step.view case final view?) {
+        try {
+          _guard();
+          _acceptBody(ForumBodyPreparedTextFragment.inline(view));
+          _guard();
+        } catch (_) {
+          view.close();
+          rethrow;
+        }
+        _completedWork += active.workCount;
+        _activeFontFrame = null;
+      }
+      return !step.cacheMiss;
+    }
     final active = _inline ??= ForumBodyInlinePagePreparation(
       input: input as ForumBodyInlinePageContent,
       fragment: fragment,
@@ -536,6 +560,22 @@ final class ForumBodyTextPagePreparation {
     _probeWork = _budgetParts(_budgetProbe!).iterator;
   }
 
+  ForumBodyInlineFontFramePagePreparation _fontFramePart(
+    int index,
+    ForumBodyInlinePageContent input,
+  ) => _fontFrames.putIfAbsent(
+    index,
+    () => ForumBodyInlineFontFramePagePreparation(
+      input: input,
+      fragment: snapshot[pageIndex].fragments[index],
+      cache: _cache!,
+      textScaler: _textScaler!,
+      ensureOwner: _guard,
+      ensureVisibleOwner: _ensureOwner!,
+      ownedPageLeases: () => _finishedLeases,
+    ),
+  );
+
   // Parent and child requests are separate bounded inspection units. No native
   // work or large list of callbacks is retained by the whole-page probe.
   Iterable<_PageBudgetPart> _budgetParts(
@@ -558,6 +598,9 @@ final class ForumBodyTextPagePreparation {
                   ? body.plan.metrics.textScaler
                   : body is ForumBodyEmphasisPageContent
                   ? body.paragraph.textScaler
+                  : body is ForumBodyInlinePageContent &&
+                        body.fontFrames != null
+                  ? body.fontFrames!.textScaler
                   : _textScaler!,
             );
           },
@@ -566,6 +609,17 @@ final class ForumBodyTextPagePreparation {
       }
       if (body is ForumBodyEmphasisPageContent) {
         final parts = _emphasisPart(index, body);
+        while (!parts.isInputReady) {
+          yield (startsFragment: parent, inspect: parts.advanceInput);
+          parent = false;
+        }
+        yield (
+          startsFragment: parent,
+          inspect: () => parts.includeSceneBudget(probe),
+        );
+      }
+      if (body is ForumBodyInlinePageContent && body.fontFrames != null) {
+        final parts = _fontFramePart(index, body);
         while (!parts.isInputReady) {
           yield (startsFragment: parent, inspect: parts.advanceInput);
           parent = false;
@@ -746,6 +800,11 @@ final class ForumBodyTextPagePreparation {
     }
     _emphasis.clear();
     _activeEmphasis = null;
+    for (final parts in _fontFrames.values) {
+      parts.close();
+    }
+    _fontFrames.clear();
+    _activeFontFrame = null;
     for (final fragment in _fragments) {
       fragment.close();
     }

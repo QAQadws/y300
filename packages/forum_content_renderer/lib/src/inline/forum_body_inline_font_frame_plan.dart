@@ -26,15 +26,30 @@ final class ForumBodyInlineFontFramePlan {
     this.paintReference,
     List<ForumBodyParagraphLine> lines,
     List<List<ForumBodyTextPictureCommand>> parentCommands,
+    List<int> commandPrefix,
   ) : lines = UnmodifiableListView(lines),
-      _parentCommands = UnmodifiableListView(parentCommands);
+      _parentCommands = UnmodifiableListView(parentCommands),
+      _commandPrefix = UnmodifiableListView(commandPrefix);
 
-  static const revision = 1;
+  static const revision = 2;
   final ForumBodyInlinePlanInput source;
   final ForumBodyInlineEmphasisRowAllocation allocation;
   final ForumBodyInlineEmphasisPaintReference paintReference;
   final List<ForumBodyParagraphLine> lines;
   final List<List<ForumBodyTextPictureCommand>> _parentCommands;
+  final List<int> _commandPrefix;
+  bool hasParentPaint(int start, int end) {
+    fragment(start, end);
+    return _commandPrefix[end] > _commandPrefix[start];
+  }
+
+  int visibleParentHandleCount(int start, int end) =>
+      hasParentPaint(start, end) ? 3 : 2;
+
+  /// Measurement parents plus child-source alias and scene-private aliases.
+  /// A child-only window does not record or retain an invented parent picture.
+  int preparationParentHandleCount(int start, int end) =>
+      hasParentPaint(start, end) ? 10 : 7;
   double get width => allocation.width;
   double get height => allocation.height;
   TextScaler get textScaler => allocation.input.natural.textScaler;
@@ -83,9 +98,43 @@ final class ForumBodyInlineFontFramePlan {
       final commands = _parentCommands[row];
       if (commands.isEmpty) yield null;
       for (final command in commands) {
-        yield command.translated(origin);
+        // Virtual native coordinates can be large even on a short visible
+        // page. Keep that translation in the qualified row selector rather
+        // than manufacturing an out-of-range scene origin.
+        yield ForumBodyTextPictureCommand(
+          nativeInputIdentity: command.nativeInputIdentity,
+          offset: Offset.zero,
+          inlineRow: command.inlineRow!.shifted(origin),
+        );
       }
     }
+  }
+
+  /// At most three already-qualified phase commands. Composition inspects
+  /// only new rows, without rebuilding a growing fragment's scene input.
+  ForumBodyTextSceneContribution sceneContributionForRow(int row) {
+    final metadata = <Object, int>{};
+    var inputBytes = 0, pictureBytes = 0, depth = 0;
+    final commands = _parentCommands[row];
+    for (final command in commands) {
+      inputBytes += command.estimatedInputBytes;
+      pictureBytes += command.estimatedPictureBytes;
+      if (command.translationDepth > depth) depth = command.translationDepth;
+      metadata.putIfAbsent(
+        command.nativeInputIdentity,
+        () => ForumBodyTextPictureInput.estimateRetainedMetadataBytesFor(
+          command.nativeInputIdentity,
+        ),
+      );
+    }
+    return (
+      translationOriginY: null,
+      retainedMetadata: Map.unmodifiable(metadata),
+      commandCount: commands.length,
+      inputCommandBytes: inputBytes,
+      pictureCommandBytes: pictureBytes,
+      maximumTranslationDepth: depth,
+    );
   }
 }
 

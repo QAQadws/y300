@@ -21,10 +21,10 @@ final class _InlineFontFrameBinding {
   })
   window;
   final ForumBodyInlineParagraphLease isolated;
-  final ForumBodyTextPictureLease picture;
+  final ForumBodyTextPictureLease? picture;
   final void Function() ensureOwner;
   bool get isActive =>
-      isolated.isActive && picture.hasSameActiveOwner(isolated);
+      isolated.isActive && (picture?.hasSameActiveOwner(isolated) ?? true);
   void guard() {
     ensureOwner();
     if (!isActive) throw StateError('Allocated inline source is retired');
@@ -141,7 +141,7 @@ final class _InlineFontFrameBinding {
 
   void close() {
     try {
-      picture.release();
+      picture?.release();
     } finally {
       isolated.release();
     }

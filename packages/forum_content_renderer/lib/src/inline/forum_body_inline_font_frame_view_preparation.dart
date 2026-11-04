@@ -4,6 +4,7 @@ enum _FontViewPhase {
   children,
   paint,
   input,
+  compare,
   rows,
   scene,
   alias,
@@ -26,7 +27,9 @@ final class ForumBodyInlineFontFrameViewPreparation {
     Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
     this.startLine = 0,
     int? endLine,
-  }) : _measurement = measurement,
+    ForumBodyTextPictureInput? expectedParentInput,
+  }) : _expectedInput = expectedParentInput,
+       _measurement = measurement,
        _cache = cache,
        _ensureOwner = ensureOwner,
        _ensureVisibleOwner = ensureVisibleOwner ?? ensureOwner,
@@ -60,6 +63,7 @@ final class ForumBodyInlineFontFrameViewPreparation {
   ForumBodyInlineEmphasisChildView? _children;
   ForumBodyTextPictureInputComposition? _inputWork;
   ForumBodyTextPictureInput? _sceneInput;
+  ForumBodyTextPictureInput? _expectedInput;
   ForumBodyTextPicturePreparation? _sceneWork;
   ForumBodyTextPictureLease? _picture;
   ForumBodyInlineParagraphLease? _isolated;
@@ -67,6 +71,7 @@ final class ForumBodyInlineFontFrameViewPreparation {
   List<ForumBodyInlinePaintRowView> _rows = [];
   var _phase = _FontViewPhase.children;
   var _paint = 0, _row = 0;
+  int _compare = 0;
   bool _operating = false, _miss = false;
   bool get isReady => _phase == _FontViewPhase.ready;
   bool get cacheMiss => _miss;
@@ -140,7 +145,15 @@ final class ForumBodyInlineFontFrameViewPreparation {
             if (!_childWork!.isReady) break;
             _children = _childWork!.takeView();
             _childWork = null;
-            _phase = _FontViewPhase.paint;
+            if (!plan.hasParentPaint(startLine, endLine) &&
+                _expectedInput != null) {
+              throw const ForumBodyInlineViewException(
+                ForumBodyInlineViewFailure.geometry,
+              );
+            }
+            _phase = plan.hasParentPaint(startLine, endLine)
+                ? _FontViewPhase.paint
+                : _FontViewPhase.alias;
           case _FontViewPhase.paint:
             if (_paint < measurement.paint.phases.length) {
               final phase = measurement.paint.phases[_paint];
@@ -168,8 +181,30 @@ final class ForumBodyInlineFontFrameViewPreparation {
             if (!_inputWork!.isReady) break;
             _sceneInput = _inputWork!.takeInput();
             _inputWork = null;
+            if (_expectedInput != null &&
+                _expectedInput!.commands.length !=
+                    _sceneInput!.commands.length) {
+              throw const ForumBodyInlineViewException(
+                ForumBodyInlineViewFailure.geometry,
+              );
+            }
+            _phase = _FontViewPhase.compare;
+          case _FontViewPhase.compare:
+            if (_expectedInput != null &&
+                _compare < _sceneInput!.commands.length) {
+              final index = _compare++;
+              if (_sceneInput!.commands[index] !=
+                  _expectedInput!.commands[index]) {
+                throw const ForumBodyInlineViewException(
+                  ForumBodyInlineViewFailure.geometry,
+                );
+              }
+              used++;
+              break;
+            }
             _row = startLine * 3;
             _phase = _FontViewPhase.rows;
+            used++;
           case _FontViewPhase.rows:
             if (_row < endLine * 3) {
               const layers = [
@@ -184,6 +219,10 @@ final class ForumBodyInlineFontFrameViewPreparation {
                 lineIndex: index ~/ 3,
                 layer: layers[index % 3],
                 ensureOwner: _guard,
+                allocationOrigin: Offset(
+                  0,
+                  -plan.fragment(startLine, endLine).top,
+                ),
               );
               if (!row.selector.isEmpty) _rows.add(row);
             } else {
@@ -242,7 +281,7 @@ final class ForumBodyInlineFontFrameViewPreparation {
             _source = _children!.takeSourceView();
             _children = null;
             if (!_source!.matchesCurrentParent(measurement.natural) ||
-                !identical(_picture!.input, _sceneInput)) {
+                !identical(_picture?.input, _sceneInput)) {
               throw StateError('Allocated inline source differs');
             }
             final frames = _InlineFontFrameBinding(
@@ -250,7 +289,7 @@ final class ForumBodyInlineFontFrameViewPreparation {
               startLine,
               endLine,
               _isolated!,
-              _picture!,
+              _picture,
               _ensureVisibleOwner!,
             );
             _result = ForumBodyInlineParagraphView._allocated(
@@ -365,6 +404,7 @@ final class ForumBodyInlineFontFrameViewPreparation {
     _children = null;
     _inputWork = null;
     _sceneInput = null;
+    _expectedInput = null;
     _sceneWork = null;
     _picture = null;
     _isolated = null;

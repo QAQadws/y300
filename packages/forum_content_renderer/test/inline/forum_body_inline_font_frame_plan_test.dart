@@ -195,6 +195,10 @@ void main() {
                 lineIndex: rowIndex,
                 layer: layers[layer],
                 ensureOwner: () {},
+                allocationOrigin: Offset(
+                  0,
+                  -plan.fragment(rowIndex, rowIndex + 1).top,
+                ),
               ),
           ];
           final scene = ForumBodyTextPicturePreparation(
@@ -239,6 +243,29 @@ void main() {
     expect(cache.activeLeases, 0);
     _finish(work, cache);
     work.takePlan();
+    expect(cache.activeLeases, 0);
+  });
+
+  test('row contributions equal the actual rebased scene byte contract', () {
+    final cache = _cache(), work = _work(_fixture(), cache);
+    _finish(work, cache);
+    final plan = work.takePlan();
+    for (var start = 0; start < plan.lines.length; start++) {
+      for (var end = start + 1; end <= plan.lines.length; end++) {
+        final metadata = <Object, int>{};
+        var bytes =
+            ForumBodyTextPictureInput.baseEstimatedInputBytes +
+            ForumBodyTextPictureInput.baseEstimatedPictureBytes;
+        for (var row = start; row < end; row++) {
+          final part = plan.sceneContributionForRow(row);
+          expect(part.translationOriginY, isNull);
+          bytes += part.inputCommandBytes + part.pictureCommandBytes;
+          metadata.addAll(part.retainedMetadata);
+        }
+        bytes += metadata.values.fold<int>(0, (sum, value) => sum + value);
+        expect(plan.parentPictureInput(start, end).estimatedBytes, bytes);
+      }
+    }
     expect(cache.activeLeases, 0);
   });
 

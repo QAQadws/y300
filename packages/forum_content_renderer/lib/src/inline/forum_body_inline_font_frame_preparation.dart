@@ -91,6 +91,7 @@ final class ForumBodyInlineFontFramePreparation {
   ForumBodyInlineEmphasisPaintBinding? _paint;
   List<ForumBodyParagraphLine> _lines = [];
   List<List<ForumBodyTextPictureCommand>> _commands = [];
+  List<int> _commandPrefix = [0];
   ForumBodyInlineFontFramePlan? _result;
   int _row = 0;
   bool _operating = false, _cacheMiss = false;
@@ -252,6 +253,7 @@ final class ForumBodyInlineFontFramePreparation {
               }
               _lines.add(_allocation!.rows[_row].line);
               _commands.add(List.unmodifiable(commands));
+              _commandPrefix.add(_commandPrefix.last + commands.length);
               _row++;
             } else {
               _result = ForumBodyInlineFontFramePlan._(
@@ -260,9 +262,11 @@ final class ForumBodyInlineFontFramePreparation {
                 _paint!.view.reference,
                 _lines,
                 _commands,
+                _commandPrefix,
               );
               _lines = [];
               _commands = [];
+              _commandPrefix = [0];
               _phase = _FramePhase.ready;
             }
             used++;
@@ -377,5 +381,6 @@ final class ForumBodyInlineFontFramePreparation {
     _additionalOwned = null;
     _lines = [];
     _commands = [];
+    _commandPrefix = [0];
   }
 }

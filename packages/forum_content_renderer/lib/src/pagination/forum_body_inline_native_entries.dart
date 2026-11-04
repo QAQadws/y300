@@ -8,9 +8,9 @@ import 'forum_body_text_page_content.dart';
 /// This is not a cache or a proof of readable ownership. Published pages retain
 /// only numeric fragments; this index retires with the active composer input.
 final class ForumBodyInlineNativeEntries {
-  ForumBodyInlineNativeEntries._(this._input, this._parent, this._atoms);
+  ForumBodyInlineNativeEntries._(this._input, this._parents, this._atoms);
   final ForumBodyInlinePageContent _input;
-  final ForumBodyNativeInputCost _parent;
+  final List<ForumBodyNativeInputCost> _parents;
   final List<List<ForumBodyNativeInputCost>> _atoms;
 
   Iterable<Object> inRange(int start, int end) =>
@@ -19,7 +19,7 @@ final class ForumBodyInlineNativeEntries {
   Iterable<ForumBodyNativeInputCost> costsInRange(int start, int end) sync* {
     // Reuse the authoritative legal atom/range checks and indexed boundaries.
     _input.nativeHandleCountInRange(start, end);
-    yield _parent;
+    yield* _parents;
     final ranges = _input.content.projection.atoms;
     var low = 0, high = ranges.length;
     while (low < high) {
@@ -61,9 +61,12 @@ final class ForumBodyInlineNativeEntriesPreparation {
     if (!cache.ownsLease(parent) || !identical(input.content, parent.content)) {
       throw ArgumentError('Foreign inline native entry input');
     }
+    _parentsReady = input.fontFrames == null;
   }
   ForumBodyInlinePageContent? _input;
   ForumBodyNativeInputCost? _parent;
+  List<ForumBodyNativeInputCost>? _parentCosts;
+  bool _parentsReady = false;
   ForumBodyParagraphCache? _cache;
   TextScaler? _scaler;
   void Function()? _ensureOwner;
@@ -83,7 +86,28 @@ final class ForumBodyInlineNativeEntriesPreparation {
       _guard();
       var used = 0;
       while (!_ready && used < maxParts) {
-        if (_atoms.length == _input!.rubyAtoms.length) {
+        if (!_parentsReady) {
+          final probe = _probe ??= _cache!.createBudgetProbe(
+            captureInputEstimates: true,
+          );
+          final requests = _requests ??=
+              _input!.fontFrames!.paintReference.nativeFootprint.iterator;
+          if (requests.moveNext()) {
+            final slot = requests.current;
+            slot.request.includeBudget(
+              probe,
+              width: slot.width,
+              textScaler: _input!.fontFrames!.textScaler,
+              minimumLineCount: slot.minimumLineCount,
+            );
+          } else {
+            _parentCosts = [_parent!, ...probe.snapshotNativeEstimates()];
+            probe.close();
+            _probe = null;
+            _requests = null;
+            _parentsReady = true;
+          }
+        } else if (_atoms.length == _input!.rubyAtoms.length) {
           _ready = true;
         } else {
           final requests = _requests ??=
@@ -125,7 +149,11 @@ final class ForumBodyInlineNativeEntriesPreparation {
     try {
       _guard();
       if (!_ready) throw StateError('Native entry preparation is incomplete');
-      final result = ForumBodyInlineNativeEntries._(_input!, _parent!, _atoms);
+      final result = ForumBodyInlineNativeEntries._(
+        _input!,
+        _parentCosts ?? [_parent!],
+        _atoms,
+      );
       _atoms = [];
       close();
       return result;
@@ -153,6 +181,7 @@ final class ForumBodyInlineNativeEntriesPreparation {
     _requests = null;
     _input = null;
     _parent = null;
+    _parentCosts = null;
     _cache = null;
     _scaler = null;
     _ensureOwner = null;

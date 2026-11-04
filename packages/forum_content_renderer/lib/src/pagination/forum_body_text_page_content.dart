@@ -2,6 +2,7 @@ import 'package:flutter/painting.dart';
 import '../document/forum_body_document.dart';
 
 import '../inline/forum_body_inline_span_content.dart';
+import '../inline/forum_body_inline_font_frame_plan.dart';
 import '../inline/forum_body_emphasis_paragraph_metrics.dart';
 import '../inline/forum_body_fitted_emphasis_plan.dart';
 import '../inline/forum_body_inline_paragraph_request.dart';
@@ -213,7 +214,8 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
     Map<int, ForumBodyRubyContainerFontBox> containerBackgrounds = const {},
     Map<int, ForumBodyRubyRootFontBox> rootFonts = const {},
     this.layoutMode = ForumBodyParagraphLayoutMode.wrap,
-  }) : dimensions = List.unmodifiable(dimensions),
+  }) : fontFrames = null,
+       dimensions = List.unmodifiable(dimensions),
        rubyAtoms = List.unmodifiable(rubyAtoms),
        trimmedAtomIndices = Set.unmodifiable(trimmedAtomIndices),
        containerBackgrounds = Map.unmodifiable(containerBackgrounds),
@@ -355,6 +357,35 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
       }
     }
   }
+  factory ForumBodyInlinePageContent.withFontFrames(
+    ForumBodyInlineFontFramePlan plan,
+  ) => ForumBodyInlinePageContent._framed(
+    plan.allocation.input.natural.page,
+    plan,
+  );
+  ForumBodyInlinePageContent._framed(
+    ForumBodyInlinePageContent source,
+    ForumBodyInlineFontFramePlan plan,
+  ) : content = source.content,
+      dimensions = source.dimensions,
+      rubyAtoms = source.rubyAtoms,
+      trimmedAtomIndices = source.trimmedAtomIndices,
+      containerBackgrounds = source.containerBackgrounds,
+      rootFonts = source.rootFonts,
+      _nativeHandlePrefix = source._nativeHandlePrefix,
+      layoutMode = source.layoutMode,
+      fontFrames = plan,
+      super._() {
+    if (source.fontFrames != null ||
+        source.layoutMode != ForumBodyParagraphLayoutMode.wrap ||
+        !identical(source.content, plan.source.content) ||
+        plan.allocation.marks.isNotEmpty) {
+      throw ArgumentError(
+        'Font frames require their original mark-free source',
+      );
+    }
+  }
+  final ForumBodyInlineFontFramePlan? fontFrames;
   final ForumBodyInlineSpanContent content;
   final List<PlaceholderDimensions> dimensions;
 
@@ -396,10 +427,13 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
   @override
   late final retainedTextCodeUnits =
       textCodeUnits +
-      rubyAtoms.fold<int>(0, (sum, atom) => sum + atom.extraTextCodeUnits);
+      rubyAtoms.fold<int>(0, (sum, atom) => sum + atom.extraTextCodeUnits) +
+      (fontFrames?.source.retainedTextCodeUnits ?? 0);
   @override
   late final retainedRuns =
-      runCount + rubyAtoms.fold<int>(0, (sum, atom) => sum + atom.extraRuns);
+      runCount +
+      rubyAtoms.fold<int>(0, (sum, atom) => sum + atom.extraRuns) +
+      (fontFrames?.source.retainedRuns ?? 0);
   // Intrinsic shaping ignores a valid request width. Preserve an empty physical
   // frame's zero width while still passing native input admission explicitly.
   @override
@@ -423,6 +457,33 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
       fragment.coverageEndUtf16,
       content.projection.display.text.length,
     );
+    if (fontFrames case final frames?) {
+      try {
+        final selected = frames.fragment(fragment.startLine, fragment.endLine);
+        if (fragment.width != frames.width ||
+            fragment.height != selected.height ||
+            fragment.coverageStartUtf16 != selected.coverageStartUtf16 ||
+            fragment.coverageEndUtf16 != selected.coverageEndUtf16 ||
+            fragment.sourceHint !=
+                forumBodySourceHint(
+                  content.projection.display,
+                  selected.coverageStartUtf16,
+                  selected.coverageEndUtf16,
+                )) {
+          throw const ForumBodyTextPageSurfaceException(
+            ForumBodyTextPageSurfaceFailure.geometry,
+          );
+        }
+      } on RangeError {
+        throw const ForumBodyTextPageSurfaceException(
+          ForumBodyTextPageSurfaceFailure.geometry,
+        );
+      } on ForumBodyParagraphLayoutException {
+        throw const ForumBodyTextPageSurfaceException(
+          ForumBodyTextPageSurfaceFailure.geometry,
+        );
+      }
+    }
     final result = <int>[];
     for (final atom in content.projection.atoms) {
       if (atom.displayEndUtf16 <= fragment.coverageStartUtf16) continue;
@@ -440,10 +501,28 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
 
   @override
   int nativeHandleCountFor(ForumBodyTextPageFragment fragment) =>
-      1 +
+      (fontFrames?.visibleParentHandleCount(
+            fragment.startLine,
+            fragment.endLine,
+          ) ??
+          1) +
       visibleAtoms(
         fragment,
       ).fold<int>(0, (sum, index) => sum + rubyAtoms[index].nativeHandleCount);
+
+  @override
+  int nativePreparationHandleCountFor(ForumBodyTextPageFragment fragment) =>
+      nativeHandleCountFor(fragment) +
+      (fontFrames == null
+          ? 0
+          : fontFrames!.preparationParentHandleCount(
+                  fragment.startLine,
+                  fragment.endLine,
+                ) -
+                fontFrames!.visibleParentHandleCount(
+                  fragment.startLine,
+                  fragment.endLine,
+                ));
 
   @override
   Iterable<ForumBodyNativeRequestSlot> nativeFootprintFor(
@@ -468,8 +547,11 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
     yield (
       request: parentRequest,
       width: requestWidthFor(fragment),
-      minimumLineCount: fragment.endLine,
+      minimumLineCount: fontFrames?.lines.length ?? fragment.endLine,
     );
+    if (fontFrames case final frames?) {
+      yield* frames.paintReference.nativeFootprint;
+    }
     for (final atom in visibleAtoms(fragment)) {
       yield* rubyAtoms[atom].nativeBudgetFootprint;
     }
@@ -506,8 +588,13 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
         ForumBodyTextPageSurfaceFailure.geometry,
       );
     }
-    return 1 + _nativeHandlePrefix[after] - _nativeHandlePrefix[first];
+    return (fontFrames == null ? 1 : 3) +
+        _nativeHandlePrefix[after] -
+        _nativeHandlePrefix[first];
   }
+
+  int nativePreparationHandleCountInRange(int start, int end) =>
+      nativeHandleCountInRange(start, end) + (fontFrames == null ? 0 : 7);
 }
 
 List<ForumBodyRubyAtomPlan> _columnAtoms(

@@ -30,6 +30,19 @@ final class ForumBodyInlinePaintRowSelector {
   final int? windowEndLine;
   bool get isNaturalWindow => windowEndLine != null;
   bool matchesInput(Object identity) => nativeInputIdentity == identity;
+
+  /// Pure physical rebasing only. A scene still requires a current qualified
+  /// row view with this same selector; translation grants no source authority.
+  ForumBodyInlinePaintRowSelector shifted(Offset by) =>
+      ForumBodyInlinePaintRowSelector._(
+        nativeInputIdentity,
+        lineIndex,
+        clipTop,
+        clipBottom,
+        isEmpty,
+        ForumBodyInlinePaintRowView._offset(by, nativeOffset),
+        windowEndLine: windowEndLine,
+      );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||

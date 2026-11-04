@@ -21,6 +21,14 @@ final class ForumBodyEmphasisGroupNativeEntries {
   final Map<Object, int> retainedMetadata;
   final int commandCount, inputCommandBytes, pictureCommandBytes;
   final int maximumTranslationDepth;
+  ForumBodyTextSceneContribution get sceneContribution => (
+    translationOriginY: group.top,
+    retainedMetadata: retainedMetadata,
+    commandCount: commandCount,
+    inputCommandBytes: inputCommandBytes,
+    pictureCommandBytes: pictureCommandBytes,
+    maximumTranslationDepth: maximumTranslationDepth,
+  );
 }
 
 /// Pure per-group budget index for the exact whole paragraph. It owns neither
