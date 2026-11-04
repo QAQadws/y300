@@ -11,6 +11,7 @@ import '../paragraph/forum_body_paragraph_geometry.dart'
     show forumBodyPaintedTextRanges;
 import 'forum_body_list_marker_plan.dart';
 import 'forum_body_text_page_composer.dart';
+import 'forum_body_text_page_content.dart';
 
 /// One complete prepared fragment. Each concurrently mounted view must own
 /// distinct handles even when they share the same cache entry. These values
@@ -54,6 +55,50 @@ sealed class ForumBodyPreparedTextFragment {
   /// evidence; ordinary UI selections still retain their native boxes.
   List<TextBox> glyphBoxes(int startUtf16, int endUtf16);
   void close();
+}
+
+/// A resource delivery has no fabricated text projection or native lease.
+/// Its durable owner guard outlives PageJob transfer and retires on session exit.
+final class ForumBodyPreparedImageFragment
+    extends ForumBodyPreparedTextFragment {
+  ForumBodyPreparedImageFragment({
+    required this.content,
+    required void Function() ensureOwner,
+  }) : _ensureOwner = ensureOwner,
+       super._();
+  final ForumBodyImagePageContent content;
+  void Function()? _ensureOwner;
+  static final _emptyProjection = HtmlDisplayTextProjection.build(const []);
+  @override
+  bool get isActive {
+    final guard = _ensureOwner;
+    if (guard == null) return false;
+    try {
+      guard();
+      return _ensureOwner != null;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  Iterable<ForumBodyNativeParagraphLease> get nativeLeases => const [];
+  @override
+  HtmlDisplayTextProjection get projection => _emptyProjection;
+  @override
+  List<ForumBodyParagraphRun> get runs => const [];
+  @override
+  Iterable<ForumBodyParagraphLine> get lines => const [];
+  @override
+  List<TextBox> glyphBoxes(int startUtf16, int endUtf16) {
+    RangeError.checkValidRange(startUtf16, endUtf16, 0);
+    return const [];
+  }
+
+  @override
+  void close() {
+    _ensureOwner = null;
+  }
 }
 
 /// The body keeps its original source/geometry. The picture owns no source.

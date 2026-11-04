@@ -88,6 +88,18 @@ final class ForumBodyBlockFlowInline extends ForumBodyBlockFlowUnit {
   final List<ForumBodyListItemMarker> listMarkers;
 }
 
+final class ForumBodyBlockFlowImage extends ForumBodyBlockFlowUnit {
+  ForumBodyBlockFlowImage._(
+    this.image,
+    this.contentLeft,
+    this.contentWidth,
+    this.listMarkers,
+  ) : super._(image.identity);
+  final ForumBodyTextFlowImage image;
+  final double contentLeft, contentWidth;
+  final List<ForumBodyListItemMarker> listMarkers;
+}
+
 /// A first-content marker specification tied to the actual owning item.
 /// It has no paragraph projection, source coordinate or measured glyph box.
 final class ForumBodyListItemMarker {
@@ -167,7 +179,7 @@ final class ForumBodyBlockFlowCursor {
       throw ArgumentError.value(width, 'width');
     }
   }
-  static const revision = 8;
+  static const revision = 9;
   final double width;
   final ForumBodyBlockEdgeMargins edgeMargins;
   final double _rootFontSize;
@@ -227,6 +239,17 @@ final class ForumBodyBlockFlowCursor {
         final unit = _flow.current;
         if (unit == null) continue;
         switch (unit) {
+          case ForumBodyTextFlowImage():
+            _flushMargins();
+            _hasFlowContent = true;
+            _pending.add(
+              ForumBodyBlockFlowImage._(
+                unit,
+                _frames.last.contentLeft,
+                _frames.last.contentWidth,
+                _takeListMarkers(),
+              ),
+            );
           case ForumBodyTextFlowParagraph():
             _flushMargins();
             _hasFlowContent = true;
@@ -274,6 +297,7 @@ final class ForumBodyBlockFlowCursor {
           ForumBodyElementKind.rule,
           ForumBodyElementKind.editStatus,
           ForumBodyElementKind.code,
+          ForumBodyElementKind.image,
           ForumBodyElementKind.inline,
           ForumBodyElementKind.unknown,
         }.contains(node.kind)) {
@@ -290,6 +314,7 @@ final class ForumBodyBlockFlowCursor {
           containingDirection:
               parent?.event.style.textDirection ?? _rootDirection,
           rootFontSize: _rootFontSize,
+          blockifyInline: node.kind == ForumBodyElementKind.image,
         );
         final left = (parent?.contentLeft ?? 0) + box.contentLeft;
         if (!left.isFinite) {

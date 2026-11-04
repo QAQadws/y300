@@ -19,6 +19,7 @@ import 'forum_body_inline_page_admission.dart';
 import '../inline/forum_body_inline_font_frame_plan.dart';
 import 'forum_body_emphasis_page_admission.dart';
 import 'forum_body_list_marker_plan.dart';
+import 'forum_body_image_frame.dart';
 
 enum ForumBodyTextPageSessionState { active, complete, failed, closed }
 
@@ -31,6 +32,8 @@ enum ForumBodyTextPageSessionFailure {
   decoration,
   preparationLimit,
   pageNotPrepared,
+  imageResource,
+  imageStructure,
 }
 
 final class ForumBodyTextPageSessionException implements Exception {
@@ -147,6 +150,7 @@ final class ForumBodyTextPageSession {
     int? maxNativeHandlesPerPage,
     int? maxNativeEntriesPerPage,
     int? maxNativeEstimatedBytesPerPage,
+    ForumBodyImageResolver? imageResolver,
   }) {
     limits._validate();
     if (maxNativeHandlesPerPage != null &&
@@ -182,6 +186,7 @@ final class ForumBodyTextPageSession {
         cache,
         limits,
         textScaler,
+        imageResolver,
       );
     } catch (_) {
       composer.close();
@@ -195,16 +200,19 @@ final class ForumBodyTextPageSession {
     this._cache,
     this.limits,
     this._textScaler,
+    this._imageResolver,
   ) : _content = _RetainedParagraphs(limits);
   final ForumBodyBlockFlowCursor _flow;
   final ForumBodyTextPageComposer _composer;
   final ForumBodyParagraphCache _cache;
   final TextScaler _textScaler;
+  final ForumBodyImageResolver? _imageResolver;
   final ForumBodyTextPageSessionLimits limits;
   final _RetainedParagraphs _content;
   final _issued = <ForumBodyPreparedTextFragment>{};
   final _preparations = <ForumBodyTextPagePreparation>{};
   int _reservedLeases = 0;
+  int _reservedFragments = 0;
   StreamController<void>? _retirementEvents;
   final _issues = <ForumBodyStyleIssue>[];
   ForumBodyTextPageSessionState _state = ForumBodyTextPageSessionState.active;
@@ -494,6 +502,10 @@ final class ForumBodyTextPageSession {
             completed: step.isComplete,
           );
         }
+        if (_composer.hasPendingImage) {
+          final step = _composer.advanceImage();
+          return result(completed: step.isComplete);
+        }
         if (_composer.hasPendingPadding) {
           final step = _composer.advancePadding();
           return result(
@@ -517,6 +529,60 @@ final class ForumBodyTextPageSession {
         if (unit == null) continue;
         units++;
         switch (unit) {
+          case ForumBodyBlockFlowImage():
+            final node = unit.image.event.node as ForumBodyElement;
+            if (unit.image.index != _content.items.length) {
+              throw StateError('Unordered image input');
+            }
+            // First-content list markers and inline stickers need their own
+            // real baseline layout. Do not silently consume a marker here.
+            if (unit.listMarkers.isNotEmpty ||
+                unit.image.event.style.visibilityHidden) {
+              throw const ForumBodyTextPageSessionException(
+                ForumBodyTextPageSessionFailure.imageStructure,
+              );
+            }
+            final input = _imageResolver?.call(unit.identity, node);
+            _ensureActivePlan();
+            if (input == null ||
+                input.identity != unit.identity ||
+                !identical(input.element, node)) {
+              throw const ForumBodyTextPageSessionException(
+                ForumBodyTextPageSessionFailure.imageResource,
+              );
+            }
+            final style = unit.image.event.style;
+            if (input.isSticker) {
+              throw const ForumBodyTextPageSessionException(
+                ForumBodyTextPageSessionFailure.imageStructure,
+              );
+            }
+            final frame = ForumBodyImageFrame.resolve(
+              input: input,
+              width: unit.contentWidth,
+              maxHeight: _composer.height,
+              align: style.textAlign,
+              direction: style.textDirection,
+            );
+            final content = ForumBodyImagePageContent(
+              input: input,
+              frame: frame,
+              fontRevision: _flow.fontRevision,
+              styleRevision: _flow.styleRevision,
+            );
+            _content.check(content);
+            _composer.appendImage(
+              input: input,
+              frame: frame,
+              inputIndex: unit.image.index,
+              fontRevision: _flow.fontRevision,
+              styleRevision: _flow.styleRevision,
+              left: unit.contentLeft,
+              spaceBefore: _margin,
+            );
+            _content.add(content);
+            _margin = 0;
+            admitted = 1;
           case ForumBodyBlockFlowListItemStart():
             _pendingListItem = unit;
           case ForumBodyBlockFlowSpace():
@@ -665,6 +731,14 @@ final class ForumBodyTextPageSession {
       _issued.remove(fragment);
     }
     final inputs = <ForumBodyTextPageContent>[];
+    // Images own no paragraph handles. Bound their issued delivery objects by
+    // the same capacity so repeated unmounted preparations cannot grow forever.
+    if (page.fragments.length >
+        limits.maxIssuedLeases - _issued.length - _reservedFragments) {
+      throw const ForumBodyTextPageSessionException(
+        ForumBodyTextPageSessionFailure.leaseLimit,
+      );
+    }
     var requested = 0;
     final available =
         limits.maxIssuedLeases - activeIssuedLeases - _reservedLeases;
@@ -690,12 +764,14 @@ final class ForumBodyTextPageSession {
     );
     _preparations.add(preparation);
     _reservedLeases += preparation.expectedNativeLeaseCount;
+    _reservedFragments += preparation.expectedFragmentCount;
     return preparation;
   }
 
   void _retirePreparation(ForumBodyTextPagePreparation preparation) {
     if (_preparations.remove(preparation)) {
       _reservedLeases -= preparation.expectedNativeLeaseCount;
+      _reservedFragments -= preparation.expectedFragmentCount;
     }
   }
 
@@ -834,6 +910,7 @@ final class ForumBodyTextPageSession {
     }
     _preparations.clear();
     _reservedLeases = 0;
+    _reservedFragments = 0;
     for (final fragment in _issued) {
       fragment.close();
     }

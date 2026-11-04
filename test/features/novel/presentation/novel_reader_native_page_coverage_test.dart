@@ -419,6 +419,9 @@ void main() {
           try {
             final fragment = fragments.single;
             final raw = switch (fragment) {
+              ForumBodyPreparedImageFragment() => throw StateError(
+                'Unexpected image in SPACE fixture',
+              ),
               ForumBodyPreparedListItemFragment() => throw StateError(
                 'Unexpected list in SPACE fixture',
               ),

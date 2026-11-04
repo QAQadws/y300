@@ -117,6 +117,7 @@ final class ForumBodyTextPagePreparation {
   ) : _initialProbePending = _inputs.any(
         (input) =>
             input is ForumBodyListItemPageContent ||
+            input is ForumBodyImagePageContent ||
             input is ForumBodyEmphasisPageContent ||
             input is ForumBodyFittedEmphasisPageContent ||
             (input is ForumBodyInlinePageContent &&
@@ -385,6 +386,18 @@ final class ForumBodyTextPagePreparation {
       }
       return !step.cacheMiss;
     }
+    if (input is ForumBodyImagePageContent) {
+      input.nativeHandleCountFor(fragment);
+      _guard();
+      _acceptBody(
+        ForumBodyPreparedImageFragment(
+          content: input,
+          ensureOwner: _ensureOwner!,
+        ),
+      );
+      _completedWork++;
+      return true;
+    }
     if (input is ForumBodyFittedEmphasisPageContent) {
       final work = _fitted ??= ForumBodyEmphasisLinePreparation.fromMetrics(
         input: input.plan.metrics.input,
@@ -585,6 +598,16 @@ final class ForumBodyTextPagePreparation {
     for (final (index, input) in _inputs.indexed) {
       final body = input.bodyContent;
       final fragment = page.fragments[index];
+      if (body is ForumBodyImagePageContent) {
+        // Even a zero-native resource consumes a bounded inspection unit.
+        yield (
+          startsFragment: true,
+          inspect: () {
+            input.nativeHandleCountFor(fragment);
+          },
+        );
+        continue;
+      }
       var parent = true;
       for (final slot in input.nativeBudgetFootprintFor(fragment)) {
         yield (

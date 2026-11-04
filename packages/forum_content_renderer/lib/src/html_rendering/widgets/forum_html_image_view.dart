@@ -23,6 +23,7 @@ class ForumHtmlImageView extends StatefulWidget {
     this.onImageResolved,
     this.onImageLayoutShift,
     this.viewportCoordinator,
+    this.fit,
   });
 
   final ForumHtmlImageHost host;
@@ -32,6 +33,9 @@ class ForumHtmlImageView extends StatefulWidget {
   final ValueChanged<Size>? onImageResolved;
   final void Function(ForumHtmlImageLayoutShift shift)? onImageLayoutShift;
   final ForumHtmlImageViewportCoordinator? viewportCoordinator;
+
+  /// Native fixed-page frames use contain; HTML keeps its existing fit policy.
+  final BoxFit? fit;
 
   @override
   State<ForumHtmlImageView> createState() => _ForumHtmlImageViewState();
@@ -240,7 +244,7 @@ class _ForumHtmlImageViewState extends State<ForumHtmlImageView> {
 
     return widget.host.buildImage(
       image: widget.image,
-      fit: sticker ? BoxFit.contain : BoxFit.fitWidth,
+      fit: widget.fit ?? (sticker ? BoxFit.contain : BoxFit.fitWidth),
       width: sticker ? size?.width : null,
       height: sticker ? size?.height : null,
       placeholder: sticker ? const SizedBox.shrink() : const _ImageSurface(),

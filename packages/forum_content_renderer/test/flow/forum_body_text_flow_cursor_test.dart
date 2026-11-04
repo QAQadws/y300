@@ -170,6 +170,7 @@ void main() {
             ForumBodyTextFlowParagraph() =>
               'text:${unit.content.projection.text}',
             ForumBodyTextFlowInline() => 'inline:${unit.index}',
+            ForumBodyTextFlowImage() => 'image:${unit.index}',
             ForumBodyTextFlowBoundary() =>
               '${unit.kind.name}:${unit.event?.node.path}',
           },
@@ -301,11 +302,18 @@ void main() {
       expect(cursor.takePendingIssues, throwsStateError);
       final resource = _cursor(_document('<span>a<img src="x">b</span>'));
       addTearDown(resource.close);
+      final units = _drain(resource);
       expect(
-        () => _drain(resource),
-        throwsA(isA<ForumBodyParagraphInputException>()),
+        units.whereType<ForumBodyTextFlowImage>().single.event.node.path,
+        '0/1',
       );
-      expect(resource.isClosed, isTrue);
+      expect(
+        units.whereType<ForumBodyTextFlowParagraph>().map(
+          (unit) => unit.content.projection.text,
+        ),
+        ['a', 'b'],
+      );
+      expect(resource.isComplete, isTrue);
     },
   );
 }

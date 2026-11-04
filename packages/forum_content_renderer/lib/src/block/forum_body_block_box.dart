@@ -35,9 +35,11 @@ final class ForumBodyBlockBox {
     required double containingWidth,
     required TextDirection containingDirection,
     required double rootFontSize,
+    bool blockifyInline = false,
   }) {
     if (style.display != ForumBodyDisplay.block &&
-        style.display != ForumBodyDisplay.listItem) {
+        style.display != ForumBodyDisplay.listItem &&
+        !(blockifyInline && style.display == ForumBodyDisplay.inline)) {
       throw const ForumBodyBlockBoxException(ForumBodyBlockBoxFailure.display);
     }
     final fontSize = style.textStyle.fontSize;

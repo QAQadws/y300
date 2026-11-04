@@ -95,6 +95,11 @@ ForumBodyTextPage validateForumBodyPreparedTextPageBinding({
       _fail(ForumBodyTextPageSurfaceFailure.leases);
     }
     switch (binding) {
+      case ForumBodyPreparedImageFragment():
+        if (binding.content.identity != snapshot.identity) {
+          _fail(ForumBodyTextPageSurfaceFailure.identity);
+        }
+        binding.content.nativeHandleCountFor(fragment);
       case ForumBodyPreparedListItemFragment():
         _fail(ForumBodyTextPageSurfaceFailure.identity);
       case ForumBodyPreparedParagraphFragment():

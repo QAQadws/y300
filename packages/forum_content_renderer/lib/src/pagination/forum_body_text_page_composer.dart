@@ -15,6 +15,7 @@ import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_layout.dart';
 import 'forum_body_source_hint.dart';
 import 'forum_body_list_marker_plan.dart';
+import 'forum_body_image_frame.dart';
 
 part 'forum_body_emphasis_scene_reservation.dart';
 part 'forum_body_text_page_background.dart';
@@ -36,6 +37,7 @@ enum ForumBodyTextPageFragmentKind {
   inline,
   emphasis,
   fittedEmphasis,
+  image,
 }
 
 final class ForumBodyTextPageException implements Exception {
@@ -64,6 +66,7 @@ final class ForumBodyTextPageFragment {
     required this.height,
     required this.kind,
     this.listMarker,
+    this.imageFrame,
   });
   final int paragraphIndex;
   final String? path;
@@ -83,6 +86,7 @@ final class ForumBodyTextPageFragment {
   final double height;
   final ForumBodyTextPageFragmentKind kind;
   final ForumBodyTextPageListMarker? listMarker;
+  final ForumBodyImageFrame? imageFrame;
 }
 
 /// Numeric decoration envelope only; no font input or source position.
@@ -211,7 +215,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 17;
+  static const revision = 18;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;
@@ -237,6 +241,7 @@ final class ForumBodyTextPageComposer {
   _ActiveParagraph? _active;
   _ActivePadding? _padding;
   _ActiveRule? _rule;
+  _ActiveImage? _image;
   int _nextParagraphIndex = 0;
   int _fragmentCount = 0;
   double _usedHeight = 0;
@@ -251,9 +256,11 @@ final class ForumBodyTextPageComposer {
       !_complete &&
       _active == null &&
       _padding == null &&
-      _rule == null;
+      _rule == null &&
+      _image == null;
   bool get hasPendingPadding => _padding != null;
   bool get hasPendingRule => _rule != null;
+  bool get hasPendingImage => _image != null;
 
   /// Admission order only; consumed input can extend beyond the stable pages.
   /// This ordinal must not be persisted as a confirmed reading position.
@@ -300,6 +307,98 @@ final class ForumBodyTextPageComposer {
 
   void _touchBackgrounds(double top) {
     _fragmentCount += _backgrounds.touch(top, maxFragments - _fragmentCount);
+  }
+
+  /// Already resolved block geometry, sharing text's ordered input and page
+  /// metadata budgets. Resources never create native rows or text coverage.
+  void appendImage({
+    required ForumBodyImageInput input,
+    required ForumBodyImageFrame frame,
+    required int inputIndex,
+    required String fontRevision,
+    required int styleRevision,
+    required double left,
+    double spaceBefore = 0,
+  }) {
+    _ensureOpen();
+    if (!needsInput) throw StateError('Composition input is still pending');
+    if (input.identity != identity || inputIndex != _nextParagraphIndex) {
+      throw ArgumentError('Unordered or foreign image input');
+    }
+    if (!left.isFinite ||
+        !spaceBefore.isFinite ||
+        frame.height > height ||
+        left < 0 ||
+        left + frame.width > width) {
+      throw ArgumentError('Invalid image composition inputs');
+    }
+    _image = _ActiveImage(
+      input.element.path,
+      frame,
+      inputIndex,
+      fontRevision,
+      styleRevision,
+      left,
+      spaceBefore,
+    );
+    _nextParagraphIndex++;
+  }
+
+  /// Stop after sealing a preceding page. The same indivisible resource is
+  /// placed on the next call; an earlier published prefix is never changed.
+  ({int pagesPublished, bool isComplete}) advanceImage() {
+    _ensureOpen();
+    final active = _image;
+    if (active == null) throw StateError('No image is pending');
+    final before = _pages.length;
+    try {
+      final atStart = _draft.isEmpty && _rules.isEmpty && _usedHeight == 0;
+      final top = math.max(
+        0.0,
+        _flowHeight + (atStart ? 0 : active.spaceBefore),
+      );
+      final bottom = top + active.frame.height;
+      if (!bottom.isFinite) _fail(ForumBodyTextPageFailure.invalidGeometry);
+      if (bottom > height) {
+        if (atStart) _fail(ForumBodyTextPageFailure.oversizedGroup);
+        _seal();
+        return (pagesPublished: 1, isComplete: false);
+      }
+      _touchBackgrounds(top);
+      if (_fragmentCount >= maxFragments) {
+        _fail(ForumBodyTextPageFailure.fragmentLimit);
+      }
+      _draft.add(
+        ForumBodyTextPageFragment._(
+          paragraphIndex: active.index,
+          path: active.path,
+          fontRevision: active.fontRevision,
+          styleRevision: active.styleRevision,
+          startLine: 0,
+          endLine: 0,
+          coverageStartUtf16: 0,
+          coverageEndUtf16: 0,
+          sourceHint: null,
+          left: active.left,
+          top: top,
+          width: active.frame.width,
+          height: active.frame.height,
+          kind: ForumBodyTextPageFragmentKind.image,
+          imageFrame: active.frame,
+        ),
+      );
+      _fragmentCount++;
+      _lastFragmentNativeHandles = 0;
+      _lastSceneReservation = null;
+      _flowHeight = bottom;
+      _usedHeight = math.max(_usedHeight, bottom);
+      _image = null;
+      if (_usedHeight == height && !_backgrounds.needsEndBoundary) _seal();
+      return (pagesPublished: _pages.length - before, isComplete: true);
+    } catch (_) {
+      close();
+      rethrow;
+    }
   }
 
   void appendRule({
@@ -1018,6 +1117,7 @@ final class ForumBodyTextPageComposer {
     _active = null;
     _padding = null;
     _rule = null;
+    _image = null;
     _fragmentCount -= _draft.length + _rules.length + _backgrounds.itemCount;
     _draft.clear();
     _rules.clear();
@@ -1032,6 +1132,22 @@ final class ForumBodyTextPageComposer {
     _usedHeight = 0;
     _flowHeight = 0;
   }
+}
+
+final class _ActiveImage {
+  const _ActiveImage(
+    this.path,
+    this.frame,
+    this.index,
+    this.fontRevision,
+    this.styleRevision,
+    this.left,
+    this.spaceBefore,
+  );
+  final String path, fontRevision;
+  final ForumBodyImageFrame frame;
+  final int index, styleRevision;
+  final double left, spaceBefore;
 }
 
 final class _ActiveRule {

@@ -50,6 +50,8 @@ ForumBodyTextSelectionSnapshot? forumBodyTextSelectionAt({
   var end = fragment.coverageEndUtf16;
   ForumBodyTextRole role;
   switch (body) {
+    case ForumBodyPreparedImageFragment():
+      return null;
     case ForumBodyPreparedListItemFragment():
       return null;
     case ForumBodyPreparedParagraphFragment():

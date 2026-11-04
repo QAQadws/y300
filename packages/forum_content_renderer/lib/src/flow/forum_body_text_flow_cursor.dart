@@ -33,6 +33,14 @@ final class ForumBodyTextFlowInline extends ForumBodyTextFlowUnit {
   final ForumBodyParagraphWindow window;
 }
 
+/// A resource keeps its actual source object and a distinct ordered input;
+/// zero textual length never becomes an invented paragraph or glyph.
+final class ForumBodyTextFlowImage extends ForumBodyTextFlowUnit {
+  ForumBodyTextFlowImage._(super.identity, this.index, this.event) : super._();
+  final int index;
+  final ForumBodyStyledFlowEvent event;
+}
+
 enum ForumBodyTextFlowBoundaryKind { openBlock, closeBlock, endDocument }
 
 /// Block structure remains explicit for the block renderer. A terminal BR
@@ -65,11 +73,13 @@ final class ForumBodyTextFlowCursor {
     this.paragraphBuilder = const ForumBodyParagraphContentBuilder(),
     this.rubyLimits = const ForumBodyRubyContentLimits(),
   }) : _flow = ForumBodyStyledFlowCursor(document: document, reader: reader);
-  static const revision = 7;
+  static const revision = 8;
   final ForumBodyParagraphContentBuilder paragraphBuilder;
   final ForumBodyRubyContentLimits rubyLimits;
   final ForumBodyStyledFlowCursor _flow;
   final _blocks = <ForumBodyStyledFlowEvent>[];
+  final _startedBlocks = <ForumBodyStyledFlowEvent>{};
+  ForumBodyTextFlowImage? _pendingImage;
   final _emptyListItems = <String, ForumBodyParagraphSequence>{};
   final _issues = <ForumBodyStyleIssue>[];
   ForumBodyTextFlowSequence? _before;
@@ -116,6 +126,12 @@ final class ForumBodyTextFlowCursor {
     if (_complete) return _step(read, work);
     try {
       while (true) {
+        if (_pendingImage case final image?) {
+          _pendingImage = null;
+          _markContent();
+          _current = image;
+          return _step(read, work + 1);
+        }
         if (_boundaryPending) {
           if (_flushContext()) return _step(read, work);
           final event = _boundary;
@@ -152,6 +168,14 @@ final class ForumBodyTextFlowCursor {
               : ForumBodyTextFlowBoundaryKind.closeBlock;
           if (kind == ForumBodyTextFlowBoundaryKind.openBlock) {
             _blocks.add(event!);
+            if ((event.node as ForumBodyElement).kind ==
+                ForumBodyElementKind.image) {
+              _pendingImage = ForumBodyTextFlowImage._(
+                identity,
+                _paragraphIndex++,
+                event,
+              );
+            }
             if (event.style.display == ForumBodyDisplay.listItem) {
               _emptyListItems[event.node.path] = paragraphBuilder.openSequence(
                 _flow,
@@ -162,7 +186,7 @@ final class ForumBodyTextFlowCursor {
             if (_blocks.isEmpty || !identical(_blocks.last.node, event!.node)) {
               throw StateError('Unbalanced text flow block');
             }
-            _blocks.removeLast();
+            _startedBlocks.remove(_blocks.removeLast());
             if ((event.node as ForumBodyElement).kind ==
                 ForumBodyElementKind.editStatus) {
               _followingEditStatusParent = _parentPath(event.node.path);
@@ -378,7 +402,9 @@ final class ForumBodyTextFlowCursor {
         block: _blocks.isEmpty ? null : _blocks.last,
         builder: paragraphBuilder,
         rubyLimits: rubyLimits,
-        appliesFirstLineIndent: !continuation,
+        appliesFirstLineIndent:
+            !continuation &&
+            (_blocks.isEmpty || !_startedBlocks.contains(_blocks.last)),
         layoutMode: _insideEditStatus
             ? ForumBodyParagraphLayoutMode.fitSingleLine
             : ForumBodyParagraphLayoutMode.wrap,
@@ -388,9 +414,7 @@ final class ForumBodyTextFlowCursor {
     ForumBodyTextFlowSequenceContent content,
     ForumBodyParagraphWindow window,
   ) {
-    for (final block in _blocks) {
-      _emptyListItems.remove(block.node.path)?.close();
-    }
+    _markContent();
     final index = _paragraphIndex++;
     _current = switch (content) {
       ForumBodyPlainSequenceContent() => ForumBodyTextFlowParagraph._(
@@ -406,16 +430,24 @@ final class ForumBodyTextFlowCursor {
     };
   }
 
+  void _markContent() {
+    _startedBlocks.addAll(_blocks);
+    for (final block in _blocks) {
+      _emptyListItems.remove(block.node.path)?.close();
+    }
+  }
+
   static bool _isBlock(ForumBodyStyledFlowEvent event) =>
       event.node is ForumBodyElement &&
       (event.node as ForumBodyElement).kind != ForumBodyElementKind.hardBreak &&
-      const {
-        ForumBodyDisplay.block,
-        ForumBodyDisplay.listItem,
-        ForumBodyDisplay.table,
-        ForumBodyDisplay.tableRow,
-        ForumBodyDisplay.tableCell,
-      }.contains(event.style.display);
+      ((event.node as ForumBodyElement).kind == ForumBodyElementKind.image ||
+          const {
+            ForumBodyDisplay.block,
+            ForumBodyDisplay.listItem,
+            ForumBodyDisplay.table,
+            ForumBodyDisplay.tableRow,
+            ForumBodyDisplay.tableCell,
+          }.contains(event.style.display));
 
   ({int eventsRead, int workDone, bool hasOutput, bool isComplete}) _step(
     int read,
@@ -452,6 +484,8 @@ final class ForumBodyTextFlowCursor {
     _trimmedBreak = null;
     _followingEditStatusParent = null;
     _blocks.clear();
+    _startedBlocks.clear();
+    _pendingImage = null;
     for (final proof in _emptyListItems.values) {
       proof.close();
     }

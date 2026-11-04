@@ -140,6 +140,7 @@ void main() {
           ForumBodyBlockFlowParagraph() =>
             'text:${unit.paragraph.content.projection.text}',
           ForumBodyBlockFlowInline() => 'inline:${unit.paragraph.index}',
+          ForumBodyBlockFlowImage() => 'image:${unit.image.index}',
           ForumBodyBlockFlowRule() => 'rule:${unit.path}',
           ForumBodyBlockFlowListItemStart() => 'list:${unit.marker.itemPath}',
           ForumBodyBlockFlowBoundary() =>
@@ -255,6 +256,7 @@ void main() {
               ForumBodyBlockFlowParagraph() =>
                 '${unit.paragraph.index}:${unit.paragraph.content.projection.text}:${unit.paragraph.window}:${unit.contentLeft}:${unit.contentWidth}',
               ForumBodyBlockFlowInline() => 'inline:${unit.paragraph.index}',
+              ForumBodyBlockFlowImage() => 'image:${unit.image.index}',
               ForumBodyBlockFlowRule() => 'rule:${unit.path}',
               ForumBodyBlockFlowListItemStart() =>
                 'list:${unit.marker.itemPath}',
@@ -280,10 +282,7 @@ void main() {
     expect(cursor.takePendingIssues, throwsStateError);
   });
 
-  for (final html in [
-    '<img style="display:block" src="x">',
-    '<table><tr><td>x</td></tr></table>',
-  ]) {
+  for (final html in ['<table><tr><td>x</td></tr></table>']) {
     test(
       'dedicated format nodes cannot disappear as ordinary empty blocks: $html',
       () {

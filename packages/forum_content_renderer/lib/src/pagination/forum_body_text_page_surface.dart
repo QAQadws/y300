@@ -4,6 +4,9 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../style/forum_body_quote_decoration.dart';
+import '../contracts/forum_html_display_image.dart';
+import '../contracts/forum_html_image_host.dart';
+import '../html_rendering/widgets/forum_html_image_view.dart';
 import '../paragraph/forum_body_paragraph_surface.dart';
 import '../inline/forum_body_inline_paragraph_surface.dart';
 import '../inline/forum_body_emphasis_fragment_surface.dart';
@@ -71,6 +74,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     required int pageIndex,
     required String layoutId,
     required List<ForumBodyPreparedTextFragment> fragments,
+    ForumHtmlImageHost? imageHost,
     void Function(ForumBodyTextPageFragment, HtmlProjectedSourcePosition)?
     onSourceTap,
     void Function(ForumBodyTextPageFragment, ForumBodyTextSelectionSnapshot)?
@@ -82,6 +86,29 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
       layoutId: layoutId,
       fragments: fragments,
     );
+    final images = <ForumBodyPreparedImageFragment, ForumHtmlDisplayImage>{};
+    for (final binding
+        in fragments.whereType<ForumBodyPreparedImageFragment>()) {
+      if (imageHost == null) _fail(ForumBodyTextPageSurfaceFailure.leases);
+      final entry = binding.content.input.entry;
+      final uri = Uri.tryParse(entry.url);
+      if (uri == null) _fail(ForumBodyTextPageSurfaceFailure.identity);
+      final display = imageHost.resolveImage(
+        url: uri,
+        imageIndex: entry.index,
+        isSticker: false,
+        htmlSize: entry.htmlWidth != null && entry.htmlHeight != null
+            ? Size(entry.htmlWidth!, entry.htmlHeight!)
+            : null,
+      );
+      if (display == null ||
+          display.sourceUrl != entry.url ||
+          display.cacheKey != entry.cacheKey ||
+          display.isSticker) {
+        _fail(ForumBodyTextPageSurfaceFailure.identity);
+      }
+      images[binding] = display;
+    }
     return ForumBodyTextPageSurface._(
       key,
       page,
@@ -91,6 +118,8 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
       List.unmodifiable(fragments),
       onSourceTap,
       onSourceLongPress,
+      imageHost,
+      Map.unmodifiable(images),
     );
   }
 
@@ -103,6 +132,8 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     this._bindings,
     this._onSourceTap,
     this._onSourceLongPress,
+    this._imageHost,
+    this._images,
   ) : super(key: key);
   final ForumBodyTextPage _page;
   final String _layoutId;
@@ -116,12 +147,15 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     ForumBodyTextSelectionSnapshot,
   )?
   _onSourceLongPress;
+  final ForumHtmlImageHost? _imageHost;
+  final Map<ForumBodyPreparedImageFragment, ForumHtmlDisplayImage> _images;
 
   static Never _fail(ForumBodyTextPageSurfaceFailure failure) =>
       throw ForumBodyTextPageSurfaceException(failure);
 
   static Object _bindingKey(ForumBodyPreparedTextFragment binding) =>
       switch (binding) {
+        ForumBodyPreparedImageFragment() => binding,
         ForumBodyPreparedListItemFragment() => binding.picture,
         ForumBodyPreparedParagraphFragment() => binding.lease,
         ForumBodyPreparedInlineFragment() => binding.view,
@@ -158,6 +192,11 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
         : (HtmlProjectedSourcePosition position) =>
               _onSourceTap(fragment, position);
     return switch (binding) {
+      ForumBodyPreparedImageFragment() => _ImageFragmentSurface(
+        binding: binding,
+        host: _imageHost!,
+        image: _images[binding]!,
+      ),
       ForumBodyPreparedListItemFragment() => throw StateError(
         'Nested list delivery',
       ),
@@ -229,39 +268,95 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
                 top: fragment.top,
                 width: fragment.width,
                 height: fragment.height,
-                child: _TextLongPressSurface(
-                  identity: (
-                    _layoutId,
-                    _page.index,
-                    fragment.paragraphIndex,
-                    fragment.startLine,
-                    fragment.endLine,
-                    fragment.left,
-                    fragment.top,
-                    fragment.width,
-                    fragment.height,
-                  ),
-                  onLongPress: _onSourceLongPress == null
-                      ? null
-                      : (point) {
-                          final selected = forumBodyTextSelectionAt(
-                            binding: _bindings[index],
-                            fragment: fragment,
-                            pageSize: Size(_width, _height),
-                            point: point,
-                          );
-                          if (selected != null) {
-                            _onSourceLongPress(fragment, selected);
-                          }
-                        },
-                  child: _fragmentSurface(fragment, _bindings[index]),
-                ),
+                child: _bindings[index] is ForumBodyPreparedImageFragment
+                    ? _fragmentSurface(fragment, _bindings[index])
+                    : _TextLongPressSurface(
+                        identity: (
+                          _layoutId,
+                          _page.index,
+                          fragment.paragraphIndex,
+                          fragment.startLine,
+                          fragment.endLine,
+                          fragment.left,
+                          fragment.top,
+                          fragment.width,
+                          fragment.height,
+                        ),
+                        onLongPress: _onSourceLongPress == null
+                            ? null
+                            : (point) {
+                                final selected = forumBodyTextSelectionAt(
+                                  binding: _bindings[index],
+                                  fragment: fragment,
+                                  pageSize: Size(_width, _height),
+                                  point: point,
+                                );
+                                if (selected != null) {
+                                  _onSourceLongPress(fragment, selected);
+                                }
+                              },
+                        child: _fragmentSurface(fragment, _bindings[index]),
+                      ),
               ),
           ],
         ),
       );
     },
   );
+}
+
+/// Resource pixels may change, but published placement is fixed. The Host
+/// uses ForumHtmlImageView with contain fit; new hints reflow via a new
+/// layout generation. This surface owns the transient delivery on mount.
+final class _ImageFragmentSurface extends StatefulWidget {
+  const _ImageFragmentSurface({
+    required this.binding,
+    required this.host,
+    required this.image,
+  });
+  final ForumBodyPreparedImageFragment binding;
+  final ForumHtmlImageHost host;
+  final ForumHtmlDisplayImage image;
+  @override
+  State<_ImageFragmentSurface> createState() => _ImageFragmentSurfaceState();
+}
+
+final class _ImageFragmentSurfaceState extends State<_ImageFragmentSurface> {
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.binding.isActive) {
+      throw const ForumBodyTextPageSurfaceException(
+        ForumBodyTextPageSurfaceFailure.leases,
+      );
+    }
+    return Stack(
+      clipBehavior: Clip.hardEdge,
+      children: [
+        Positioned.fromRect(
+          rect: widget.binding.content.frame.imageRect,
+          child: ForumHtmlImageView(
+            host: widget.host,
+            image: widget.image,
+            fit: BoxFit.contain,
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _ImageFragmentSurface oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.binding, widget.binding)) {
+      oldWidget.binding.close();
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.binding.close();
+    super.dispose();
+  }
 }
 
 /// Retire gesture geometry without remounting/releasing the borrowed body.

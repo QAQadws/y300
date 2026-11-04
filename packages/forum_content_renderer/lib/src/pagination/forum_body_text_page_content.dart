@@ -21,6 +21,7 @@ import 'forum_body_text_page_binding.dart';
 import 'forum_body_text_page_composer.dart';
 import 'forum_body_source_hint.dart';
 import 'forum_body_list_marker_plan.dart';
+import 'forum_body_image_frame.dart';
 
 export '../inline/forum_body_ruby_column_request.dart';
 
@@ -79,6 +80,64 @@ sealed class ForumBodyTextPageContent {
   Iterable<ForumBodyNativeBudgetSlot> nativeBudgetFootprintFor(
     ForumBodyTextPageFragment fragment,
   ) => nativeFootprintFor(fragment);
+}
+
+/// A pure prepared resource. It consumes retained metadata, but no text run,
+/// line, shaping request or paragraph-cache entry.
+final class ForumBodyImagePageContent extends ForumBodyTextPageContent {
+  ForumBodyImagePageContent({
+    required this.input,
+    required this.frame,
+    required this.fontRevision,
+    required this.styleRevision,
+  }) : super._();
+  final ForumBodyImageInput input;
+  final ForumBodyImageFrame frame;
+  final String fontRevision;
+  final int styleRevision;
+  @override
+  ForumBodyIdentity get identity => input.identity;
+  @override
+  int get textCodeUnits => 0;
+  @override
+  int get runCount => 0;
+  @override
+  int get retainedTextCodeUnits => input.retainedCodeUnits;
+  @override
+  double requestWidthFor(ForumBodyTextPageFragment fragment) => frame.width;
+  @override
+  int nativeHandleCountFor(ForumBodyTextPageFragment fragment) {
+    if (fragment.kind != ForumBodyTextPageFragmentKind.image ||
+        fragment.path != input.element.path ||
+        fragment.fontRevision != fontRevision ||
+        fragment.styleRevision != styleRevision) {
+      throw const ForumBodyTextPageSurfaceException(
+        ForumBodyTextPageSurfaceFailure.identity,
+      );
+    }
+    if (!identical(fragment.imageFrame, frame) ||
+        fragment.width != frame.width ||
+        fragment.height != frame.height ||
+        fragment.startLine != 0 ||
+        fragment.endLine != 0 ||
+        fragment.coverageStartUtf16 != 0 ||
+        fragment.coverageEndUtf16 != 0 ||
+        fragment.sourceHint != null ||
+        fragment.listMarker != null) {
+      throw const ForumBodyTextPageSurfaceException(
+        ForumBodyTextPageSurfaceFailure.geometry,
+      );
+    }
+    return 0;
+  }
+
+  @override
+  Iterable<ForumBodyNativeRequestSlot> nativeFootprintFor(
+    ForumBodyTextPageFragment fragment,
+  ) {
+    nativeHandleCountFor(fragment);
+    return const [];
+  }
 }
 
 final class ForumBodyListItemPageContent extends ForumBodyTextPageContent {
