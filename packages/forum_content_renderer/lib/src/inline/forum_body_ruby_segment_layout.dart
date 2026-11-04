@@ -157,7 +157,11 @@ final class ForumBodyRubySegmentLayout {
     gaps: UnmodifiableListView(_gaps),
     annotationGaps: UnmodifiableListView(_annotationGaps),
   );
-  ForumBodyRubySegmentMemberSnapshot inspectMembers() => _members;
+  ForumBodyRubySegmentMemberSnapshot inspectMembers() {
+    if (_closed) throw StateError('Ruby segment is retired');
+    return _members;
+  }
+
   bool _closed = false;
   Size get size => metrics.size;
   double get baseline => metrics.baseline;

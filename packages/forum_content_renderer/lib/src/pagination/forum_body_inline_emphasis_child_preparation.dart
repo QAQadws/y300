@@ -68,6 +68,45 @@ final class ForumBodyInlineEmphasisChildView {
     _guard();
   }
 
+  /// Uses this binding's actual allocated origins and already-merged surfaces.
+  /// Parent text/markers remain separate; this is not readable-page admission.
+  Iterable<ForumBodyInlinePaintCommand?> paintCommands(
+    Offset offset, {
+    bool paintBackgrounds = true,
+  }) sync* {
+    void check() {
+      _ensureOwner();
+      if (_children == null) throw StateError('Allocated children are retired');
+      if (!offset.dx.isFinite || !offset.dy.isFinite) {
+        throw ArgumentError.value(offset);
+      }
+    }
+
+    check();
+    if (paintBackgrounds) {
+      for (final surface in backgroundSurfaces) {
+        check();
+        yield ForumBodyInlinePaintCommand.fill(
+          surface.rect,
+          surface.font.background.color,
+          offset,
+        );
+      }
+    }
+    for (final entry in _origins.entries) {
+      yield null;
+      check();
+      for (final step in _children!.boundAtomPaintCommandsAt(
+        offset + entry.value,
+        entry.key,
+      )) {
+        check();
+        yield step;
+      }
+    }
+    check();
+  }
+
   void _guard() {
     _ensureOwner();
     if (!isActive) throw StateError('Allocated children are retired');

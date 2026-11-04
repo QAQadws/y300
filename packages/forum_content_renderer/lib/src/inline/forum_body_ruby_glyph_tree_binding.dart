@@ -54,6 +54,24 @@ final class ForumBodyRubyGlyphTreeBinding {
     _tree!.paint(canvas, offset);
   }
 
+  Iterable<ForumBodyInlinePaintCommand?> paintCommands(Offset offset) sync* {
+    final tree = _tree;
+    if (tree == null) throw StateError('Ruby glyph binding is retired');
+    void check() {
+      _ensureOwner?.call();
+      if (!identical(_tree, tree)) {
+        throw StateError('Ruby glyph owner is retired');
+      }
+    }
+
+    check();
+    for (final step in tree.paintCommands(offset)) {
+      check();
+      yield step;
+    }
+    check();
+  }
+
   void paintBackgrounds(Canvas canvas, Offset offset, {required Rect clip}) {
     ensureActive();
     _tree!.paintBackgrounds(canvas, offset, clip: clip);

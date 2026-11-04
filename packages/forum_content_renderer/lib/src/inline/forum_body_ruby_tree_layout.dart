@@ -11,6 +11,7 @@ import '../paragraph/forum_body_text_request_preparation.dart';
 import '../paragraph/forum_body_native_request.dart';
 import '../pagination/forum_body_inline_page_preparation.dart';
 import 'forum_body_inline_paragraph_view.dart';
+import 'forum_body_inline_paint_command.dart';
 import 'forum_body_inline_span_content.dart';
 import 'forum_body_ruby_container_background.dart';
 import 'forum_body_ruby_group_contract.dart';
@@ -115,6 +116,26 @@ final class ForumBodyRubyTreeLayout {
         _byNode[item.id]!.lease?.layout.paint(canvas, offset + item.offset);
       }
     }
+  }
+
+  /// Same actual draw order as paint, including opaque native parent windows.
+  /// Structural steps yield even when a member has no native ink.
+  Iterable<ForumBodyInlinePaintCommand?> paintCommands(Offset offset) sync* {
+    if (_closed) throw StateError('Ruby tree layout is retired');
+    for (final item in _paintNodes) {
+      yield null;
+      if (_closed) throw StateError('Ruby tree layout is retired');
+      final view = _inlineViews[item.id];
+      if (view != null) {
+        yield* view.paintCommands(
+          offset + item.offset,
+          paintBackgrounds: false,
+        );
+      } else if (_byNode[item.id]!.lease case final lease?) {
+        yield ForumBodyInlinePaintCommand.text(lease, offset + item.offset);
+      }
+    }
+    if (_closed) throw StateError('Ruby tree layout is retired');
   }
 
   /// Standalone component helper; page integration consumes the same prepared

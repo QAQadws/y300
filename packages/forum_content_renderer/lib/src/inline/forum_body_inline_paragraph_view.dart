@@ -16,11 +16,14 @@ import 'forum_body_ruby_container_background.dart';
 import 'forum_body_ruby_root_box.dart';
 import 'forum_body_ruby_tree_layout.dart';
 import 'forum_body_emphasis_line_layout.dart';
+import 'forum_body_inline_paint_command.dart';
+import 'forum_body_inline_paint_row.dart';
 
 part 'forum_body_inline_ruby_binding.dart';
 part 'forum_body_inline_view_assembly.dart';
 part 'forum_body_inline_ruby_binding_work.dart';
 part 'forum_body_inline_background_regions.dart';
+part 'forum_body_inline_paint_commands.dart';
 
 enum ForumBodyInlineViewFailure { leases, coverage, identity, geometry }
 
@@ -133,6 +136,76 @@ final class ForumBodyInlineParagraphView {
     if (binding == null) _fail(ForumBodyInlineViewFailure.coverage);
     binding.paint(canvas, origin);
     _ensureActive();
+  }
+
+  /// Bounded paint-only traversal of the ACTUAL bound child at this slot.
+  /// Keep this view alive until scene.dependenciesReady. Null steps are work,
+  /// not permission to skip arbitrary empty subtrees in a single moveNext.
+  Iterable<ForumBodyInlinePaintCommand?> boundAtomPaintCommandsAt(
+    Offset origin,
+    int atomIndex,
+  ) sync* {
+    _ensureCommandOwner(origin);
+    final binding = _children[atomIndex];
+    if (binding == null) _fail(ForumBodyInlineViewFailure.coverage);
+    for (final step in _rubyPaintCommands(binding, origin)) {
+      _ensureCommandOwner(origin);
+      yield step;
+    }
+    _ensureCommandOwner(origin);
+  }
+
+  /// Includes the original hard viewport scope and natural parent window.
+  /// Container surfaces remain one separate plane before any native glyph.
+  Iterable<ForumBodyInlinePaintCommand?> paintCommands(
+    Offset offset, {
+    bool paintBackgrounds = true,
+  }) sync* {
+    _ensureCommandOwner(offset);
+    if (_fragment == null) return;
+    if (paintBackgrounds) {
+      for (final surface in _backgrounds) {
+        _ensureCommandOwner(offset);
+        yield ForumBodyInlinePaintCommand.fill(
+          surface.rect,
+          surface.font.background.color,
+          offset,
+        );
+      }
+    }
+    final clip = offset & Size(width, height),
+        row = ForumBodyInlinePaintRowView.naturalWindow(
+          parent: _parent!,
+          startLine: startLine,
+          endLine: endLine,
+          ensureOwner: () => _ensureCommandOwner(offset),
+        );
+    yield ForumBodyInlinePaintCommand.parent(row, offset).clipped(clip);
+    for (final entry in _children.entries) {
+      yield null;
+      _ensureCommandOwner(offset);
+      for (final step in boundAtomPaintCommandsAt(
+        offset + _origin(entry.key),
+        entry.key,
+      )) {
+        _ensureCommandOwner(offset);
+        yield step?.clipped(clip);
+      }
+    }
+    _ensureCommandOwner(offset);
+  }
+
+  // Check ownership in O(1); each actual leaf is checked as it is emitted and
+  // again during private scene adoption. isActive would rescan the entire tree
+  // for every step, defeating bounded traversal of a long nested format.
+  void _ensureCommandOwner(Offset offset) {
+    if (!offset.dx.isFinite || !offset.dy.isFinite) {
+      throw ArgumentError.value(offset);
+    }
+    final parent = _parent;
+    if (parent == null || !parent.isActive || parent.layout.isDisposed) {
+      throw StateError('Inline command source is retired');
+    }
   }
 
   List<({Rect rect, ForumBodyRubyContainerFontBox font})>

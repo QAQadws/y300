@@ -12,6 +12,7 @@ import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_text_request_preparation.dart';
 import '../style/forum_body_style_options.dart';
 import 'forum_body_inline_text_window.dart';
+import 'forum_body_inline_paint_command.dart';
 import 'forum_body_ruby_annotation_input.dart';
 import 'forum_body_ruby_annotation_pairing.dart';
 import 'forum_body_ruby_child_input.dart';

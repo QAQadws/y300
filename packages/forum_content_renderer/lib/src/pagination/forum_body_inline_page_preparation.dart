@@ -4,6 +4,7 @@ import 'package:flutter/painting.dart';
 
 import '../document/forum_body_document.dart';
 import '../inline/forum_body_inline_paragraph_view.dart';
+import '../inline/forum_body_inline_paint_command.dart';
 import '../inline/forum_body_inline_paragraph_layout.dart';
 import '../inline/forum_body_inline_emphasis_row_allocation.dart';
 import '../inline/forum_body_ruby_container_background.dart';

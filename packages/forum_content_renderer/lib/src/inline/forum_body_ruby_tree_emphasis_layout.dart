@@ -77,6 +77,32 @@ final class ForumBodyRubyTreeEmphasisLayout {
     }
   }
 
+  Iterable<ForumBodyInlinePaintCommand?> paintCommands(Offset offset) sync* {
+    final glyphs = _glyphs;
+    if (glyphs == null) throw StateError('Ruby tree emphasis is retired');
+    void check() {
+      _ensureOwner?.call();
+      if (!identical(_glyphs, glyphs)) {
+        throw StateError('Ruby tree emphasis owner is retired');
+      }
+    }
+
+    check();
+    for (final step in glyphs.paintCommands(Offset.zero)) {
+      check();
+      // These are two REAL Canvas translations in paint(), unlike ancestor
+      // frame/member offsets added in Dart before the call.
+      yield step?.translated(contentOffset).translated(offset);
+    }
+    if (_picture case final picture?) {
+      yield ForumBodyInlinePaintCommand.picture(
+        picture,
+        Offset.zero,
+      ).translated(contentOffset).translated(offset);
+    }
+    check();
+  }
+
   ForumBodyRubyTreeHit sourceAt(Offset offset) {
     ensureActive();
     if (!offset.dx.isFinite || !offset.dy.isFinite) {

@@ -50,6 +50,13 @@ final class ForumBodyRubySoftSpaceLayout {
     return _leases[index];
   }
 
+  /// Borrow without an all-member scan; the command consumer checks each real
+  /// lease. Closing this layout retires the borrowed handles, never aliases them.
+  List<ForumBodyTextLease> inspectMembers() {
+    if (_closed) throw StateError('Ruby space is retired');
+    return UnmodifiableListView(_leases);
+  }
+
   void paint(Canvas canvas, Offset offset) {
     _ensureActive();
     for (final (index, lease) in _leases.indexed) {

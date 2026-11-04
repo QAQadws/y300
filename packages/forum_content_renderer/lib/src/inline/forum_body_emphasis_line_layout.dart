@@ -28,6 +28,7 @@ import 'forum_body_ruby_root_box.dart';
 import 'forum_body_ruby_tree_layout.dart' show ForumBodyRubyTreeHit;
 import 'forum_body_ruby_container_background.dart';
 import 'forum_body_inline_paragraph_request.dart';
+import 'forum_body_inline_paint_command.dart';
 
 part 'forum_body_emphasis_line_preparation.dart';
 part 'forum_body_emphasis_line_metrics.dart';

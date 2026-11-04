@@ -89,11 +89,33 @@ final class ForumBodyTextPictureInputComposition {
     this.maxInputs = 512,
     int maxCommands = 8192,
   }) : _inputs = inputs,
+       maxSteps = 0,
+       _usesSteps = false,
        _ensureOwner = ensureOwner {
     if (maxInputs <= 0) throw ArgumentError.value(maxInputs);
     _writer = _TextPictureInputWriter(maxCommands);
   }
+
+  /// Consumes one bounded traversal step per part. Null represents structural
+  /// work without ink, so empty ranks cannot hide an unbounded walk in moveNext.
+  /// The producer must itself yield after each structural/native draw unit.
+  ForumBodyTextPictureInputComposition.commandSteps({
+    required Iterable<ForumBodyTextPictureCommand?> steps,
+    required void Function() ensureOwner,
+    this.maxSteps = 131072,
+    int maxCommands = 8192,
+  }) : _steps = steps,
+       maxInputs = 0,
+       _usesSteps = true,
+       _ensureOwner = ensureOwner {
+    if (maxSteps <= 0) throw ArgumentError.value(maxSteps);
+    _writer = _TextPictureInputWriter(maxCommands);
+  }
   final int maxInputs;
+  final int maxSteps;
+  final bool _usesSteps;
+  Iterable<ForumBodyTextPictureCommand?>? _steps;
+  Iterator<ForumBodyTextPictureCommand?>? _stepIterator;
   Iterable<ForumBodyPositionedTextPictureInput>? _inputs;
   Iterator<ForumBodyPositionedTextPictureInput>? _iterator;
   ForumBodyPositionedTextPictureInput? _current;
@@ -112,6 +134,12 @@ final class ForumBodyTextPictureInputComposition {
     try {
       _guard();
       while (!isReady && used < maxParts) {
+        if (_usesSteps) {
+          _advanceCommandStep();
+          used++;
+          _guard();
+          continue;
+        }
         final current = _current;
         if (current == null) {
           if (_iterator == null) {
@@ -133,10 +161,8 @@ final class ForumBodyTextPictureInputComposition {
               _current = item;
               _command = 0;
             } else {
-              _result = _writer!.takeInput();
-              _writer = null;
+              _publish();
               _iterator = null;
-              _state = _InputCompositionState.ready;
             }
           }
         } else if (_command < current.input.commands.length) {
@@ -155,6 +181,34 @@ final class ForumBodyTextPictureInputComposition {
     } finally {
       _operating = false;
     }
+  }
+
+  void _advanceCommandStep() {
+    final iterator = _stepIterator;
+    if (iterator == null) {
+      final next = _steps!.iterator;
+      _guard();
+      _stepIterator = next;
+      _steps = null;
+      return;
+    }
+    final more = iterator.moveNext();
+    _guard();
+    if (!more) {
+      _publish();
+      _stepIterator = null;
+      return;
+    }
+    if (_source++ >= maxSteps) throw ArgumentError('Excess drawing steps');
+    final command = iterator.current;
+    _guard();
+    if (command != null) _writer!.add(command);
+  }
+
+  void _publish() {
+    _result = _writer!.takeInput();
+    _writer = null;
+    _state = _InputCompositionState.ready;
   }
 
   ForumBodyTextPictureInput takeInput() {
@@ -187,6 +241,8 @@ final class ForumBodyTextPictureInputComposition {
   }
 
   void _drop() {
+    _steps = null;
+    _stepIterator = null;
     _inputs = null;
     _iterator = null;
     _current = null;

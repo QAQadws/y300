@@ -32,6 +32,7 @@ export 'src/inline/forum_body_inline_emphasis_paint_view.dart';
 export 'src/inline/forum_body_inline_emphasis_paint_preparation.dart';
 export 'src/inline/forum_body_inline_emphasis_marker_preparation.dart';
 export 'src/inline/forum_body_inline_paint_row.dart';
+export 'src/inline/forum_body_inline_paint_command.dart';
 export 'src/pagination/forum_body_inline_page_preparation.dart'
     show
         ForumBodyInlineEmphasisChildView,
