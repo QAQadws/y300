@@ -10,6 +10,7 @@ import 'forum_body_emphasis_page_preparation.dart';
 import 'forum_body_text_page_binding.dart';
 import 'forum_body_text_page_composer.dart';
 import 'forum_body_text_page_content.dart';
+import 'forum_body_list_marker_plan.dart';
 
 enum ForumBodyTextPagePreparationState {
   active,
@@ -82,7 +83,8 @@ ForumBodyTextPagePreparation createForumBodyTextPagePreparation({
   }
   final count = inputs.indexed.fold<int>(
     0,
-    (sum, item) => sum + item.$2.nativeHandleCountFor(page.fragments[item.$1]),
+    (sum, item) =>
+        sum + item.$2.nativePreparationHandleCountFor(page.fragments[item.$1]),
   );
   return ForumBodyTextPagePreparation._(
     cache,
@@ -113,6 +115,7 @@ final class ForumBodyTextPagePreparation {
     this._onRetire,
   ) : _initialProbePending = _inputs.any(
         (input) =>
+            input is ForumBodyListItemPageContent ||
             input is ForumBodyEmphasisPageContent ||
             input is ForumBodyFittedEmphasisPageContent ||
             (input is ForumBodyInlinePageContent &&
@@ -135,6 +138,8 @@ final class ForumBodyTextPagePreparation {
   void Function(ForumBodyTextPagePreparation)? _onRetire;
   final _fragments = <ForumBodyPreparedTextFragment>[];
   ForumBodyInlinePagePreparation? _inline;
+  ForumBodyPreparedTextFragment? _pendingListBody;
+  ForumBodyListMarkerPicturePreparation? _list;
   final _emphasis = <int, ForumBodyEmphasisPagePreparation>{};
   ForumBodyEmphasisPagePreparation? _activeEmphasis;
   ForumBodyEmphasisLinePreparation? _fitted;
@@ -147,6 +152,7 @@ final class ForumBodyTextPagePreparation {
   int _completedWork = 0;
   int get _retainedWork =>
       _completedWork +
+      (_list?.workCount ?? 0) +
       _fittedWork +
       (_inline?.workCount ?? 0) +
       (_activeEmphasis?.workCount ?? 0);
@@ -175,6 +181,8 @@ final class ForumBodyTextPagePreparation {
 
   Iterable<ForumBodyNativeParagraphLease> get _ownedLeases sync* {
     yield* _finishedLeases;
+    if (_pendingListBody != null) yield* _pendingListBody!.nativeLeases;
+    if (_list != null) yield* _list!.nativeLeases;
     final active = _inline;
     if (active != null) {
       yield* active.nativeLeases;
@@ -339,8 +347,38 @@ final class ForumBodyTextPagePreparation {
   bool _prepareNext({required bool cachedOnly, required int maxParts}) {
     final index = _fragments.length;
     final fragment = snapshot[pageIndex].fragments[index];
-    final input = _inputs[index];
+    final fullInput = _inputs[index];
+    final input = fullInput.bodyContent;
     final cache = _cache!;
+    if (_pendingListBody != null) {
+      final work = _list ??= ForumBodyListMarkerPicturePreparation(
+        plan: (fullInput as ForumBodyListItemPageContent).markers,
+        cache: cache,
+        textScaler: _textScaler!,
+        ensureOwner: _guard,
+        ownedLeases: () sync* {
+          yield* _finishedLeases;
+          yield* _pendingListBody!.nativeLeases;
+        },
+      );
+      final step = work.advance(cachedOnly: cachedOnly);
+      _waiting = step.waiting;
+      if (work.isReady) {
+        final picture = work.take();
+        _fragments.add(
+          ForumBodyPreparedListItemFragment(
+            _pendingListBody!,
+            (fullInput as ForumBodyListItemPageContent).markers,
+            fragment.listMarker!,
+            picture,
+          ),
+        );
+        _pendingListBody = null;
+        _completedWork += work.workCount;
+        _list = null;
+      }
+      return !step.cacheMiss;
+    }
     if (input is ForumBodyFittedEmphasisPageContent) {
       final work = _fitted ??= ForumBodyEmphasisLinePreparation.fromMetrics(
         input: input.plan.metrics.input,
@@ -360,7 +398,7 @@ final class ForumBodyTextPagePreparation {
         final view = work.takeLayout();
         try {
           _guard();
-          _fragments.add(
+          _acceptBody(
             ForumBodyPreparedTextFragment.fittedEmphasis(
               view: view,
               plan: input.plan,
@@ -385,7 +423,7 @@ final class ForumBodyTextPagePreparation {
       if (view != null) {
         try {
           _guard();
-          _fragments.add(ForumBodyPreparedTextFragment.emphasis(view));
+          _acceptBody(ForumBodyPreparedTextFragment.emphasis(view));
           _guard();
         } catch (_) {
           view.close();
@@ -417,7 +455,7 @@ final class ForumBodyTextPagePreparation {
       }
       if (lease == null) return false;
       try {
-        _fragments.add(
+        _acceptBody(
           ForumBodyPreparedTextFragment.paragraph(
             lease: lease,
             startLine: fragment.startLine,
@@ -448,9 +486,22 @@ final class ForumBodyTextPagePreparation {
     if (view != null) {
       _inline = null;
       _completedWork += active.workCount;
-      _fragments.add(ForumBodyPreparedTextFragment.inline(view));
+      _acceptBody(ForumBodyPreparedTextFragment.inline(view));
     }
     return !step.cacheMiss;
+  }
+
+  void _acceptBody(ForumBodyPreparedTextFragment body) {
+    final fragment = snapshot[pageIndex].fragments[_fragments.length];
+    if (fragment.listMarker != null) {
+      if (_inputs[_fragments.length] is! ForumBodyListItemPageContent) {
+        body.close();
+        throw StateError('List marker input is missing');
+      }
+      _pendingListBody = body;
+    } else {
+      _fragments.add(body);
+    }
   }
 
   bool get _hasCurrentBudgetCheck =>
@@ -492,6 +543,7 @@ final class ForumBodyTextPagePreparation {
   ) sync* {
     final page = snapshot[pageIndex];
     for (final (index, input) in _inputs.indexed) {
+      final body = input.bodyContent;
       final fragment = page.fragments[index];
       var parent = true;
       for (final slot in input.nativeBudgetFootprintFor(fragment)) {
@@ -502,18 +554,18 @@ final class ForumBodyTextPagePreparation {
               probe,
               width: slot.width,
               minimumLineCount: slot.minimumLineCount,
-              textScaler: input is ForumBodyFittedEmphasisPageContent
-                  ? input.plan.metrics.textScaler
-                  : input is ForumBodyEmphasisPageContent
-                  ? input.paragraph.textScaler
+              textScaler: body is ForumBodyFittedEmphasisPageContent
+                  ? body.plan.metrics.textScaler
+                  : body is ForumBodyEmphasisPageContent
+                  ? body.paragraph.textScaler
                   : _textScaler!,
             );
           },
         );
         parent = false;
       }
-      if (input is ForumBodyEmphasisPageContent) {
-        final parts = _emphasisPart(index, input);
+      if (body is ForumBodyEmphasisPageContent) {
+        final parts = _emphasisPart(index, body);
         while (!parts.isInputReady) {
           yield (startsFragment: parent, inspect: parts.advanceInput);
           parent = false;
@@ -682,6 +734,10 @@ final class ForumBodyTextPagePreparation {
     _state = state;
     _inline?.close();
     _inline = null;
+    _list?.close();
+    _list = null;
+    _pendingListBody?.close();
+    _pendingListBody = null;
     _fitted?.close();
     _fitted = null;
     _fittedWork = 0;

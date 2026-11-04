@@ -1,3 +1,4 @@
+import 'dart:ui' show Offset;
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_layout.dart';
 import 'forum_body_text_page_composer.dart';
@@ -35,6 +36,9 @@ ForumBodyTextPage validateForumBodyTextPageBinding({
     _fail(ForumBodyTextPageSurfaceFailure.leases);
   }
   for (final (index, fragment) in page.fragments.indexed) {
+    if (fragment.listMarker != null) {
+      _fail(ForumBodyTextPageSurfaceFailure.leases);
+    }
     _validateParagraph(fragment, leases[index], snapshot);
   }
   return page;
@@ -61,8 +65,8 @@ ForumBodyTextPage validateForumBodyPreparedTextPageBinding({
   }
   final handles = Set<ForumBodyNativeParagraphLease>.identity();
   ForumBodyNativeParagraphLease? ownerWitness;
-  for (final (index, binding) in fragments.indexed) {
-    for (final handle in binding.nativeLeases) {
+  for (final (index, delivery) in fragments.indexed) {
+    for (final handle in delivery.nativeLeases) {
       if (!handle.isActive ||
           !handles.add(handle) ||
           (ownerWitness != null && !ownerWitness.hasSameActiveOwner(handle))) {
@@ -71,7 +75,28 @@ ForumBodyTextPage validateForumBodyPreparedTextPageBinding({
       ownerWitness ??= handle;
     }
     final fragment = page.fragments[index];
+    final binding = delivery is ForumBodyPreparedListItemFragment
+        ? delivery.body
+        : delivery;
+    if (delivery is ForumBodyPreparedListItemFragment) {
+      final baseline =
+          binding is ForumBodyPreparedParagraphFragment && binding.lines.isEmpty
+          ? binding.lease.layout.alphabeticBaseline
+          : binding.lines.first.baseline;
+      if (delivery.plan.identity != snapshot.identity ||
+          !identical(delivery.placement, fragment.listMarker) ||
+          delivery.picture.input != delivery.plan.picture ||
+          delivery.placement.baseline != baseline ||
+          delivery.placement.bounds !=
+              delivery.plan.bounds.shift(Offset(0, baseline))) {
+        _fail(ForumBodyTextPageSurfaceFailure.geometry);
+      }
+    } else if (fragment.listMarker != null) {
+      _fail(ForumBodyTextPageSurfaceFailure.leases);
+    }
     switch (binding) {
+      case ForumBodyPreparedListItemFragment():
+        _fail(ForumBodyTextPageSurfaceFailure.identity);
       case ForumBodyPreparedParagraphFragment():
         if (binding.startLine != fragment.startLine ||
             binding.endLine != fragment.endLine) {

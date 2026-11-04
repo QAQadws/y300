@@ -207,6 +207,9 @@ final class NovelReaderNativePrefixVerifier {
     ForumBodyTextPageFragment next,
   ) =>
       old.paragraphIndex == next.paragraphIndex &&
+      old.kind == next.kind &&
+      old.listMarker?.baseline == next.listMarker?.baseline &&
+      old.listMarker?.bounds == next.listMarker?.bounds &&
       old.path == next.path &&
       old.fontRevision == next.fontRevision &&
       old.styleRevision == next.styleRevision &&

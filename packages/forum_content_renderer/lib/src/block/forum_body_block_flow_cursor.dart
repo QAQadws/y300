@@ -30,6 +30,17 @@ sealed class ForumBodyBlockFlowUnit {
   final ForumBodyIdentity identity;
 }
 
+/// Resolve intrinsic marker width before advancing into this item's children.
+final class ForumBodyBlockFlowListItemStart extends ForumBodyBlockFlowUnit {
+  ForumBodyBlockFlowListItemStart._(
+    super.identity,
+    this.marker,
+    this.availableGutter,
+  ) : super._();
+  final ForumBodyListItemMarker marker;
+  final double availableGutter;
+}
+
 /// Continuous-flow gap, not a ready-to-apply page margin. Collapsed margins
 /// may be negative and never prove that an earlier page is stable. The page
 /// layer must resolve break trimming/decoration and admission before applying
@@ -128,7 +139,7 @@ final class ForumBodyBlockFlowBoundary extends ForumBodyBlockFlowUnit {
 /// Normal-flow geometry over the sole text cursor. Adjoining signed margins
 /// accumulate as max-positive + min-negative across empty blocks and ancestors;
 /// real line content or nonzero padding separates groups. Only active frames,
-/// one margin strut and at most four pending units are retained. No measuring,
+/// one margin strut and at most five pending units are retained. No measuring,
 /// native resource, HTML slice, persistent anchor or page publication is owned.
 /// Edit notices use the text cursor's fitted format. Mixed inline inputs retain
 /// the same block geometry without entering the ordinary shaping port. Other semantic containers
@@ -156,7 +167,7 @@ final class ForumBodyBlockFlowCursor {
       throw ArgumentError.value(width, 'width');
     }
   }
-  static const revision = 6;
+  static const revision = 7;
   final double width;
   final ForumBodyBlockEdgeMargins edgeMargins;
   final double _rootFontSize;
@@ -172,6 +183,7 @@ final class ForumBodyBlockFlowCursor {
   bool _complete = false;
   bool _closed = false;
   bool _hasFlowContent = false;
+  bool _waitingListGutter = false;
 
   ForumBodyIdentity get identity => _flow.identity;
   String get fontRevision => _flow.fontRevision;
@@ -185,6 +197,9 @@ final class ForumBodyBlockFlowCursor {
     required int maxEvents,
   }) {
     if (_closed) throw StateError('Block flow cursor is closed');
+    if (_waitingListGutter) {
+      throw StateError('List marker gutter is unresolved');
+    }
     if (maxEvents <= 0) throw ArgumentError.value(maxEvents, 'maxEvents');
     _current = null;
     if (_complete) return _step(0, 0);
@@ -195,6 +210,9 @@ final class ForumBodyBlockFlowCursor {
         if (_pending.isNotEmpty) {
           _current = _pending.removeFirst();
           final unit = _current;
+          if (unit is ForumBodyBlockFlowListItemStart) {
+            _waitingListGutter = true;
+          }
           if (unit is ForumBodyBlockFlowBoundary &&
               unit.boundary.kind == ForumBodyTextFlowBoundaryKind.endDocument) {
             _complete = true;
@@ -216,7 +234,7 @@ final class ForumBodyBlockFlowCursor {
               ForumBodyBlockFlowParagraph._(
                 unit,
                 _frames.isEmpty ? 0 : _frames.last.contentLeft,
-                _frames.isEmpty ? width : _frames.last.box.contentWidth,
+                _frames.isEmpty ? width : _frames.last.contentWidth,
                 _takeListMarkers(),
               ),
             );
@@ -227,7 +245,7 @@ final class ForumBodyBlockFlowCursor {
               ForumBodyBlockFlowInline._(
                 unit,
                 _frames.isEmpty ? 0 : _frames.last.contentLeft,
-                _frames.isEmpty ? width : _frames.last.box.contentWidth,
+                _frames.isEmpty ? width : _frames.last.contentWidth,
                 _takeListMarkers(),
               ),
             );
@@ -267,7 +285,7 @@ final class ForumBodyBlockFlowCursor {
         final parent = _frames.lastOrNull;
         final box = ForumBodyBlockBox.resolve(
           style: event.style,
-          containingWidth: parent?.box.contentWidth ?? width,
+          containingWidth: parent?.contentWidth ?? width,
           containingDirection:
               parent?.event.style.textDirection ?? _rootDirection,
           rootFontSize: _rootFontSize,
@@ -322,6 +340,30 @@ final class ForumBodyBlockFlowCursor {
         }
         _frames.add(frame);
         _pending.add(ForumBodyBlockFlowBoundary._(unit, box, left));
+        if (frame.marker case final marker?) {
+          final owner = _frames.reversed
+              .skip(1)
+              .where((frame) => frame.counter != null)
+              .firstOrNull;
+          final edgeLeft = owner == null
+              ? 0.0
+              : owner.contentLeft -
+                    owner.box.padding.left -
+                    owner.box.leftBorder;
+          final edgeRight = owner == null
+              ? width
+              : edgeLeft + owner.box.borderBoxWidth;
+          final available = marker.style.textDirection == TextDirection.ltr
+              ? left - edgeLeft
+              : edgeRight - left - box.contentWidth;
+          _pending.add(
+            ForumBodyBlockFlowListItemStart._(
+              identity,
+              marker,
+              math.max(0, available),
+            ),
+          );
+        }
         _margin(box.margin.top);
         _padding(
           box.padding.top,
@@ -374,6 +416,38 @@ final class ForumBodyBlockFlowCursor {
   void _margin(double value) {
     _positiveMargin = math.max(_positiveMargin, value);
     _negativeMargin = math.min(_negativeMargin, value);
+  }
+
+  void resolveListItemGutter(
+    ForumBodyBlockFlowListItemStart item,
+    double requiredGutter,
+  ) {
+    if (_closed ||
+        !_waitingListGutter ||
+        !identical(item, _current) ||
+        !requiredGutter.isFinite ||
+        requiredGutter < 0) {
+      throw StateError('List marker gutter does not match pending item');
+    }
+    final frame = _frames.last;
+    final extra = math.max(0.0, requiredGutter - item.availableGutter);
+    if (extra >= frame.box.contentWidth) {
+      throw ForumBodyBlockFlowException(
+        ForumBodyBlockFlowFailure.geometry,
+        item.marker.itemPath,
+      );
+    }
+    frame.extraGutter = extra;
+    final marker = item.marker;
+    frame.marker = ForumBodyListItemMarker._(
+      listPath: marker.listPath,
+      itemPath: marker.itemPath,
+      ordinal: marker.ordinal,
+      style: marker.style,
+      contentLeft: frame.contentLeft,
+      contentWidth: frame.contentWidth,
+    );
+    _waitingListGutter = false;
   }
 
   List<ForumBodyListItemMarker> _takeListMarkers() {
@@ -514,10 +588,15 @@ final class ForumBodyBlockFlowCursor {
 }
 
 final class _Frame {
-  _Frame(this.event, this.box, this.contentLeft);
+  _Frame(this.event, this.box, this._baseLeft);
   final ForumBodyStyledFlowEvent event;
   final ForumBodyBlockBox box;
-  final double contentLeft;
+  final double _baseLeft;
+  double extraGutter = 0;
+  double get contentLeft =>
+      _baseLeft +
+      (event.style.textDirection == TextDirection.ltr ? extraGutter : 0);
+  double get contentWidth => box.contentWidth - extraGutter;
   _ListCounter? counter;
   _ListCounter? _implicitCounter;
   _ListCounter get implicitCounter => _implicitCounter ??= _ListCounter(1, 1);

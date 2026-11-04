@@ -108,6 +108,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
 
   static Object _bindingKey(ForumBodyPreparedTextFragment binding) =>
       switch (binding) {
+        ForumBodyPreparedListItemFragment() => binding.picture,
         ForumBodyPreparedParagraphFragment() => binding.lease,
         ForumBodyPreparedInlineFragment() => binding.view,
         ForumBodyPreparedEmphasisFragment() => binding.view,
@@ -118,6 +119,17 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     ForumBodyTextPageFragment fragment,
     ForumBodyPreparedTextFragment binding,
   ) {
+    if (binding is ForumBodyPreparedListItemFragment) {
+      return Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(child: _fragmentSurface(fragment, binding.body)),
+          Positioned.fill(
+            child: IgnorePointer(child: _ListMarkerSurface(binding)),
+          ),
+        ],
+      );
+    }
     final interaction = (
       _layoutId,
       _page.index,
@@ -132,6 +144,9 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
         : (HtmlProjectedSourcePosition position) =>
               _onSourceTap(fragment, position);
     return switch (binding) {
+      ForumBodyPreparedListItemFragment() => throw StateError(
+        'Nested list delivery',
+      ),
       ForumBodyPreparedParagraphFragment() => ForumBodyParagraphSurface(
         lease: binding.lease,
         startLine: binding.startLine,
@@ -185,12 +200,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
                   child: CustomPaint(painter: _RulePainter(_page.rules)),
                 ),
               ),
-            if (_bindings.any(
-              (binding) =>
-                  binding is ForumBodyPreparedInlineFragment &&
-                  binding.view.isActive &&
-                  binding.view.containerBackgrounds.isNotEmpty,
-            ))
+            if (_bindings.any((binding) => _hasRubyBackground(binding)))
               Positioned.fill(
                 child: IgnorePointer(
                   child: CustomPaint(
@@ -212,6 +222,57 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
       );
     },
   );
+}
+
+bool _hasRubyBackground(ForumBodyPreparedTextFragment delivery) {
+  final body = delivery is ForumBodyPreparedListItemFragment
+      ? delivery.body
+      : delivery;
+  return body is ForumBodyPreparedInlineFragment &&
+      body.view.isActive &&
+      body.view.containerBackgrounds.isNotEmpty;
+}
+
+final class _ListMarkerSurface extends StatefulWidget {
+  const _ListMarkerSurface(this.binding);
+  final ForumBodyPreparedListItemFragment binding;
+  @override
+  State<_ListMarkerSurface> createState() => _ListMarkerSurfaceState();
+}
+
+final class _ListMarkerSurfaceState extends State<_ListMarkerSurface> {
+  @override
+  void didUpdateWidget(covariant _ListMarkerSurface oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.binding.picture, widget.binding.picture)) {
+      oldWidget.binding.picture.release();
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.binding.picture.release();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      CustomPaint(painter: _ListMarkerPainter(widget.binding));
+}
+
+final class _ListMarkerPainter extends CustomPainter {
+  const _ListMarkerPainter(this.binding);
+  final ForumBodyPreparedListItemFragment binding;
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (binding.isActive) {
+      binding.picture.paint(canvas, Offset(0, binding.placement.baseline));
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ListMarkerPainter oldDelegate) =>
+      !identical(binding, oldDelegate.binding);
 }
 
 final class _BlockBackgroundPainter extends CustomPainter {
@@ -316,7 +377,10 @@ final class _RubyPageBackgroundPainter extends CustomPainter {
     try {
       // Stack need not clip paint overflow when its children's layout fits.
       canvas.clipRect(Offset.zero & size, doAntiAlias: false);
-      for (final (index, binding) in bindings.indexed) {
+      for (final (index, delivery) in bindings.indexed) {
+        final binding = delivery is ForumBodyPreparedListItemFragment
+            ? delivery.body
+            : delivery;
         if (binding is ForumBodyPreparedInlineFragment &&
             binding.view.isActive) {
           final fragment = page.fragments[index];

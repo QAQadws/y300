@@ -30,6 +30,28 @@ void _compareAvailable(NovelReaderNativePrefixVerifier verifier) {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'independent list retry compares marker values without native identity',
+    () {
+      const source = '<ol><li>body</li></ol>';
+      final previous = NativeReaderTestFixture(source, height: 80);
+      final next = NativeReaderTestFixture(
+        source,
+        height: 80,
+        layoutId: 'retry',
+      );
+      final verifier = _verifier(
+        previous.session.snapshot,
+        next.session.snapshot,
+      );
+      _compareAvailable(verifier);
+      expect(
+        previous.session.snapshot.first.fragments.first.listMarker,
+        isNotNull,
+      );
+      expect(verifier.state, NovelReaderNativePrefixState.matched);
+    },
+  );
   const html = '<p>ab</p><p>cd</p><p>ef</p>';
 
   test('quote border paint is checked even when text, source and fill geometry are identical', () {

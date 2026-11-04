@@ -28,6 +28,9 @@ List<ForumBodyBlockFlowUnit> _drain(String html, {int budget = 1}) {
       expect(step.workDone, lessThanOrEqualTo(budget));
       expect(step.workDone > 0 || step.hasOutput, isTrue);
       if (step.hasOutput) units.add(cursor.current!);
+      if (cursor.current case ForumBodyBlockFlowListItemStart item) {
+        cursor.resolveListItemGutter(item, 0);
+      }
     }
     return units;
   } finally {

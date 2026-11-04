@@ -19,6 +19,7 @@ import '../inline/forum_body_ruby_root_box.dart';
 import 'forum_body_text_page_binding.dart';
 import 'forum_body_text_page_composer.dart';
 import 'forum_body_source_hint.dart';
+import 'forum_body_list_marker_plan.dart';
 
 export '../inline/forum_body_ruby_column_request.dart';
 
@@ -30,6 +31,7 @@ part 'forum_body_fitted_emphasis_page_content.dart';
 /// retention; native resources remain in its existing shared reading cache.
 sealed class ForumBodyTextPageContent {
   const ForumBodyTextPageContent._();
+  ForumBodyTextPageContent get bodyContent => this;
   factory ForumBodyTextPageContent.paragraph(
     ForumBodyParagraphContent content,
   ) = ForumBodyParagraphPageContent;
@@ -64,6 +66,8 @@ sealed class ForumBodyTextPageContent {
   ForumBodyIdentity get identity;
   double requestWidthFor(ForumBodyTextPageFragment fragment);
   int nativeHandleCountFor(ForumBodyTextPageFragment fragment);
+  int nativePreparationHandleCountFor(ForumBodyTextPageFragment fragment) =>
+      nativeHandleCountFor(fragment);
   Iterable<ForumBodyNativeRequestSlot> nativeFootprintFor(
     ForumBodyTextPageFragment fragment,
   );
@@ -74,6 +78,68 @@ sealed class ForumBodyTextPageContent {
   Iterable<ForumBodyNativeBudgetSlot> nativeBudgetFootprintFor(
     ForumBodyTextPageFragment fragment,
   ) => nativeFootprintFor(fragment);
+}
+
+final class ForumBodyListItemPageContent extends ForumBodyTextPageContent {
+  ForumBodyListItemPageContent(this.body, this.markers) : super._() {
+    if (body is ForumBodyListItemPageContent ||
+        body.identity != markers.identity) {
+      throw ArgumentError('List markers require current unwrapped body');
+    }
+  }
+  final ForumBodyTextPageContent body;
+  final ForumBodyListMarkerPlan markers;
+  @override
+  ForumBodyTextPageContent get bodyContent => body;
+  @override
+  ForumBodyIdentity get identity => body.identity;
+  @override
+  int get textCodeUnits => body.textCodeUnits;
+  @override
+  int get runCount => body.runCount;
+  @override
+  int get retainedTextCodeUnits =>
+      body.retainedTextCodeUnits + markers.retainedCodeUnits;
+  @override
+  int get retainedRuns => body.retainedRuns + markers.fontCount;
+  @override
+  double requestWidthFor(ForumBodyTextPageFragment fragment) =>
+      body.requestWidthFor(fragment);
+  void _validate(ForumBodyTextPageFragment fragment) {
+    final marker = fragment.listMarker;
+    if (marker != null &&
+        (fragment.startLine != 0 ||
+            marker.bounds !=
+                markers.bounds.shift(Offset(0, marker.baseline)))) {
+      throw const ForumBodyTextPageSurfaceException(
+        ForumBodyTextPageSurfaceFailure.geometry,
+      );
+    }
+  }
+
+  @override
+  int nativeHandleCountFor(ForumBodyTextPageFragment fragment) {
+    _validate(fragment);
+    return body.nativeHandleCountFor(fragment) +
+        (fragment.listMarker == null ? 0 : 1);
+  }
+
+  @override
+  int nativePreparationHandleCountFor(ForumBodyTextPageFragment fragment) =>
+      nativeHandleCountFor(fragment) +
+      (fragment.listMarker == null ? 0 : 2 * markers.fontCount);
+  @override
+  Iterable<ForumBodyNativeRequestSlot> nativeFootprintFor(
+    ForumBodyTextPageFragment fragment,
+  ) => body.nativeFootprintFor(fragment);
+  @override
+  Iterable<ForumBodyNativeBudgetSlot> nativeBudgetFootprintFor(
+    ForumBodyTextPageFragment fragment,
+  ) sync* {
+    _validate(fragment);
+    yield* body.nativeBudgetFootprintFor(fragment);
+    if (fragment.listMarker != null) yield* markers.footprint;
+  }
 }
 
 final class ForumBodyParagraphPageContent extends ForumBodyTextPageContent {

@@ -9,6 +9,8 @@ import '../paragraph/forum_body_paragraph_layout.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_paragraph_geometry.dart'
     show forumBodyPaintedTextRanges;
+import 'forum_body_list_marker_plan.dart';
+import 'forum_body_text_page_composer.dart';
 
 /// One complete prepared fragment. Each concurrently mounted view must own
 /// distinct handles even when they share the same cache entry. These values
@@ -31,6 +33,7 @@ sealed class ForumBodyPreparedTextFragment {
     required ForumBodyFittedEmphasisPlan plan,
   }) = ForumBodyPreparedFittedEmphasisFragment;
   bool get isActive;
+  Iterable<Rect> get decorationBounds => const [];
 
   /// Borrowed for the same owner's page-budget checks and lifecycle counts.
   /// Reading this list never acquires aliases or transfers the handles.
@@ -51,6 +54,47 @@ sealed class ForumBodyPreparedTextFragment {
   /// evidence; ordinary UI selections still retain their native boxes.
   List<TextBox> glyphBoxes(int startUtf16, int endUtf16);
   void close();
+}
+
+/// The body keeps its original source/geometry. The picture owns no source.
+final class ForumBodyPreparedListItemFragment
+    extends ForumBodyPreparedTextFragment {
+  const ForumBodyPreparedListItemFragment(
+    this.body,
+    this.plan,
+    this.placement,
+    this.picture,
+  ) : super._();
+  final ForumBodyPreparedTextFragment body;
+  final ForumBodyListMarkerPlan plan;
+  final ForumBodyTextPageListMarker placement;
+  final ForumBodyTextPictureLease picture;
+  @override
+  bool get isActive => body.isActive && picture.isActive;
+  @override
+  Iterable<Rect> get decorationBounds => [placement.bounds];
+  @override
+  Iterable<ForumBodyNativeParagraphLease> get nativeLeases => [
+    ...body.nativeLeases,
+    picture,
+  ];
+  @override
+  HtmlDisplayTextProjection get projection => body.projection;
+  @override
+  List<ForumBodyParagraphRun> get runs => body.runs;
+  @override
+  Iterable<ForumBodyParagraphLine> get lines => body.lines;
+  @override
+  List<TextBox> glyphBoxes(int startUtf16, int endUtf16) =>
+      body.glyphBoxes(startUtf16, endUtf16);
+  @override
+  void close() {
+    try {
+      body.close();
+    } finally {
+      picture.release();
+    }
+  }
 }
 
 final class ForumBodyPreparedEmphasisFragment

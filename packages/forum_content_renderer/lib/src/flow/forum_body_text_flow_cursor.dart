@@ -65,7 +65,7 @@ final class ForumBodyTextFlowCursor {
     this.paragraphBuilder = const ForumBodyParagraphContentBuilder(),
     this.rubyLimits = const ForumBodyRubyContentLimits(),
   }) : _flow = ForumBodyStyledFlowCursor(document: document, reader: reader);
-  static const revision = 5;
+  static const revision = 6;
   final ForumBodyParagraphContentBuilder paragraphBuilder;
   final ForumBodyRubyContentLimits rubyLimits;
   final ForumBodyStyledFlowCursor _flow;
@@ -119,6 +119,18 @@ final class ForumBodyTextFlowCursor {
         if (_boundaryPending) {
           if (_flushContext()) return _step(read, work);
           final event = _boundary;
+          if (event?.phase == ForumBodyFlowPhase.open &&
+              (event!.node as ForumBodyElement).kind ==
+                  ForumBodyElementKind.rule &&
+              _emptyListItems.isNotEmpty) {
+            final entry = _emptyListItems.entries.last;
+            _emptyListItems.remove(entry.key);
+            _paragraph(
+              ForumBodyPlainSequenceContent(entry.value.finish()),
+              ForumBodyParagraphWindow.full,
+            );
+            return _step(read, work);
+          }
           if (event?.phase == ForumBodyFlowPhase.close) {
             final empty = _emptyListItems.remove(event!.node.path);
             if (empty != null) {

@@ -1,6 +1,6 @@
 import 'dart:collection';
 import 'dart:math' as math;
-import 'dart:ui' show Color;
+import 'dart:ui' show Color, Offset, Rect;
 
 import 'package:flutter/foundation.dart' show precisionErrorTolerance;
 import 'package:html_pagination_core/html_pagination_core.dart';
@@ -13,6 +13,7 @@ import '../inline/forum_body_fitted_emphasis_plan.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_layout.dart';
 import 'forum_body_source_hint.dart';
+import 'forum_body_list_marker_plan.dart';
 
 part 'forum_body_emphasis_scene_reservation.dart';
 part 'forum_body_text_page_background.dart';
@@ -61,6 +62,7 @@ final class ForumBodyTextPageFragment {
     required this.width,
     required this.height,
     required this.kind,
+    this.listMarker,
   });
   final int paragraphIndex;
   final String? path;
@@ -79,6 +81,14 @@ final class ForumBodyTextPageFragment {
   final double width;
   final double height;
   final ForumBodyTextPageFragmentKind kind;
+  final ForumBodyTextPageListMarker? listMarker;
+}
+
+/// Numeric decoration envelope only; no font input or source position.
+final class ForumBodyTextPageListMarker {
+  const ForumBodyTextPageListMarker._(this.baseline, this.bounds);
+  final double baseline;
+  final Rect bounds;
 }
 
 /// Immutable paint geometry. A rule never contributes text, glyph coverage or
@@ -200,7 +210,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 16;
+  static const revision = 17;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;
@@ -377,6 +387,7 @@ final class ForumBodyTextPageComposer {
     required double spaceBefore,
     required double spaceAtPageStart,
     ForumBodyParagraphWindow window = ForumBodyParagraphWindow.full,
+    ForumBodyListMarkerPlan? listMarkers,
   }) => _append(
     input: _CompositionParagraph.paragraph(lease),
     paragraphIndex: paragraphIndex,
@@ -384,6 +395,7 @@ final class ForumBodyTextPageComposer {
     spaceBefore: spaceBefore,
     spaceAtPageStart: spaceAtPageStart,
     window: window,
+    listMarkers: listMarkers,
   );
 
   /// Owns only the already measured parent. Child dimensions are part of its
@@ -396,6 +408,7 @@ final class ForumBodyTextPageComposer {
     required double spaceBefore,
     required double spaceAtPageStart,
     ForumBodyParagraphWindow window = ForumBodyParagraphWindow.full,
+    ForumBodyListMarkerPlan? listMarkers,
     int Function(int startUtf16, int endUtf16)? nativeHandleCountInRange,
     Iterable<Object> Function(int startUtf16, int endUtf16)?
     nativeEntriesInRange,
@@ -413,6 +426,7 @@ final class ForumBodyTextPageComposer {
     spaceBefore: spaceBefore,
     spaceAtPageStart: spaceAtPageStart,
     window: window,
+    listMarkers: listMarkers,
   );
 
   /// Numeric complete-group input only. This transfers no native resource;
@@ -426,6 +440,7 @@ final class ForumBodyTextPageComposer {
     required double spaceBefore,
     required double spaceAtPageStart,
     ForumBodyParagraphWindow window = ForumBodyParagraphWindow.full,
+    ForumBodyListMarkerPlan? listMarkers,
   }) => _append(
     input: _CompositionParagraph.emphasis(entries, ensureOwner),
     paragraphIndex: paragraphIndex,
@@ -433,6 +448,7 @@ final class ForumBodyTextPageComposer {
     spaceBefore: spaceBefore,
     spaceAtPageStart: spaceAtPageStart,
     window: window,
+    listMarkers: listMarkers,
   );
 
   /// One already measured complete fitted line, never a fabricated wrapping
@@ -445,6 +461,7 @@ final class ForumBodyTextPageComposer {
     required double spaceBefore,
     required double spaceAtPageStart,
     ForumBodyParagraphWindow window = ForumBodyParagraphWindow.full,
+    ForumBodyListMarkerPlan? listMarkers,
   }) => _append(
     input: _CompositionParagraph.fitted(plan, ensureOwner),
     paragraphIndex: paragraphIndex,
@@ -452,6 +469,7 @@ final class ForumBodyTextPageComposer {
     spaceBefore: spaceBefore,
     spaceAtPageStart: spaceAtPageStart,
     window: window,
+    listMarkers: listMarkers,
   );
 
   void _append({
@@ -461,6 +479,7 @@ final class ForumBodyTextPageComposer {
     required double spaceBefore,
     required double spaceAtPageStart,
     required ForumBodyParagraphWindow window,
+    ForumBodyListMarkerPlan? listMarkers,
   }) {
     _ensureOpen();
     if (!needsInput) throw StateError('Composition input is still pending');
@@ -477,6 +496,10 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid paragraph composition inputs');
     }
     final range = input.lineWindow(window);
+    if (listMarkers != null &&
+        (listMarkers.identity != identity || range.startLine != 0)) {
+      throw ArgumentError('List marker belongs to another first line');
+    }
     if (maxNativeHandlesPerPage != null &&
         input.kind == ForumBodyTextPageFragmentKind.inline &&
         input.nativeHandleCountInRange == null) {
@@ -507,6 +530,7 @@ final class ForumBodyTextPageComposer {
       spaceAtPageStart,
       range.startLine,
       range.endLine,
+      listMarkers,
     );
   }
 
@@ -619,14 +643,32 @@ final class ForumBodyTextPageComposer {
         final gap = active.nextLine == active.firstLine
             ? (atPageStart ? active.spaceAtPageStart : active.spaceBefore)
             : 0.0;
+        final marker = continuation
+            ? _draft.last.listMarker
+            : active.nextLine == active.firstLine && active.listMarkers != null
+            ? ForumBodyTextPageListMarker._(
+                layout.alphabeticBaseline,
+                active.listMarkers!.bounds.shift(
+                  Offset(0, layout.alphabeticBaseline),
+                ),
+              )
+            : null;
         final top = continuation
             ? _draft.last.top
-            : math.max(0.0, _flowHeight + gap);
+            : math.max(0.0, _flowHeight + gap) +
+                  math.max(0.0, -(marker?.bounds.top ?? 0));
         final view = layout.lines.isEmpty
             ? null
             : layout.fragment(firstLine, end);
         final fragmentHeight = view?.height ?? layout.height;
-        final bottom = top + fragmentHeight;
+        final bottom =
+            top + math.max(fragmentHeight, marker?.bounds.bottom ?? 0);
+        if (marker != null &&
+            (active.left + marker.bounds.left < -precisionErrorTolerance ||
+                active.left + marker.bounds.right >
+                    width + precisionErrorTolerance)) {
+          _fail(ForumBodyTextPageFailure.invalidGeometry);
+        }
         if (!fragmentHeight.isFinite ||
             fragmentHeight < 0 ||
             !bottom.isFinite ||
@@ -675,7 +717,7 @@ final class ForumBodyTextPageComposer {
             replacedSceneBytes +
             (sceneAddition?.estimatedBytes ?? 0);
         final limit = maxNativeHandlesPerPage;
-        final handles = limit == null
+        final bodyHandles = limit == null
             ? 0
             : emphasis != null
             ? 2
@@ -684,6 +726,11 @@ final class ForumBodyTextPageComposer {
                     view?.coverageEndUtf16 ?? 0,
                   ) ??
                   1;
+        final handles =
+            bodyHandles +
+            (marker == null || limit == null
+                ? 0
+                : 1 + 2 * active.listMarkers!.fontCount);
         if (limit != null && handles <= 0) {
           _fail(ForumBodyTextPageFailure.invalidGeometry);
         }
@@ -745,6 +792,14 @@ final class ForumBodyTextPageComposer {
           }
           _ensureOpen();
           layout.ensureActive();
+          if (marker != null && !continuation) {
+            for (final cost in active.listMarkers!.costs) {
+              addedEntries[cost.identity] = math.max(
+                addedEntries[cost.identity] ?? 0,
+                cost.estimatedBytes,
+              );
+            }
+          }
           if (addedEntries.isEmpty) {
             _fail(ForumBodyTextPageFailure.invalidGeometry);
           }
@@ -812,8 +867,9 @@ final class ForumBodyTextPageComposer {
           width: layout.width,
           height: fragmentHeight,
           kind: layout.kind,
+          listMarker: marker,
         );
-        _touchBackgrounds(top);
+        _touchBackgrounds(top + math.min(0, marker?.bounds.top ?? 0));
         if (!continuation && _fragmentCount >= maxFragments) {
           _fail(ForumBodyTextPageFailure.fragmentLimit);
         }
@@ -1072,6 +1128,13 @@ final class _CompositionParagraph {
       _emphasisEntries?.paragraph.lines ??
       _text?.lines ??
       _inline!.lines;
+  double get alphabeticBaseline =>
+      _fitted?.metrics.alphabeticBaseline ??
+      _emphasisEntries?.paragraph.alphabeticBaseline ??
+      _text?.alphabeticBaseline ??
+      (_inline!.lines.isEmpty
+          ? _inline.nativeAlphabeticBaseline
+          : _inline.lines.first.baseline);
   void ensureActive() {
     if (_emphasisEntries != null || _fitted != null) {
       _emphasisGuard!();
@@ -1154,6 +1217,7 @@ final class _ActiveParagraph {
     this.spaceAtPageStart,
     this.firstLine,
     this.endLine,
+    this.listMarkers,
   ) : nextLine = firstLine,
       scanLine = firstLine;
   final _CompositionParagraph input;
@@ -1163,6 +1227,7 @@ final class _ActiveParagraph {
   final double spaceAtPageStart;
   final int firstLine;
   final int endLine;
+  final ForumBodyListMarkerPlan? listMarkers;
   int nextLine;
   int scanLine;
   int? groupEnd;

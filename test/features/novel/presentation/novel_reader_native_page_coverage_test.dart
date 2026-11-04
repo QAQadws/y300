@@ -146,6 +146,29 @@ Matcher _failure(NovelReaderNativeCoverageFailure failure) => throwsA(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test('list pictures fit the page without contributing source proof for empty items', () {
+    for (final html in [
+      '<ol><li></li></ol><p>ab</p>',
+      '<ol><li>ab</li><li></li><li><ruby>CD<rt>xy</rt></ruby></li></ol>',
+    ]) {
+      final fixture = _Fixture(
+        html,
+        height: html.endsWith('<p>ab</p>') ? 10 : 100,
+      );
+      final fragments = fixture.prepareFragments(0);
+      try {
+        expect(fragments.first, isA<ForumBodyPreparedListItemFragment>());
+        final coverage = _finish(fixture.preparedCursor(0, fragments));
+        expect(coverage.hasClippedGlyphs, isFalse);
+        if (html.endsWith('<p>ab</p>')) expect(coverage.points, isEmpty);
+      } finally {
+        for (final fragment in fragments) {
+          fragment.close();
+        }
+      }
+      expect(fixture.cache.activeLeases, 0);
+    }
+  });
 
   test(
     'rules consume the page item budget without fabricating text coverage',
@@ -286,6 +309,9 @@ void main() {
           try {
             final fragment = fragments.single;
             final raw = switch (fragment) {
+              ForumBodyPreparedListItemFragment() => throw StateError(
+                'Unexpected list in SPACE fixture',
+              ),
               ForumBodyPreparedParagraphFragment(:final lease) =>
                 lease.layout.selectionBoxes(3, 5),
               ForumBodyPreparedInlineFragment(:final view) =>

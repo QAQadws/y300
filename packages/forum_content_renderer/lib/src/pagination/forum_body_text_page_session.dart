@@ -17,6 +17,7 @@ import 'forum_body_prepared_text_fragment.dart';
 import 'forum_body_text_page_content.dart';
 import 'forum_body_inline_native_entries.dart';
 import 'forum_body_emphasis_page_admission.dart';
+import 'forum_body_list_marker_plan.dart';
 
 enum ForumBodyTextPageSessionState { active, complete, failed, closed }
 
@@ -205,6 +206,10 @@ final class ForumBodyTextPageSession {
   final _issues = <ForumBodyStyleIssue>[];
   ForumBodyTextPageSessionState _state = ForumBodyTextPageSessionState.active;
   ForumBodyBlockFlowParagraph? _pendingParagraph;
+  ForumBodyListMarkerPlanPreparation? _listPreparation;
+  ForumBodyListMarkerPlan? _listPlan;
+  bool _markersReady = false;
+  ForumBodyBlockFlowListItemStart? _pendingListItem;
   ForumBodyEmphasisPageAdmission? _paragraphAdmission;
   ForumBodyBlockFlowInline? _pendingInline;
   ForumBodyInlinePlanPreparation? _inlinePreparation;
@@ -294,6 +299,66 @@ final class ForumBodyTextPageSession {
 
     try {
       while (true) {
+        final item = _pendingListItem;
+        if (item != null) {
+          var gutter = 0.0;
+          if (item.marker.text != null) {
+            if (item.marker.style.listStyle.position !=
+                ForumBodyListMarkerPosition.outside) {
+              throw ForumBodyBlockFlowException(
+                ForumBodyBlockFlowFailure.structure,
+                item.marker.itemPath,
+              );
+            }
+            final input = forumBodyListMarkerFontInput(
+              item.marker,
+              _flow.fontRevision,
+              _flow.styleRevision,
+            );
+            final lease = _cache.acquireDecorationText(
+              input: input,
+              textScaler: _textScaler,
+            );
+            try {
+              _ensureActivePlan();
+              final bounds = forumBodyListMarkerFontBounds(input, lease);
+              final gap = lease.layout.height * .25;
+              gutter = item.marker.style.textDirection == TextDirection.ltr
+                  ? gap + lease.layout.width - bounds.left
+                  : gap + bounds.right;
+            } finally {
+              lease.release();
+            }
+          }
+          _flow.resolveListItemGutter(item, gutter);
+          _pendingListItem = null;
+          formatUnits++;
+          return result();
+        }
+        final markers =
+            _pendingParagraph?.listMarkers ?? _pendingInline?.listMarkers;
+        if (markers != null && markers.isNotEmpty && !_markersReady) {
+          final preparation = _listPreparation ??=
+              ForumBodyListMarkerPlanPreparation(
+                identity: _flow.identity,
+                markers: markers,
+                left:
+                    _pendingParagraph?.contentLeft ??
+                    _pendingInline!.contentLeft,
+                fontRevision: _flow.fontRevision,
+                styleRevision: _flow.styleRevision,
+                cache: _cache,
+                textScaler: _textScaler,
+                ensureOwner: _ensureActivePlan,
+              );
+          formatUnits += preparation.advance();
+          if (preparation.isReady) {
+            _listPlan = preparation.take();
+            _listPreparation = null;
+            _markersReady = true;
+          }
+          return result();
+        }
         final pending = _pendingParagraph;
         if (pending != null) {
           final admission = _paragraphAdmission ??= _openParagraphPlan(pending);
@@ -305,7 +370,9 @@ final class ForumBodyTextPageSession {
           }
           ForumBodyTextPageContent input;
           if (admission.isPlain) {
-            input = ForumBodyTextPageContent.paragraph(admission.plainContent);
+            input = _decorate(
+              ForumBodyTextPageContent.paragraph(admission.plainContent),
+            );
             final lease = _cache.acquire(
               content: admission.plainContent,
               width: pending.contentWidth,
@@ -319,6 +386,7 @@ final class ForumBodyTextPageSession {
                 spaceBefore: _margin,
                 spaceAtPageStart: 0,
                 window: pending.paragraph.window,
+                listMarkers: _listPlan,
               );
             } catch (_) {
               lease.release();
@@ -327,7 +395,7 @@ final class ForumBodyTextPageSession {
             admission.close();
           } else if (admission.isFitted) {
             final fitted = admission.takeFitted();
-            input = fitted;
+            input = _decorate(fitted);
             _composer.appendFittedEmphasis(
               plan: fitted.plan,
               ensureOwner: _ensureActivePlan,
@@ -336,10 +404,11 @@ final class ForumBodyTextPageSession {
               spaceBefore: _margin,
               spaceAtPageStart: 0,
               window: pending.paragraph.window,
+              listMarkers: _listPlan,
             );
           } else {
             final ready = admission.take();
-            input = ready.content;
+            input = _decorate(ready.content);
             _composer.appendEmphasis(
               entries: ready.entries,
               ensureOwner: _ensureActivePlan,
@@ -348,11 +417,14 @@ final class ForumBodyTextPageSession {
               spaceBefore: _margin,
               spaceAtPageStart: 0,
               window: pending.paragraph.window,
+              listMarkers: _listPlan,
             );
           }
           _paragraphAdmission = null;
           _content.add(input);
           _pendingParagraph = null;
+          _listPlan = null;
+          _markersReady = false;
           _margin = 0;
           admitted = 1;
         }
@@ -388,6 +460,7 @@ final class ForumBodyTextPageSession {
             _entryPreparation = null;
           }
           final ready = _readyInline!;
+          final input = _decorate(ready.content);
           try {
             _composer.appendInline(
               lease: ready.lease,
@@ -396,6 +469,7 @@ final class ForumBodyTextPageSession {
               spaceBefore: _margin,
               spaceAtPageStart: 0,
               window: mixed.paragraph.window,
+              listMarkers: _listPlan,
               nativeHandleCountInRange: ready.content.nativeHandleCountInRange,
               nativeEntriesInRange: entries?.inRange,
               nativeCostsInRange: entries?.costsInRange,
@@ -405,8 +479,10 @@ final class ForumBodyTextPageSession {
             rethrow;
           }
           _readyInline = null;
-          _content.add(ready.content);
+          _content.add(input);
           _pendingInline = null;
+          _listPlan = null;
+          _markersReady = false;
           _margin = 0;
           admitted = 1;
         }
@@ -440,6 +516,8 @@ final class ForumBodyTextPageSession {
         if (unit == null) continue;
         units++;
         switch (unit) {
+          case ForumBodyBlockFlowListItemStart():
+            _pendingListItem = unit;
           case ForumBodyBlockFlowSpace():
             if (unit.kind == ForumBodyBlockSpaceKind.collapsedMargin) {
               _margin += unit.extent;
@@ -476,16 +554,6 @@ final class ForumBodyTextPageSession {
               return result(completed: true);
             }
             final event = unit.boundary.event!;
-            if ((event.node as ForumBodyElement).kind ==
-                    ForumBodyElementKind.list ||
-                event.style.display == ForumBodyDisplay.listItem) {
-              // List geometry is available in BlockFlow. Page admission must
-              // wait for complete marker budget/preparation and paint binding.
-              throw ForumBodyBlockFlowException(
-                ForumBodyBlockFlowFailure.structure,
-                event.node.path,
-              );
-            }
             final background = event.style.visibilityHidden
                 ? null
                 : event.style.boxBackground;
@@ -514,7 +582,9 @@ final class ForumBodyTextPageSession {
       }
     } on ForumBodyParagraphBudgetException catch (error) {
       if (error.failure == ForumBodyParagraphBudgetFailure.pinned &&
-          _pendingParagraph != null) {
+          (_pendingParagraph != null ||
+              _pendingInline != null ||
+              _pendingListItem != null)) {
         _waiting = true;
         return result();
       }
@@ -537,7 +607,9 @@ final class ForumBodyTextPageSession {
   List<ForumBodyParagraphLease> preparePageLeases(int pageIndex) {
     _ensureUsable();
     if (snapshot[pageIndex].fragments.any(
-      (fragment) => fragment.kind != ForumBodyTextPageFragmentKind.paragraph,
+      (fragment) =>
+          fragment.kind != ForumBodyTextPageFragmentKind.paragraph ||
+          fragment.listMarker != null,
     )) {
       throw StateError('Mixed pages require typed fragment delivery');
     }
@@ -597,7 +669,7 @@ final class ForumBodyTextPageSession {
         limits.maxIssuedLeases - activeIssuedLeases - _reservedLeases;
     for (final fragment in page.fragments) {
       final input = _content.items[fragment.paragraphIndex];
-      requested += input.nativeHandleCountFor(fragment);
+      requested += input.nativePreparationHandleCountFor(fragment);
       if (requested > available) {
         throw const ForumBodyTextPageSessionException(
           ForumBodyTextPageSessionFailure.leaseLimit,
@@ -700,7 +772,7 @@ final class ForumBodyTextPageSession {
     ForumBodyBlockFlowParagraph paragraph,
   ) {
     final content = paragraph.paragraph.content;
-    _content.check(ForumBodyTextPageContent.paragraph(content));
+    _content.check(_decorate(ForumBodyTextPageContent.paragraph(content)));
     return ForumBodyEmphasisPageAdmission(
       content: content,
       width: paragraph.contentWidth,
@@ -709,6 +781,14 @@ final class ForumBodyTextPageSession {
       ensureOwner: _ensureActivePlan,
       validateCounts: _content.checkCounts,
     );
+  }
+
+  ForumBodyTextPageContent _decorate(ForumBodyTextPageContent body) {
+    final result = _listPlan == null
+        ? body
+        : ForumBodyListItemPageContent(body, _listPlan!);
+    _content.check(result);
+    return result;
   }
 
   void _closeInlineAdmission() {
@@ -722,6 +802,11 @@ final class ForumBodyTextPageSession {
     if (isClosed) return;
     _recordPublished();
     _flow.close();
+    _pendingListItem = null;
+    _listPreparation?.close();
+    _listPreparation = null;
+    _listPlan = null;
+    _markersReady = false;
     _composer.close();
     _pendingParagraph = null;
     _paragraphAdmission?.close();
@@ -740,6 +825,11 @@ final class ForumBodyTextPageSession {
     if (isClosed) return;
     _state = ForumBodyTextPageSessionState.closed;
     _flow.close();
+    _pendingListItem = null;
+    _listPreparation?.close();
+    _listPreparation = null;
+    _listPlan = null;
+    _markersReady = false;
     _composer.close();
     for (final preparation in _preparations.toList()) {
       preparation.close();

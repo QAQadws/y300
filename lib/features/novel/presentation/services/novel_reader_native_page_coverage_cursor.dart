@@ -212,6 +212,20 @@ final class NovelReaderNativePageCoverageCursor {
     final projection = _projection = prepared.projection;
     _runs = prepared.runs;
     final snapshot = _snapshot!;
+    final pageClip = Rect.fromLTWH(
+      -fragment.left,
+      -fragment.top,
+      snapshot.width,
+      snapshot.height,
+    );
+    for (final box in prepared.decorationBounds) {
+      if (box.left < pageClip.left - precisionErrorTolerance ||
+          box.right > pageClip.right + precisionErrorTolerance ||
+          box.top < pageClip.top - precisionErrorTolerance ||
+          box.bottom > pageClip.bottom + precisionErrorTolerance) {
+        _hasClippedGlyphs = true;
+      }
+    }
     _clip = Rect.fromLTWH(0, 0, fragment.width, fragment.height).intersect(
       Rect.fromLTWH(
         -fragment.left,
