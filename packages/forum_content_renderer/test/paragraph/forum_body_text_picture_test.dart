@@ -891,7 +891,7 @@ void main() {
   );
 
   test(
-    'same pure keys cannot authorize foreign live leases or recursive scenes',
+    'same pure keys cannot authorize foreign text or missing nested pictures',
     () {
       final f = _Fixture(), other = _Fixture();
       expect(f.input, other.input);
@@ -905,14 +905,15 @@ void main() {
         throwsStateError,
       );
       final value = f.finish(f.open());
+      final nested = ForumBodyTextPictureInput(
+        commands: [ForumBodyTextPictureCommand.fromPicture(value, Offset.zero)],
+      );
       expect(
-        () => ForumBodyTextPictureInput(
-          commands: [
-            ForumBodyTextPictureCommand(
-              nativeInputIdentity: value.nativeInputIdentity,
-              offset: Offset.zero,
-            ),
-          ],
+        () => ForumBodyTextPicturePreparation(
+          cache: f.cache,
+          input: nested,
+          text: const [],
+          ensureOwner: () {},
         ),
         throwsArgumentError,
       );

@@ -7,6 +7,18 @@ typedef _TextPictureDependency = ({
   ForumBodyInlinePaintRowSelector? inlineRow,
 });
 
+/// Resource-free drawing data, deliberately NOT an opaque native font key.
+final class _TextPictureFill {
+  const _TextPictureFill(this.rect, this.color);
+  final Rect rect;
+  final Color color;
+  @override
+  bool operator ==(Object other) =>
+      other is _TextPictureFill && rect == other.rect && color == other.color;
+  @override
+  int get hashCode => Object.hash(rect, color);
+}
+
 final class ForumBodyTextPictureCommand {
   const ForumBodyTextPictureCommand({
     required this.nativeInputIdentity,
@@ -53,6 +65,7 @@ final class ForumBodyTextPictureCommand {
   /// Command-only retention; the unique opaque native metadata is separate.
   int get estimatedInputBytes =>
       128 +
+      (isFill ? 160 : 0) +
       (paragraphRow == null ? 0 : 64) +
       (physicalLine == null ? 0 : 192) +
       (inlineRow == null ? 0 : 128) +
@@ -89,6 +102,32 @@ final class ForumBodyTextPictureCommand {
     offset: offset,
     fitScale: fitScale,
   );
+  factory ForumBodyTextPictureCommand.fromPicture(
+    ForumBodyTextPictureLease picture,
+    Offset offset, {
+    double fitScale = 1,
+  }) => ForumBodyTextPictureCommand(
+    nativeInputIdentity: picture.nativeInputIdentity,
+    offset: offset,
+    fitScale: fitScale,
+  );
+
+  factory ForumBodyTextPictureCommand.fillRect({
+    required Rect rect,
+    required Color color,
+    Offset offset = Offset.zero,
+    double fitScale = 1,
+  }) => ForumBodyTextPictureCommand(
+    nativeInputIdentity: _TextPictureFill(rect, color),
+    offset: offset,
+    fitScale: fitScale,
+  );
+
+  bool get isFill => nativeInputIdentity is _TextPictureFill;
+  ({Rect rect, Color color})? get fill => switch (nativeInputIdentity) {
+    _TextPictureFill(:final rect, :final color) => (rect: rect, color: color),
+    _ => null,
+  };
   factory ForumBodyTextPictureCommand.fromParagraphRow(
     ForumBodyParagraphRowView row,
     Offset offset, {
@@ -120,6 +159,9 @@ final class ForumBodyTextPictureCommand {
       physicalLine: line,
     );
   }
+
+  /// Opaque native identity for resources; fills have a distinct resource-free
+  /// paint identity. Inspect [isFill]/[fill] before resolving dependencies.
   final Object nativeInputIdentity;
   final Offset offset;
 
@@ -216,6 +258,7 @@ final class ForumBodyTextPicturePreparation {
     required Iterable<ForumBodyTextLease> text,
     required void Function() ensureOwner,
     Iterable<ForumBodyEmphasisMarkLease> marks = const [],
+    Iterable<ForumBodyTextPictureLease> pictures = const [],
     Iterable<ForumBodyParagraphRowView> paragraphRows = const [],
     Iterable<ForumBodyInlinePaintRowView> inlineRows = const [],
     Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
@@ -225,6 +268,7 @@ final class ForumBodyTextPicturePreparation {
          text: text,
          ensureOwner: ensureOwner,
          marks: marks,
+         pictures: pictures,
          paragraphRows: paragraphRows,
          inlineRows: inlineRows,
          additionalOwnedLeases: additionalOwnedLeases,
@@ -241,6 +285,7 @@ final class ForumBodyTextPicturePreparation {
     required Iterable<ForumBodyTextLease> text,
     required void Function() ensureOwner,
     Iterable<ForumBodyEmphasisMarkLease> marks = const [],
+    Iterable<ForumBodyTextPictureLease> pictures = const [],
     Iterable<ForumBodyParagraphRowView> paragraphRows = const [],
     Iterable<ForumBodyInlinePaintRowView> inlineRows = const [],
     Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
@@ -250,6 +295,7 @@ final class ForumBodyTextPicturePreparation {
          text: text,
          ensureOwner: ensureOwner,
          marks: marks,
+         pictures: pictures,
          paragraphRows: paragraphRows,
          inlineRows: inlineRows,
          additionalOwnedLeases: additionalOwnedLeases,
@@ -262,6 +308,7 @@ final class ForumBodyTextPicturePreparation {
     required Iterable<ForumBodyTextLease> text,
     required void Function() ensureOwner,
     required Iterable<ForumBodyEmphasisMarkLease> marks,
+    required Iterable<ForumBodyTextPictureLease> pictures,
     required Iterable<ForumBodyParagraphRowView> paragraphRows,
     required Iterable<ForumBodyInlinePaintRowView> inlineRows,
     required Iterable<ForumBodyNativeParagraphLease> Function()?
@@ -279,6 +326,7 @@ final class ForumBodyTextPicturePreparation {
         input: input,
         text: text,
         marks: marks,
+        pictures: pictures,
         rows: paragraphRows,
         inlineRows: inlineRows,
         ensureOwner: _guard,
@@ -450,7 +498,12 @@ final class ForumBodyTextPicturePreparation {
                   final offset = fitted ? Offset.zero : command.offset;
                   final row = _rowViews[command._dependency];
                   final inlineRow = _inlineRowViews[command._dependency];
-                  if (inlineRow != null) {
+                  if (command.nativeInputIdentity case _TextPictureFill(
+                    :final rect,
+                    :final color,
+                  )) {
+                    canvas.drawRect(rect.shift(offset), Paint()..color = color);
+                  } else if (inlineRow != null) {
                     inlineRow.paint(canvas, offset);
                   } else if (row != null) {
                     final physical = command.physicalLine;
@@ -465,6 +518,8 @@ final class ForumBodyTextPicturePreparation {
                         resource.layout.paint(canvas, offset);
                       case ForumBodyEmphasisMarkLease resource:
                         resource.layout.paint(canvas, offset);
+                      case ForumBodyTextPictureLease resource:
+                        resource.paint(canvas, offset);
                       default:
                         throw StateError('Unsupported text picture resource');
                     }
@@ -653,6 +708,7 @@ final class ForumBodyTextPicturePreparation {
 int _textPictureInputBytes(_NativeInputIdentity input) {
   final key = input._key;
   if (key is _EmphasisMarkKey) return key.input.estimatedInputBytes + 16;
+  if (key is ForumBodyTextPictureInput) return key.estimatedInputBytes + 16;
   // Both admitted key kinds come from ParagraphContent's flat native spans.
   // Count those retained children without rescanning source text or run trees.
   int spans(TextSpan root) => 1 + (root.children?.length ?? 0);

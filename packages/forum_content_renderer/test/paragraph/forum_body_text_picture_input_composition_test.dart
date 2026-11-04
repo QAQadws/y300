@@ -156,10 +156,10 @@ void main() {
       }
       final scene = job.takeLease();
       expect(
-        () => ForumBodyTextPictureInput.estimateRetainedMetadataBytesFor(
+        ForumBodyTextPictureInput.estimateRetainedMetadataBytesFor(
           scene.nativeInputIdentity,
         ),
-        throwsArgumentError,
+        scene.input.estimatedInputBytes + 16,
       );
       addTearDown(scene.release);
       final captures = <ui.Picture>[];

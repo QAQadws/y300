@@ -1,6 +1,6 @@
 part of 'forum_body_paragraph_cache.dart';
 
-/// A finite draw list over actual opaque native inputs. No source authority,
+/// A finite draw list of solid fills and actual opaque native inputs. No source authority,
 /// lease, painter, owner or callback is retained by this immutable cache key.
 final class ForumBodyTextPictureInput {
   ForumBodyTextPictureInput._(
@@ -8,6 +8,7 @@ final class ForumBodyTextPictureInput {
     this.estimatedInputBytes,
     this.estimatedPictureBytes,
     this._hash,
+    this.nestingDepth,
   ) : _keyRevision = revision;
   factory ForumBodyTextPictureInput({
     required List<ForumBodyTextPictureCommand> commands,
@@ -23,7 +24,8 @@ final class ForumBodyTextPictureInput {
       writer.close();
     }
   }
-  static const revision = 9;
+  static const revision = 10;
+  static const maximumNestingDepth = 32;
   static const maximumCommands = 32768;
   static const baseEstimatedInputBytes = 4096;
   static const baseEstimatedPictureBytes = 4096;
@@ -39,13 +41,19 @@ final class ForumBodyTextPictureInput {
     if (key is! _LayoutKey &&
         key is! _InlineLayoutKey &&
         key is! _EmphasisMarkKey &&
+        key is! ForumBodyTextPictureInput &&
         key is! ForumBodyTextBandCacheKey) {
-      throw ArgumentError('Drawing metadata requires an actual font input');
+      throw ArgumentError(
+        'Drawing metadata requires an actual font or picture',
+      );
     }
     return _textPictureInputBytes(nativeInputIdentity);
   }
 
   final List<ForumBodyTextPictureCommand> commands;
+
+  /// Depth of scene-to-scene references; native font pictures are not scenes.
+  final int nestingDepth;
   final int _keyRevision, _hash;
 
   /// Conservative display-list admission, not native/GPU memory. Recording
@@ -211,6 +219,7 @@ final class _TextPictureInputWriter {
   final _hash = _TextPictureCommandHash();
   int _inputBytes = ForumBodyTextPictureInput.baseEstimatedInputBytes;
   int _pictureBytes = ForumBodyTextPictureInput.baseEstimatedPictureBytes;
+  int _nestingDepth = 0;
   void add(ForumBodyTextPictureCommand command) {
     final commands =
         _commands ?? (throw StateError('Picture input writer is retired'));
@@ -218,11 +227,24 @@ final class _TextPictureInputWriter {
       throw ArgumentError('Excess picture commands');
     }
     _validateTextPictureCommand(command);
-    final identity = command.nativeInputIdentity as _NativeInputIdentity;
+    final identity = command.nativeInputIdentity;
     commands.add(command);
     _inputBytes += command.estimatedInputBytes;
     _pictureBytes += command.estimatedPictureBytes;
-    if (_inputs.add(identity)) _inputBytes += _textPictureInputBytes(identity);
+    if (identity is _NativeInputIdentity && _inputs.add(identity)) {
+      _inputBytes += _textPictureInputBytes(identity);
+      if (identity._key case final ForumBodyTextPictureInput nested) {
+        final depth = nested.nestingDepth + 1;
+        if (depth > ForumBodyTextPictureInput.maximumNestingDepth) {
+          throw ArgumentError('Excess nested picture depth');
+        }
+        if (depth > _nestingDepth) _nestingDepth = depth;
+        // Native retention is shared by repeated draws of this SAME picture.
+        // Reserve the nested display list even if engine byte estimates only
+        // account for the parent's reference operation after source eviction.
+        _pictureBytes += nested.estimatedPictureBytes;
+      }
+    }
     _hash.add(command);
   }
 
@@ -235,6 +257,7 @@ final class _TextPictureInputWriter {
       _inputBytes,
       _pictureBytes,
       _hash.finish(),
+      _nestingDepth,
     );
     close();
     return result;
@@ -276,7 +299,7 @@ final class _TextPictureCommandHash {
 
 void _validateTextPictureCommand(ForumBodyTextPictureCommand command) {
   final identity = command.nativeInputIdentity;
-  if (identity is! _NativeInputIdentity ||
+  if ((identity is! _NativeInputIdentity && identity is! _TextPictureFill) ||
       !command.offset.dx.isFinite ||
       !command.offset.dy.isFinite ||
       command.offset.dx.abs() > 32768 ||
@@ -289,6 +312,32 @@ void _validateTextPictureCommand(ForumBodyTextPictureCommand command) {
       command.fitScale <= 0 ||
       command.fitScale > 1) {
     throw ArgumentError('Invalid native text picture fitting scale');
+  }
+  if (identity is _TextPictureFill) {
+    final r = identity.rect, c = identity.color;
+    if (!r.isFinite ||
+        r.right < r.left ||
+        r.bottom < r.top ||
+        r.left.abs() > 32768 ||
+        r.top.abs() > 32768 ||
+        r.right.abs() > 32768 ||
+        r.bottom.abs() > 32768 ||
+        !c.a.isFinite ||
+        !c.r.isFinite ||
+        !c.g.isFinite ||
+        !c.b.isFinite ||
+        c.a < 0 ||
+        c.a > 1 ||
+        command.bandChildIndex != null ||
+        command.paragraphRow != null ||
+        command.physicalLine != null ||
+        command.inlineRow != null) {
+      throw ArgumentError('Invalid solid picture fill');
+    }
+    return;
+  }
+  if (identity is! _NativeInputIdentity) {
+    throw ArgumentError('Invalid picture input');
   }
   final key = identity._key;
   final inline = command.inlineRow;
@@ -323,7 +372,9 @@ void _validateTextPictureCommand(ForumBodyTextPictureCommand command) {
         command.paragraphRow != null) {
       throw ArgumentError('Invalid native band picture selector');
     }
-  } else if ((key is! _LayoutKey && key is! _EmphasisMarkKey) ||
+  } else if ((key is! _LayoutKey &&
+          key is! _EmphasisMarkKey &&
+          key is! ForumBodyTextPictureInput) ||
       command.bandChildIndex != null) {
     throw ArgumentError('Text picture requires an actual text input');
   }

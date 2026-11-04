@@ -221,6 +221,15 @@ final class ForumBodyParagraphCache {
       lease.isActive &&
       !lease._entry.layout.isDisposed;
 
+  ForumBodyTextPictureLease _aliasPictureLease(
+    ForumBodyTextPictureLease lease,
+  ) {
+    if (!ownsLease(lease)) throw StateError('Nested picture owner is retired');
+    lease._entry.leases++;
+    _leases++;
+    return ForumBodyTextPictureLease._(this, lease._entry, lease.input);
+  }
+
   /// Monotonic evidence that a lease was released or this owner retired.
   /// Callers must still retry admission; aliases need not free a native entry.
   int get budgetRevision => _budgetRevision;

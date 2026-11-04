@@ -37,6 +37,7 @@ enum _PictureDependencyPhase {
   commands,
   text,
   marks,
+  pictures,
   rows,
   inlineRows,
   publish,
@@ -54,6 +55,7 @@ final class _TextPictureDependencyWork {
     required ForumBodyTextPictureInput input,
     required Iterable<ForumBodyTextLease> text,
     required Iterable<ForumBodyEmphasisMarkLease> marks,
+    required Iterable<ForumBodyTextPictureLease> pictures,
     required Iterable<ForumBodyParagraphRowView> rows,
     required Iterable<ForumBodyInlinePaintRowView> inlineRows,
     required void Function() ensureOwner,
@@ -61,6 +63,7 @@ final class _TextPictureDependencyWork {
        _input = input,
        _text = text,
        _marks = marks,
+       _pictures = pictures,
        _rows = rows,
        _inlineRows = inlineRows,
        _ensureOwner = ensureOwner;
@@ -68,6 +71,7 @@ final class _TextPictureDependencyWork {
   ForumBodyTextPictureInput? _input;
   Iterable<ForumBodyTextLease>? _text;
   Iterable<ForumBodyEmphasisMarkLease>? _marks;
+  Iterable<ForumBodyTextPictureLease>? _pictures;
   Iterable<ForumBodyParagraphRowView>? _rows;
   Iterable<ForumBodyInlinePaintRowView>? _inlineRows;
   Iterator<ForumBodyNativeParagraphLease>? _iterator;
@@ -100,12 +104,14 @@ final class _TextPictureDependencyWork {
     switch (_phase) {
       case _PictureDependencyPhase.commands:
         if (_index < _input!.commands.length) {
-          _wanted.add(_input!.commands[_index++]._dependency);
+          final command = _input!.commands[_index++];
+          if (!command.isFill) _wanted.add(command._dependency);
         } else {
           _phase = _PictureDependencyPhase.text;
         }
       case _PictureDependencyPhase.text:
       case _PictureDependencyPhase.marks:
+      case _PictureDependencyPhase.pictures:
         _advanceResources();
       case _PictureDependencyPhase.rows:
         _advanceRows();
@@ -138,7 +144,12 @@ final class _TextPictureDependencyWork {
   void _advanceResources() {
     final current = _iterator;
     if (current == null) {
-      final source = _phase == _PictureDependencyPhase.text ? _text! : _marks!;
+      final Iterable<ForumBodyNativeParagraphLease> source = switch (_phase) {
+        _PictureDependencyPhase.text => _text!,
+        _PictureDependencyPhase.marks => _marks!,
+        _PictureDependencyPhase.pictures => _pictures!,
+        _ => throw StateError('Invalid picture dependency phase'),
+      };
       final next = source.iterator;
       _guard();
       _iterator = next;
@@ -155,8 +166,11 @@ final class _TextPictureDependencyWork {
         if (_phase == _PictureDependencyPhase.text) {
           _text = null;
           _phase = _PictureDependencyPhase.marks;
-        } else {
+        } else if (_phase == _PictureDependencyPhase.marks) {
           _marks = null;
+          _phase = _PictureDependencyPhase.pictures;
+        } else {
+          _pictures = null;
           _phase = _PictureDependencyPhase.rows;
         }
       }
@@ -183,6 +197,7 @@ final class _TextPictureDependencyWork {
       final alias = switch (lease) {
         ForumBodyTextLease() => cache._aliasTextLease(lease),
         ForumBodyEmphasisMarkLease() => cache._aliasEmphasisMarkLease(lease),
+        ForumBodyTextPictureLease() => cache._aliasPictureLease(lease),
         _ => throw ArgumentError('Unsupported text picture resource'),
       };
       _aliases.add(alias);
@@ -337,6 +352,7 @@ final class _TextPictureDependencyWork {
     _input = null;
     _text = null;
     _marks = null;
+    _pictures = null;
     _rows = null;
     _inlineRows = null;
     _iterator = null;
