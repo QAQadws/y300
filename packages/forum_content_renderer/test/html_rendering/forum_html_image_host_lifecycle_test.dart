@@ -8,6 +8,81 @@ import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'render_test_support.dart';
 
 void main() {
+  testWidgets('standalone image view shares binding isolation without HTML', (
+    tester,
+  ) async {
+    final dimensionsA = _Dimensions(deferred: true);
+    final dimensionsB = _Dimensions(deferred: true);
+    final hostA = _ImageHost(dimensionsA);
+    final hostB = _ImageHost(dimensionsB);
+    final resolved = <Size>[];
+    final shifts = <ForumHtmlImageLayoutShift>[];
+    Widget build(_ImageHost host) => MaterialApp(
+      home: Align(
+        alignment: Alignment.topLeft,
+        child: SizedBox(
+          width: 200,
+          child: SingleChildScrollView(
+            child: ForumHtmlImageView(
+              key: const ValueKey('native-image-slot'),
+              host: host,
+              image: host.resolveImage(
+                url: Uri.parse('https://example.invalid/image.jpg'),
+                imageIndex: 0,
+                isSticker: false,
+              ),
+              onImageResolved: resolved.add,
+              onImageLayoutShift: shifts.add,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpWidget(build(hostA));
+    await _frames(tester);
+    final retired = tester.widget<_DisplayedImage>(
+      find.byType(_DisplayedImage),
+    );
+    await tester.pumpWidget(build(hostB));
+    await _frames(tester);
+    await tester.pumpWidget(build(hostA));
+    await _frames(tester);
+    expect(find.byType(HtmlWidget), findsNothing);
+    expect(dimensionsA.pending, hasLength(2));
+    expect(dimensionsB.pending, hasLength(1));
+    retired.reportAll();
+    dimensionsA.pending.first.complete(_wideDimensions);
+    dimensionsB.pending.single.complete(_wideDimensions);
+    await _frames(tester);
+    expect(hostA.blockSizes, isEmpty);
+    expect(hostB.blockSizes, isEmpty);
+    expect(resolved, isEmpty);
+    expect(shifts, isEmpty);
+    expect(
+      tester.getSize(find.byType(_DisplayedImage)).aspectRatio,
+      closeTo(.7, .001),
+    );
+    dimensionsA.pending.last.complete(_wideDimensions);
+    await _frames(tester);
+    expect(tester.getSize(find.byType(_DisplayedImage)).aspectRatio, 2);
+    expect(hostA.blockSizes, [const Size(400, 200)]);
+    expect(shifts, hasLength(1));
+    final current = tester.widget<_DisplayedImage>(
+      find.byType(_DisplayedImage),
+    );
+    current.onResolved!(const Size(800, 400));
+    await _frames(tester);
+    expect(resolved, [const Size(800, 400)]);
+    final count = hostA.blockSizes.length;
+    await tester.pumpWidget(const SizedBox.shrink());
+    current.reportAll();
+    retired.reportAll();
+    await _frames(tester);
+    expect(hostA.blockSizes, hasLength(count));
+    expect(resolved, hasLength(1));
+    expect(tester.takeException(), isNull);
+  });
+
   for (final reportedSize in [false, true]) {
     testWidgets(
       'a displayed smiley ignores late metadata: size=$reportedSize',

@@ -4,6 +4,8 @@
 
 Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `theme`。图片 `Host` 可选；宿主通过中立的准备、显示、尺寸和预取端口提供图片能力。准备资源与显示资源分别保持身份，迟到回调和取消仍受当前绑定与显示代次约束。
 
+`ForumHtmlImageView` 为同一图片显示实现提供独立入口，只接收 `ForumHtmlDisplayImage`、`ForumHtmlImageHost` 和可选 viewport／尺寸回调，不解析 HTML 或装配缓存请求。HTML 图片工厂直接使用它；自研正文可复用相同的尺寸查询、首帧、失败、重试与预取生命周期。更新 Host、显示身份或视口会退役相应回调及工作代次，A→B→A 的旧结果不能写回。正文分片的资源准入、布局代次与来源位置仍由包含它的布局会话负责。
+
 宿主可提供已解析、未缩放的 `textStyle` 和根 `textAlign`。提供 style 时不再应用 options.fontScale；系统缩放仍由 renderer 环境决定，作者 CSS 和段距策略继续生效。缺省参数保留默认样式及 start 对齐；仅改变对齐也会使缓存正文和根属性失效，不重挂图片/折叠状态。
 
 应用偏好及其持久化、文字转换、本地化、默认 URL/缓存装配、provider、Cookie 和会话继续由宿主负责。包不依赖应用源码或 provider，不装配 Host 传输或会话，也不调用论坛客户端的网络请求 API。
