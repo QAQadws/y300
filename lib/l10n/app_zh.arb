@@ -2350,5 +2350,7 @@
   "novelAuthorBackgroundAllHint": "清除所有支持角色的作者高亮及块背景，保留页面背景和主题本身的文字底色。",
   "novelAuthorColorUnavailable": "作者颜色策略仅用于翻页阅读；滚动时保留设置，可在此重置。",
   "novelAuthorForegroundReset": "恢复默认作者文字色策略",
-  "novelAuthorBackgroundReset": "恢复默认作者高亮策略"
+  "novelAuthorBackgroundReset": "恢复默认作者高亮策略",
+  "novelSelectionCopyTitle": "选择复制",
+  "novelAnnotationSelectionCopyTitle": "选择复制注音"
 }

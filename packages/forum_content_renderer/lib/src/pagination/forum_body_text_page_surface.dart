@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:flutter/gestures.dart';
 import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../paragraph/forum_body_paragraph_cache.dart';
@@ -9,6 +10,7 @@ import '../inline/forum_body_emphasis_fragment_surface.dart';
 import 'forum_body_prepared_text_fragment.dart';
 import 'forum_body_text_page_composer.dart';
 import 'forum_body_text_page_binding.dart';
+import 'forum_body_text_selection_snapshot.dart';
 
 export 'forum_body_text_page_binding.dart'
     show ForumBodyTextPageSurfaceFailure, ForumBodyTextPageSurfaceException;
@@ -33,6 +35,8 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
       HtmlProjectedSourcePosition position,
     )?
     onSourceTap,
+    void Function(ForumBodyTextPageFragment, ForumBodyTextSelectionSnapshot)?
+    onSourceLongPress,
   }) {
     validateForumBodyTextPageBinding(
       snapshot: snapshot,
@@ -54,6 +58,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
           ),
       ],
       onSourceTap: onSourceTap,
+      onSourceLongPress: onSourceLongPress,
     );
   }
 
@@ -68,6 +73,8 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     required List<ForumBodyPreparedTextFragment> fragments,
     void Function(ForumBodyTextPageFragment, HtmlProjectedSourcePosition)?
     onSourceTap,
+    void Function(ForumBodyTextPageFragment, ForumBodyTextSelectionSnapshot)?
+    onSourceLongPress,
   }) {
     final page = validateForumBodyPreparedTextPageBinding(
       snapshot: snapshot,
@@ -83,6 +90,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
       snapshot.height,
       List.unmodifiable(fragments),
       onSourceTap,
+      onSourceLongPress,
     );
   }
 
@@ -94,6 +102,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     this._height,
     this._bindings,
     this._onSourceTap,
+    this._onSourceLongPress,
   ) : super(key: key);
   final ForumBodyTextPage _page;
   final String _layoutId;
@@ -102,6 +111,11 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
   final List<ForumBodyPreparedTextFragment> _bindings;
   final void Function(ForumBodyTextPageFragment, HtmlProjectedSourcePosition)?
   _onSourceTap;
+  final void Function(
+    ForumBodyTextPageFragment,
+    ForumBodyTextSelectionSnapshot,
+  )?
+  _onSourceLongPress;
 
   static Never _fail(ForumBodyTextPageSurfaceFailure failure) =>
       throw ForumBodyTextPageSurfaceException(failure);
@@ -215,13 +229,91 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
                 top: fragment.top,
                 width: fragment.width,
                 height: fragment.height,
-                child: _fragmentSurface(fragment, _bindings[index]),
+                child: _TextLongPressSurface(
+                  identity: (
+                    _layoutId,
+                    _page.index,
+                    fragment.paragraphIndex,
+                    fragment.startLine,
+                    fragment.endLine,
+                    fragment.left,
+                    fragment.top,
+                    fragment.width,
+                    fragment.height,
+                  ),
+                  onLongPress: _onSourceLongPress == null
+                      ? null
+                      : (point) {
+                          final selected = forumBodyTextSelectionAt(
+                            binding: _bindings[index],
+                            fragment: fragment,
+                            pageSize: Size(_width, _height),
+                            point: point,
+                          );
+                          if (selected != null) {
+                            _onSourceLongPress(fragment, selected);
+                          }
+                        },
+                  child: _fragmentSurface(fragment, _bindings[index]),
+                ),
               ),
           ],
         ),
       );
     },
   );
+}
+
+/// Retire gesture geometry without remounting/releasing the borrowed body.
+final class _TextLongPressSurface extends StatefulWidget {
+  const _TextLongPressSurface({
+    required this.identity,
+    required this.onLongPress,
+    required this.child,
+  });
+  final Object identity;
+  final ValueChanged<Offset>? onLongPress;
+  final Widget child;
+  @override
+  State<_TextLongPressSurface> createState() => _TextLongPressSurfaceState();
+}
+
+final class _TextLongPressSurfaceState extends State<_TextLongPressSurface> {
+  late LongPressGestureRecognizer _press;
+  void _bind() {
+    _press = LongPressGestureRecognizer()
+      ..onLongPressStart = (details) {
+        if (mounted) widget.onLongPress?.call(details.localPosition);
+      };
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _bind();
+  }
+
+  @override
+  void didUpdateWidget(covariant _TextLongPressSurface oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.identity != widget.identity ||
+        (oldWidget.onLongPress == null) != (widget.onLongPress == null)) {
+      _press.dispose();
+      _bind();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Listener(
+    behavior: HitTestBehavior.translucent,
+    onPointerDown: widget.onLongPress == null ? null : _press.addPointer,
+    child: widget.child,
+  );
+  @override
+  void dispose() {
+    _press.dispose();
+    super.dispose();
+  }
 }
 
 bool _hasRubyBackground(ForumBodyPreparedTextFragment delivery) {

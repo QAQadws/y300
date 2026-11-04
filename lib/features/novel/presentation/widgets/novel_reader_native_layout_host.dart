@@ -18,6 +18,7 @@ import '../models/novel_reader_anchor_navigation_request.dart';
 import '../models/novel_reader_native_host_status.dart';
 import '../models/novel_reader_native_prepared_chapter.dart';
 import '../models/novel_reader_pagination_position.dart';
+import '../models/novel_reader_native_text_selection.dart';
 import '../services/novel_reader_native_layout_scope.dart';
 import '../services/novel_reader_native_owner.dart';
 import '../services/novel_reader_native_preparation_service.dart';
@@ -67,6 +68,7 @@ class NovelReaderNativeLayoutHost extends StatefulWidget {
     this.onContentReady,
     this.onContentTerminal,
     this.onScrollActivityChanged,
+    this.onTextSelection,
     this.active = true,
     this.activity,
     this.placeholderBuilder,
@@ -124,6 +126,7 @@ class NovelReaderNativeLayoutHost extends StatefulWidget {
   final VoidCallback? onContentReady;
   final VoidCallback? onContentTerminal;
   final ValueChanged<bool>? onScrollActivityChanged;
+  final ValueChanged<NovelReaderNativeTextSelection>? onTextSelection;
 
   /// Shell supplies frontmost && resumed && unobstructed reading authority.
   /// Hidden content keeps its mounted paint but owns no active pagination work.
@@ -159,6 +162,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
   int _readyEpoch = -1;
   int _terminalEpoch = -1;
   bool _needsLayout = true;
+  int _selectionRevision = 0;
   bool _paintOnlyCandidate = false;
   bool _busy = true;
   bool _empty = false;
@@ -326,6 +330,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         resourcesChanged ||
         beginningChanged;
     if (inputsChanged || oldWidget.preferences != widget.preferences) {
+      _selectionRevision++;
       // Only color requests may join the context paint check. The immutable
       // scope still rejects foreground/link changes before accepting a canvas.
       final colorOnly =
@@ -650,6 +655,31 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
             widget.placeholderBuilder?.call(context, _status) ??
             const SizedBox.shrink(),
         onPositionChanged: (position) => _confirmed(request, position),
+        onTextSelection: widget.onTextSelection == null
+            ? null
+            : (selection) {
+                if (!_live(request)) return;
+                final revision = _selectionRevision;
+                widget.onTextSelection!(
+                  NovelReaderNativeTextSelection(
+                    selection.snapshot,
+                    () =>
+                        mounted &&
+                        !_disposed &&
+                        revision == _selectionRevision &&
+                        identical(request, _current) &&
+                        !request.closed &&
+                        request.handle.isCurrent &&
+                        !widget.owner.isClosed &&
+                        identical(request.owner, widget.owner) &&
+                        identical(
+                          request.authority,
+                          widget.readingAuthorityIdentity,
+                        ) &&
+                        selection.isCurrent,
+                  ),
+                );
+              },
         onScrollActivityChanged: (scrolling) {
           if (_live(request)) widget.onScrollActivityChanged?.call(scrolling);
         },

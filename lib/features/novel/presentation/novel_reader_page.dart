@@ -67,6 +67,8 @@ import 'package:y300/features/thread/presentation/thread_image_reader_page.dart'
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/link_copy_feedback.dart';
+import 'package:y300/shared/widgets/forum_content_selection_copy_page.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_native_text_selection.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 
 const _progressDiagnostics = NovelReaderProgressDiagnostics();
@@ -141,6 +143,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   bool _isProgrammaticScrollChange = false;
   bool _allowPopAfterProgressFlush = false;
   bool _isHandlingPop = false;
+  bool _textSelectionOpening = false;
   int _pageSeekSerial = 0;
   int _chapterEntrySerial = 0;
   NovelReaderChapterEntryRequest? _pendingChapterEntryRequest;
@@ -1132,6 +1135,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     chromeInsets: chromeInsets,
     semanticDocument: viewState.document,
     activity: _nativeActivity,
+    onTextSelection: (selection) =>
+        unawaited(_openNativeTextSelection(identity, selection)),
     idleScheduler: widget.nativeIdleScheduler,
     navigationController: _pagedNavigationController,
     pageSeekRequest: _pendingPageSeekRequest,
@@ -2402,6 +2407,64 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         );
       },
     );
+  }
+
+  Future<void> _openNativeTextSelection(
+    String identity,
+    NovelReaderNativeTextSelection selection,
+  ) async {
+    if (_textSelectionOpening ||
+        !_isReadingVisible ||
+        !_isCurrentReaderSurface(identity) ||
+        !selection.isCurrent) {
+      return;
+    }
+    _textSelectionOpening = true;
+    _cancelPendingReaderTap();
+    try {
+      await _runWithReaderSemanticsSuspended(() async {
+        if (!mounted ||
+            !_isCurrentReaderSurface(identity) ||
+            !selection.isCurrent) {
+          return;
+        }
+        final snapshot = selection.snapshot;
+        final writer = ref.read(clipboardTextWriterProvider);
+        final route = MaterialPageRoute<void>(
+          builder: (context) => ForumContentSelectionCopyPage(
+            key: const Key('novel-native-selection-copy-page'),
+            bodyKey: const Key('novel-native-selection-copy-body'),
+            title: snapshot.isAnnotation
+                ? AppLocalizations.of(context).novelAnnotationSelectionCopyTitle
+                : AppLocalizations.of(context).novelSelectionCopyTitle,
+            clipboardTextWriter: writer,
+            isCurrent: () =>
+                mounted &&
+                _resumed &&
+                _isCurrentReaderSurface(identity) &&
+                selection.isCurrent,
+            child: Text(
+              snapshot.text,
+              key: const Key('novel-native-selection-copy-text'),
+              style: snapshot.isCode
+                  ? const TextStyle(fontFamily: 'monospace')
+                  : null,
+            ),
+          ),
+        );
+        await Navigator.of(context).push<void>(route);
+        // The pop result precedes the last obscuring transition frame.
+        await route.completed;
+      });
+    } on Object {
+      if (mounted && _isCurrentReaderSurface(identity)) {
+        _showReaderSnackBar(
+          AppLocalizations.of(context).novelSaveReadingProgressFailed,
+        );
+      }
+    } finally {
+      _textSelectionOpening = false;
+    }
   }
 
   Future<T> _runWithReaderSemanticsSuspended<T>(

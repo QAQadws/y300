@@ -19,6 +19,7 @@ import '../models/novel_reader_native_host_status.dart';
 import '../models/novel_reader_paged_indicator_layout.dart';
 import '../models/novel_reader_pagination_exception.dart';
 import '../models/novel_reader_pagination_position.dart';
+import '../models/novel_reader_native_text_selection.dart';
 import '../novel_text_resolver.dart';
 import '../services/novel_reader_display_resolvers.dart';
 import '../services/novel_reader_native_owner.dart';
@@ -66,6 +67,7 @@ class NovelReaderNativePagedSurface extends StatefulWidget {
     this.onContentReady,
     this.onContentTerminal,
     this.onScrollActivityChanged,
+    this.onTextSelection,
     this.onStatusChanged,
     this.onChooseScrollMode,
     this.performance = const NovelReaderPaginationPerformancePolicy(),
@@ -108,6 +110,7 @@ class NovelReaderNativePagedSurface extends StatefulWidget {
   final VoidCallback? onContentReady;
   final VoidCallback? onContentTerminal;
   final ValueChanged<bool>? onScrollActivityChanged;
+  final ValueChanged<NovelReaderNativeTextSelection>? onTextSelection;
   final ValueChanged<NovelReaderNativeHostStatus>? onStatusChanged;
   final VoidCallback? onChooseScrollMode;
   final NovelReaderPaginationPerformancePolicy performance;
@@ -377,6 +380,7 @@ class _NativePagedSurfaceState extends State<NovelReaderNativePagedSurface> {
                           converter: widget.converter,
                           active: widget.active,
                           activity: widget.activity,
+                          onTextSelection: widget.onTextSelection,
                           startsAtBeginning: widget.startsAtBeginning,
                           conversionAnchor: widget.conversionAnchor,
                           navigationController: _navigation,

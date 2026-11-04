@@ -1970,5 +1970,7 @@
   "novelAuthorBackgroundAllHint": "清除所有支援角色的作者醒目及區塊背景，保留頁面背景和主題本身的文字底色。",
   "novelAuthorColorUnavailable": "作者顏色策略僅用於翻頁閱讀；捲動時保留設定，可在此重設。",
   "novelAuthorForegroundReset": "恢復預設作者文字色策略",
-  "novelAuthorBackgroundReset": "恢復預設作者醒目背景策略"
+  "novelAuthorBackgroundReset": "恢復預設作者醒目背景策略",
+  "novelSelectionCopyTitle": "選擇複製",
+  "novelAnnotationSelectionCopyTitle": "選擇複製注音"
 }

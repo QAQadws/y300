@@ -10023,6 +10023,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'恢复默认作者高亮策略'**
   String get novelAuthorBackgroundReset;
+
+  /// No description provided for @novelSelectionCopyTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择复制'**
+  String get novelSelectionCopyTitle;
+
+  /// No description provided for @novelAnnotationSelectionCopyTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择复制注音'**
+  String get novelAnnotationSelectionCopyTitle;
 }
 
 class _AppLocalizationsDelegate

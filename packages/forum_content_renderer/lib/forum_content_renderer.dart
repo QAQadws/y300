@@ -145,6 +145,7 @@ export 'src/pagination/forum_body_text_page_preparation.dart'
         ForumBodyTextPagePreparationFailure,
         ForumBodyTextPagePreparationException;
 export 'src/pagination/forum_body_text_page_surface.dart';
+export 'src/pagination/forum_body_text_selection_snapshot.dart';
 export 'src/pagination/forum_body_prepared_text_fragment.dart';
 export 'src/pagination/forum_body_text_page_content.dart';
 export 'src/paragraph/forum_body_paragraph_content.dart';

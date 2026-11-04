@@ -11,6 +11,7 @@ import '../controllers/novel_reader_paged_navigation_controller.dart';
 import '../models/novel_reader_chapter_turn.dart';
 import '../models/novel_reader_native_page_view.dart';
 import '../models/novel_reader_pagination_position.dart';
+import '../models/novel_reader_native_text_selection.dart';
 
 /// Native page mounting and gesture boundary. The Host owns controllers,
 /// sessions and the paragraph cache, and supplies loading/recovery chrome.
@@ -38,6 +39,7 @@ class NovelReaderNativePagedViewport extends StatefulWidget {
     this.placeholder = const SizedBox.shrink(),
     this.onPositionChanged,
     this.onScrollActivityChanged,
+    this.onTextSelection,
   });
 
   final NovelReaderNativePagedController controller;
@@ -58,6 +60,7 @@ class NovelReaderNativePagedViewport extends StatefulWidget {
   final Widget placeholder;
   final ValueChanged<NovelReaderPaginationPosition>? onPositionChanged;
   final ValueChanged<bool>? onScrollActivityChanged;
+  final ValueChanged<NovelReaderNativeTextSelection>? onTextSelection;
 
   @override
   State<NovelReaderNativePagedViewport> createState() =>
@@ -221,6 +224,23 @@ class _NovelReaderNativePagedViewportState
           widget.onPositionChanged?.call(position);
         }
       },
+      onTextSelection: widget.onTextSelection == null
+          ? null
+          : (selection) {
+              if (frozen ||
+                  !identical(displayed.controller, widget.controller)) {
+                return;
+              }
+              widget.onTextSelection!(
+                NovelReaderNativeTextSelection(
+                  selection.snapshot,
+                  () =>
+                      mounted &&
+                      identical(displayed.controller, widget.controller) &&
+                      selection.isCurrent,
+                ),
+              );
+            },
     );
   }
 
@@ -258,6 +278,7 @@ class _NativeLayoutViewport extends StatefulWidget {
     required this.placeholder,
     required this.onPositionChanged,
     required this.onScrollActivityChanged,
+    required this.onTextSelection,
   });
   final NovelReaderNativePagedController controller;
   final double width;
@@ -276,6 +297,7 @@ class _NativeLayoutViewport extends StatefulWidget {
   final Widget placeholder;
   final ValueChanged<NovelReaderPaginationPosition> onPositionChanged;
   final ValueChanged<bool> onScrollActivityChanged;
+  final ValueChanged<NovelReaderNativeTextSelection>? onTextSelection;
 
   @override
   State<_NativeLayoutViewport> createState() => _NativeLayoutViewportState();
@@ -852,6 +874,32 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
                               page == _tapTurn?.to,
                           onMounted: _mounted,
                           onUnmounted: _unmounted,
+                          onTextSelection:
+                              widget.frozen || widget.onTextSelection == null
+                              ? null
+                              : (snapshot) {
+                                  if (widget.frozen ||
+                                      _scrolling ||
+                                      _page != page ||
+                                      controller.isClosed) {
+                                    return;
+                                  }
+                                  final fragments = _mountedPages[view];
+                                  if (fragments == null) return;
+                                  widget.onTextSelection!(
+                                    NovelReaderNativeTextSelection(
+                                      snapshot,
+                                      () =>
+                                          mounted &&
+                                          !controller.isClosed &&
+                                          _page == page &&
+                                          _mountedPages.containsKey(view) &&
+                                          fragments.every(
+                                            (fragment) => fragment.isActive,
+                                          ),
+                                    ),
+                                  );
+                                },
                         );
                       },
                     ),
@@ -899,6 +947,7 @@ class _NativeMountedPage extends StatefulWidget {
     required this.keepAlive,
     required this.onMounted,
     required this.onUnmounted,
+    required this.onTextSelection,
   });
   final NovelReaderNativePageView view;
   final bool keepAlive;
@@ -908,6 +957,7 @@ class _NativeMountedPage extends StatefulWidget {
   )
   onMounted;
   final ValueChanged<NovelReaderNativePageView> onUnmounted;
+  final ValueChanged<ForumBodyTextSelectionSnapshot>? onTextSelection;
 
   @override
   State<_NativeMountedPage> createState() => _NativeMountedPageState();
@@ -945,6 +995,9 @@ class _NativeMountedPageState extends State<_NativeMountedPage>
       pageIndex: view.pageIndex,
       layoutId: view.snapshot.layoutId,
       fragments: _fragments,
+      onSourceLongPress: widget.onTextSelection == null
+          ? null
+          : (_, selection) => widget.onTextSelection!(selection),
     );
   }
 

@@ -5950,6 +5950,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get novelAuthorBackgroundReset => '恢复默认作者高亮策略';
+
+  @override
+  String get novelSelectionCopyTitle => '选择复制';
+
+  @override
+  String get novelAnnotationSelectionCopyTitle => '选择复制注音';
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -11899,4 +11905,10 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get novelAuthorBackgroundReset => '恢復預設作者醒目背景策略';
+
+  @override
+  String get novelSelectionCopyTitle => '選擇複製';
+
+  @override
+  String get novelAnnotationSelectionCopyTitle => '選擇複製注音';
 }
