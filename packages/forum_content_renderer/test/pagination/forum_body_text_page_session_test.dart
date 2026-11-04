@@ -325,7 +325,14 @@ void main() {
       expect(waiting.madeProgress, isFalse);
       expect(session.resolvedNodeCount, resolved);
       visible.single.release();
-      final resumed = session.advance(maxEvents: 2, maxLines: 1);
+      var resumed = session.advance(maxEvents: 2, maxLines: 1);
+      // The retained natural input now checks its font frames cooperatively
+      // after reacquisition; no new DOM events or paragraph are consumed.
+      for (var n = 0; resumed.paragraphsAdmitted == 0 && n < 32; n++) {
+        expect(resumed.eventsRead, 0);
+        expect(resumed.waitingForLayoutBudget, isFalse);
+        resumed = session.advance(maxEvents: 2, maxLines: 1);
+      }
       expect(resumed.eventsRead, 0);
       expect(resumed.paragraphsAdmitted, 1);
       expect(resumed.pagesPublished, 1);

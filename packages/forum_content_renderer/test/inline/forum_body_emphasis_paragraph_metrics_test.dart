@@ -22,13 +22,14 @@ class _Scaler extends TextScaler {
 ForumBodyParagraphContent _content({
   String body = _body,
   String height = '.4',
+  String emphasis = "'X' red",
   TextDirection direction = TextDirection.ltr,
   bool indent = false,
 }) {
   final doc = const ForumBodyParser().parse(
     html:
         '<p style="white-space:pre-wrap;line-height:$height;'
-        'text-emphasis:\'X\' red">$body</p>',
+        'text-emphasis:$emphasis">$body</p>',
     sourceId: 'emphasis-paragraph',
     conversionIdentity: 'none',
   );
@@ -169,6 +170,30 @@ void _checkSource(ForumBodyEmphasisParagraphMetrics plan) {
 }
 
 void main() {
+  test(
+    'mark-free text shares row allocation without introducing decoration',
+    () {
+      final content = _content(body: 'AB\nCD\nEF', emphasis: 'none');
+      final cache = _cache();
+      final plan = _finish(
+        ForumBodyEmphasisParagraphPreparation(
+          content: content,
+          cache: cache,
+          width: 140,
+          ensureOwner: () {},
+        ),
+      );
+      expect(plan.content, same(content));
+      expect(plan.markCount, 0);
+      expect(plan.groups, hasLength(3));
+      expect(plan.height, greaterThanOrEqualTo(60));
+      for (final group in plan.groups) {
+        expect(group.allocation.marks, isEmpty);
+        expect(group.height, greaterThanOrEqualTo(20));
+      }
+      expect(cache.activeLeases, 0);
+    },
+  );
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() async {
     await (FontLoader(

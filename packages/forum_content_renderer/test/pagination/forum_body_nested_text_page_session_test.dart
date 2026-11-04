@@ -241,8 +241,8 @@ void main() {
     'ordinary native paragraphs obey the same byte seal and pair budget',
     () {
       final f = _Fixture(
-        List.filled(6, '<p style="font-size:2px">${'A' * 1000}</p>').join(),
-        width: 100,
+        List.filled(6, '<p>${'A' * 1000}</p>').join(),
+        width: 1000,
         height: 1000,
         cacheBytes: 500000,
         pageBytes: 140000,
@@ -264,6 +264,23 @@ void main() {
           old.close();
         }
       }
+      expect(f.cache.activeLeases, 0);
+    },
+  );
+
+  test(
+    'overflowing fractional fonts keep the existing aggregate cache budget',
+    () {
+      final f = _Fixture(
+        '<p style="font-size:2px">${'A' * 1000}</p>',
+        width: 100,
+        height: 1000,
+        cacheBytes: 500000,
+      );
+      // The natural 2px native rows round differently from their font boxes.
+      // Complete row paint needs more resources than the ordinary font alone.
+      expect(f.finish, throwsA(isA<ForumBodyParagraphBudgetException>()));
+      expect(f.cache.layoutBuildCount, 1);
       expect(f.cache.activeLeases, 0);
     },
   );

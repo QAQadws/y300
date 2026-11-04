@@ -129,6 +129,7 @@ final class ForumBodyTextPageSessionStep {
 /// demand scheduler or persisted semantic anchor is owned by this layer.
 final class ForumBodyTextPageSession {
   static const inlinePlanRevision = ForumBodyInlinePlanInput.revision;
+  static const paragraphPlanRevision = 1;
   factory ForumBodyTextPageSession({
     required ForumBodyDocument document,
     required ForumBodyReaderStyle reader,
@@ -373,11 +374,7 @@ final class ForumBodyTextPageSession {
             input = _decorate(
               ForumBodyTextPageContent.paragraph(admission.plainContent),
             );
-            final lease = _cache.acquire(
-              content: admission.plainContent,
-              width: pending.contentWidth,
-              textScaler: _textScaler,
-            );
+            final lease = admission.takePlainLease();
             try {
               _composer.append(
                 lease: lease,

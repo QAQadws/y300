@@ -347,12 +347,12 @@ void main() {
     expect(fixture.cache.activeLeases, 0);
   });
 
-  for (final source in [
-    '<p style="line-height:.25">X<ruby>A<rt>x</rt></ruby>Z</p>',
-    '<p>a</p><p style="line-height:.25">b</p>',
+  for (final (source, clipped) in [
+    ('<p style="line-height:.25">X<ruby>A<rt>x</rt></ruby>Z</p>', true),
+    ('<p>a</p><p style="line-height:.25">b</p>', false),
   ]) {
     test(
-      'clipped actual glyphs cannot confirm body-end visibility: $source',
+      'actual font containment governs body-end visibility, clipped=$clipped: $source',
       () async {
         final fixture = NativeReaderTestFixture(source, width: 20, height: 100);
         final controller = _controller(fixture);
@@ -364,20 +364,22 @@ void main() {
         final delivery = controller.readyTarget!;
         final fragments = delivery.view.takeFragments();
         expect(delivery.view.coverage.points, isNotEmpty);
-        expect(delivery.view.coverage.hasClippedGlyphs, isTrue);
+        expect(delivery.view.coverage.hasClippedGlyphs, clipped);
         final position = controller.confirmPreparedVisible(
           delivery,
           fragments,
         )!;
-        expect(position.isWholeBodyVisible, isFalse);
-        expect(position.isBodyEndVisible, isFalse);
-        expect(
-          controller.confirmPreparedChapterEndNavigation(
-            delivery.view,
-            fragments,
-          ),
-          isNull,
-        );
+        expect(position.isWholeBodyVisible, !clipped);
+        expect(position.isBodyEndVisible, !clipped);
+        if (clipped) {
+          expect(
+            controller.confirmPreparedChapterEndNavigation(
+              delivery.view,
+              fragments,
+            ),
+            isNull,
+          );
+        }
         for (final fragment in fragments) {
           fragment.close();
         }

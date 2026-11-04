@@ -6,10 +6,15 @@ import '../inline/forum_body_emphasis_text_input.dart';
 import '../inline/forum_body_fitted_emphasis_plan.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
+import '../paragraph/forum_body_paragraph_font_overflow.dart';
+import '../paragraph/forum_body_text_request.dart';
+import '../paragraph/forum_body_text_request_preparation.dart';
 import 'forum_body_text_page_content.dart';
 
 enum _AdmissionPhase {
   inspect,
+  plainAcquire,
+  plainFrames,
   plain,
   measure,
   entries,
@@ -23,6 +28,7 @@ enum _AdmissionPhase {
 
 /// Selects the paragraph format and prepares only its numeric admission input.
 /// The session owns traversal/composition; readable scenes belong to PageJob.
+/// Actual overflowing fonts reuse row allocation with zero decoration marks.
 final class ForumBodyEmphasisPageAdmission {
   ForumBodyEmphasisPageAdmission({
     required ForumBodyParagraphContent content,
@@ -39,6 +45,9 @@ final class ForumBodyEmphasisPageAdmission {
        _validateCounts = validateCounts;
 
   ForumBodyParagraphContent? _content;
+  ForumBodyTextRequestPreparation? _plainRequest;
+  ForumBodyParagraphLease? _plainLease;
+  ForumBodyParagraphFontOverflowPreparation? _plainFrames;
   ForumBodyParagraphCache? _cache;
   final double _width;
   TextScaler? _textScaler;
@@ -80,7 +89,7 @@ final class ForumBodyEmphasisPageAdmission {
           case _AdmissionPhase.inspect:
             final content = _content!;
             if (_style == content.runs.length) {
-              _phase = _AdmissionPhase.plain;
+              _phase = _AdmissionPhase.plainAcquire;
             } else {
               final style = _style < 0
                   ? content.style
@@ -107,6 +116,57 @@ final class ForumBodyEmphasisPageAdmission {
               }
             }
             used++;
+          case _AdmissionPhase.plainAcquire:
+            _plainRequest ??= ForumBodyTextRequestPreparation(
+              cache: cache,
+              request: ForumBodyTextRequest.paragraph(_content!),
+              width: _width,
+              textScaler: _textScaler!,
+              ensureOwner: _guard,
+              preparePaint: false,
+            );
+            final step = _plainRequest!.advance();
+            used += step.units;
+            _guard();
+            if (step.waiting) {
+              return (partsPrepared: used, waitingForLayoutBudget: true);
+            }
+            if (!_plainRequest!.isReady) {
+              return (partsPrepared: used, waitingForLayoutBudget: false);
+            }
+            _plainLease = _plainRequest!.takeLease() as ForumBodyParagraphLease;
+            _plainRequest = null;
+            if (_content!.layoutMode != ForumBodyParagraphLayoutMode.wrap) {
+              _phase = _AdmissionPhase.plain;
+            } else {
+              _plainFrames = ForumBodyParagraphFontOverflowPreparation(
+                parent: _plainLease!,
+                ensureOwner: _guard,
+              );
+              _phase = _AdmissionPhase.plainFrames;
+            }
+          case _AdmissionPhase.plainFrames:
+            used += _plainFrames!.advance(maxParts: maxParts - used);
+            if (!_plainFrames!.isReady) break;
+            final needsRows = _plainFrames!.take();
+            _plainFrames = null;
+            if (!needsRows) {
+              _phase = _AdmissionPhase.plain;
+            } else {
+              _plainLease!.release();
+              _plainLease = null;
+              // The existing row transaction also supports zero marks. Its
+              // isolated whole-source paint keeps glyphs inside their own rows;
+              // simply enlarging the natural fragment clip would leak neighbors.
+              _measurement = ForumBodyEmphasisParagraphPreparation(
+                content: _content!,
+                cache: cache,
+                width: _width,
+                textScaler: _textScaler!,
+                ensureOwner: _guard,
+              );
+              _phase = _AdmissionPhase.measure;
+            }
           case _AdmissionPhase.measure:
             final work = _measurement!;
             final step = work.advance(maxParts: maxParts - used);
@@ -126,7 +186,7 @@ final class ForumBodyEmphasisPageAdmission {
             // suffix or an empty visible substring is not sufficient proof.
             if (metrics.groups.isEmpty) {
               _content = metrics.glyphInput.glyphs;
-              _phase = _AdmissionPhase.plain;
+              _phase = _AdmissionPhase.plainAcquire;
             } else {
               final input = ForumBodyEmphasisPageContent(metrics);
               _validateCounts!(input.retainedTextCodeUnits, input.retainedRuns);
@@ -227,6 +287,17 @@ final class ForumBodyEmphasisPageAdmission {
     return result;
   }
 
+  ForumBodyParagraphLease takePlainLease() {
+    _guard();
+    if (!isPlain || _plainLease == null) {
+      throw StateError('Ordinary paragraph is not ready');
+    }
+    final result = _plainLease!;
+    _plainLease = null;
+    close();
+    return result;
+  }
+
   ForumBodyFittedEmphasisPageContent takeFitted() {
     if (_operating) throw StateError('Emphasis admission is reentrant');
     _guard();
@@ -249,6 +320,12 @@ final class ForumBodyEmphasisPageAdmission {
   void close() {
     if (_phase == _AdmissionPhase.closed) return;
     _phase = _AdmissionPhase.closed;
+    _plainFrames?.close();
+    _plainFrames = null;
+    _plainRequest?.close();
+    _plainRequest = null;
+    _plainLease?.release();
+    _plainLease = null;
     _measurement?.close();
     _measurement = null;
     _entries?.close();
