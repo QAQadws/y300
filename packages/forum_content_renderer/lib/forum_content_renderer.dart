@@ -40,6 +40,7 @@ export 'src/pagination/forum_body_inline_page_preparation.dart'
 export 'src/inline/forum_body_inline_paragraph_view.dart'
     show
         ForumBodyInlineParagraphView,
+        ForumBodyInlineFontFrameViewPreparation,
         ForumBodyInlineViewFailure,
         ForumBodyInlineViewException;
 export 'src/inline/forum_body_inline_paragraph_surface.dart';

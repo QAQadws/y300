@@ -19,12 +19,16 @@ import 'forum_body_emphasis_line_layout.dart';
 import 'forum_body_inline_paint_command.dart';
 import 'forum_body_inline_paint_row.dart';
 import 'forum_body_text_baseline_layout.dart';
+import 'forum_body_inline_font_frame_plan.dart';
+import '../pagination/forum_body_inline_page_preparation.dart';
 
 part 'forum_body_inline_ruby_binding.dart';
 part 'forum_body_inline_view_assembly.dart';
 part 'forum_body_inline_ruby_binding_work.dart';
 part 'forum_body_inline_background_regions.dart';
 part 'forum_body_inline_paint_commands.dart';
+part 'forum_body_inline_font_frame_view.dart';
+part 'forum_body_inline_font_frame_view_preparation.dart';
 
 enum ForumBodyInlineViewFailure { leases, coverage, identity, geometry }
 
@@ -66,6 +70,23 @@ final class ForumBodyInlineParagraphView {
       coverageStartUtf16 = 0,
       coverageEndUtf16 = 0;
 
+  ForumBodyInlineParagraphView._allocated(
+    ForumBodyInlineParagraphView source,
+    _InlineFontFrameBinding frames,
+    List<({Rect rect, ForumBodyRubyContainerFontBox font})> backgrounds,
+  ) : _parent = source._parent,
+      _fragment = source._fragment,
+      _children = source._children,
+      _backgrounds = backgrounds,
+      _backgroundRows = source._backgroundRows,
+      _fontFrames = frames,
+      width = source.width,
+      height = frames.window.height,
+      startLine = source.startLine,
+      endLine = source.endLine,
+      coverageStartUtf16 = source.coverageStartUtf16,
+      coverageEndUtf16 = source.coverageEndUtf16;
+
   /// Consumes these handles on success AND failure. Column and segment indices
   /// must be disjoint and cover exactly the visible atoms; hidden children
   /// cannot silently pin an entire long paragraph.
@@ -106,6 +127,7 @@ final class ForumBodyInlineParagraphView {
   Map<int, _RubyBinding> _children;
   List<({Rect rect, ForumBodyRubyContainerFontBox font})> _backgrounds;
   List<int> _backgroundRows;
+  _InlineFontFrameBinding? _fontFrames;
 
   /// Actual parent row ownership of each already-bound container surface.
   /// Coordinates remain local to this natural source window; allocation is
@@ -174,14 +196,21 @@ final class ForumBodyInlineParagraphView {
         );
       }
     }
-    final clip = offset & Size(width, height),
-        row = ForumBodyInlinePaintRowView.naturalWindow(
-          parent: _parent!,
-          startLine: startLine,
-          endLine: endLine,
-          ensureOwner: () => _ensureCommandOwner(offset),
-        );
-    yield ForumBodyInlinePaintCommand.parent(row, offset).clipped(clip);
+    final clip = offset & Size(width, height);
+    if (_fontFrames case final frames?) {
+      yield ForumBodyInlinePaintCommand.picture(
+        frames.picture,
+        offset,
+      ).clipped(clip);
+    } else {
+      final row = ForumBodyInlinePaintRowView.naturalWindow(
+        parent: _parent!,
+        startLine: startLine,
+        endLine: endLine,
+        ensureOwner: () => _ensureCommandOwner(offset),
+      );
+      yield ForumBodyInlinePaintCommand.parent(row, offset).clipped(clip);
+    }
     for (final entry in _children.entries) {
       yield null;
       _ensureCommandOwner(offset);
@@ -207,6 +236,7 @@ final class ForumBodyInlineParagraphView {
     if (parent == null || !parent.isActive || parent.layout.isDisposed) {
       throw StateError('Inline command source is retired');
     }
+    _fontFrames?.guard();
   }
 
   List<({Rect rect, ForumBodyRubyContainerFontBox font})>
@@ -227,7 +257,8 @@ final class ForumBodyInlineParagraphView {
   bool get isActive =>
       _parent?.isActive == true &&
       !_parent!.layout.isDisposed &&
-      _children.values.every((binding) => binding.isActive);
+      _children.values.every((binding) => binding.isActive) &&
+      (_fontFrames?.isActive ?? true);
   final double width;
   final double height;
   final int startLine;
@@ -247,14 +278,15 @@ final class ForumBodyInlineParagraphView {
     _ensureActive();
     final fragment = _fragment;
     if (fragment == null) return const [];
-    final top = fragment.top;
-    return fragment.layout.lines
+    final top = _fontFrames?.window.top ?? fragment.top;
+    return (_fontFrames?.plan.lines ?? fragment.layout.lines)
         .getRange(startLine, endLine)
         .map((line) => line.shift(Offset(0, -top)));
   }
 
   Iterable<ForumBodyNativeParagraphLease> get nativeLeases => [
     ?_parent,
+    if (_fontFrames case final frames?) ...[frames.isolated, frames.picture],
     for (final binding in _children.values) ...binding.nativeLeases,
   ];
 
@@ -277,7 +309,11 @@ final class ForumBodyInlineParagraphView {
       // Child pictures already contain their native edge coverage. A second
       // antialiased rectangular viewport compounds alpha at fractional edges.
       canvas.clipRect(offset & Size(width, height), doAntiAlias: false);
-      _fragment!.paintParent(canvas, offset);
+      if (_fontFrames case final frames?) {
+        frames.picture.paint(canvas, offset);
+      } else {
+        _fragment!.paintParent(canvas, offset);
+      }
       for (final entry in _children.entries) {
         entry.value.paint(canvas, offset + _origin(entry.key));
       }
@@ -286,9 +322,11 @@ final class ForumBodyInlineParagraphView {
     }
   }
 
-  Offset _origin(int index) =>
-      _fragment!.layout.atomBoxes[index].toRect().topLeft -
-      Offset(0, _fragment!.top);
+  Offset _origin(int index) => _fontFrames == null
+      ? _fragment!.layout.atomBoxes[index].toRect().topLeft -
+            Offset(0, _fragment!.top)
+      : _fontFrames!.plan.allocation.children[index]!.offset -
+            Offset(0, _fontFrames!.window.top);
 
   /// Returns parent display coordinates and the ACTUAL child's source point.
   /// Off-window points clamp to this view and remain approximate, never borrow
@@ -321,7 +359,8 @@ final class ForumBodyInlineParagraphView {
       offset.dx.clamp(0, width),
       offset.dy.clamp(0, height > 1e-7 ? height - 1e-7 : 0),
     );
-    final hit = _fragment!.hitAt(point);
+    final allocatedHit = _fontFrames?.hitAt(point, _children, _origin);
+    final hit = allocatedHit?.hit ?? _fragment!.hitAt(point);
     final display = content.projection.display;
     HtmlProjectedSourcePosition position;
     ForumBodyInlineContext? window;
@@ -375,7 +414,11 @@ final class ForumBodyInlineParagraphView {
       position: HtmlProjectedSourcePosition(
         sourceRune: position.sourceRune,
         displayUtf16: position.displayUtf16,
-        isExact: position.isExact && point == offset && height > 0,
+        isExact:
+            position.isExact &&
+            point == offset &&
+            height > 0 &&
+            (allocatedHit?.isExact ?? true),
       ),
     );
   }
@@ -478,9 +521,10 @@ final class ForumBodyInlineParagraphView {
     final start = startUtf16.clamp(coverageStartUtf16, coverageEndUtf16);
     final end = endUtf16.clamp(coverageStartUtf16, coverageEndUtf16);
     if (start >= end) return const [];
+    final query = _fontFrames?.isolated.layout ?? _fragment!.layout;
     final selected = paintedOnly
-        ? _fragment!.layout.glyphSelection(start, end)
-        : _fragment!.layout.selection(start, end);
+        ? query.glyphSelection(start, end)
+        : query.selection(start, end);
     final result = <TextBox>[];
     void add(TextBox box, Offset translation) {
       final raw = box.toRect().shift(translation);
@@ -501,7 +545,12 @@ final class ForumBodyInlineParagraphView {
     }
 
     for (final box in selected.textBoxes) {
-      add(box, Offset(0, -_fragment!.top));
+      if (_fontFrames case final frames?) {
+        final placed = frames.selectionBox(box);
+        if (placed != null) add(placed, Offset.zero);
+      } else {
+        add(box, Offset(0, -_fragment!.top));
+      }
     }
     for (final atom in selected.atoms) {
       final binding = _children[atom.index];
@@ -517,6 +566,7 @@ final class ForumBodyInlineParagraphView {
   }
 
   void _ensureActive() {
+    _fontFrames?.guard();
     if (!isActive) throw StateError('Inline paragraph view is retired');
     for (final binding in _children.values) {
       binding.ensureActive();
@@ -537,6 +587,8 @@ final class ForumBodyInlineParagraphView {
     _backgrounds = const [];
     _backgroundRows = const [];
     _fragment = null;
+    _fontFrames?.close();
+    _fontFrames = null;
     parent.release();
   }
 }

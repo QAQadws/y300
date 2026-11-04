@@ -117,6 +117,16 @@ final class ForumBodyInlineEmphasisChildView {
     _children = null;
     children?.close();
   }
+
+  /// Transfers the already qualified natural source/child binding. Its caller
+  /// supplies the allocated parent paint and keeps the allocation's geometry;
+  /// this view returns to its original natural coordinates after transfer.
+  ForumBodyInlineParagraphView takeSourceView() {
+    _guard();
+    final result = _children!;
+    _children = null;
+    return result;
+  }
 }
 
 enum _EmphasisChildPhase {

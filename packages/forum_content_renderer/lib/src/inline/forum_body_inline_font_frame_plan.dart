@@ -62,16 +62,30 @@ final class ForumBodyInlineFontFramePlan {
   /// apply the real page clip and admit all current font/scene dependencies.
   /// Native physical strips retain their own transforms and source-free keys.
   ForumBodyTextPictureInput parentPictureInput(int startLine, int endLine) {
-    final window = fragment(startLine, endLine);
-    final origin = Offset(0, -window.top);
     return ForumBodyTextPictureInput(
-      commands: [
-        for (var row = startLine; row < endLine; row++)
-          for (final command in _parentCommands[row])
-            command.translated(origin),
-      ],
+      commands: parentPictureSteps(
+        startLine,
+        endLine,
+      ).whereType<ForumBodyTextPictureCommand>().toList(growable: false),
       maxCommands: ForumBodyTextPictureInput.maximumCommands,
     );
+  }
+
+  /// One row/command per step, including a row whose parent has no ink. Used
+  /// by the existing cooperative scene writer without a synchronous full walk.
+  Iterable<ForumBodyTextPictureCommand?> parentPictureSteps(
+    int startLine,
+    int endLine,
+  ) sync* {
+    final window = fragment(startLine, endLine),
+        origin = Offset(0, -window.top);
+    for (var row = startLine; row < endLine; row++) {
+      final commands = _parentCommands[row];
+      if (commands.isEmpty) yield null;
+      for (final command in commands) {
+        yield command.translated(origin);
+      }
+    }
   }
 }
 
