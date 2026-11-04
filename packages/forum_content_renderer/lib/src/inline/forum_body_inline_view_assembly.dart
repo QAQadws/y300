@@ -13,6 +13,7 @@ final class ForumBodyInlineViewAssembly {
     required this.endLine,
     Map<int, ForumBodyRubyGroupLayout> rubyGroups = const {},
     Map<int, ForumBodyTextBaselineLayout> baselineTexts = const {},
+    Map<int, ForumBodyInlineParagraphView> intrinsicBoxes = const {},
     Map<int, ForumBodyRubySegmentLayout> rubySegments = const {},
     Map<int, ForumBodyRubySoftSpaceLayout> rubySpaces = const {},
     Map<int, ForumBodyRubyTreeLayout> rubyTrees = const {},
@@ -24,6 +25,7 @@ final class ForumBodyInlineViewAssembly {
        _parent = parent,
        _groups = Map.of(rubyGroups),
        _baselines = Map.of(baselineTexts),
+       _inlineBoxes = Map.of(intrinsicBoxes),
        _segments = Map.of(rubySegments),
        _spaces = Map.of(rubySpaces),
        _trees = Map.of(rubyTrees),
@@ -35,6 +37,7 @@ final class ForumBodyInlineViewAssembly {
   ForumBodyInlineParagraphLease? _parent;
   Map<int, ForumBodyRubyGroupLayout> _groups;
   Map<int, ForumBodyTextBaselineLayout> _baselines;
+  Map<int, ForumBodyInlineParagraphView> _inlineBoxes;
   Map<int, ForumBodyRubySegmentLayout> _segments;
   Map<int, ForumBodyRubySoftSpaceLayout> _spaces;
   Map<int, ForumBodyRubyTreeLayout> _trees;
@@ -65,6 +68,7 @@ final class ForumBodyInlineViewAssembly {
     ?_parent,
     for (final group in _groups.values) ...group.nativeLeases,
     for (final text in _baselines.values) text.lease,
+    for (final view in _inlineBoxes.values) ...view.nativeLeases,
     for (final segment in _segments.values) ...segment.nativeLeases,
     for (final space in _spaces.values) ...space.nativeLeases,
     for (final tree in _trees.values) ...tree.nativeLeases,
@@ -88,6 +92,8 @@ final class ForumBodyInlineViewAssembly {
             if (startLine != 0 ||
                 endLine != 0 ||
                 _groups.isNotEmpty ||
+                _baselines.isNotEmpty ||
+                _inlineBoxes.isNotEmpty ||
                 _segments.isNotEmpty ||
                 _spaces.isNotEmpty ||
                 _trees.isNotEmpty ||
@@ -146,12 +152,14 @@ final class ForumBodyInlineViewAssembly {
               !_parent!.layout.isAtomTrimmed(atom.index)) {
             final group = _groups[atom.index];
             final baselineText = _baselines[atom.index];
+            final inlineBox = _inlineBoxes[atom.index];
             final segment = _segments[atom.index];
             final space = _spaces[atom.index];
             final tree = _trees[atom.index];
             final emphasisTree = _emphasisTrees[atom.index];
             if ((group != null ? 1 : 0) +
                         (baselineText != null ? 1 : 0) +
+                        (inlineBox != null ? 1 : 0) +
                         (segment != null ? 1 : 0) +
                         (space != null ? 1 : 0) +
                         (tree != null ? 1 : 0) +
@@ -162,6 +170,7 @@ final class ForumBodyInlineViewAssembly {
             }
             if (group == null &&
                 baselineText == null &&
+                inlineBox == null &&
                 segment == null &&
                 space == null &&
                 tree == null &&
@@ -170,6 +179,9 @@ final class ForumBodyInlineViewAssembly {
             }
             final size =
                 baselineText?.metrics.size ??
+                (inlineBox == null
+                    ? null
+                    : Size(inlineBox.width, inlineBox.height)) ??
                 group?.size ??
                 segment?.size ??
                 space?.size ??
@@ -177,6 +189,7 @@ final class ForumBodyInlineViewAssembly {
                 emphasisTree!.size;
             final baseline =
                 baselineText?.metrics.baseline ??
+                inlineBox?.lines.single.baseline ??
                 group?.baseline ??
                 segment?.baseline ??
                 space?.baseline ??
@@ -234,6 +247,7 @@ final class ForumBodyInlineViewAssembly {
             _bindingIndex = atom.index;
             _binding = _RubyBindingWork(
               baselineText: baselineText,
+              intrinsicBox: inlineBox,
               content: _parent!.content,
               index: atom.index,
               group: group,
@@ -249,6 +263,7 @@ final class ForumBodyInlineViewAssembly {
           if (_bindings.length !=
               _groups.length +
                   _baselines.length +
+                  _inlineBoxes.length +
                   _segments.length +
                   _spaces.length +
                   _trees.length +
@@ -363,6 +378,7 @@ final class ForumBodyInlineViewAssembly {
     _parent = null;
     _groups = const {};
     _baselines = const {};
+    _inlineBoxes = const {};
     _segments = const {};
     _spaces = const {};
     _trees = const {};
@@ -429,6 +445,9 @@ final class ForumBodyInlineViewAssembly {
     for (final text in _baselines.values) {
       text.close();
     }
+    for (final view in _inlineBoxes.values) {
+      view.close();
+    }
     for (final segment in _segments.values) {
       segment.close();
     }
@@ -443,6 +462,7 @@ final class ForumBodyInlineViewAssembly {
     }
     _groups = const {};
     _baselines = const {};
+    _inlineBoxes = const {};
     _segments = const {};
     _spaces = const {};
     _trees = const {};

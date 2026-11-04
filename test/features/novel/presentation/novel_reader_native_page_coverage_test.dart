@@ -146,6 +146,33 @@ Matcher _failure(NovelReaderNativeCoverageFailure failure) => throwsA(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'mixed script words keep canonical coverage across real line/page breaks',
+    () {
+      final fixture = _Fixture(
+        '<p>AB H<sup>2</sup>O A<sub>n</sub>z CD</p>',
+        width: 50,
+        height: 25,
+      );
+      expect(fixture.session.snapshot.length, greaterThan(1));
+      final sources = <int>{};
+      for (var page = 0; page < fixture.session.snapshot.length; page++) {
+        final fragments = fixture.prepareFragments(page);
+        try {
+          final coverage = _finish(fixture.preparedCursor(page, fragments));
+          expect(coverage.hasClippedGlyphs, isFalse);
+          sources.addAll(coverage.points.map((p) => p.sourceRune));
+        } finally {
+          for (final f in fragments) {
+            f.close();
+          }
+        }
+      }
+      expect(fixture.anchors.unmappedPaths, isEmpty);
+      expect(sources, containsAll([3, 4, 5, 6, 7, 8, 9, 10]));
+      expect(fixture.cache.activeLeases, 0);
+    },
+  );
   test('HTML script boxes keep canonical glyph proof including complete Unicode units', () {
     for (final (html, expected, omitted) in [
       ('<p>A<sup>2</sup>B<sub>n</sub>C</p>', [0, 1, 2, 3, 4, 5], <int>[]),

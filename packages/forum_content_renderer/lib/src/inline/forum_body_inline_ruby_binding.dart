@@ -24,6 +24,66 @@ sealed class _RubyBinding {
   void close();
 }
 
+final class _IntrinsicInlineBinding extends _RubyBinding {
+  const _IntrinsicInlineBinding(this.view, this.windows);
+  final ForumBodyInlineParagraphView view;
+  final Map<ForumBodyInlineContext, ForumBodyInlineContext> windows;
+  @override
+  Size get size => Size(view.width, view.height);
+  @override
+  double get baseline => view.lines.single.baseline;
+  @override
+  bool get isActive => view.isActive;
+  @override
+  Iterable<ForumBodyNativeParagraphLease> get nativeLeases => view.nativeLeases;
+  @override
+  void paint(Canvas canvas, Offset offset) => view.paint(canvas, offset);
+  @override
+  _RubySourceHit sourceAt(Offset point) {
+    final hit = view.sourceHitAt(point);
+    final child =
+        hit.window ??
+        view.content.contexts.firstWhere(
+          (c) =>
+              c.startUtf16 <= hit.position.displayUtf16 &&
+              c.endUtf16 >= hit.position.displayUtf16,
+        );
+    return (
+      window: windows[child]!,
+      position: HtmlProjectedSourcePosition(
+        sourceRune: hit.position.sourceRune,
+        displayUtf16: hit.position.displayUtf16 - child.startUtf16,
+        isExact: hit.window != null && hit.position.isExact,
+      ),
+    );
+  }
+
+  List<TextBox> _boxes(int start, int end, bool glyphs) => [
+    for (final pair in windows.entries)
+      ..._selectRubyWindow(
+        pair.value,
+        start,
+        end,
+        (from, to) => glyphs
+            ? view.glyphBoxes(
+                pair.key.startUtf16 + from,
+                pair.key.startUtf16 + to,
+              )
+            : view.selectionBoxes(
+                pair.key.startUtf16 + from,
+                pair.key.startUtf16 + to,
+                clipToView: false,
+              ),
+      ),
+  ];
+  @override
+  List<TextBox> selectionBoxes(int start, int end) => _boxes(start, end, false);
+  @override
+  List<TextBox> glyphBoxes(int start, int end) => _boxes(start, end, true);
+  @override
+  void close() => view.close();
+}
+
 final class _BaselineTextBinding extends _RubyBinding {
   const _BaselineTextBinding(this.text, this.window);
   final ForumBodyTextBaselineLayout text;

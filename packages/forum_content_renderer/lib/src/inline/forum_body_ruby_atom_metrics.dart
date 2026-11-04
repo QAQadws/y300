@@ -17,12 +17,35 @@ sealed class ForumBodyRubyAtomMetrics {
   double get baseline;
   String get alignmentSignature;
   PlaceholderDimensions get placeholderDimensions;
+  bool get participatesInRubyAlignment => true;
+}
+
+final class ForumBodyIntrinsicInlineAtomMetrics
+    extends ForumBodyRubyAtomMetrics {
+  const ForumBodyIntrinsicInlineAtomMetrics(this.size, this.baseline);
+  @override
+  final Size size;
+  @override
+  final double baseline;
+  @override
+  String get alignmentSignature => 'intrinsic-text';
+  @override
+  bool get participatesInRubyAlignment => false;
+  @override
+  PlaceholderDimensions get placeholderDimensions => PlaceholderDimensions(
+    size: size,
+    alignment: PlaceholderAlignment.baseline,
+    baseline: TextBaseline.alphabetic,
+    baselineOffset: baseline,
+  );
 }
 
 /// Baseline boxes keep their own geometry; they never join an annotation level.
 final class ForumBodyTextBaselineAtomMetrics extends ForumBodyRubyAtomMetrics {
   const ForumBodyTextBaselineAtomMetrics(this.value);
   final ForumBodyTextBaselineMetrics value;
+  @override
+  bool get participatesInRubyAlignment => false;
   @override
   Size get size => value.size;
   @override
@@ -109,7 +132,7 @@ final class ForumBodyRubyAtomAlignment {
            ),
          _ => null,
        } {
-    if (atom is ForumBodyTextBaselineAtomMetrics) {
+    if (!atom.participatesInRubyAlignment) {
       throw ArgumentError('Baseline text does not join ruby levels');
     }
   }

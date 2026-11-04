@@ -110,6 +110,8 @@ final class ForumBodyInlinePlanPreparation {
   final _retriedBands = Set<ForumBodyTextBandContent>.identity();
   ForumBodyRubyGroupPreparation? _pair;
   ForumBodyTextBaselinePreparation? _baseline;
+  ForumBodyInlinePlanPreparation? _inlineBox;
+  final _inlineBoxes = <int, ForumBodyIntrinsicInlineMetrics>{};
   ForumBodyRubySegmentMetricsPreparation? _segment;
   ForumBodyRubySoftSpacePreparation? _space;
   ForumBodyRubyTreeMetricsPreparation? _tree;
@@ -136,6 +138,7 @@ final class ForumBodyInlinePlanPreparation {
     ?_probe,
     if (_pair != null) ..._pair!.nativeLeases,
     if (_baseline != null) ..._baseline!.nativeLeases,
+    if (_inlineBox != null) ..._inlineBox!.nativeLeases,
     if (_segment != null) ..._segment!.nativeLeases,
     if (_space != null) ..._space!.nativeLeases,
     if (_tree != null) ..._tree!.nativeLeases,
@@ -311,6 +314,40 @@ final class ForumBodyInlinePlanPreparation {
     bool cachedOnly,
   ) {
     switch (request) {
+      case ForumBodyIntrinsicInlineAtomRequest(:final input):
+        final job = _inlineBox ??= ForumBodyInlinePlanPreparation(
+          input: input,
+          cache: _cache!,
+          textScaler: _textScaler!,
+          ensureOwner: _guard,
+          additionalOwnedLeases: _ownedPrefix,
+        );
+        final before = _cache!.layoutBuildCount;
+        final step = job.advance(maxParts: maxParts, cachedOnly: cachedOnly);
+        _cacheMiss = job.cacheMiss;
+        if (step.isReady) {
+          final metrics = job.takeIntrinsicBox();
+          if (metrics.size.width > width) {
+            _input = _input!.flattenIntrinsicAtom(_metrics.length);
+          } else {
+            _inlineBoxes[_metrics.length] = metrics;
+            _metrics.add(
+              ForumBodyIntrinsicInlineAtomMetrics(
+                metrics.size,
+                metrics.baseline,
+              ),
+            );
+          }
+          _closeMetric();
+        }
+        return ForumBodyRubyGroupPreparationStep(
+          partsPrepared: 0,
+          layoutsBuilt: _cache!.layoutBuildCount - before,
+          partsInspected: 0,
+          isReady: step.isReady,
+          waitingForLayoutBudget: step.waitingForLayoutBudget,
+          formatUnitsPrepared: step.partsPrepared,
+        );
       case ForumBodyTextBaselineAtomRequest(
         :final text,
         :final shift,
@@ -573,6 +610,8 @@ final class ForumBodyInlinePlanPreparation {
     _pair?.close();
     _baseline?.close();
     _baseline = null;
+    _inlineBox?.close();
+    _inlineBox = null;
     _pair = null;
     _segment?.close();
     _segment = null;
@@ -823,6 +862,14 @@ final class ForumBodyInlinePlanPreparation {
       } else {
         _atomPlans.add(switch ((request, alignment.results[index])) {
           (
+            ForumBodyIntrinsicInlineAtomRequest(),
+            ForumBodyIntrinsicInlineAtomMetrics(),
+          ) =>
+            ForumBodyIntrinsicInlineAtomPlan(
+              metrics: _inlineBoxes[index]!,
+              maxWidth: width,
+            ),
+          (
             ForumBodyTextBaselineAtomRequest(:final text, :final maxWidth),
             ForumBodyTextBaselineAtomMetrics(:final value),
           ) =>
@@ -1025,6 +1072,7 @@ final class ForumBodyInlinePlanPreparation {
     _source = null;
     _validateInput = null;
     _treeSnapshots.clear();
+    _inlineBoxes.clear();
     _glyphSnapshots.clear();
     _emphasisFormats.clear();
     _atomPlans.clear();

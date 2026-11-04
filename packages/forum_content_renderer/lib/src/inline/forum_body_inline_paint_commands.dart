@@ -9,6 +9,8 @@ Iterable<ForumBodyInlinePaintCommand?> _rubyPaintCommands(
 ) sync* {
   yield null;
   switch (binding) {
+    case _IntrinsicInlineBinding():
+      yield* binding.view.paintCommands(offset);
     case _BaselineTextBinding():
       yield ForumBodyInlinePaintCommand.text(
         binding.text.lease,

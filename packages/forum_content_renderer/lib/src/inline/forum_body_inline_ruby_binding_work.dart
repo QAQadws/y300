@@ -8,6 +8,7 @@ final class _RubyBindingWork {
     required int index,
     ForumBodyRubyGroupLayout? group,
     ForumBodyTextBaselineLayout? baselineText,
+    ForumBodyInlineParagraphView? intrinsicBox,
     ForumBodyRubySegmentLayout? segment,
     ForumBodyRubySoftSpaceLayout? space,
     ForumBodyRubyTreeLayout? tree,
@@ -16,6 +17,8 @@ final class _RubyBindingWork {
   }) : _cursor = content.openAtomicContexts(index),
        _group = group,
        _baselineText = baselineText,
+       _intrinsicBox = intrinsicBox,
+       _boxLeases = intrinsicBox?.nativeLeases.iterator,
        _segment = segment,
        _space = space,
        _tree = tree,
@@ -27,6 +30,12 @@ final class _RubyBindingWork {
   ForumBodyInlineAtomicContextCursor? _cursor;
   ForumBodyRubyGroupLayout? _group;
   ForumBodyTextBaselineLayout? _baselineText;
+  ForumBodyInlineParagraphView? _intrinsicBox;
+  Iterator<ForumBodyNativeParagraphLease>? _boxLeases;
+  var _boxMember = 0;
+  bool _boxLeasesDone = false;
+  Map<ForumBodyInlineContext, ForumBodyInlineContext> _boxWindows =
+      Map.identity();
   ForumBodyRubySegmentLayout? _segment;
   ForumBodyRubySoftSpaceLayout? _space;
   ForumBodyRubyTreeLayout? _tree;
@@ -56,7 +65,25 @@ final class _RubyBindingWork {
     if (maxParts <= 0) throw ArgumentError.value(maxParts);
     var work = 0;
     while (work < maxParts && !isComplete) {
-      if (_baselineText != null) {
+      if (_intrinsicBox != null) {
+        final box = _intrinsicBox!;
+        if (!_boxLeasesDone) {
+          if (_boxLeases!.moveNext()) {
+            _own!(_boxLeases!.current);
+          } else {
+            _boxLeasesDone = true;
+          }
+        } else if (_boxMember < box.content.contexts.length) {
+          final member = box.content.contexts[_boxMember++];
+          _boxWindows[member] = _cursor!.resolve(member.content);
+        } else {
+          _cursor!.finish();
+          _result = _IntrinsicInlineBinding(
+            box,
+            UnmodifiableMapView(_boxWindows),
+          );
+        }
+      } else if (_baselineText != null) {
         final text = _baselineText!;
         _own!(text.lease);
         final window = _cursor!.resolve(text.content);
@@ -176,6 +203,9 @@ final class _RubyBindingWork {
     _cursor = null;
     _group = null;
     _baselineText = null;
+    _intrinsicBox = null;
+    _boxLeases = null;
+    _boxWindows = Map.identity();
     _segment = null;
     _space = null;
     _tree = null;

@@ -205,6 +205,33 @@ final class ForumBodyInlineSpanContent {
   final List<ForumBodyParagraphRun> runs;
   final List<ForumBodyInlineContext> contexts;
 
+  /// Repartition only opaque engine slots after a measured group is too wide.
+  /// Original display/source fences, windows and run identities stay intact.
+  ForumBodyInlineSpanContent repartitionAtoms({
+    required List<({int startUtf16, int endUtf16})> atomicRanges,
+    required Set<int> softSpaceAtoms,
+  }) {
+    if (_sourceMapping != null ||
+        paintLayer != ForumBodyParagraphPaintLayer.all) {
+      throw StateError('Only original inline input can repartition atoms');
+    }
+    return ForumBodyInlineSpanContent._(
+      identity: identity,
+      path: path,
+      fontRevision: fontRevision,
+      styleRevision: styleRevision,
+      style: style,
+      projection: HtmlInlineTextProjection.build(
+        display: projection.display,
+        atomicRanges: atomicRanges,
+        softSpaceAtoms: softSpaceAtoms,
+      ),
+      contexts: contexts,
+      runs: runs,
+      appliesFirstLineIndent: appliesFirstLineIndent,
+    );
+  }
+
   // Only the enclosing constrained paragraph reserves an edge. Atomic child
   // fonts participate too; their intrinsic layouts keep their native origins.
   late final double horizontalInset =

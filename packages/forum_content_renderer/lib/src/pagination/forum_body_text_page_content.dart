@@ -250,7 +250,8 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
     }
     for (final (index, plan) in rubyAtoms.indexed) {
       final root = switch (plan) {
-        ForumBodyTextBaselineAtomPlan() => null,
+        ForumBodyTextBaselineAtomPlan() ||
+        ForumBodyIntrinsicInlineAtomPlan() => null,
         ForumBodyRubyTreeEmphasisAtomPlan(:final request) =>
           request.sourceTree.rootGroup.font,
         ForumBodyRubyTreePlan(:final request) => request.rootGroup.font,
@@ -262,7 +263,8 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
         throw ArgumentError('Ruby root font snapshot differs from request');
       }
       final background = switch (plan) {
-        ForumBodyTextBaselineAtomPlan() => null,
+        ForumBodyTextBaselineAtomPlan() ||
+        ForumBodyIntrinsicInlineAtomPlan() => null,
         ForumBodyRubyTreeEmphasisAtomPlan() => null,
         ForumBodyRubyTreePlan() => null,
         ForumBodyRubyColumnPlan(:final request) => request.background,
@@ -287,6 +289,10 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
         );
       }
       final target = switch (plan) {
+        ForumBodyIntrinsicInlineAtomPlan(:final metrics) => (
+          size: metrics.size,
+          baseline: metrics.baseline,
+        ),
         ForumBodyTextBaselineAtomPlan(:final metrics) => (
           size: metrics.size,
           baseline: metrics.baseline,

@@ -21,6 +21,8 @@ import 'forum_body_text_band_content.dart';
 import 'forum_body_ruby_tree_input.dart';
 import 'forum_body_emphasis_mark.dart';
 
+part 'forum_body_intrinsic_text_input.dart';
+
 /// Pure source-bound parent input and child requests for the session's pending
 /// format. No native resource, owner or scheduler is retained here.
 final class ForumBodyInlinePlanInput {
@@ -40,7 +42,7 @@ final class ForumBodyInlinePlanInput {
             .atoms
             .map((atom) => atom.engineUtf16),
       );
-  static const revision = 27;
+  static const revision = 28;
 
   factory ForumBodyInlinePlanInput(
     ForumBodyInlineFlowContent input,
@@ -48,6 +50,7 @@ final class ForumBodyInlinePlanInput {
     Map<ForumBodyRubyGroupContent, ForumBodyRubyTreeInput> trees = const {},
     Map<ForumBodyRubyGroupContent, ForumBodyRubyGlyphTreeInput> emphasisTrees =
         const {},
+    bool groupMixedWords = true,
   }) {
     if (input.layoutMode == ForumBodyParagraphLayoutMode.fitSingleLine) {
       _unsupported(input.path);
@@ -162,7 +165,7 @@ final class ForumBodyInlinePlanInput {
       lastPlain = null;
     }
 
-    void appendSourceText(ForumBodyParagraphContent context) {
+    void appendStyledText(ForumBodyParagraphContent context) {
       if (!context.hasBaselineShift || context.projection.text.isEmpty) {
         sourceOrder.add(appendPlain(context));
         return;
@@ -234,6 +237,19 @@ final class ForumBodyInlinePlanInput {
         var from = start;
         for (var i = start; i < end; i++) {
           final unit = text.codeUnitAt(i);
+          if (input.layoutMode == ForumBodyParagraphLayoutMode.wrap &&
+              (unit == 0x20 || unit == 0x09) &&
+              context.projection.sourceAtUtf16(i).displayUtf16 == i &&
+              context.projection.sourceAtUtf16(i + 1).displayUtf16 == i + 1) {
+            emitSingle(from, i, style);
+            sourceOrder.add(
+              appendPlain(
+                context.displayWindow(startUtf16: i, endUtf16: i + 1),
+              ),
+            );
+            from = i + 1;
+            continue;
+          }
           if (!forumBodyIsDisplayLineBreak(unit) &&
               unit != 0x0d &&
               unit != 0x85) {
@@ -266,6 +282,66 @@ final class ForumBodyInlinePlanInput {
         end += part.text.length;
       }
       if (current != null) emit(start, end, current);
+    }
+
+    void appendSourceText(ForumBodyParagraphContent context) {
+      if (!groupMixedWords ||
+          !context.hasBaselineShift ||
+          context.projection.text.isEmpty ||
+          input.layoutMode != ForumBodyParagraphLayoutMode.wrap) {
+        appendStyledText(context);
+        return;
+      }
+      var from = 0;
+      for (final word in _mixedScriptWords(context)) {
+        if (from < word.start) {
+          appendStyledText(
+            context.displayWindow(startUtf16: from, endUtf16: word.start),
+          );
+        }
+        final child = ForumBodyInlinePlanInput(
+          ForumBodyInlineFlowContent(
+            identity: input.identity,
+            path: input.path,
+            fontRevision: input.fontRevision,
+            styleRevision: input.styleRevision,
+            style: input.style,
+            layoutMode: ForumBodyParagraphLayoutMode.intrinsicSingleLine,
+            appliesFirstLineIndent: false,
+            trimCollapsibleEdges: false,
+            parts: [
+              ForumBodyInlineFlowText(
+                context.displayWindow(
+                  startUtf16: word.start,
+                  endUtf16: word.end,
+                ),
+              ),
+            ],
+            ignored: const [],
+            issues: const [],
+          ),
+          width,
+        );
+        final start = offset;
+        for (final window in child.content.contexts) {
+          sourceOrder.add(append(window.content));
+        }
+        atoms.add((startUtf16: start, endUtf16: offset));
+        requestsByAtom.add(ForumBodyIntrinsicInlineAtomRequest(child));
+        levelIds.add(-1);
+        previousCollapsibleSpace = false;
+        atLineStart = false;
+        lastPlain = null;
+        from = word.end;
+      }
+      if (from < context.projection.text.length) {
+        appendStyledText(
+          context.displayWindow(
+            startUtf16: from,
+            endUtf16: context.projection.text.length,
+          ),
+        );
+      }
     }
 
     for (final part in input.parts) {
@@ -701,6 +777,18 @@ final class ForumBodyInlinePlanInput {
     // Empty trailing source contexts must not keep a previous collapsed space
     // alive. Only a final ordinary context is eligible; atomic children are not.
     if (input.trimCollapsibleEdges) trimTrailingPlain();
+    const maxParentContexts = 512;
+    if (groupMixedWords && contexts.length > maxParentContexts) {
+      // Word boxes add source windows. Keep the existing input limit and the
+      // original atom path when that extra structure cannot be retained.
+      return ForumBodyInlinePlanInput(
+        input,
+        width,
+        trees: trees,
+        emphasisTrees: emphasisTrees,
+        groupMixedWords: false,
+      );
+    }
     final content = ForumBodyInlineSpanContent.compose(
       identity: input.identity,
       path: input.path,
@@ -712,6 +800,7 @@ final class ForumBodyInlinePlanInput {
       atomicRanges: atoms,
       softSpaceAtoms: softSpaceAtoms ?? const {},
       sourceOrder: sourceOrder,
+      maxContexts: maxParentContexts,
     );
     final glyphContexts = Set<ForumBodyParagraphContent>.identity();
     final derived =
@@ -760,6 +849,12 @@ final class ForumBodyInlinePlanInput {
 
   /// Explicit original order, independent of column display order.
   final List<ForumBodyParagraphContent> sourceContexts;
+
+  /// A full native mixed word may exceed the viewport. Restore its original
+  /// child atoms so the parent can use its existing emergency wrap behavior.
+  ForumBodyInlinePlanInput flattenIntrinsicAtom(int index) =>
+      _flattenIntrinsicTextAtom(this, index);
+
   final int retainedTextCodeUnits;
   final int retainedRuns;
   late final hasEmphasisTrees = atoms.any(
@@ -772,6 +867,9 @@ final class ForumBodyInlinePlanInput {
     }
     final bands = Set<ForumBodyTextBandContent>.identity();
     for (final atom in atoms) {
+      if (atom is ForumBodyIntrinsicInlineAtomRequest) {
+        yield* atom.input.nativeFontSizes;
+      }
       if (atom is ForumBodyTextBaselineAtomRequest) {
         yield* atom.shift.referenceFontSizes;
       }

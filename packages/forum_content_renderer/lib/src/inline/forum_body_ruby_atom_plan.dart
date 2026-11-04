@@ -8,6 +8,7 @@ import 'forum_body_ruby_soft_space_request.dart';
 import 'forum_body_ruby_soft_space_contract.dart';
 import 'forum_body_ruby_tree_input.dart';
 import 'forum_body_ruby_tree_metrics_preparation.dart';
+import 'forum_body_inline_plan_preparation.dart';
 import 'forum_body_emphasis_line_layout.dart';
 import 'forum_body_text_baseline_layout.dart';
 
@@ -62,8 +63,50 @@ sealed class ForumBodyRubyAtomPlan {
       nativeFootprint;
 }
 
-/// A text box, not ruby or an annotation. It participates in the same parent
-/// slots and page budget while retaining exactly one original source context.
+/// One measured, unbroken text group. Its own native parent and original child
+/// windows share the existing page budget without acquiring ruby/RT roles.
+final class ForumBodyIntrinsicInlineAtomPlan extends ForumBodyRubyAtomPlan {
+  ForumBodyIntrinsicInlineAtomPlan({
+    required this.metrics,
+    this.maxWidth = 16384,
+  }) : super._() {
+    if (!maxWidth.isFinite ||
+        maxWidth <= 0 ||
+        maxWidth > 16384 ||
+        metrics.size.width > maxWidth ||
+        metrics.size.height <= 0 ||
+        metrics.size.height > 16384 ||
+        metrics.input.rubyAtoms.any(
+          (atom) => atom is! ForumBodyTextBaselineAtomPlan,
+        )) {
+      throw ArgumentError('Invalid intrinsic text atom');
+    }
+  }
+  final ForumBodyIntrinsicInlineMetrics metrics;
+  @override
+  final double maxWidth;
+  @override
+  late final List<ForumBodyTextRequest> nativeRequests = List.unmodifiable([
+    for (final atom in metrics.input.rubyAtoms) ...atom.nativeRequests,
+  ]);
+  @override
+  Iterable<ForumBodyParagraphContent> get sourceContexts =>
+      metrics.input.content.contexts.map((c) => c.content);
+  @override
+  int get extraTextCodeUnits => metrics.input.retainedTextCodeUnits;
+  @override
+  int get extraRuns => metrics.input.retainedRuns;
+  @override
+  int get nativeHandleCount => metrics.nativeHandleCount;
+  @override
+  Iterable<ForumBodyNativeRequestSlot> get nativeFootprint =>
+      metrics.input.nativeFootprintFor(metrics.fragment);
+  @override
+  Iterable<ForumBodyNativeBudgetSlot> get nativeBudgetFootprint =>
+      metrics.input.nativeBudgetFootprintFor(metrics.fragment);
+}
+
+/// A shifted text box keeps exactly one original source context.
 final class ForumBodyTextBaselineAtomPlan extends ForumBodyRubyAtomPlan {
   ForumBodyTextBaselineAtomPlan({
     required this.request,

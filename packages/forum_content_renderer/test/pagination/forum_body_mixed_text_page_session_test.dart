@@ -108,6 +108,298 @@ void main() {
     )..addFont(rootBundle.load('assets/fonts/inline_space.ttf'))).load();
   });
 
+  for (final html in [
+    'AB H<sup>2</sup>O',
+    'AB A<sub>n</sub>z',
+    'AB <sup>X</sup><sub>2</sub>Y',
+  ]) {
+    test('mixed alphanumeric word stays together at a style seam: $html', () {
+      final f = _Fixture('<p>$html</p>', width: 100, height: 100, entries: 16);
+      f.finish();
+      final bindings = f.prepare(0);
+      try {
+        final body = bindings.single as ForumBodyPreparedInlineFragment;
+        expect(body.lines, hasLength(2));
+        expect(body.lines.first.coverageEndUtf16, 3);
+        expect(body.lines.last.coverageStartUtf16, 3);
+        expect(body.projection.text, html.replaceAll(RegExp('<[^>]+>'), ''));
+        expect(body.view.content.projection.atoms, hasLength(1));
+        final atoms = body.view.nativeLeases
+            .whereType<ForumBodyInlineParagraphLease>();
+        expect(atoms, hasLength(2));
+        for (final c in body.view.content.contexts) {
+          if (c.startUtf16 == c.endUtf16) continue;
+          final boxes = body.glyphBoxes(c.startUtf16, c.endUtf16);
+          if (boxes.isEmpty) continue;
+          final point = boxes.first.toRect().center;
+          final selected = forumBodyTextSelectionAt(
+            binding: body,
+            fragment: f.session.snapshot.single.fragments.single,
+            pageSize: const Size(100, 100),
+            point: point,
+          );
+          expect(selected?.text, c.content.projection.text);
+          expect(selected?.isAnnotation, isFalse);
+        }
+      } finally {
+        for (final b in bindings) {
+          b.close();
+        }
+      }
+      expect(f.cache.activeLeases, 0);
+    });
+  }
+
+  test('an overwide mixed word retains the original emergency wrap path', () {
+    final f = _Fixture(
+      '<p>ABC<sup>2</sup>DE</p>',
+      width: 60,
+      height: 200,
+      entries: 16,
+    );
+    f.finish();
+    final bindings = f.prepare(0);
+    try {
+      final body = bindings.single as ForumBodyPreparedInlineFragment;
+      expect(body.lines.length, greaterThan(1));
+      expect(
+        body.view.nativeLeases.whereType<ForumBodyInlineParagraphLease>(),
+        hasLength(1),
+      );
+      expect(body.projection.text, 'ABC2DE');
+      for (var i = 0; i < 6; i++) {
+        final box = body.glyphBoxes(i, i + 1).single;
+        expect(box.left, greaterThanOrEqualTo(0));
+        expect(box.right, lessThanOrEqualTo(60));
+        expect(body.view.sourceAt(box.toRect().center).isExact, isTrue);
+      }
+    } finally {
+      for (final b in bindings) {
+        b.close();
+      }
+    }
+  });
+
+  test(
+    'long script phrases break at original spaces without synthetic text',
+    () {
+      final f = _Fixture(
+        '<p><sup>one two three four five six</sup></p>',
+        width: 90,
+        height: 60,
+        entries: 16,
+      );
+      f.finish();
+      expect(f.session.snapshot.length, greaterThan(1));
+      final seen = StringBuffer();
+      for (var p = 0; p < f.session.snapshot.length; p++) {
+        final bindings = f.prepare(p);
+        try {
+          for (final body in bindings) {
+            for (final line in body.lines) {
+              seen.write(
+                body.projection.text.substring(
+                  line.coverageStartUtf16,
+                  line.coverageEndUtf16,
+                ),
+              );
+            }
+          }
+        } finally {
+          for (final b in bindings) {
+            b.close();
+          }
+        }
+      }
+      expect(seen.toString(), 'one two three four five six');
+    },
+  );
+
+  test(
+    'mixed word page cancellation releases nested resources at every quantum',
+    () {
+      final f = _Fixture(
+        '<p>AB H<sup>2</sup>O A<sub>n</sub>z</p>',
+        width: 100,
+        height: 100,
+        entries: 16,
+      );
+      f.finish();
+      var completed = false;
+      for (var stopAt = 0; stopAt < 250; stopAt++) {
+        final job = f.session.openPagePreparation(0);
+        try {
+          for (var i = 0; i < stopAt && !job.isReady; i++) {
+            job.advance(maxFragments: 1, maxParts: 1);
+          }
+          completed = job.isReady;
+        } finally {
+          job.close();
+        }
+        expect(f.cache.activeLeases, 0, reason: 'quantum $stopAt');
+        if (completed) break;
+      }
+      expect(completed, isTrue);
+    },
+  );
+
+  test(
+    'overwide fallback preserves later mixed words and single-level ruby gaps',
+    () {
+      final f = _Fixture(
+        '<p>ABC<sup>2</sup>DE H<sup>2</sup>O '
+        '<ruby><rb>A</rb> <rb>B</rb><rt>x</rt> <rt>y</rt></ruby></p>',
+        width: 60,
+        height: 200,
+        entries: 16,
+      );
+      f.finish();
+      final bindings = f.prepare(0);
+      try {
+        final body = bindings.single as ForumBodyPreparedInlineFragment;
+        expect(body.projection.text, 'ABC2DE H2O Ax  By');
+        final word = body.view.content.contexts.singleWhere(
+          (c) => c.content.projection.text == '2' && c.startUtf16 > 6,
+        );
+        final hit = body.view.sourceHitAt(
+          body
+              .glyphBoxes(word.startUtf16, word.endUtf16)
+              .single
+              .toRect()
+              .center,
+        );
+        expect(hit.window, same(word));
+        expect(hit.position.isExact, isTrue);
+      } finally {
+        for (final b in bindings) {
+          b.close();
+        }
+      }
+      expect(f.cache.activeLeases, 0);
+    },
+  );
+
+  test(
+    'mixed word aggregate budget counts its inner parent before acquiring glyphs',
+    () {
+      final f = _Fixture(
+        '<p>H<sup>2</sup>O</p>',
+        width: 100,
+        height: 100,
+        entries: 2,
+      );
+      f.finish();
+      final job = f.session.openPagePreparation(0);
+      try {
+        expect(
+          () {
+            for (var i = 0; i < 1000 && !job.isReady; i++) {
+              job.advance(maxFragments: 1, maxParts: 1);
+            }
+          },
+          throwsA(
+            isA<ForumBodyTextPagePreparationException>().having(
+              (e) => e.failure,
+              'failure',
+              ForumBodyTextPagePreparationFailure.intrinsicBudget,
+            ),
+          ),
+        );
+      } finally {
+        job.close();
+      }
+      expect(f.cache.activeLeases, 0);
+    },
+  );
+
+  test(
+    'RTL mixed word keeps its actual native frame and exact source windows',
+    () {
+      final f = _Fixture(
+        '<p>AB H<sup>2</sup>O</p>',
+        width: 100,
+        height: 100,
+        entries: 16,
+        reader: ForumBodyReaderStyle(
+          textStyle: _reader.textStyle,
+          fontRevision: _reader.fontRevision,
+          linkColor: _reader.linkColor,
+          textDirection: TextDirection.rtl,
+          paragraphAfter: 0,
+          paragraphBefore: 0,
+        ),
+      );
+      f.finish();
+      final bindings = f.prepare(0);
+      try {
+        final body = bindings.single as ForumBodyPreparedInlineFragment;
+        expect(body.lines.length, 2);
+        expect(body.lines.first.coverageEndUtf16, 3);
+        for (final c in body.view.content.contexts) {
+          if (c.startUtf16 == c.endUtf16) continue;
+          final box = body.glyphBoxes(c.startUtf16, c.endUtf16).first.toRect();
+          expect(box.left, greaterThanOrEqualTo(0));
+          expect(box.right, lessThanOrEqualTo(100));
+          final hit = body.view.sourceHitAt(box.center);
+          expect(hit.window, same(c));
+          expect(hit.position.isExact, isTrue);
+        }
+      } finally {
+        for (final b in bindings) {
+          b.close();
+        }
+      }
+    },
+  );
+
+  test('warm mixed word page reuses inner and outer native inputs', () {
+    final f = _Fixture(
+      '<p>H<sup>2</sup>O</p>',
+      width: 100,
+      height: 100,
+      entries: 16,
+    );
+    f.finish();
+    for (final b in f.prepare(0)) {
+      b.close();
+    }
+    final before = (f.cache.layoutBuildCount, f.cache.pictureBuildCount);
+    final warm = f.session.preparePageFragments(0);
+    try {
+      expect(warm.single.nativeLeases, hasLength(3));
+    } finally {
+      for (final b in warm) {
+        b.close();
+      }
+    }
+    expect((f.cache.layoutBuildCount, f.cache.pictureBuildCount), before);
+    expect(f.cache.activeLeases, 0);
+  });
+
+  test(
+    'mixed word structure never expands the original source-window budget',
+    () {
+      final text = List.filled(150, 'H<sup>2</sup>O').join(' ');
+      final f = _Fixture('<p>$text</p>', width: 100, height: 100, entries: 64);
+      f.finish();
+      final bindings = f.prepare(0);
+      try {
+        final body = bindings.single as ForumBodyPreparedInlineFragment;
+        expect(body.projection.text, List.filled(150, 'H2O').join(' '));
+        expect(body.view.content.contexts.length, lessThanOrEqualTo(512));
+        expect(
+          body.view.nativeLeases.whereType<ForumBodyInlineParagraphLease>(),
+          hasLength(1),
+        );
+      } finally {
+        for (final b in bindings) {
+          b.close();
+        }
+      }
+      expect(f.cache.activeLeases, 0);
+    },
+  );
+
   for (final scale in [TextScaler.noScaling, const _ScriptCurve()]) {
     test(
       'HTML sup/sub use actual native baselines, colors and local copy: $scale',

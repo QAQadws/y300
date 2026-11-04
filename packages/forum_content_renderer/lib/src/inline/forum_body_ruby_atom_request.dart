@@ -6,6 +6,29 @@ import 'forum_body_ruby_container_background.dart';
 import 'forum_body_ruby_root_box.dart';
 import 'forum_body_ruby_tree_input.dart';
 import '../style/forum_body_baseline_shift.dart';
+import 'forum_body_inline_plan_input.dart';
+
+/// A bounded intrinsic text group has its own original parent and leaf plan.
+/// Its leaves are not rebound into an outer text band.
+final class ForumBodyIntrinsicInlineAtomRequest
+    extends ForumBodyRubyAtomRequest {
+  const ForumBodyIntrinsicInlineAtomRequest(this.input);
+  final ForumBodyInlinePlanInput input;
+  @override
+  List<ForumBodyTextRequest> get nativeRequests => const [];
+  @override
+  int get extraTextCodeUnits => input.retainedTextCodeUnits;
+  @override
+  int get extraRuns => input.retainedRuns;
+  @override
+  ForumBodyRubyContainerBackground? get background => null;
+  @override
+  ForumBodyRubyRootBoxInput? get rootBox => null;
+  @override
+  ForumBodyRubyAtomRequest mapRequests(
+    ForumBodyTextRequest Function(ForumBodyTextRequest) map,
+  ) => this;
+}
 
 /// Internal pre-measurement variant of an actual parent atom. It borrows the
 /// existing immutable requests; numeric targets only enter the later AtomPlan.

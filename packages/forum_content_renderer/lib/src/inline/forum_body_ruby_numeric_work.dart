@@ -27,7 +27,8 @@ final class ForumBodyRubyLevelUnion {
 
   ForumBodyRubyLevelMerge mergeAtom(ForumBodyRubyAtomMetrics atom) =>
       switch (atom) {
-        ForumBodyTextBaselineAtomMetrics() => throw ArgumentError(
+        ForumBodyTextBaselineAtomMetrics() ||
+        ForumBodyIntrinsicInlineAtomMetrics() => throw ArgumentError(
           'Baseline text has no ruby level',
         ),
         ForumBodyRubyColumnMetrics(:final value) => merge(value),

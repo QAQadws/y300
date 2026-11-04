@@ -146,6 +146,8 @@ final class ForumBodyInlinePagePreparation {
   List<int> _indices = const [];
   final _groups = <int, ForumBodyRubyGroupLayout>{};
   final _baselines = <int, ForumBodyTextBaselineLayout>{};
+  final _inlineBoxes = <int, ForumBodyInlineParagraphView>{};
+  ForumBodyInlinePagePreparation? _inlineBox;
   ForumBodyTextBaselinePreparation? _baseline;
   final _segments = <int, ForumBodyRubySegmentLayout>{};
   final _spaces = <int, ForumBodyRubySoftSpaceLayout>{};
@@ -173,6 +175,8 @@ final class ForumBodyInlinePagePreparation {
     ?_parent,
     for (final group in _groups.values) ...group.nativeLeases,
     for (final text in _baselines.values) text.lease,
+    for (final view in _inlineBoxes.values) ...view.nativeLeases,
+    if (_inlineBox != null) ..._inlineBox!.nativeLeases,
     if (_baseline != null) ..._baseline!.nativeLeases,
     for (final segment in _segments.values) ...segment.nativeLeases,
     for (final space in _spaces.values) ...space.nativeLeases,
@@ -233,6 +237,42 @@ final class ForumBodyInlinePagePreparation {
       if (_nextGroup < _indices.length) {
         final index = _indices[_nextGroup];
         final atom = input.rubyAtoms[index];
+        if (atom is ForumBodyIntrinsicInlineAtomPlan) {
+          final target = atom.metrics;
+          final job = _inlineBox ??= ForumBodyInlinePagePreparation(
+            input: target.input,
+            fragment: target.fragment,
+            identity: identity,
+            cache: cache,
+            textScaler: _textScaler!,
+            ensureOwner: _guard,
+            ensureVisibleOwner: _ensureVisibleOwner,
+            ownedPageLeases: _ownedPageLeases!,
+          );
+          final before = job.workCount;
+          final step = job.advance(cachedOnly: cachedOnly, maxParts: maxParts);
+          _workCount += job.workCount - before;
+          final view = step.view;
+          try {
+            _guard();
+            if (view != null &&
+                (view.width != target.size.width ||
+                    view.height != target.size.height ||
+                    view.lines.single.baseline != target.baseline)) {
+              throw const ForumBodyInlineViewException(
+                ForumBodyInlineViewFailure.geometry,
+              );
+            }
+          } catch (_) {
+            view?.close();
+            rethrow;
+          }
+          if (view == null) return (cacheMiss: step.cacheMiss, view: null);
+          _inlineBoxes[index] = view;
+          _inlineBox = null;
+          _nextGroup++;
+          return (cacheMiss: false, view: null);
+        }
         if (atom is ForumBodyTextBaselineAtomPlan) {
           final job = _baseline ??= ForumBodyTextBaselinePreparation(
             cache: cache,
@@ -304,6 +344,7 @@ final class ForumBodyInlinePagePreparation {
         endLine: _window.endLine,
         rubyGroups: _groups,
         baselineTexts: _baselines,
+        intrinsicBoxes: _inlineBoxes,
         rubySegments: _segments,
         rubySpaces: _spaces,
         rubyTrees: _trees,
@@ -315,6 +356,7 @@ final class ForumBodyInlinePagePreparation {
       _parent = null;
       _groups.clear();
       _baselines.clear();
+      _inlineBoxes.clear();
       _segments.clear();
       _spaces.clear();
       _trees.clear();
@@ -590,6 +632,12 @@ final class ForumBodyInlinePagePreparation {
     _pair?.close();
     _baseline?.close();
     _baseline = null;
+    _inlineBox?.close();
+    _inlineBox = null;
+    for (final view in _inlineBoxes.values) {
+      view.close();
+    }
+    _inlineBoxes.clear();
     _pair = null;
     _component?.close();
     _component = null;

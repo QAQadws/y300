@@ -190,7 +190,7 @@ final class ForumBodyRubyRowAlignment {
             }
             continue;
           }
-          if (column is ForumBodyTextBaselineAtomMetrics) {
+          if (!column.participatesInRubyAlignment) {
             _dimensions.add(column.placeholderDimensions);
             _results.add(column);
             parts++;
@@ -218,7 +218,7 @@ final class ForumBodyRubyRowAlignment {
           }
         case _Phase.globalCheck:
           final column = atoms[_cursor];
-          if (column is ForumBodyTextBaselineAtomMetrics) {
+          if (!column.participatesInRubyAlignment) {
             parts++;
             if (++_cursor == atoms.length) _phase = _Phase.done;
             continue;
@@ -251,7 +251,7 @@ final class ForumBodyRubyRowAlignment {
             final column = atoms[_cursor];
             final key = (_row, levelIds[_cursor], column.alignmentSignature);
             _atomRows[_cursor] = _row;
-            if (column is ForumBodyTextBaselineAtomMetrics) {
+            if (!column.participatesInRubyAlignment) {
               parts++;
               _nextRowAtom();
               continue;
@@ -280,7 +280,7 @@ final class ForumBodyRubyRowAlignment {
           }
         case _Phase.rowCheck:
           if (_trimmed.contains(_cursor) ||
-              atoms[_cursor] is ForumBodyTextBaselineAtomMetrics) {
+              !atoms[_cursor].participatesInRubyAlignment) {
             parts++;
             if (++_cursor == atoms.length) {
               _cursor = 0;
