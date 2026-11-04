@@ -226,9 +226,12 @@ final class ForumBodyInlineEmphasisChildBandsPreparation {
     double baseline;
     Size size;
     switch (source) {
-      case ForumBodyTextBaselineAtomPlan() ||
-          ForumBodyIntrinsicInlineAtomPlan():
-        _fail(ForumBodyEmphasisGeometryFailure.source);
+      case ForumBodyTextBaselineAtomPlan(:final metrics):
+        _neutralFrame(slot, metrics.size, metrics.baseline);
+        return;
+      case ForumBodyIntrinsicInlineAtomPlan(:final metrics):
+        _neutralFrame(slot, metrics.size, metrics.baseline);
+        return;
       case ForumBodyRubyColumnPlan(:final metrics):
         if (metrics == null) _fail(ForumBodyEmphasisGeometryFailure.source);
         _group = metrics;
@@ -306,6 +309,23 @@ final class ForumBodyInlineEmphasisChildBandsPreparation {
   }
 
   double _stackBaseline = 0, _bandOrigin = 0;
+
+  void _neutralFrame(Rect slot, Size size, double baseline) {
+    final page = _page!, dimension = page.dimensions[_index];
+    // Sup/sub and intrinsic words already enclose their own font bounds. Only
+    // mark-free row allocation borrows that frame; annotation/mark placement
+    // cannot infer ruby bands from an ordinary text box.
+    if (_fonts!.geometry.input.units.isNotEmpty ||
+        page.rootFonts[_index] != null ||
+        dimension.size != size ||
+        dimension.baselineOffset != baseline) {
+      _fail(ForumBodyEmphasisGeometryFailure.source);
+    }
+    _origin = slot.topLeft;
+    _top = slot.top;
+    _bottom = slot.bottom;
+    _phase = _ChildBandPhase.finish;
+  }
 
   void _annotation(int rank) {
     final group = _group;

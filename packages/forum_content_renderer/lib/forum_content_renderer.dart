@@ -166,6 +166,7 @@ export 'src/inline/forum_body_emphasis_mark.dart'
 export 'src/decoration/forum_body_decoration_text_request.dart';
 export 'src/inline/forum_body_emphasis_mark_request.dart';
 export 'src/inline/forum_body_emphasis_text_input.dart';
+export 'src/inline/forum_body_inline_font_frame_plan.dart';
 export 'src/inline/forum_body_emphasis_row_input.dart';
 export 'src/inline/forum_body_emphasis_text_geometry.dart';
 export 'src/inline/forum_body_emphasis_line_layout.dart';
