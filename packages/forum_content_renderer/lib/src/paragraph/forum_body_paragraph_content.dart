@@ -1,18 +1,19 @@
 import 'dart:collection';
-import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
-import 'package:flutter/foundation.dart' show listEquals;
 import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../document/forum_body_document.dart';
 import '../flow/forum_body_styled_flow_cursor.dart';
 import '../inline/forum_body_native_space_span.dart';
 import '../style/forum_body_length.dart';
-import '../style/forum_body_paint_text_style.dart';
+import '../style/forum_body_native_text_paint.dart';
 import '../style/forum_body_style_options.dart';
 import 'forum_body_paragraph_input_admission.dart';
 import 'forum_body_horizontal_text_frame.dart';
+
+export '../style/forum_body_native_text_paint.dart'
+    show ForumBodyParagraphPaintLayer;
 
 part 'forum_body_emphasis_glyph_input.dart';
 part 'forum_body_paragraph_paint_input.dart';
@@ -260,40 +261,13 @@ final class ForumBodyParagraphContent {
     String? text,
     List<InlineSpan>? children,
     ForumBodyResolvedStyle? resolved,
-  }) {
-    final visible = resolved == null
-        ? style
-        : forumBodyPaintTextStyle(resolved);
-    final hidden = resolved?.visibilityHidden ?? false;
-    return paintLayer != ForumBodyParagraphPaintLayer.all || hidden
-        ? _ForumBodyLayerSpan(
-            sourceStyle: style,
-            layer: paintLayer,
-            hidden: hidden,
-            style: _paintStyle(visible),
-            text: text,
-            children: children,
-          )
-        : TextSpan(style: visible, text: text, children: children);
-  }
-
-  TextStyle _paintStyle(TextStyle visible) => switch (paintLayer) {
-    ForumBodyParagraphPaintLayer.all => visible,
-    ForumBodyParagraphPaintLayer.background => visible.copyWith(
-      foreground: Paint()..color = const Color(0x00000000),
-      shadows: const [],
-      decoration: TextDecoration.none,
-    ),
-    ForumBodyParagraphPaintLayer.foreground => visible.copyWith(
-      background: Paint()..color = const Color(0x00000000),
-      decoration: TextDecoration.none,
-    ),
-    ForumBodyParagraphPaintLayer.decoration => visible.copyWith(
-      foreground: Paint()..color = const Color(0x00000000),
-      background: Paint()..color = const Color(0x00000000),
-      shadows: const [],
-    ),
-  };
+  }) => forumBodyNativePaintSpan(
+    style: style,
+    layer: paintLayer,
+    text: text,
+    children: children,
+    resolved: resolved,
+  );
 }
 
 /// Complex containers/resources require their own block/inline layout. They

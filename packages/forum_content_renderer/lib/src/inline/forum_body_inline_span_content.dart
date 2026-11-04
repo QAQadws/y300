@@ -8,12 +8,13 @@ import '../document/forum_body_document.dart';
 import '../paragraph/forum_body_first_line_indent.dart';
 import '../paragraph/forum_body_horizontal_text_frame.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
-import '../style/forum_body_paint_text_style.dart';
+import '../style/forum_body_native_text_paint.dart';
 import '../style/forum_body_style_options.dart';
 import 'forum_body_native_space_span.dart';
 
 part 'forum_body_inline_emphasis_glyph_input.dart';
 part 'forum_body_inline_parent_cursor.dart';
+part 'forum_body_inline_paint_input.dart';
 
 /// Exact independently projected input retained for source-bound child binding.
 /// These are display coordinates, never inferred from equal text or HTML.
@@ -42,6 +43,7 @@ final class ForumBodyInlineSpanContent {
     required List<ForumBodyParagraphRun> runs,
     required this.appliesFirstLineIndent,
   }) : _sourceMapping = null,
+       paintLayer = ForumBodyParagraphPaintLayer.all,
        contexts = List.unmodifiable(contexts),
        runs = List.unmodifiable(runs);
 
@@ -58,10 +60,25 @@ final class ForumBodyInlineSpanContent {
       projection = original.projection,
       contexts = original.contexts,
       runs = UnmodifiableListView(runs),
+      paintLayer = original.paintLayer,
       appliesFirstLineIndent = original.appliesFirstLineIndent,
       _sourceMapping = original;
 
-  static const revision = 9;
+  ForumBodyInlineSpanContent._paintLayer(
+    ForumBodyInlineSpanContent original,
+    this.paintLayer,
+  ) : identity = original.identity,
+      path = original.path,
+      fontRevision = original.fontRevision,
+      styleRevision = original.styleRevision,
+      style = original.style,
+      projection = original.projection,
+      contexts = original.contexts,
+      runs = original.runs,
+      appliesFirstLineIndent = original.appliesFirstLineIndent,
+      _sourceMapping = original;
+
+  static const revision = 10;
 
   factory ForumBodyInlineSpanContent.compose({
     required ForumBodyIdentity identity,
@@ -99,7 +116,8 @@ final class ForumBodyInlineSpanContent {
     final runIndices = Map<ForumBodyParagraphRun, int>.identity();
     var inputLength = 0;
     for (final context in contexts) {
-      if (context.isSourceFree) {
+      if (context.isSourceFree ||
+          context.paintLayer != ForumBodyParagraphPaintLayer.all) {
         throw ForumBodyParagraphInputException(
           ForumBodyParagraphInputFailure.structure,
           context.path,
@@ -181,6 +199,7 @@ final class ForumBodyInlineSpanContent {
   final int styleRevision;
   final ForumBodyResolvedStyle style;
   final bool appliesFirstLineIndent;
+  final ForumBodyParagraphPaintLayer paintLayer;
   final ForumBodyInlineSpanContent? _sourceMapping;
   final HtmlInlineTextProjection projection;
   final List<ForumBodyParagraphRun> runs;
@@ -188,9 +207,14 @@ final class ForumBodyInlineSpanContent {
 
   // Only the enclosing constrained paragraph reserves an edge. Atomic child
   // fonts participate too; their intrinsic layouts keep their native origins.
-  late final horizontalInset = projection.display.text.isEmpty
-      ? 0.0
-      : forumBodyHorizontalTextInset([style, ...runs.map((run) => run.style)]);
+  late final double horizontalInset =
+      _sourceMapping?.horizontalInset ??
+      (projection.display.text.isEmpty
+          ? 0.0
+          : forumBodyHorizontalTextInset([
+              style,
+              ...runs.map((run) => run.style),
+            ]));
 
   /// Display/source ownership stays fixed; only wrap's native coordinates gain
   /// the mechanical prefix. Intrinsic child measurement leaves indent outside.
@@ -246,6 +270,7 @@ final class ForumBodyInlineSpanContent {
   /// Pure derived indexing, reusable across cancelled reading preparations.
   /// No native owner, callback or resource enters this immutable input cache.
   int prepareContextIndex({required int maxContexts}) {
+    _ensureSourceInput();
     if (maxContexts <= 0) throw ArgumentError.value(maxContexts);
     var work = 0;
     while (!isContextIndexReady && work < maxContexts) {
@@ -257,8 +282,16 @@ final class ForumBodyInlineSpanContent {
     return work;
   }
 
-  ForumBodyInlineAtomicContextCursor openAtomicContexts(int index) =>
-      ForumBodyInlineAtomicContextCursor._(this, index);
+  ForumBodyInlineAtomicContextCursor openAtomicContexts(int index) {
+    _ensureSourceInput();
+    return ForumBodyInlineAtomicContextCursor._(this, index);
+  }
+
+  void _ensureSourceInput() {
+    if (paintLayer != ForumBodyParagraphPaintLayer.all) {
+      throw StateError('Inline paint phases cannot bind source contexts');
+    }
+  }
 
   /// Resolve actual independent children covering one engine atom. Explicit
   /// source-free font struts occupy no display range; they cannot provide glyph
@@ -310,8 +343,9 @@ final class ForumBodyInlineSpanContent {
         : textSpan;
     return firstLineIndent == 0
         ? span
-        : TextSpan(
+        : forumBodyNativePaintSpan(
             style: style.textStyle,
+            layer: paintLayer,
             children: [
               ForumBodyNativeSpaceSpan.nonBreaking(firstLineIndent),
               ...span.children!,
@@ -367,18 +401,21 @@ final class ForumBodyInlineSpanContent {
       final runIndex = piece.runIndex!;
       parentRunIndices.add(runIndex);
       children.add(
-        TextSpan(
+        forumBodyNativePaintSpan(
           text: projection.display.text.substring(
             piece.startUtf16,
             piece.endUtf16,
           ),
-          style: forumBodyPaintTextStyle(runs[runIndex].style),
+          style: runs[runIndex].style.textStyle,
+          resolved: runs[runIndex].style,
+          layer: paintLayer,
         ),
       );
     }
     return (
-      span: TextSpan(
+      span: forumBodyNativePaintSpan(
         style: style.textStyle,
+        layer: paintLayer,
         children: List.unmodifiable(children),
       ),
       runs: List.unmodifiable(parentRunIndices.map((index) => runs[index])),

@@ -38,6 +38,11 @@ final class MixedEmphasisParentFixture {
     String parentStyle = 'text-emphasis:circle;line-height:.4',
     String prefix = 'P',
     String suffix = 'Q',
+    TextStyle readerTextStyle = const TextStyle(
+      fontFamily: 'Ahem',
+      fontSize: 20,
+      color: Color(0xff123456),
+    ),
   }) {
     final doc = const ForumBodyParser().parse(
       html:
@@ -48,11 +53,7 @@ final class MixedEmphasisParentFixture {
     final flow = ForumBodyTextFlowCursor(
       document: doc,
       reader: ForumBodyReaderStyle(
-        textStyle: const TextStyle(
-          fontFamily: 'Ahem',
-          fontSize: 20,
-          color: Color(0xff123456),
-        ),
+        textStyle: readerTextStyle,
         fontRevision: 'mixed-emphasis-parent',
         linkColor: const Color(0xff0000ff),
         textDirection: direction,

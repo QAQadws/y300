@@ -22,6 +22,12 @@ final class ForumBodyInlineEmphasisGlyphPreparation {
        _ensureOwner = ensureOwner,
        _cursor = _InlineParentCursor(content.projection) {
     if (maxRuns < 0) throw ArgumentError.value(maxRuns);
+    if (content.paintLayer != ForumBodyParagraphPaintLayer.all) {
+      throw ForumBodyParagraphInputException(
+        ForumBodyParagraphInputFailure.structure,
+        content.path,
+      );
+    }
     if (content.runs.length > maxRuns) {
       throw ForumBodyParagraphInputException(
         ForumBodyParagraphInputFailure.runLimit,

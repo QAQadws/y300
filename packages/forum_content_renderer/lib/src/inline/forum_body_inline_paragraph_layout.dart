@@ -76,6 +76,7 @@ final class ForumBodyInlineParagraphLayout
     required this.firstLineIndent,
     required this.rowIsolationPitch,
     required this.nativeFontClearance,
+    required this.paintLayer,
     required Offset paintOffset,
     required Float64List frameTops,
     required Float64List frameBottoms,
@@ -94,6 +95,7 @@ final class ForumBodyInlineParagraphLayout
   /// Whole-source native font/slot clearance. Isolated row selectors must also
   /// qualify actual shadows, decorations and adjacent rows before clipping.
   final double nativeFontClearance;
+  final ForumBodyParagraphPaintLayer paintLayer;
 
   factory ForumBodyInlineParagraphLayout.create({
     required ForumBodyInlineSpanContent content,
@@ -379,6 +381,7 @@ final class ForumBodyInlineParagraphLayout
         firstLineIndent: indentGeometry,
         rowIsolationPitch: rowIsolationPitch,
         nativeFontClearance: clearance,
+        paintLayer: content.paintLayer,
         paintOffset: paintOffset,
         frameTops: frameTops,
         frameBottoms: frameBottoms,
@@ -545,6 +548,15 @@ final class ForumBodyInlineParagraphLayout
     if (_disposed) throw StateError('Inline parent layout is disposed');
   }
 
+  void _ensureSource() {
+    _ensureOpen();
+    if (paintLayer != ForumBodyParagraphPaintLayer.all) {
+      throw const ForumBodyParagraphLayoutException(
+        ForumBodyParagraphLayoutFailure.coverage,
+      );
+    }
+  }
+
   /// Native engine coordinates, including the mechanical indent prefix. A
   /// child slot/glue cannot authorize an ordinary parent's glyph. No display
   /// grapheme normalization moves a governing scalar to another native row.
@@ -698,7 +710,7 @@ final class ForumBodyInlineParagraphLayout
     int engineStart = 0,
     int? engineEnd,
   }) {
-    _ensureOpen();
+    _ensureSource();
     if (!offset.dx.isFinite || !offset.dy.isFinite) {
       throw ArgumentError.value(offset);
     }
@@ -764,7 +776,7 @@ final class ForumBodyInlineParagraphLayout
     int endUtf16, {
     required bool paintedOnly,
   }) {
-    _ensureOpen();
+    _ensureSource();
     final display = projection.display;
     RangeError.checkValidRange(startUtf16, endUtf16, display.text.length);
     if (startUtf16 == endUtf16) {
@@ -830,7 +842,7 @@ final class ForumBodyInlineParagraphLayout
   }
 
   ForumBodyInlineParagraphFragment fragment(int startLine, int endLine) {
-    _ensureOpen();
+    _ensureSource();
     if (rowIsolationPitch != null) {
       throw const ForumBodyParagraphLayoutException(
         ForumBodyParagraphLayoutFailure.isolation,

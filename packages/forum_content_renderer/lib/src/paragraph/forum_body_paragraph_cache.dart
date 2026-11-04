@@ -1064,7 +1064,8 @@ int _minimumInlineEstimatedBytes(ForumBodyInlineSpanContent content) =>
     4096 +
     content.projection.display.text.length * 96 +
     content.runs.length * 256 +
-    content.projection.atoms.length * 256;
+    content.projection.atoms.length * 256 +
+    (content.paintLayer == ForumBodyParagraphPaintLayer.all ? 0 : 16);
 
 sealed class ForumBodyNativeParagraphLease {
   ForumBodyNativeParagraphLease._(this._owner, this._entry);
@@ -1414,6 +1415,7 @@ final class _InlineLayoutKey {
       backendRevision = ForumBodyParagraphLayout.backendRevision,
       layoutRevision = ForumBodyInlineParagraphLayout.revision,
       inputRevision = ForumBodyInlineSpanContent.revision,
+      paintLayer = content.paintLayer,
       projectionRevision = HtmlDisplayTextProjection.revision,
       inlineRevision = HtmlInlineTextProjection.revision,
       projection = content.projectionForLayout(layoutMode),
@@ -1440,6 +1442,7 @@ final class _InlineLayoutKey {
   final int backendRevision;
   final int layoutRevision;
   final int inputRevision;
+  final ForumBodyParagraphPaintLayer paintLayer;
   final int projectionRevision;
   final int inlineRevision;
   final HtmlInlineTextProjection projection;
@@ -1474,6 +1477,7 @@ final class _InlineLayoutKey {
       backendRevision == other.backendRevision &&
       layoutRevision == other.layoutRevision &&
       inputRevision == other.inputRevision &&
+      paintLayer == other.paintLayer &&
       projectionRevision == other.projectionRevision &&
       inlineRevision == other.inlineRevision &&
       projection.hasSameMapping(other.projection) &&
@@ -1505,6 +1509,7 @@ final class _InlineLayoutKey {
     backendRevision,
     layoutRevision,
     inputRevision,
+    paintLayer,
     projectionRevision,
     inlineRevision,
     projection.mappingHash,

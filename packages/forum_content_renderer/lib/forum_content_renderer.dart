@@ -11,6 +11,7 @@ export 'src/flow/forum_body_inline_flow_content.dart';
 export 'src/inline/forum_body_inline_span_content.dart'
     show
         ForumBodyInlineSpanContent,
+        ForumBodyInlinePaintInput,
         ForumBodyInlineContext,
         ForumBodyInlineEmphasisGlyphInput,
         ForumBodyInlineEmphasisGlyphPreparation;
