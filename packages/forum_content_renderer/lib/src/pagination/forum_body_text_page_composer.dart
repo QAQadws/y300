@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show precisionErrorTolerance;
 import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../document/forum_body_document.dart';
+import '../style/forum_body_quote_decoration.dart';
 import '../inline/forum_body_inline_paragraph_layout.dart';
 import '../inline/forum_body_emphasis_paragraph_metrics.dart';
 import '../inline/forum_body_fitted_emphasis_plan.dart';
@@ -199,7 +200,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 15;
+  static const revision = 16;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;
@@ -266,6 +267,7 @@ final class ForumBodyTextPageComposer {
     required double left,
     required double width,
     required Color color,
+    ForumBodyQuoteDecoration? quoteDecoration,
   }) {
     _ensureOpen();
     if (!needsInput) throw StateError('Composition input is still pending');
@@ -275,13 +277,14 @@ final class ForumBodyTextPageComposer {
         width < 0) {
       throw ArgumentError('Invalid background geometry');
     }
-    _backgrounds.open(path, left, width, color);
+    _backgrounds.open(path, left, width, color, quoteDecoration);
   }
 
   void closeBackground(String path) {
     _ensureOpen();
     if (!needsInput) throw StateError('Composition input is still pending');
     _backgrounds.close(path, _flowHeight);
+    if (_usedHeight == height && !_backgrounds.needsEndBoundary) _seal();
   }
 
   void _touchBackgrounds(double top) {
@@ -356,7 +359,7 @@ final class ForumBodyTextPageComposer {
       _flowHeight = bottom;
       _usedHeight = math.max(_usedHeight, bottom);
       _rule = null;
-      if (_usedHeight == height) _seal();
+      if (_usedHeight == height && !_backgrounds.needsEndBoundary) _seal();
       return (pagesPublished: _pages.length - before, isComplete: true);
     } catch (_) {
       close();
@@ -561,7 +564,10 @@ final class ForumBodyTextPageComposer {
       // for values such as 0.1 + 0.2. Padding carries no source text coverage.
       active.remaining = after;
       if (after <= precisionErrorTolerance) _padding = null;
-      if (_usedHeight == height) _seal();
+      if (_usedHeight == height &&
+          (_padding != null || !_backgrounds.needsEndBoundary)) {
+        _seal();
+      }
       return (
         extentConsumed: consumed,
         pagesPublished: _pages.length - pagesBefore,
@@ -836,7 +842,12 @@ final class ForumBodyTextPageComposer {
           _active = null;
           _nextParagraphIndex++;
         }
-        if (_usedHeight == height) _seal();
+        // A still-open rounded box can end at this exact edge. Resolve its
+        // actual close/continuation before publishing immutable corner metadata.
+        if (_usedHeight == height &&
+            (!paragraphComplete || !_backgrounds.needsEndBoundary)) {
+          _seal();
+        }
         if (paragraphComplete ||
             inspected >= maxLines ||
             _pages.length != pagesBefore) {

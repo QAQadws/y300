@@ -15,7 +15,8 @@ final class ForumBodyBlockBoxException implements Exception {
   String toString() => 'ForumBodyBlockBoxException(${failure.name})';
 }
 
-/// Horizontal normal-flow geometry for a borderless block. Fixed CSS lengths
+/// Horizontal normal-flow geometry for ordinary blocks and built-in quote
+/// borders. Fixed CSS lengths
 /// are logical pixels; em/rem were computed by the sole style resolver. Text
 /// scaling remains owned by the native paragraph and is not applied here.
 /// Vertical margins are values only: collapse/fragmentation belongs to flow.
@@ -26,6 +27,7 @@ final class ForumBodyBlockBox {
     required this.contentWidth,
     required this.margin,
     required this.padding,
+    required this.leftBorder,
   });
 
   factory ForumBodyBlockBox.resolve({
@@ -84,6 +86,10 @@ final class ForumBodyBlockBox {
     var left = leftAuto ? 0.0 : length(style.margin.left);
     var right = rightAuto ? 0.0 : length(style.margin.right);
     final box = style.box;
+    final leftBorder = style.quoteDecoration == null
+        ? 0.0
+        : ForumBodyQuoteDecoration.borderWidth * 1.0;
+    final horizontalEdges = padding.horizontal + leftBorder;
     double contentLength(ForumBodyLength value) {
       final resolved = length(value);
       if (resolved < 0) {
@@ -92,19 +98,18 @@ final class ForumBodyBlockBox {
         );
       }
       return box.sizing == ForumBodyBoxSizing.borderBox
-          ? math.max(0.0, resolved - padding.horizontal)
+          ? math.max(0.0, resolved - horizontalEdges)
           : resolved;
     }
 
     var width = box.width == null
-        ? math.max(0.0, containingWidth - padding.horizontal - left - right)
+        ? math.max(0.0, containingWidth - horizontalEdges - left - right)
         : contentLength(box.width!);
     if (box.maxWidth != null) {
       width = math.min(width, contentLength(box.maxWidth!));
     }
     width = math.max(width, contentLength(box.minWidth));
-    final remaining =
-        containingWidth - width - padding.horizontal - left - right;
+    final remaining = containingWidth - width - horizontalEdges - left - right;
     if (!width.isFinite || !remaining.isFinite) {
       throw const ForumBodyBlockBoxException(ForumBodyBlockBoxFailure.geometry);
     }
@@ -134,6 +139,7 @@ final class ForumBodyBlockBox {
         verticalMargin(style.margin.bottom),
       ),
       padding: padding,
+      leftBorder: leftBorder,
     );
   }
 
@@ -141,8 +147,9 @@ final class ForumBodyBlockBox {
   final double contentWidth;
   final EdgeInsets margin;
   final EdgeInsets padding;
-  double get contentLeft => margin.left + padding.left;
-  double get borderBoxWidth => contentWidth + padding.horizontal;
+  final double leftBorder;
+  double get contentLeft => margin.left + leftBorder + padding.left;
+  double get borderBoxWidth => contentWidth + padding.horizontal + leftBorder;
   bool get hasHorizontalOverflow =>
       margin.left < 0 || margin.left + borderBoxWidth > containingWidth;
 }

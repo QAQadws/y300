@@ -32,6 +32,34 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const html = '<p>ab</p><p>cd</p><p>ef</p>';
 
+  test('quote border paint is checked even when text, source and fill geometry are identical', () {
+    const source = '<blockquote><p>quote</p></blockquote>';
+    ForumBodyReaderStyle reader(Color border) => ForumBodyReaderStyle(
+      textStyle: const TextStyle(
+        fontSize: 10,
+        height: 1,
+        fontFamily: 'Ahem',
+        color: Color(0xff000000),
+      ),
+      fontRevision: 'same',
+      linkColor: border,
+      paragraphAfter: 0,
+    );
+    final old = NativeReaderTestFixture(
+      source,
+      reader: reader(const Color(0xffff0000)),
+    );
+    final next = NativeReaderTestFixture(
+      source,
+      reader: reader(const Color(0xff0000ff)),
+      layoutId: 'retry',
+    );
+    final verifier = _verifier(old.session.snapshot, next.session.snapshot);
+    _compareAvailable(verifier);
+    expect(verifier.mismatch, NovelReaderNativePrefixMismatch.background);
+    expect(old.session.snapshot.single.backgrounds.single.endsBox, isTrue);
+  });
+
   test('padding backgrounds share retry work budgets and compare actual paint color', () {
     const source =
         '<div style="background:currentColor;padding-top:45px"><p>x</p></div>';

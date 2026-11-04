@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../paragraph/forum_body_paragraph_cache.dart';
+import '../style/forum_body_quote_decoration.dart';
 import '../paragraph/forum_body_paragraph_surface.dart';
 import '../inline/forum_body_inline_paragraph_surface.dart';
 import '../inline/forum_body_emphasis_fragment_surface.dart';
@@ -224,15 +225,48 @@ final class _BlockBackgroundPainter extends CustomPainter {
       final paint = Paint();
       for (final background in backgrounds) {
         paint.color = background.color;
-        canvas.drawRect(
-          Rect.fromLTWH(
-            background.left,
-            background.top,
-            background.width,
-            background.height,
-          ),
-          paint,
+        final rect = Rect.fromLTWH(
+          background.left,
+          background.top,
+          background.width,
+          background.height,
         );
+        final quote = background.quoteDecoration;
+        if (quote == null) {
+          canvas.drawRect(rect, paint);
+          continue;
+        }
+        // Continue the actual rounded shape outside the clipped slice. Drawing
+        // a tiny RRect for a short page tail would compress its corner radius.
+        const radius = ForumBodyQuoteDecoration.radius * 1.0;
+        final shape = Rect.fromLTRB(
+          rect.left,
+          background.startsBox ? rect.top : rect.top - radius * 2,
+          rect.right,
+          background.endsBox ? rect.bottom : rect.bottom + radius * 2,
+        );
+        final painter = BoxDecoration(
+          color: background.color,
+          border: Border(
+            left: BorderSide(
+              color: quote.borderColor,
+              width: ForumBodyQuoteDecoration.borderWidth * 1.0,
+            ),
+          ),
+          borderRadius: BorderRadius.circular(radius),
+        ).createBoxPainter();
+        canvas.save();
+        try {
+          canvas.clipRect(rect, doAntiAlias: false);
+          painter.paint(
+            canvas,
+            shape.topLeft,
+            ImageConfiguration(size: shape.size),
+          );
+        } finally {
+          painter.dispose();
+          canvas.restore();
+        }
       }
     } finally {
       canvas.restore();

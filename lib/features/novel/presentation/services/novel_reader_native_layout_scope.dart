@@ -42,8 +42,10 @@ final class NovelReaderNativeLayoutScope {
     required this.maxNativeEstimatedBytesPerPage,
     required int fontCollectionGeneration,
     required String paragraphInputs,
+    required bool usesQuoteTheme,
   }) : _fontCollectionGeneration = fontCollectionGeneration,
-       _paragraphInputs = paragraphInputs;
+       _paragraphInputs = paragraphInputs,
+       _usesQuoteTheme = usesQuoteTheme;
   static const fingerprintRevision = 11;
   final NovelReaderNativePreparedChapter chapter;
   final ForumBodyReaderStyle reader;
@@ -59,6 +61,7 @@ final class NovelReaderNativeLayoutScope {
   final int? maxNativeEstimatedBytesPerPage;
   final int _fontCollectionGeneration;
   final String _paragraphInputs;
+  final bool _usesQuoteTheme;
 
   static Future<NovelReaderNativeLayoutScope> prepare({
     required NovelReaderNativePreparedChapter chapter,
@@ -122,16 +125,16 @@ final class NovelReaderNativeLayoutScope {
     }
     final reader = _freezeReader(environment.reader);
     final document = chapter.document;
-    final sizes = await cancellation.waitFor(
+    final inputs = await cancellation.waitFor(
       NovelReaderBackgroundWork.run(
         // Style traversal cost follows nodes, not the length of one text node.
         codeUnits: document.parsedNodeCount * 24,
-        transform: () => _fontSizes(document, reader, maxScaledFontSizes),
+        transform: () => _fontInputs(document, reader, maxScaledFontSizes),
       ),
     );
     cancellation.throwIfCancelled();
     final scales = <double, double>{};
-    for (final size in sizes) {
+    for (final size in inputs.sizes) {
       final scaled = environment.textScaler.scale(size);
       // A custom scaler is caller code and can retire the request reentrantly.
       cancellation.throwIfCancelled();
@@ -144,7 +147,11 @@ final class NovelReaderNativeLayoutScope {
     }
     final background = _freezeColor(environment.backgroundColor)!;
     final revisions = _nativeRevisions();
-    final readerValues = _readerValues(reader, fontCollectionGeneration);
+    final readerValues = _readerValues(
+      reader,
+      fontCollectionGeneration,
+      usesQuoteTheme: inputs.usesQuoteTheme,
+    );
     final payload = <Object?>[
       ...revisions,
       chapter.episodeId,
@@ -171,6 +178,7 @@ final class NovelReaderNativeLayoutScope {
       maxNativeEstimatedBytesPerPage: pageByteLimit,
       fontCollectionGeneration: fontCollectionGeneration,
       paragraphInputs: jsonEncode([...revisions, ...readerValues]),
+      usesQuoteTheme: inputs.usesQuoteTheme,
       paginationKey:
           'native-$fingerprintRevision-${sha256.convert(utf8.encode(jsonEncode(payload)))}',
     );
@@ -196,7 +204,11 @@ final class NovelReaderNativeLayoutScope {
     if (!isCurrent() ||
         jsonEncode([
               ..._nativeRevisions(),
-              ..._readerValues(candidate, fontCollectionGeneration),
+              ..._readerValues(
+                candidate,
+                fontCollectionGeneration,
+                usesQuoteTheme: _usesQuoteTheme,
+              ),
             ]) !=
             _paragraphInputs) {
       return null;
@@ -220,6 +232,7 @@ final class NovelReaderNativeLayoutScope {
       maxNativeEstimatedBytesPerPage: maxNativeEstimatedBytesPerPage,
       fontCollectionGeneration: fontCollectionGeneration,
       paragraphInputs: _paragraphInputs,
+      usesQuoteTheme: _usesQuoteTheme,
       paginationKey: paginationKey,
     );
   }
@@ -267,6 +280,7 @@ ForumBodyReaderStyle _freezeReader(ForumBodyReaderStyle original) =>
       paragraphAfter: original.paragraphAfter,
       firstLineIndent: original.firstLineIndent,
       policy: ForumBodyStylePolicy(original.policy.values),
+      theme: _freezeTheme(original.theme),
     );
 
 List<int> _nativeRevisions() => [
@@ -300,35 +314,49 @@ List<int> _nativeRevisions() => [
 
 /// Shared by the full fingerprint and the paint-only check. No native text
 /// or policy input may bypass invalidation just because geometry looks equal.
-List<Object?> _readerValues(ForumBodyReaderStyle reader, int fontGeneration) =>
+List<Object?> _readerValues(
+  ForumBodyReaderStyle reader,
+  int fontGeneration, {
+  required bool usesQuoteTheme,
+}) => [
+  reader.fontRevision,
+  fontGeneration,
+  _styleValue(reader.textStyle),
+  _colorValue(reader.linkColor),
+  if (usesQuoteTheme && reader.theme != null)
     [
-      reader.fontRevision,
-      fontGeneration,
-      _styleValue(reader.textStyle),
-      _colorValue(reader.linkColor),
-      reader.textAlign.name,
-      reader.textDirection.name,
-      reader.paragraphBefore,
-      reader.paragraphAfter,
-      reader.firstLineIndent.value,
-      reader.firstLineIndent.unit.name,
-      for (final property in ForumBodyStyleProperty.values)
-        (reader.policy.values[property] ?? ForumBodyStyleScope.asDefault).name,
-    ];
+      // Only semantic colors currently consumed by native content belong
+      // here; the page canvas remains a separate paint-only input.
+      _colorValue(reader.theme!.quoteSurface),
+      _colorValue(reader.theme!.quoteForeground),
+    ]
+  else
+    null,
+  reader.textAlign.name,
+  reader.textDirection.name,
+  reader.paragraphBefore,
+  reader.paragraphAfter,
+  reader.firstLineIndent.value,
+  reader.firstLineIndent.unit.name,
+  for (final property in ForumBodyStyleProperty.values)
+    (reader.policy.values[property] ?? ForumBodyStyleScope.asDefault).name,
+];
 
 int _pageHandleLimit(int issued) {
   if (issued <= 0) throw ArgumentError.value(issued, 'maxIssuedLeases');
   return issued >= 2 ? issued ~/ 2 : 1;
 }
 
-List<double> _fontSizes(
+({List<double> sizes, bool usesQuoteTheme}) _fontInputs(
   ForumBodyDocument document,
   ForumBodyReaderStyle reader,
   int limit,
 ) {
   final cursor = const ForumBodyStyleResolver().open(document, reader);
   final sizes = <double>{};
+  var usesQuoteTheme = false;
   void include(ForumBodyResolvedStyle style) {
+    usesQuoteTheme |= style.quoteDecoration != null;
     final size = style.textStyle.fontSize!;
     sizes.add(size);
     // Marks use half the unscaled author size, then the platform's actual
@@ -346,7 +374,10 @@ List<double> _fontSizes(
     while (cursor.moveNext()) {
       include(cursor.currentStyle!);
     }
-    return List.unmodifiable(sizes.toList()..sort());
+    return (
+      sizes: List<double>.unmodifiable(sizes.toList()..sort()),
+      usesQuoteTheme: usesQuoteTheme,
+    );
   } finally {
     cursor.close();
   }
@@ -366,6 +397,20 @@ final class _CapturedTextScaler extends TextScaler {
   @override
   double get textScaleFactor => scale(rootSize) / rootSize;
 }
+
+ForumHtmlThemeContext? _freezeTheme(ForumHtmlThemeContext? theme) =>
+    theme == null
+    ? null
+    : ForumHtmlThemeContext(
+        brightness: theme.brightness,
+        surface: _freezeColor(theme.surface)!,
+        foreground: _freezeColor(theme.foreground)!,
+        link: _freezeColor(theme.link)!,
+        quoteSurface: _freezeColor(theme.quoteSurface)!,
+        quoteForeground: _freezeColor(theme.quoteForeground)!,
+        codeSurface: _freezeColor(theme.codeSurface)!,
+        codeForeground: _freezeColor(theme.codeForeground)!,
+      );
 
 Color? _freezeColor(Color? color) {
   if (color == null) return null;

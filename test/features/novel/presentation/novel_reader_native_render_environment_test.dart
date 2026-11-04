@@ -117,8 +117,11 @@ void main() {
               reason: id,
             );
             if (forceBackground) {
-              expect(style.ownBackground, isNull, reason: id);
-              expect(style.boxBackground, isNull, reason: id);
+              final semanticSurface = style.quoteDecoration == null
+                  ? null
+                  : environment.reader.theme!.quoteSurface;
+              expect(style.ownBackground, semanticSurface, reason: id);
+              expect(style.boxBackground, semanticSurface, reason: id);
               expect(
                 style.textStyle.backgroundColor,
                 anyOf(isNull, const Color(0x00000000)),

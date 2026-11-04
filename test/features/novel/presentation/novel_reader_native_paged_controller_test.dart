@@ -87,7 +87,7 @@ _failedReadable({
       const NovelReaderPaginationPerformancePolicy(enforceBudgets: false),
 }) async {
   final fixture = NativeReaderTestFixture(
-    '<p>abcdefgh</p><p>ij</p><blockquote>unsupported</blockquote>',
+    '<p>abcdefgh</p><p>ij</p><div style="position:absolute">unsupported</div>',
     width: 20,
     height: 10,
     complete: false,
@@ -921,7 +921,7 @@ void main() {
     'late source failure preserves actual visible leases and accepted prefix',
     () async {
       final fixture = NativeReaderTestFixture(
-        '<p>abcd</p><blockquote>unsupported</blockquote>',
+        '<p>abcd</p><div style="position:absolute">unsupported</div>',
         width: 20,
         height: 10,
         complete: false,

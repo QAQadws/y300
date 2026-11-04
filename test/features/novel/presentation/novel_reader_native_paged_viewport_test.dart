@@ -1146,7 +1146,7 @@ void main() {
     (tester) async {
       final idle = Completer<void>();
       final fixture = _fixture(
-        html: '$_html<blockquote>unsupported</blockquote>',
+        html: '$_html<div style="position:absolute">unsupported</div>',
       );
       final controller = _controller(fixture, idle: () => idle.future);
       final reports = <NovelReaderPaginationPosition>[];

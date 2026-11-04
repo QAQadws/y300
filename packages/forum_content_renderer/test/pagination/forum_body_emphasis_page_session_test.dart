@@ -284,7 +284,7 @@ void main() {
     () {
       final fixture = _Fixture(
         '<p style="margin:0;text-emphasis:\'X\'">AB CD EF</p>'
-        '<blockquote>unsupported container</blockquote>',
+        '<div style="position:absolute">unsupported container</div>',
       );
       final session = fixture.open(width: 40, height: 40);
       _finish(fixture, session, pages: 1);
@@ -437,20 +437,17 @@ void main() {
     },
   );
 
-  test(
-    'ruby emphasis retains its explicit unsupported-format guard',
-    () {
-      for (final html in [
-        '<p style="text-emphasis:\'X\'">A<ruby>B<rt>b</rt></ruby>C</p>',
-      ]) {
-        final fixture = _Fixture(html), session = fixture.open();
-        expect(() => _finish(fixture, session), throwsA(anything));
-        expect(session.state, ForumBodyTextPageSessionState.failed);
-        expect(session.snapshot, isEmpty);
-        expect(fixture.cache.activeLeases, 0);
-      }
-    },
-  );
+  test('ruby emphasis retains its explicit unsupported-format guard', () {
+    for (final html in [
+      '<p style="text-emphasis:\'X\'">A<ruby>B<rt>b</rt></ruby>C</p>',
+    ]) {
+      final fixture = _Fixture(html), session = fixture.open();
+      expect(() => _finish(fixture, session), throwsA(anything));
+      expect(session.state, ForumBodyTextPageSessionState.failed);
+      expect(session.snapshot, isEmpty);
+      expect(fixture.cache.activeLeases, 0);
+    }
+  });
 
   test('an indivisible Unicode group cannot be split to fit a small page', () {
     final fixture = _Fixture(

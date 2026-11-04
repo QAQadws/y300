@@ -479,17 +479,25 @@ final class ForumBodyTextPageSession {
             final background = event.style.visibilityHidden
                 ? null
                 : event.style.boxBackground;
-            if ((background?.a ?? 0) > 0) {
+            final quote = event.style.visibilityHidden
+                ? null
+                : event.style.quoteDecoration;
+            if ((background?.a ?? 0) > 0 || quote != null) {
               if (unit.boundary.kind ==
                   ForumBodyTextFlowBoundaryKind.openBlock) {
                 _composer.openBackground(
                   path: event.node.path,
-                  left: unit.contentLeft - unit.box!.padding.left,
+                  left:
+                      unit.contentLeft -
+                      unit.box!.padding.left -
+                      unit.box!.leftBorder,
                   width: unit.box!.borderBoxWidth,
-                  color: background!,
+                  color: background ?? const Color(0x00000000),
+                  quoteDecoration: quote,
                 );
               } else {
                 _composer.closeBackground(event.node.path);
+                if (snapshot.length != before) return result();
               }
             }
         }

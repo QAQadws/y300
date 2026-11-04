@@ -162,7 +162,10 @@ final class NovelReaderNativePrefixVerifier {
             a.top != b.top ||
             a.width != b.width ||
             a.height != b.height ||
-            a.color != b.color) {
+            a.color != b.color ||
+            a.startsBox != b.startsBox ||
+            a.endsBox != b.endsBox ||
+            a.quoteDecoration?.borderColor != b.quoteDecoration?.borderColor) {
           _fail(NovelReaderNativePrefixMismatch.background);
           break;
         }

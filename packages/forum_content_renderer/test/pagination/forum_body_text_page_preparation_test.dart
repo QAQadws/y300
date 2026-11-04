@@ -366,7 +366,7 @@ void main() {
     () {
       final fixture = _Fixture(
         html:
-            '<p style="margin:0">aa</p><p style="margin:0">bb</p><blockquote>quote</blockquote>',
+            '<p style="margin:0">aa</p><p style="margin:0">bb</p><div style="position:absolute">unsupported</div>',
         height: 20,
         firstPageOnly: true,
       );

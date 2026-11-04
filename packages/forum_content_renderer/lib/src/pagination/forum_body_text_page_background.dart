@@ -11,10 +11,18 @@ final class ForumBodyTextPageBackground {
     this.width,
     this.height,
     this.color,
+    this.quoteDecoration,
+    this.startsBox,
+    this.endsBox,
   );
   final String path;
   final double left, top, width, height;
   final Color color;
+  final ForumBodyQuoteDecoration? quoteDecoration;
+
+  /// Corner eligibility for rounded chrome. Rectangular fills do not wait for
+  /// an exact-edge close, since that boundary cannot affect their paint.
+  final bool startsBox, endsBox;
 }
 
 /// Bounded numeric block decoration state, independent of native resources.
@@ -24,16 +32,24 @@ final class _PageBackgrounds {
   static const maxDepth = 128;
   final _open = <_BackgroundBox>[];
   final _draft = <_BackgroundSlice>[];
+  int _pendingRoundedEnds = 0;
+  bool get needsEndBoundary => _pendingRoundedEnds > 0;
   bool get isBalanced => _open.isEmpty;
   int get itemCount => _draft.length;
 
-  void open(String path, double left, double width, Color color) {
+  void open(
+    String path,
+    double left,
+    double width,
+    Color color,
+    ForumBodyQuoteDecoration? quoteDecoration,
+  ) {
     if (_open.length == maxDepth) {
       throw const ForumBodyTextPageException(
         ForumBodyTextPageFailure.backgroundDepth,
       );
     }
-    _open.add(_BackgroundBox(path, left, width, color));
+    _open.add(_BackgroundBox(path, left, width, color, quoteDecoration));
   }
 
   void close(String path, double flowEnd) {
@@ -41,7 +57,11 @@ final class _PageBackgrounds {
       throw StateError('Unbalanced page background');
     }
     final slice = _open.removeLast().current;
-    if (slice != null) slice.bottom = flowEnd;
+    if (slice != null) {
+      slice.bottom = flowEnd;
+      slice.closed = true;
+      if (slice.box.quoteDecoration != null) _pendingRoundedEnds--;
+    }
   }
 
   int touch(double top, int remainingItems) {
@@ -59,9 +79,14 @@ final class _PageBackgrounds {
     // over its parent, including when both start at the same collapsed edge.
     for (var i = first; i < _open.length; i++) {
       final box = _open[i];
-      final slice = _BackgroundSlice(box, box.continued ? 0 : top);
+      final slice = _BackgroundSlice(
+        box,
+        box.continued ? 0 : top,
+        !box.continued,
+      );
       box.current = slice;
       _draft.add(slice);
+      if (box.quoteDecoration != null) _pendingRoundedEnds++;
     }
     return count;
   }
@@ -83,30 +108,44 @@ final class _PageBackgrounds {
           slice.box.width,
           math.max(0.0, slice.bottom! - slice.top),
           slice.box.color,
+          slice.box.quoteDecoration,
+          slice.startsBox,
+          slice.closed,
         ),
     ];
     _draft.clear();
+    _pendingRoundedEnds = 0;
     return result;
   }
 
   void clear() {
     _open.clear();
     _draft.clear();
+    _pendingRoundedEnds = 0;
   }
 }
 
 final class _BackgroundBox {
-  _BackgroundBox(this.path, this.left, this.width, this.color);
+  _BackgroundBox(
+    this.path,
+    this.left,
+    this.width,
+    this.color,
+    this.quoteDecoration,
+  );
   final String path;
   final double left, width;
   final Color color;
+  final ForumBodyQuoteDecoration? quoteDecoration;
   bool continued = false;
   _BackgroundSlice? current;
 }
 
 final class _BackgroundSlice {
-  _BackgroundSlice(this.box, this.top);
+  _BackgroundSlice(this.box, this.top, this.startsBox);
   final _BackgroundBox box;
   final double top;
+  final bool startsBox;
+  bool closed = false;
   double? bottom;
 }

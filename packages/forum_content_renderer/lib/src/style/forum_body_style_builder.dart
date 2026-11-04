@@ -9,7 +9,7 @@ import 'forum_body_box_resolver.dart';
 import 'forum_body_style_options.dart';
 import 'forum_body_text_emphasis_resolver.dart';
 
-const forumBodyStyleRevision = 16;
+const forumBodyStyleRevision = 17;
 ForumBodyLength forumBodyReaderIndent(
   ForumBodyReaderStyle reader,
   double size,
@@ -92,6 +92,12 @@ final class ForumBodyStyleBuilder {
     ForumBodyElementKind? parentKind,
   }) {
     final role = _role(node.kind, parent.role);
+    final quoteClass =
+        node.attributes['class']?.split(RegExp(r'\s+')).contains('quote') ??
+        false;
+    final quoteSurface =
+        node.kind == ForumBodyElementKind.quote &&
+        (quoteClass || !parent.insideQuoteContainer);
     final declarations = node.style;
     if (!declarations.isValid) {
       _issue(node, 'style', 'malformed');
@@ -241,6 +247,7 @@ final class ForumBodyStyleBuilder {
         ? node.attributes['href']
         : parent.linkTarget;
     var foreground = node.tag == 'a' ? reader.linkColor : style.color;
+    if (quoteSurface) foreground = reader.theme?.quoteForeground ?? foreground;
     if (node.kind == ForumBodyElementKind.editStatus) {
       foreground = (reader.textStyle.color ?? foreground)?.withValues(
         alpha: .62,
@@ -262,8 +269,9 @@ final class ForumBodyStyleBuilder {
     if (_force(ForumBodyStyleProperty.foreground, role) && linkTarget == null) {
       foreground = reader.textStyle.color;
     }
-    Color? boxBackground;
-    Color? ownBackground;
+    final semanticBackground = quoteSurface ? reader.theme?.quoteSurface : null;
+    Color? boxBackground = semanticBackground;
+    Color? ownBackground = semanticBackground;
     var inlineBackground = style.backgroundColor;
     final rawBackground = declarations
         .effectiveDeclaration({'background-color', 'background'})
@@ -300,8 +308,8 @@ final class ForumBodyStyleBuilder {
     if (_force(ForumBodyStyleProperty.background, role)) {
       inlineBackground =
           reader.textStyle.backgroundColor ?? const Color(0x00000000);
-      boxBackground = null;
-      ownBackground = reader.textStyle.backgroundColor;
+      boxBackground = semanticBackground;
+      ownBackground = semanticBackground ?? reader.textStyle.backgroundColor;
     }
     // Start from the Host font so a null system family can leave a code block.
     // Inherited author values are supplied explicitly, never via copyWith(null).
@@ -500,8 +508,22 @@ final class ForumBodyStyleBuilder {
       rubyPosition: rubyPosition,
       textEmphasis: emphasis,
       indent: indent,
-      margin: _insets(node, 'margin', size, role, parent.margin),
-      padding: _insets(node, 'padding', size, role, parent.padding),
+      margin: _insets(
+        node,
+        'margin',
+        size,
+        role,
+        parent.margin,
+        quoteSurface: quoteSurface,
+      ),
+      padding: _insets(
+        node,
+        'padding',
+        size,
+        role,
+        parent.padding,
+        quoteSurface: quoteSurface,
+      ),
       box: const ForumBodyBoxResolver().resolveBoxStyle(
         node: node,
         parent: parent.box,
@@ -528,6 +550,10 @@ final class ForumBodyStyleBuilder {
       alignmentFromReader: alignmentFromReader,
       display: display,
       visibilityHidden: visibilityHidden,
+      quoteDecoration: quoteSurface
+          ? ForumBodyQuoteDecoration(reader.linkColor)
+          : null,
+      insideQuoteContainer: parent.insideQuoteContainer || quoteClass,
     );
   }
 
@@ -711,11 +737,13 @@ final class ForumBodyStyleBuilder {
     String property,
     double size,
     ForumBodyTextRole role,
-    ForumBodyInsets parent,
-  ) {
+    ForumBodyInsets parent, {
+    required bool quoteSurface,
+  }) {
     final isParagraph =
         node.kind == ForumBodyElementKind.paragraph ||
-        node.kind == ForumBodyElementKind.heading;
+        node.kind == ForumBodyElementKind.heading ||
+        quoteSurface;
     final defaults = property == 'margin' && isParagraph
         ? ForumBodyInsets(
             top: ForumBodyLength(reader.paragraphBefore),
@@ -727,6 +755,21 @@ final class ForumBodyStyleBuilder {
             bottom: ForumBodyLength(.5, ForumBodyLengthUnit.em),
             left: ForumBodyLength(0, ForumBodyLengthUnit.auto),
             right: ForumBodyLength(0, ForumBodyLengthUnit.auto),
+          )
+        : property == 'padding' && quoteSurface
+        ? const ForumBodyInsets(
+            top: ForumBodyLength(
+              ForumBodyQuoteDecoration.verticalPadding * 1.0,
+            ),
+            bottom: ForumBodyLength(
+              ForumBodyQuoteDecoration.verticalPadding * 1.0,
+            ),
+            left: ForumBodyLength(
+              ForumBodyQuoteDecoration.horizontalPadding * 1.0,
+            ),
+            right: ForumBodyLength(
+              ForumBodyQuoteDecoration.horizontalPadding * 1.0,
+            ),
           )
         : property == 'padding' && node.kind == ForumBodyElementKind.editStatus
         ? const ForumBodyInsets(bottom: ForumBodyLength(8))

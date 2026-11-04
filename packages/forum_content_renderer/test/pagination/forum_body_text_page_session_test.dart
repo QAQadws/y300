@@ -180,7 +180,7 @@ void main() {
     'a late format failure keeps the published page visible and materializable',
     (tester) async {
       final fixture = _Fixture(
-        '<p style="margin:0">a</p><blockquote>quote</blockquote>',
+        '<p style="margin:0">a</p><ul><li>item</li></ul>',
       );
       final session = fixture.session(height: 10);
       _advance(session, pages: 1);

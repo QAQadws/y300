@@ -153,7 +153,7 @@ void main() {
 
   test('replacing and cancelling paused-prefix anchor work releases its probe and rejects late frames', () async {
     final fixture = NativeReaderTestFixture(
-      '<p>abcdefgh</p><blockquote>unsupported</blockquote>',
+      '<p>abcdefgh</p><div style="position:absolute">unsupported</div>',
       width: 20,
       height: 10,
       complete: false,
@@ -325,7 +325,7 @@ void main() {
 
   test('failed source searches only accepted prefix and preserves its original failure on hit and miss', () async {
     final fixture = NativeReaderTestFixture(
-      '<p>abcdefgh</p><blockquote>unsupported</blockquote><p>outside</p>',
+      '<p>abcdefgh</p><div style="position:absolute">unsupported</div><p>outside</p>',
       width: 20,
       height: 10,
       complete: false,

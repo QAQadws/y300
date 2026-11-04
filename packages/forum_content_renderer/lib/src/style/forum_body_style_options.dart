@@ -4,10 +4,13 @@ import 'forum_body_length.dart';
 import 'forum_body_box_style.dart';
 import 'forum_body_ruby_position.dart';
 import 'forum_body_text_emphasis.dart';
+import 'forum_body_quote_decoration.dart';
+import '../html_rendering/theme/forum_html_theme_context.dart';
 import '../document/forum_body_document.dart';
 
 export 'forum_body_ruby_position.dart';
 export 'forum_body_text_emphasis.dart';
+export 'forum_body_quote_decoration.dart';
 
 enum ForumBodyStyleScope { asDefault, forceBody, forceAll }
 
@@ -64,6 +67,7 @@ final class ForumBodyReaderStyle {
     this.paragraphBefore = 0,
     this.paragraphAfter = 10,
     this.firstLineIndent = ForumBodyLength.zero,
+    this.theme,
     ForumBodyStylePolicy? policy,
   }) : policy = policy ?? ForumBodyStylePolicy() {
     final size = textStyle.fontSize;
@@ -94,6 +98,9 @@ final class ForumBodyReaderStyle {
   final double paragraphAfter;
   final ForumBodyLength firstLineIndent;
   final ForumBodyStylePolicy policy;
+
+  /// The same immutable semantic palette used by the HTML renderer.
+  final ForumHtmlThemeContext? theme;
 }
 
 final class ForumBodyResolvedStyle {
@@ -120,6 +127,8 @@ final class ForumBodyResolvedStyle {
     this.visibilityHidden = false,
     this.indentFromReader = true,
     this.alignmentFromReader = true,
+    this.quoteDecoration,
+    this.insideQuoteContainer = false,
   });
   final TextStyle textStyle;
   final ForumBodyTextRole role;
@@ -143,6 +152,8 @@ final class ForumBodyResolvedStyle {
   final bool visibilityHidden;
   final bool indentFromReader;
   final bool alignmentFromReader;
+  final ForumBodyQuoteDecoration? quoteDecoration;
+  final bool insideQuoteContainer;
 
   ForumBodyResolvedStyle withTextEmphasis(ForumBodyTextEmphasis value) =>
       value == textEmphasis
@@ -170,6 +181,8 @@ final class ForumBodyResolvedStyle {
           visibilityHidden: visibilityHidden,
           indentFromReader: indentFromReader,
           alignmentFromReader: alignmentFromReader,
+          quoteDecoration: quoteDecoration,
+          insideQuoteContainer: insideQuoteContainer,
         );
 }
 

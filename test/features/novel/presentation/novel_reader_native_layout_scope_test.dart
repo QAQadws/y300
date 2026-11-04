@@ -44,6 +44,8 @@ Future<NovelReaderNativeRenderEnvironment> _environment(
   TextDirection direction = TextDirection.ltr,
   Color? foreground,
   Color? background,
+  Color? quoteBackground,
+  Color? quoteForeground,
 }) async {
   late NovelReaderNativeRenderEnvironment captured;
   final theme = ThemeData.light();
@@ -58,7 +60,11 @@ Future<NovelReaderNativeRenderEnvironment> _environment(
           child: Theme(
             data: theme.copyWith(
               scaffoldBackgroundColor: background,
-              colorScheme: theme.colorScheme.copyWith(onSurface: foreground),
+              colorScheme: theme.colorScheme.copyWith(
+                onSurface: foreground,
+                surfaceContainerHighest: quoteBackground,
+                onSurfaceVariant: quoteForeground,
+              ),
               textTheme: TextTheme(bodyMedium: style),
             ),
             child: Builder(
@@ -112,6 +118,60 @@ const _limits = ForumBodyTextPageSessionLimits(
 );
 
 void main() {
+  testWidgets(
+    'quote theme colors are frozen and invalidate native content without conflating the page canvas',
+    (tester) async {
+      final chapter = await _chapter(
+        '<div class="quote"><blockquote><p>quoted</p></blockquote></div>',
+      );
+      final base = await _scope(chapter, await _environment(tester));
+      for (final environment in [
+        await _environment(tester, quoteBackground: Colors.green),
+        await _environment(tester, quoteForeground: Colors.red),
+      ]) {
+        final changed = await _scope(chapter, environment);
+        expect(changed.paginationKey, isNot(base.paginationKey));
+        expect(
+          base.tryUpdateCanvas(
+            environment: environment,
+            width: base.width,
+            height: base.height,
+            fontCollectionGeneration: 0,
+            isCurrent: () => true,
+          ),
+          isNull,
+        );
+      }
+      final cache = ForumBodyParagraphCache(
+        maxEntries: 8,
+        maxEstimatedBytes: 1 << 22,
+      );
+      final session = base.openSession(
+        cache: cache,
+        layoutId: 'quote',
+        limits: _limits,
+      );
+      try {
+        while (!session.isComplete) {
+          session.advance(maxEvents: 8, maxLines: 4);
+        }
+        final box = session.snapshot.single.backgrounds.single;
+        expect(box.color, base.reader.theme!.quoteSurface);
+        expect(box.quoteDecoration!.borderColor, base.reader.linkColor);
+        final leases = session.preparePageLeases(0);
+        expect(
+          leases.single.content.style.textStyle.color,
+          base.reader.theme!.quoteForeground,
+        );
+        for (final lease in leases) {
+          lease.release();
+        }
+      } finally {
+        session.close();
+        cache.close();
+      }
+    },
+  );
   testWidgets(
     'emphasis mark scaling is frozen and invalidates the reading layout',
     (tester) async {

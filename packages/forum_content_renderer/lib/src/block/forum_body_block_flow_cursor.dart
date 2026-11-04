@@ -132,7 +132,7 @@ final class ForumBodyBlockFlowCursor {
       throw ArgumentError.value(width, 'width');
     }
   }
-  static const revision = 4;
+  static const revision = 5;
   final double width;
   final ForumBodyBlockEdgeMargins edgeMargins;
   final double _rootFontSize;
@@ -223,6 +223,7 @@ final class ForumBodyBlockFlowCursor {
           ForumBodyElementKind.container,
           ForumBodyElementKind.paragraph,
           ForumBodyElementKind.heading,
+          ForumBodyElementKind.quote,
           ForumBodyElementKind.rule,
           ForumBodyElementKind.editStatus,
           ForumBodyElementKind.inline,

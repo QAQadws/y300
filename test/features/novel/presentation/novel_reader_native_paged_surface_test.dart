@@ -282,7 +282,7 @@ void main() {
     (tester) async {
       final reader = _Reader(
         html:
-            '<p>${List.filled(100, 'abcdefghijklmnopqrst').join()}</p><blockquote>unsupported</blockquote>',
+            '<p>${List.filled(100, 'abcdefghijklmnopqrst').join()}</p><div style="position:absolute">unsupported</div>',
       );
       final signal = NativeReaderActivitySignal(true);
       addTearDown(signal.dispose);
@@ -851,7 +851,7 @@ void main() {
     (tester) async {
       final reader = _Reader(
         html:
-            '<p>${List.filled(100, 'abcdefghijklmnopqrst').join()}</p><blockquote>unsupported</blockquote>',
+            '<p>${List.filled(100, 'abcdefghijklmnopqrst').join()}</p><div style="position:absolute">unsupported</div>',
       );
       await _show(tester, reader, width: 200, height: 180);
       await tester.pumpAndSettle();

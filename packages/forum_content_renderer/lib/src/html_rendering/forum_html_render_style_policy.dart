@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:html/dom.dart' as html_dom;
 import '../helpers/discuz_font_size_policy.dart';
+import '../style/forum_body_quote_decoration.dart';
 import '../models/forum_html_content_layout.dart';
 import '../models/forum_html_render_options.dart';
 import 'theme/css_inline_style_declarations.dart';
@@ -62,9 +63,11 @@ class ForumHtmlRenderStylePolicy {
       return {
         'background-color': _toCssHex(theme.quoteSurface),
         'color': _toCssHex(theme.quoteForeground),
-        'border-left': '3px solid ${_toCssHex(theme.link)}',
-        'border-radius': '6px',
-        'padding': '8px 10px',
+        'border-left':
+            '${ForumBodyQuoteDecoration.borderWidth}px solid ${_toCssHex(theme.link)}',
+        'border-radius': '${ForumBodyQuoteDecoration.radius}px',
+        'padding':
+            '${ForumBodyQuoteDecoration.verticalPadding}px ${ForumBodyQuoteDecoration.horizontalPadding}px',
         'margin': _paragraphMargin(element),
       };
     }
