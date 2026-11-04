@@ -1,12 +1,35 @@
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+
 import '../../../../test_support/localized_test_app.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_gesture_coordinator.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_paged_turn_motion.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_tap_zones.dart';
 
 void main() {
+  testWidgets('stationary long presses never commit a reader tap', (
+    tester,
+  ) async {
+    var turns = 0;
+    await tester.pumpWidget(
+      _buildTapZones(
+        onCenterTap: () => turns++,
+        onLeftTap: () => turns++,
+        onRightTap: () => turns++,
+      ),
+    );
+    final press = await tester.startGesture(const Offset(100, 300));
+    await tester.pump(const Duration(milliseconds: 600));
+    await press.up(timeStamp: const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 330));
+    expect(turns, 0);
+    await tester.tapAt(const Offset(100, 300));
+    await tester.pump(const Duration(milliseconds: 330));
+    expect(turns, 1);
+  });
+
   testWidgets('ReaderTapZones center tap triggers callback', (tester) async {
     var centerTaps = 0;
     await tester.pumpWidget(_buildTapZones(onCenterTap: () => centerTaps += 1));

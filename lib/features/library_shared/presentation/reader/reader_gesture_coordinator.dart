@@ -40,6 +40,7 @@ class ReaderGestureCoordinator {
 
   int? _activePointer;
   Offset? _downGlobalPosition;
+  Duration? _downTimeStamp;
   bool _candidateCancelled = false;
   bool _completesDoubleTap = false;
   bool _multiPointerSequence = false;
@@ -81,6 +82,7 @@ class ReaderGestureCoordinator {
 
     _activePointer = event.pointer;
     _downGlobalPosition = event.position;
+    _downTimeStamp = event.timeStamp;
     _candidateCancelled = false;
     _completesDoubleTap = _isDoubleTapCandidate(event.position);
     if (_completesDoubleTap) {
@@ -123,6 +125,8 @@ class ReaderGestureCoordinator {
     final isTap =
         !_candidateCancelled &&
         down != null &&
+        _downTimeStamp != null &&
+        event.timeStamp - _downTimeStamp! < kLongPressTimeout &&
         (event.position - down).distance <= tapSlop;
     final completesDoubleTap = _completesDoubleTap;
     final multiPointerSequence = _multiPointerSequence;
@@ -222,6 +226,7 @@ class ReaderGestureCoordinator {
   void _resetPointerCandidate() {
     _activePointer = null;
     _downGlobalPosition = null;
+    _downTimeStamp = null;
     _candidateCancelled = false;
     _completesDoubleTap = false;
     _multiPointerSequence = false;
