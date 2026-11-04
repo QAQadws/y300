@@ -60,7 +60,7 @@ final class ForumBodyInlineEmphasisRowAllocation {
   ) : rows = UnmodifiableListView(rows),
       marks = UnmodifiableListView(marks),
       children = UnmodifiableListView(children);
-  static const revision = 2;
+  static const revision = 3;
   final ForumBodyInlineEmphasisIsolationMetrics input;
   final List<ForumBodyInlineEmphasisAllocatedRow> rows;
   final List<ForumBodyInlineEmphasisAllocatedMark> marks;
@@ -208,9 +208,22 @@ final class ForumBodyInlineEmphasisRowAllocationPreparation {
             continue;
           case _AllocationPhase.fonts:
             if (_index < input.reference.lineCount) {
-              final font = input.natural.geometry.parentFontBounds[_index++];
+              final index = _index++,
+                  font = input.natural.geometry.parentFontBounds[index],
+                  isolatedFont = input.geometry.parentFontBounds[index];
               if (font != null) _rect(font);
-              _extents.add(font);
+              if (isolatedFont != null) _rect(isolatedFont);
+              // Each native layout rounds its boxes to Float32 at its own
+              // baseline. Equality within ULPs does not make the two envelopes
+              // identical; allocation must contain both measured results.
+              final queryFont = isolatedFont?.shift(
+                Offset(
+                  0,
+                  input.reference.naturalLines[index].baseline -
+                      input.reference.isolatedLines[index].baseline,
+                ),
+              );
+              _extents.add(_union(font, queryFont));
             } else {
               _next(_AllocationPhase.childBounds);
             }

@@ -312,6 +312,38 @@ void main() {
       'packages/forum_content_renderer/ForumBodyInlineSpace',
     )..addFont(rootBundle.load('assets/fonts/inline_space.ttf'))).load();
   });
+  test('allocated rows contain both actual native font envelopes', () {
+    final cache = _cache();
+    final input = _html(
+      cache,
+      '<p style="white-space:pre-wrap;line-height:.25">AA\n'
+      '<span style="font-size:27.3px">DD</span><ruby>B<rt>b</rt></ruby>\nEE</p>',
+      fontSize: 18.5,
+      width: 150,
+      scaler: const TextScaler.linear(1.5),
+    );
+    final value = _finish(_work(input), cache).value;
+    var differing = false;
+    for (final (index, row) in value.rows.indexed) {
+      final natural = input.input.natural.geometry.parentFontBounds[index];
+      final isolated = input.input.geometry.parentFontBounds[index];
+      if (natural == null || isolated == null) continue;
+      final current = isolated.shift(row.logicalOffset);
+      final original = natural.shift(row.naturalOffset);
+      differing |=
+          current.top != original.top || current.bottom != original.bottom;
+      for (final rect in [current, original]) {
+        expect(rect.top, greaterThanOrEqualTo(row.line.top - 1e-10));
+        expect(rect.bottom, lessThanOrEqualTo(row.line.bottom + 1e-10));
+      }
+    }
+    expect(
+      differing,
+      isTrue,
+      reason: 'The regression needs native Float32 rounding',
+    );
+    _verify(value, input);
+  });
   for (final (i, child) in mixedEmphasisChildren.indexed) {
     for (final side in ['over', 'under']) {
       for (final direction in TextDirection.values) {

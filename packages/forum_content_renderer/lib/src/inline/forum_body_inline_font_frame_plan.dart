@@ -31,7 +31,7 @@ final class ForumBodyInlineFontFramePlan {
       _parentCommands = UnmodifiableListView(parentCommands),
       _commandPrefix = UnmodifiableListView(commandPrefix);
 
-  static const revision = 2;
+  static const revision = 3;
   final ForumBodyInlinePlanInput source;
   final ForumBodyInlineEmphasisRowAllocation allocation;
   final ForumBodyInlineEmphasisPaintReference paintReference;
