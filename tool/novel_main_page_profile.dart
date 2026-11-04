@@ -398,17 +398,24 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       windowOpen = false;
     }
 
-    void checkLanguages(String phase, ProfileReaderObservation observation) {
+    void checkVisiblePage(String phase, ProfileReaderObservation observation) {
       final expected = novelProfileExpectedLanguages(fixture.name);
-      if (!native || expected == null) return;
+      if (!native) return;
       final readerContext = key.currentContext;
       final target = observation.nativeController?.viewForPage(
         observation.page!,
       );
       if (readerContext == null || target == null) {
-        throw StateError('Native language delivery is missing');
+        throw StateError('Native visible delivery is missing');
       }
+      if (target.coverage.hasClippedGlyphs) {
+        run['clippedGlyphs'] = true;
+        throw StateError('Native visible delivery clips glyphs');
+      }
+      // Check the exact mounted delivery outside timing windows. Inspection
+      // never asks a prepared neighbor to acquire resources or become visible.
       final actual = observeNativeProfileLanguages(readerContext, target);
+      if (expected == null) return;
       _emit({
         'event': 'page_languages',
         'run': id,
@@ -434,7 +441,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       if (native) _emitPageWork(id, 'first', latest);
       run['firstReadableWasPartial'] = !latest.complete;
       end();
-      checkLanguages('first', latest);
+      checkVisiblePage('first', latest);
       if (!latest.complete) {
         begin('background');
         latest = await _wait(
@@ -486,7 +493,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
         }
         end();
         run['completedTurns'] = i + 1;
-        checkLanguages('turn-$i', latest);
+        checkVisiblePage('turn-$i', latest);
       }
       run['commandToSettledUs'] = profileDistribution(turnUs);
       if (reflow) {
@@ -504,7 +511,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
         run['reflowReadableUs'] = reflowClock.elapsedMicroseconds;
         if (native) _emitPageWork(id, 'reflow', latest);
         end();
-        checkLanguages('reflow', latest);
+        checkVisiblePage('reflow', latest);
       }
       run['passed'] = true;
     } catch (error) {

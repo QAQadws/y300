@@ -33,6 +33,15 @@ void main() {
         novelMainPageProfileFixtures('ruby-gaps'),
         same(novelProfileRubyGapFixtures),
       );
+      expect(
+        novelMainPageProfileFixtures('semantic'),
+        same(novelProfileSemanticFixtures),
+      );
+      expect(novelProfileSemanticFixtures.map((f) => f.name), [
+        'semantic-blocks',
+        'semantic-ruby-tight',
+        'semantic-code',
+      ]);
       expect(novelProfileRubyGapFixtures.map((f) => f.name), [
         'ruby-gaps-ltr',
         'ruby-gaps-rtl',
@@ -215,6 +224,8 @@ void main() {
     ),
     for (final fixture in novelProfileRubyGapFixtures)
       (native: true, mixed: true, fixture: fixture),
+    for (final fixture in novelProfileSemanticFixtures)
+      (native: true, mixed: true, fixture: fixture),
     for (final fixture in novelProfileLanguageFixtures)
       (native: true, mixed: true, fixture: fixture),
     for (final fixture in novelProfileNestedRubyFixtures)
@@ -245,6 +256,9 @@ void main() {
         );
         final navigator = GlobalKey<NavigatorState>();
         final key = GlobalKey();
+        final semantic = novelProfileSemanticFixtures.any(
+          (f) => f.name == scenario.fixture?.name,
+        );
         await tester.pumpWidget(
           data.scope(
             MaterialApp(
@@ -252,6 +266,13 @@ void main() {
               localizationsDelegates: AppLocalizations.localizationsDelegates,
               supportedLocales: AppLocalizations.supportedLocales,
               home: const Scaffold(),
+              builder: semantic
+                  ? (context, child) => MediaQuery(
+                      data: MediaQuery.of(context)
+                          .copyWith(textScaler: const TextScaler.linear(1.5)),
+                      child: child!,
+                    )
+                  : null,
             ),
           ),
         );
@@ -340,6 +361,15 @@ void main() {
           );
         }
         void checkLanguages(ProfileReaderObservation current) {
+          if (semantic) {
+            expect(
+              current.nativeController!
+                  .viewForPage(current.page!)!
+                  .coverage
+                  .hasClippedGlyphs,
+              isFalse,
+            );
+          }
           final expected = novelProfileExpectedLanguages(
             scenario.fixture?.name ?? '',
           );

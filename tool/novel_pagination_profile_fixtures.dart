@@ -13,6 +13,47 @@ final novelProfileFixtures = <({String name, String html})>[
   (name: 'complex', html: novelProfileComplexHtml),
 ];
 
+/// Finite S6 format matrix. Keep the established performance baselines intact;
+/// these exercise ordinary forum containers and single-level annotations only.
+final novelProfileSemanticFixtures = <({String name, String html})>[
+  (name: 'semantic-blocks', html: _semanticBlocks()),
+  (name: 'semantic-ruby-tight', html: _semanticRuby()),
+  (name: 'semantic-code', html: _semanticCode()),
+];
+
+String _semanticBlocks() =>
+    '<i class="pstatus">本帖最后由 Synthetic Editor 于 2026-10-31 12:00 编辑</i><br><br>'
+    '${List.generate(12, (i) => '<h${i % 6 + 1}>第${i + 1}节 标题</h${i % 6 + 1}>'
+        '<div style="padding:4px 6px;background:#f1e0c0">'
+        '<p><font face="UnavailableAuthorFont" color="#9c2020">有色正文</font>，'
+        '<b>粗体</b>、<i>斜体</i>、<u>下划线</u>与<del>删除线</del>。'
+        'A<sup>2</sup> 和 H<sub>2</sub>O 保持原文与基线。</p>'
+        '<div class="quote"><div><blockquote><b>引用 $i</b><br>'
+        '继续阅读，核对引用续页与原始文字。'
+        '<ruby><rb>正文</rb><rt>せいぶん</rt></ruby>。</blockquote></div></div>'
+        '<ol start="8"><li>项目甲 $i，继续阅读以核对编号。'
+        '<ul><li>子项目</li></ul></li><li value="12">项目乙</li><li></li></ol>'
+        '</div><hr>').join()}';
+
+String _semanticRuby() => List.generate(
+  32,
+  (i) =>
+      '<p style="line-height:1.2">第${i + 1}段，普通正文与 '
+      '<ruby><rb><font face="UnavailableAuthorFont" color="#9c2020">漢字</font></rb>'
+      '<rp>(</rp><rt><span style="color:#204090">かんじ</span></rt><rp>)</rp></ruby>'
+      ' 单层注音混排。<b>实际字体包络</b>与父行保持一致，'
+      '不裁切，不把注音放入普通复制窗口。</p>',
+).join();
+
+String _semanticCode() =>
+    '<p>代码前，<code>inline_code()</code> 与普通文字共用来源。</p>'
+    '<pre>  spaces\tand_tab\n\ntrailing_line\n</pre>'
+    '<div class="blockcode"><div id="code_S6a"><ol>'
+    '${List.generate(32, (i) => '<li>  line_${i + 1}();\t// 保留空白\n'
+        '    ${List.filled(i == 0 ? 20 : 2, 'long_word_').join()}tail;</li>').join()}'
+    '</ol></div><em onclick="copycode(\$(\'code_S6a\'));">复制代码</em></div>'
+    '<p>代码后，作者同名文字：复制代码。</p>';
+
 /// Separate corpus: do not silently change the established baseline samples.
 /// Each paragraph remains below the renderer's 512-context admission limit.
 final novelProfileRubyGapFixtures = <({String name, String html})>[
@@ -61,6 +102,7 @@ List<({String name, String html})> novelMainPageProfileFixtures(
   String corpus,
 ) => switch (corpus) {
   'baseline' => novelProfileFixtures,
+  'semantic' => novelProfileSemanticFixtures,
   'ruby-gaps' => novelProfileRubyGapFixtures,
   'language' => novelProfileLanguageFixtures,
   'ruby-nested' => novelProfileNestedRubyFixtures,
