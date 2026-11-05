@@ -40,6 +40,8 @@ class NovelReaderNativePagedViewport extends StatefulWidget {
     this.onPositionChanged,
     this.onScrollActivityChanged,
     this.onTextSelection,
+    this.imageHost,
+    this.onPageUnmounted,
   });
 
   final NovelReaderNativePagedController controller;
@@ -61,6 +63,8 @@ class NovelReaderNativePagedViewport extends StatefulWidget {
   final ValueChanged<NovelReaderPaginationPosition>? onPositionChanged;
   final ValueChanged<bool>? onScrollActivityChanged;
   final ValueChanged<NovelReaderNativeTextSelection>? onTextSelection;
+  final ForumHtmlImageHost? imageHost;
+  final VoidCallback? onPageUnmounted;
 
   @override
   State<NovelReaderNativePagedViewport> createState() =>
@@ -76,6 +80,7 @@ class _NovelReaderNativePagedViewportState
     double height,
     int page,
     Color? background,
+    ForumHtmlImageHost? imageHost,
   })?
   _displayed;
   int _binding = 0;
@@ -117,7 +122,8 @@ class _NovelReaderNativePagedViewportState
         !widget.controller.isClosed &&
         displayed != null &&
         identical(displayed.controller, widget.controller) &&
-        oldWidget.backgroundColor != widget.backgroundColor) {
+        (oldWidget.backgroundColor != widget.backgroundColor ||
+            !identical(oldWidget.imageHost, widget.imageHost))) {
       // Only repaint the accepted current delivery. A pending/failed replacement
       // must retain the previous controller's canvas with its painted content.
       _displayed = (
@@ -126,6 +132,7 @@ class _NovelReaderNativePagedViewportState
         height: displayed.height,
         page: displayed.page,
         background: widget.backgroundColor,
+        imageHost: widget.imageHost,
       );
     }
     _startIfActive();
@@ -178,6 +185,7 @@ class _NovelReaderNativePagedViewportState
         height: snapshot.height,
         page: controller.readyTarget!.pageIndex,
         background: widget.backgroundColor,
+        imageHost: widget.imageHost,
       );
     }
   }
@@ -199,6 +207,8 @@ class _NovelReaderNativePagedViewportState
       height: displayed.height,
       initialPage: displayed.page,
       backgroundColor: displayed.background,
+      imageHost: displayed.imageHost,
+      onPageUnmounted: widget.onPageUnmounted,
       frozen: frozen,
       reverse: widget.reverse,
       navigationController: widget.navigationController,
@@ -279,8 +289,12 @@ class _NativeLayoutViewport extends StatefulWidget {
     required this.onPositionChanged,
     required this.onScrollActivityChanged,
     required this.onTextSelection,
+    required this.imageHost,
+    required this.onPageUnmounted,
   });
   final NovelReaderNativePagedController controller;
+  final ForumHtmlImageHost? imageHost;
+  final VoidCallback? onPageUnmounted;
   final double width;
   final double height;
   final int initialPage;
@@ -695,6 +709,12 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
         return;
       }
       if (target == null || target.pageIndex != _page) {
+        final view = controller.visibleView;
+        final fragments = view == null ? null : _mountedPages[view];
+        if (view != null && fragments != null && view.pageIndex == _page) {
+          final position = controller.refreshPreparedVisible(view, fragments);
+          if (position != null) widget.onPositionChanged(position);
+        }
         _confirmChapterRelease();
         return;
       }
@@ -807,6 +827,7 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
   void _unmounted(NovelReaderNativePageView view) {
     _mountedPages.remove(view);
     widget.controller.forgetPage(view.pageIndex, view);
+    widget.onPageUnmounted?.call();
   }
 
   @override
@@ -863,6 +884,8 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
                           return widget.placeholder;
                         }
                         return _NativeMountedPage(
+                          imageHost: widget.imageHost,
+                          onImageDisplayChanged: _afterFrame,
                           key: ObjectKey(view),
                           view: view,
                           // Retain the confirmed origin through cancellation
@@ -948,8 +971,12 @@ class _NativeMountedPage extends StatefulWidget {
     required this.onMounted,
     required this.onUnmounted,
     required this.onTextSelection,
+    required this.imageHost,
+    required this.onImageDisplayChanged,
   });
   final NovelReaderNativePageView view;
+  final ForumHtmlImageHost? imageHost;
+  final VoidCallback onImageDisplayChanged;
   final bool keepAlive;
   final void Function(
     NovelReaderNativePageView,
@@ -995,6 +1022,8 @@ class _NativeMountedPageState extends State<_NativeMountedPage>
       pageIndex: view.pageIndex,
       layoutId: view.snapshot.layoutId,
       fragments: _fragments,
+      imageHost: widget.imageHost,
+      onImageDisplayChanged: (_, _) => widget.onImageDisplayChanged(),
       onSourceLongPress: widget.onTextSelection == null
           ? null
           : (_, selection) => widget.onTextSelection!(selection),

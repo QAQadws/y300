@@ -124,6 +124,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       NovelReaderPaginationSessionCache();
   NovelReaderController? _paginationSessionController;
   NovelReaderNativeOwner? _nativeOwner;
+  Object? _nativeImageBindingKey;
+  ForumHtmlImageHost? _nativeImageHost;
+  ForumHtmlPreparationImagePolicy? _nativeImagePolicy;
   final _nativeActivity = ValueNotifier(false);
   NovelReaderNativeHostStatus? _nativeStatus;
   String? _nativeStatusSurface;
@@ -1117,86 +1120,112 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     NovelReaderViewState viewState,
     ReaderChromeInsets chromeInsets,
     String identity,
-  ) => NovelReaderNativePagedSurface(
-    owner: _nativeOwner!,
-    readingAuthorityIdentity: viewState.readingAuthorityRevision,
-    preparationService: ref.watch(novelReaderNativePreparationServiceProvider),
-    rawHtml: viewState.currentContent.rawHtml,
-    episode: viewState.currentEpisode,
-    preferences: viewState.renderPreferences,
-    resolvedFont: viewState.bodyFont,
-    converter: resolveTextConverter(
-      viewState.renderPreferences.sharedConversionMode,
-    ),
-    progressSnapshot: viewState.progressSnapshot,
-    startsAtBeginning: ref
-        .read(novelReaderControllerProvider(_args).notifier)
-        .startsPagedAtBeginning,
-    chromeInsets: chromeInsets,
-    semanticDocument: viewState.document,
-    activity: _nativeActivity,
-    onTextSelection: (selection) =>
-        unawaited(_openNativeTextSelection(identity, selection)),
-    idleScheduler: widget.nativeIdleScheduler,
-    navigationController: _pagedNavigationController,
-    pageSeekRequest: _pendingPageSeekRequest,
-    onPageSeekFinished: (request, outcome) {
-      if (!_isCurrentReaderSurface(identity) ||
-          !identical(_pendingPageSeekRequest, request)) {
-        return;
-      }
-      setState(() {
-        _pendingPageSeekRequest = null;
-        _isProgressSeekInFlight = false;
-        _progressSliderPreview = null;
-      });
-      if (outcome == NovelReaderNavigationOutcome.unavailable) {
-        _showReaderSnackBar(AppLocalizations.of(context).novelPositionChanged);
-      }
-      _observeReadingSurface();
-    },
-    chapterEntryRequest: _pendingChapterEntryRequest,
-    chapterTurnIsInFlight: _pendingChapterEntryRequest != null,
-    onChapterEntryApplied: (request) {
-      if (_isCurrentReaderSurface(identity)) {
-        _retireChapterEntryRequest(requestId: request.requestId);
-      }
-    },
-    onChapterEntryRetired: (request) {
-      if (_isCurrentReaderSurface(identity)) {
-        _retireChapterEntryRequest(requestId: request.requestId);
-      }
-    },
-    previousChapterTitle: viewState.previousEpisode?.episodeTitle,
-    nextChapterTitle: viewState.nextEpisode?.episodeTitle,
-    onTurnToAdjacentChapter: (edge) =>
-        _isCurrentReaderSurface(identity) &&
-        _turnToAdjacentChapter(edge, viewState),
-    onContentReady: () => _markReaderSurfaceReady(identity),
-    onStatusChanged: (status) => _nativeStatusChanged(identity, status),
-    onChooseScrollMode: () {
-      if (_isCurrentReaderSurface(identity)) {
-        _chooseScrollMode(
-          ref.read(novelReaderControllerProvider(_args).notifier),
-        );
-      }
-    },
-    onPositionChanged: (position) {
-      if (!_isCurrentReaderSurface(identity) || !_nativeActivity.value) return;
-      setState(() {
-        _pagedPosition = position;
-        _nativeUnpublishedPosition = position;
-      });
-      _publishPagedPosition();
-      _observeReadingSurface();
-    },
-    onScrollActivityChanged: (scrolling) {
-      if (_isCurrentReaderSurface(identity)) {
-        _readingScrolling = scrolling;
+  ) {
+    final base = ref.watch(forumHtmlImageHostProvider);
+    final tid = viewState.currentEpisode.sourceTid;
+    final referer = _imageRefererFor(viewState);
+    final binding = (base, tid, referer);
+    if (_nativeImageBindingKey != binding) {
+      _nativeImageBindingKey = binding;
+      _nativeImageHost = base.forContent(
+        threadId: tid,
+        imageCacheOwnerId: tid,
+        imageReferer: referer,
+      );
+      _nativeImagePolicy = ForumCacheHtmlPreparationImagePolicy(
+        imageRequestResolver: base.imageRequestResolver,
+      );
+    }
+    return NovelReaderNativePagedSurface(
+      owner: _nativeOwner!,
+      readingAuthorityIdentity: viewState.readingAuthorityRevision,
+      preparationService: ref.watch(
+        novelReaderNativePreparationServiceProvider,
+      ),
+      imageHost: _nativeImageHost,
+      imagePolicy: _nativeImagePolicy!,
+      imageCacheOwnerId: tid,
+      rawHtml: viewState.currentContent.rawHtml,
+      episode: viewState.currentEpisode,
+      preferences: viewState.renderPreferences,
+      resolvedFont: viewState.bodyFont,
+      converter: resolveTextConverter(
+        viewState.renderPreferences.sharedConversionMode,
+      ),
+      progressSnapshot: viewState.progressSnapshot,
+      startsAtBeginning: ref
+          .read(novelReaderControllerProvider(_args).notifier)
+          .startsPagedAtBeginning,
+      chromeInsets: chromeInsets,
+      semanticDocument: viewState.document,
+      activity: _nativeActivity,
+      onTextSelection: (selection) =>
+          unawaited(_openNativeTextSelection(identity, selection)),
+      idleScheduler: widget.nativeIdleScheduler,
+      navigationController: _pagedNavigationController,
+      pageSeekRequest: _pendingPageSeekRequest,
+      onPageSeekFinished: (request, outcome) {
+        if (!_isCurrentReaderSurface(identity) ||
+            !identical(_pendingPageSeekRequest, request)) {
+          return;
+        }
+        setState(() {
+          _pendingPageSeekRequest = null;
+          _isProgressSeekInFlight = false;
+          _progressSliderPreview = null;
+        });
+        if (outcome == NovelReaderNavigationOutcome.unavailable) {
+          _showReaderSnackBar(
+            AppLocalizations.of(context).novelPositionChanged,
+          );
+        }
         _observeReadingSurface();
-      }
-    },
-  );
+      },
+      chapterEntryRequest: _pendingChapterEntryRequest,
+      chapterTurnIsInFlight: _pendingChapterEntryRequest != null,
+      onChapterEntryApplied: (request) {
+        if (_isCurrentReaderSurface(identity)) {
+          _retireChapterEntryRequest(requestId: request.requestId);
+        }
+      },
+      onChapterEntryRetired: (request) {
+        if (_isCurrentReaderSurface(identity)) {
+          _retireChapterEntryRequest(requestId: request.requestId);
+        }
+      },
+      previousChapterTitle: viewState.previousEpisode?.episodeTitle,
+      nextChapterTitle: viewState.nextEpisode?.episodeTitle,
+      onTurnToAdjacentChapter: (edge) =>
+          _isCurrentReaderSurface(identity) &&
+          _turnToAdjacentChapter(edge, viewState),
+      onContentReady: () => _markReaderSurfaceReady(identity),
+      onStatusChanged: (status) => _nativeStatusChanged(identity, status),
+      onChooseScrollMode: () {
+        if (_isCurrentReaderSurface(identity)) {
+          _chooseScrollMode(
+            ref.read(novelReaderControllerProvider(_args).notifier),
+          );
+        }
+      },
+      onPositionChanged: (position) {
+        if (!_isCurrentReaderSurface(identity) || !_nativeActivity.value) {
+          return;
+        }
+        setState(() {
+          _pagedPosition = position;
+          _nativeUnpublishedPosition = position;
+        });
+        _publishPagedPosition();
+        _observeReadingSurface();
+      },
+      onScrollActivityChanged: (scrolling) {
+        if (_isCurrentReaderSurface(identity)) {
+          _readingScrolling = scrolling;
+          _observeReadingSurface();
+        }
+      },
+    );
+  }
 
   Widget _buildReaderList(
     NovelReaderViewState viewState,

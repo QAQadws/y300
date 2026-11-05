@@ -21,6 +21,7 @@ import '../models/novel_reader_pagination_position.dart';
 import '../models/novel_reader_native_text_selection.dart';
 import '../services/novel_reader_native_layout_scope.dart';
 import '../services/novel_reader_native_owner.dart';
+import '../services/novel_reader_native_image_resources.dart';
 import '../services/novel_reader_native_preparation_service.dart';
 import '../services/novel_reader_native_render_environment.dart';
 import '../services/novel_reader_native_work_scheduler.dart';
@@ -46,6 +47,10 @@ class NovelReaderNativeLayoutHost extends StatefulWidget {
     required this.readingAuthorityIdentity,
     required this.preparationService,
     this.converter = const IdentityTextConverter(),
+    this.imageHost,
+    this.imagePolicy = const ForumCacheHtmlPreparationImagePolicy(),
+    this.imageThreadId,
+    this.imageCacheOwnerId,
     this.stylePolicy,
     this.startsAtBeginning = false,
     this.chapterEntryRequest,
@@ -95,6 +100,9 @@ class NovelReaderNativeLayoutHost extends StatefulWidget {
   final Object readingAuthorityIdentity;
   final NovelReaderNativePreparationService preparationService;
   final TextConverter converter;
+  final ForumHtmlImageHost? imageHost;
+  final ForumHtmlPreparationImagePolicy imagePolicy;
+  final String? imageThreadId, imageCacheOwnerId;
   final ForumBodyStylePolicy? stylePolicy;
   final bool startsAtBeginning;
   final NovelReaderChapterEntryRequest? chapterEntryRequest;
@@ -637,6 +645,18 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         active: _live(request),
         reverse: request.reverse,
         backgroundColor: request.scope.backgroundColor,
+        imageHost:
+            request.scope.chapter.identity.sourceId == widget.sourceId &&
+                request.scope.chapter.episodeId ==
+                    widget.semanticDocument.episodeId
+            ? widget.imageHost
+            : request.imageHost,
+        onPageUnmounted: () {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && !_disposed) _reap();
+          });
+          WidgetsBinding.instance.ensureVisualUpdate();
+        },
         navigationController: widget.navigationController,
         chapterTurnIsInFlight: widget.chapterTurnIsInFlight,
         previousChapterTitle: widget.previousChapterTitle,
@@ -840,6 +860,13 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         cache: handle.cache,
         layoutId: 'native-host-$epoch',
         limits: config.sessionLimits,
+        imageResolver: NovelReaderNativeImageResources(
+          chapter: scope.chapter,
+          host: config.imageHost,
+          policy: config.imagePolicy,
+          threadId: config.imageThreadId,
+          cacheOwnerId: config.imageCacheOwnerId,
+        ).resolve,
       );
       if (old != null) _rememberPrefix(old);
       final previous =
@@ -876,6 +903,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         config.preferences.flowMode == NovelReaderFlowMode.pagedRtl,
         activeEntry,
         beginning,
+        config.imageHost,
       );
       session = null;
       handle = null;
@@ -1300,6 +1328,7 @@ class _LayoutRequest {
     this.reverse,
     this.entry,
     this.beginning,
+    this.imageHost,
   );
   NovelReaderNativeLayoutScope scope;
   final ForumBodyTextPageSession session;
@@ -1312,6 +1341,7 @@ class _LayoutRequest {
   bool reverse;
   final NovelReaderChapterEntryRequest? entry;
   final bool beginning;
+  final ForumHtmlImageHost? imageHost;
   NovelReaderPaginationPosition? confirmed;
   ForumBodyTextPageSnapshot? prefix;
   StreamSubscription<int>? releaseEvents;
@@ -1322,7 +1352,10 @@ class _LayoutRequest {
   }
 
   bool tryClose() {
-    if (session.activeIssuedLeases != 0 || session.reservedViewLeases != 0) {
+    if (session.activeIssuedLeases != 0 ||
+        session.reservedViewLeases != 0 ||
+        session.activeIssuedFragments != 0 ||
+        session.reservedViewFragments != 0) {
       return false;
     }
     close();

@@ -11,6 +11,7 @@ import 'package:y300/features/novel/domain/services/novel_reader_progress_policy
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/identity_text_converter.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 import '../controllers/novel_reader_paged_navigation_controller.dart';
 import '../models/novel_reader_anchor_navigation_request.dart';
@@ -46,6 +47,9 @@ class NovelReaderNativePagedSurface extends StatefulWidget {
     required this.readingAuthorityIdentity,
     required this.preparationService,
     this.converter = const IdentityTextConverter(),
+    this.imageHost,
+    this.imagePolicy = const ForumCacheHtmlPreparationImagePolicy(),
+    this.imageCacheOwnerId,
     this.chromeInsets = const ReaderChromeInsets.zero(),
     this.active = true,
     this.activity,
@@ -84,6 +88,9 @@ class NovelReaderNativePagedSurface extends StatefulWidget {
   final Object readingAuthorityIdentity;
   final NovelReaderNativePreparationService preparationService;
   final TextConverter converter;
+  final ForumHtmlImageHost? imageHost;
+  final ForumHtmlPreparationImagePolicy imagePolicy;
+  final String? imageCacheOwnerId;
   final ReaderChromeInsets chromeInsets;
   final bool active;
   final ValueListenable<bool>? activity;
@@ -378,6 +385,12 @@ class _NativePagedSurfaceState extends State<NovelReaderNativePagedSurface> {
                               widget.readingAuthorityIdentity,
                           preparationService: widget.preparationService,
                           converter: widget.converter,
+                          imageHost: widget.imageHost,
+                          imagePolicy: widget.imagePolicy,
+                          imageThreadId: widget.episode.sourceTid,
+                          imageCacheOwnerId:
+                              widget.imageCacheOwnerId ??
+                              widget.episode.sourceTid,
                           active: widget.active,
                           activity: widget.activity,
                           onTextSelection: widget.onTextSelection,

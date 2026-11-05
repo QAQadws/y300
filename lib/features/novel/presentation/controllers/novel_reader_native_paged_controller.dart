@@ -180,6 +180,7 @@ final class NovelReaderNativePagedController {
   bool get hasPendingNavigation => _ticket != null;
   int? get unavailableAnchorRevision => _unavailableAnchorRevision;
   int? get visiblePageIndex => _visible?.pageIndex;
+  NovelReaderNativePageView? get visibleView => _visible?.view;
   NovelReaderNativePageDelivery? get readyTarget => _target;
   Stream<void> get changes => isClosed
       ? const Stream<void>.empty()
@@ -375,7 +376,7 @@ final class NovelReaderNativePagedController {
         : coverage.locate(delivery.restoredAnchor!);
     final actual =
         anchor?.anchor ??
-        (coverage.points.isEmpty ? null : coverage.points.first.anchor);
+        (coverage.hasLocations ? coverage.locations.first.anchor : null);
     final wholePage = actual != null && _wholePageVisible(delivery, fragments);
     _visible = delivery;
     _target = null;
@@ -417,6 +418,59 @@ final class NovelReaderNativePagedController {
     _bootstrapConversionAnchor = null;
     _bootstrapEntry = null;
     return position;
+  }
+
+  /// A later accepted image frame changes visibility, never reading authority,
+  /// the saved anchor, or a consumed chapter-entry intent.
+  NovelReaderPaginationPosition? refreshPreparedVisible(
+    NovelReaderNativePageView view,
+    List<ForumBodyPreparedTextFragment> fragments,
+  ) {
+    final visible = _visible, previous = _lastPosition;
+    if (isClosed ||
+        view.coverage.images.isEmpty ||
+        _suspended ||
+        _ticket != null ||
+        _target != null ||
+        visible == null ||
+        previous == null ||
+        !identical(visible.view, view) ||
+        _session!.isClosed ||
+        _session!.isLayoutOwnerRetired) {
+      return null;
+    }
+    // A failed source keeps this exact visible view through suspend/resume,
+    // even as navigation requests retire. Refresh pixels, never its authority.
+    try {
+      validateForumBodyPreparedTextPageBinding(
+        snapshot: view.snapshot,
+        pageIndex: view.pageIndex,
+        layoutId: _snapshot!.layoutId,
+        fragments: fragments,
+      );
+    } on ForumBodyTextPageSurfaceException {
+      return null;
+    }
+    final whole =
+        view.coverage.hasLocations && _wholePageVisible(visible, fragments);
+    if (whole == previous.isWholeBodyVisible &&
+        whole == previous.isBodyEndVisible &&
+        previous.pageCount == _snapshot!.length &&
+        previous.isPageCountFinal == _snapshot!.isComplete) {
+      return null;
+    }
+    return _lastPosition = NovelReaderPaginationPosition(
+      episodeId: previous.episodeId,
+      paginationKey: previous.paginationKey,
+      pageIndex: previous.pageIndex,
+      pageCount: _snapshot!.length,
+      isPageCountFinal: _snapshot!.isComplete,
+      anchor: previous.anchor,
+      isReadOnlyCompatibilityRestore: previous.isReadOnlyCompatibilityRestore,
+      hasUserNavigated: previous.hasUserNavigated,
+      isWholeBodyVisible: whole,
+      isBodyEndVisible: whole,
+    );
   }
 
   /// Retire work and pending navigation without closing source/native leases.
@@ -534,7 +588,7 @@ final class NovelReaderNativePagedController {
         !identical(_visible?.view, view) ||
         _snapshot?.isComplete != true ||
         view.pageIndex != _snapshot!.length - 1 ||
-        view.coverage.points.isEmpty) {
+        !view.coverage.hasLocations) {
       return null;
     }
     try {
@@ -754,7 +808,15 @@ final class NovelReaderNativePagedController {
     List<ForumBodyPreparedTextFragment> fragments,
   ) {
     final snapshot = delivery.view.snapshot;
-    if (delivery.view.coverage.hasClippedGlyphs) return false;
+    if (delivery.view.coverage.hasClippedGlyphs ||
+        delivery.view.coverage.hasClippedResources ||
+        fragments.any(
+          (fragment) =>
+              fragment is ForumBodyPreparedImageFragment &&
+              !fragment.hasRenderedImage,
+        )) {
+      return false;
+    }
     // Coverage already checked actual visible glyphs against both clips.
     // Native vertical font extents also include leading and rounding overhang;
     // those extents are not the painted fragment's viewport rectangle.

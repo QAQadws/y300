@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_paged_navigation_controller.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_owner.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_performance_policy.dart';
@@ -44,8 +45,161 @@ import 'package:y300/features/novel/presentation/services/novel_reader_progress_
 import 'package:y300/features/novel/presentation/services/novel_reader_supplemental_hydration_service.dart';
 
 import '../../../test_support/localized_test_app.dart';
+import '../test_support/native_reader_image_test_host.dart';
 
 void main() {
+  for (final version in [1, 37]) {
+    testWidgets(
+      'mounted image restore version $version reaches the existing progress committer without inventing text',
+      (tester) async {
+        const args = NovelReaderArgs(
+          novelId: 'novel:49:100',
+          episodeId: 'novel:49:100:5001',
+        );
+        const html =
+            '<img src="https://bbs.yamibo.com/data/attachment/forum/a.png">'
+            '<img src="https://bbs.yamibo.com/data/attachment/forum/a.png">';
+        final semantic =
+            const DiscuzNovelReaderDocumentParser(captureSourceProvenance: true)
+                .parse(
+                  episodeId: args.episodeId,
+                  rawHtml: html,
+                  fallbackParagraphs: const [],
+                );
+        final original = NovelReadingProgress(
+          novelId: args.novelId,
+          episodeId: args.episodeId,
+          scrollOffset: 0,
+          updatedAt: DateTime(2026, 10, 4),
+          flowMode: NovelReaderFlowMode.pagedLtr,
+          pageIndex: 99,
+          pageCount: 200,
+          anchorNodeId: semantic.sourceProvenance!.images.last.nodeId,
+          anchorTextOffset: 0,
+          anchorFormatVersion: version,
+          anchorTextIdentity: NovelReaderAnchorFormat.layoutTextIdentity(
+            '',
+            semantic.sourceProvenance!.inputHash,
+          ),
+          paginationKey: 'obsolete-layout',
+          progressPercent: .8,
+          isProgressPercentValid: true,
+        );
+        final repository = _ControllerNovelRepository(
+          readingProgress: original,
+          preferences: NovelReaderPreferences.defaults().copyWith(
+            flowMode: NovelReaderFlowMode.pagedLtr,
+          ),
+        );
+        repository.contentsByEpisodeId[args.episodeId] = NovelChapterContent(
+          episodeId: args.episodeId,
+          rawHtml: html,
+          plainText: '',
+          paragraphs: const [],
+        );
+        final container = _buildContainer(
+          repository: repository,
+          progressCommitter: DefaultNovelReaderProgressCommitter(
+            repository: repository,
+          ),
+        );
+        addTearDown(container.dispose);
+        final subscription = _keepReaderAlive(container, args);
+        addTearDown(subscription.close);
+        final provider = novelReaderControllerProvider(args);
+        await container.read(provider.future);
+        final controller = container.read(provider.notifier);
+        final owner = NovelReaderNativeOwner();
+        final navigation = NovelReaderPagedNavigationController();
+        final host = NativeReaderImageTestHost();
+        addTearDown(owner.dispose);
+        addTearDown(navigation.dispose);
+        addTearDown(host.completeDimensions);
+        final positions = <NovelReaderPaginationPosition>[];
+        await _showNativeControllerSurface(
+          tester,
+          container,
+          args,
+          owner,
+          navigation,
+          positions,
+          imageHost: host,
+        );
+        await tester.pumpAndSettle();
+        expect(positions.last.pageIndex, 1);
+        expect(positions.last.anchor.nodeId, original.anchorNodeId);
+        expect(positions.last.isReadOnlyCompatibilityRestore, version != 1);
+        expect(positions.last.hasUserNavigated, isFalse);
+        expect(positions.last.isBodyEndVisible, isFalse);
+        host.callback(1).frame?.call();
+        await tester.pumpAndSettle();
+        expect(positions.last.isBodyEndVisible, isTrue);
+        await controller.saveCurrentProgressNow(
+          container.read(provider).value!.progressSnapshot,
+        );
+        if (version == 1) {
+          final live = container.read(provider).value!.progressSnapshot;
+          expect(live.pageIndex, 1);
+          expect(live.anchorNodeId, original.anchorNodeId);
+          expect(live.anchorTextOffset, 0);
+          expect(live.anchorTextIdentity, original.anchorTextIdentity);
+        }
+        // The existing business session grants resumed positions write
+        // authority only after navigation, even for an exact native restore.
+        expect(repository.savedProgressEpisodeIds, isEmpty);
+        expect(repository.readingProgress, same(original));
+        expect(navigation.turnPrevious(), isTrue);
+        await tester.pumpAndSettle();
+        await tester.pump(const Duration(milliseconds: 300));
+        final navigated = positions.last;
+        expect(navigated.hasUserNavigated, isTrue);
+        expect(navigated.isReadOnlyCompatibilityRestore, isFalse);
+        expect(repository.readingProgress!.pageIndex, 0);
+        expect(repository.readingProgress!.anchorNodeId, 'node-0');
+        expect(
+          repository.readingProgress!.anchorTextIdentity,
+          navigated.anchor.textIdentity,
+        );
+        expect(repository.readingProgress!.anchorFormatVersion, 1);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+        expect(owner.activeCacheHandles, 0);
+        final reopened = _buildContainer(repository: repository);
+        addTearDown(reopened.dispose);
+        final reopenedSubscription = _keepReaderAlive(reopened, args);
+        addTearDown(reopenedSubscription.close);
+        await reopened.read(provider.future);
+        final reopenedOwner = NovelReaderNativeOwner();
+        final reopenedNavigation = NovelReaderPagedNavigationController();
+        addTearDown(reopenedOwner.dispose);
+        addTearDown(reopenedNavigation.dispose);
+        final reopenedPositions = <NovelReaderPaginationPosition>[];
+        await _showNativeControllerSurface(
+          tester,
+          reopened,
+          args,
+          reopenedOwner,
+          reopenedNavigation,
+          reopenedPositions,
+          imageHost: host,
+        );
+        await tester.pumpAndSettle();
+        expect(reopenedPositions.last.pageIndex, 0);
+        expect(reopenedPositions.last.anchor.nodeId, navigated.anchor.nodeId);
+        expect(
+          reopenedPositions.last.anchor.textIdentity,
+          navigated.anchor.textIdentity,
+        );
+        expect(reopenedPositions.last.isReadOnlyCompatibilityRestore, isFalse);
+        expect(reopenedPositions.last.hasUserNavigated, isFalse);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+        expect(reopenedOwner.activeCacheHandles, 0);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   for (final version in [0, 1, 37]) {
     testWidgets(
       'native mounted restore version $version uses the existing read-only committer until a real chrome turn',
@@ -2661,6 +2815,7 @@ Future<void> _showNativeControllerSurface(
   NovelReaderPagedNavigationController navigation,
   List<NovelReaderPaginationPosition> positions, {
   bool active = true,
+  NativeReaderImageTestHost? imageHost,
 }) async {
   final provider = novelReaderControllerProvider(args);
   final state = container.read(provider).value!;
@@ -2697,6 +2852,9 @@ Future<void> _showNativeControllerSurface(
               preparationService: container.read(
                 novelReaderNativePreparationServiceProvider,
               ),
+              imageHost: imageHost,
+              imagePolicy:
+                  imageHost ?? const ForumCacheHtmlPreparationImagePolicy(),
               startsAtBeginning: controller.startsPagedAtBeginning,
               active: active,
               navigationController: navigation,

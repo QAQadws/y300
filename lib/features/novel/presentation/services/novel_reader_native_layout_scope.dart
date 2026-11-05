@@ -241,6 +241,7 @@ final class NovelReaderNativeLayoutScope {
     required ForumBodyParagraphCache cache,
     required String layoutId,
     required ForumBodyTextPageSessionLimits limits,
+    ForumBodyImageResolver? imageResolver,
   }) {
     if (_pageHandleLimit(limits.maxIssuedLeases) != maxNativeHandlesPerPage) {
       throw ArgumentError(
@@ -256,6 +257,7 @@ final class NovelReaderNativeLayoutScope {
       cache: cache,
       layoutId: layoutId,
       limits: limits,
+      imageResolver: imageResolver,
       // Current and target pages coexist during a real PageView turn. Reserve
       // their shared issued-handle budget before publishing legal physical rows.
       maxNativeHandlesPerPage: maxNativeHandlesPerPage,
