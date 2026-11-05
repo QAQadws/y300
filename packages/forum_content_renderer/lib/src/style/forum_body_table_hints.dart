@@ -20,10 +20,11 @@ ForumBodyLength? forumBodyTableDimension(
   );
 }
 
-ForumBodyLength forumBodyTableCellPadding(String? raw) {
+double? forumBodyTablePixelAttribute(String? raw) {
   final token = raw == null ? null : _integer.firstMatch(raw)?[1];
   final number = token == null ? null : double.tryParse(token);
-  return number != null && number.isFinite && number >= 0
-      ? ForumBodyLength(number)
-      : const ForumBodyLength(1);
+  return number != null && number.isFinite && number >= 0 ? number : null;
 }
+
+ForumBodyLength forumBodyTableCellPadding(String? raw) =>
+    ForumBodyLength(forumBodyTablePixelAttribute(raw) ?? 1);

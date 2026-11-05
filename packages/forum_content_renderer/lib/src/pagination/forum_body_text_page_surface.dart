@@ -78,6 +78,9 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     required int pageIndex,
     required String layoutId,
     required List<ForumBodyPreparedTextFragment> fragments,
+    // A cell's internal page has a large layout ceiling. Mount only the
+    // occupied box when placing that already published slice in a table.
+    bool compactHeight = false,
     ForumHtmlImageHost? imageHost,
     ForumHtmlCollapseLabels? collapseLabels,
     ValueChanged<ForumBodyTextPageFragment>? onCollapseToggle,
@@ -146,7 +149,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
       page,
       layoutId,
       snapshot.width,
-      snapshot.height,
+      compactHeight ? page.usedHeight : snapshot.height,
       List.unmodifiable(fragments),
       onSourceTap,
       onSourceLongPress,

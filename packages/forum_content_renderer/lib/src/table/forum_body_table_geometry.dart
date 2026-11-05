@@ -17,6 +17,8 @@ final class ForumBodyTableColumns {
     List<ForumBodyTableWidth> columnWidths = const [],
     ForumBodyTableWidth captionWidth = (minimum: 0, preferred: 0),
     double? specifiedWidth,
+    double minimumWidth = 0,
+    double? maximumWidth,
     double spacing = 0,
   }) {
     if (cellWidths.length != grid.cells.length ||
@@ -27,6 +29,8 @@ final class ForumBodyTableColumns {
     _checkExtent(availableWidth, path);
     _checkExtent(spacing, path);
     if (specifiedWidth != null) _checkExtent(specifiedWidth, path);
+    _checkExtent(minimumWidth, path);
+    if (maximumWidth != null) _checkExtent(maximumWidth, path);
     _checkWidth(captionWidth, path);
 
     final requirements = <_TrackWidth>[];
@@ -56,13 +60,11 @@ final class ForumBodyTableColumns {
     final gaps = spacing * math.max(0, count - 1);
     final minTotal = _sum(minimum);
     final preferredTotal = _sum(preferred);
+    final natural = math.max(preferredTotal + gaps, captionWidth.preferred);
+    final requested = specifiedWidth ?? math.min(availableWidth, natural);
     final target = math.max(
-      math.max(minTotal + gaps, captionWidth.minimum),
-      specifiedWidth ??
-          math.min(
-            availableWidth,
-            math.max(preferredTotal + gaps, captionWidth.preferred),
-          ),
+      math.max(math.max(minTotal + gaps, captionWidth.minimum), minimumWidth),
+      math.min(requested, maximumWidth ?? double.infinity),
     );
     _checkExtent(target, path);
     final assignable = target - gaps;
@@ -108,6 +110,7 @@ final class ForumBodyTableColumns {
     List<double> rowMinimums = const [],
     TextDirection direction = TextDirection.ltr,
     double spacing = 0,
+    double minimumHeight = 0,
   }) {
     if (cellHeights.length != grid.cells.length ||
         (rowMinimums.isNotEmpty && rowMinimums.length != grid.rows.length)) {
@@ -115,6 +118,7 @@ final class ForumBodyTableColumns {
     }
     final path = grid.table.path;
     _checkExtent(spacing, path);
+    _checkExtent(minimumHeight, path);
     final requirements = <_TrackMinimum>[
       for (final (index, height) in rowMinimums.indexed)
         (start: index, end: index + 1, extent: _checkExtent(height, path)),
@@ -129,10 +133,16 @@ final class ForumBodyTableColumns {
           ),
         ),
     ];
-    final rows = _TrackAxis(
-      _minimumTracks(grid.rows.length, requirements),
-      spacing,
-    );
+    final tracks = _minimumTracks(grid.rows.length, requirements);
+    if (tracks.isNotEmpty) {
+      final contentHeight = _sum(tracks) + spacing * (tracks.length - 1);
+      final extra =
+          math.max(0.0, minimumHeight - contentHeight) / tracks.length;
+      for (var i = 0; i < tracks.length; i++) {
+        tracks[i] += extra;
+      }
+    }
+    final rows = _TrackAxis(tracks, spacing);
     _checkExtent(rows.extent, path);
     return ForumBodyTableGeometry._(this, rows, direction);
   }
