@@ -25,6 +25,7 @@ class ForumHtmlImageView extends StatefulWidget {
     this.viewportCoordinator,
     this.fit,
     this.onImageDisplayChanged,
+    this.onImageLayoutResolved,
   });
 
   final ForumHtmlImageHost host;
@@ -38,6 +39,10 @@ class ForumHtmlImageView extends StatefulWidget {
   /// Native fixed-page frames use contain; HTML keeps its existing fit policy.
   final BoxFit? fit;
   final ValueChanged<bool>? onImageDisplayChanged;
+
+  /// Current accepted dimension metadata, separate from rendered pixels.
+  /// Fixed-page consumers may prepare a new layout without resizing this page.
+  final ValueChanged<ForumHtmlImageLayout>? onImageLayoutResolved;
 
   @override
   State<ForumHtmlImageView> createState() => _ForumHtmlImageViewState();
@@ -284,6 +289,13 @@ class _ForumHtmlImageViewState extends State<ForumHtmlImageView> {
         _hasResolvedImageSize = _intrinsicSize != null;
         _reportRenderedFrame();
         _promoteDecodedSize(size);
+        if (_acceptCallback(revision) && forumHtmlValidImageSize(size)) {
+          widget.onImageLayoutResolved?.call(
+            !sticker && widget.image.htmlSize == null
+                ? ForumHtmlImageLayout(aspectRatio: size.aspectRatio)
+                : _layout,
+          );
+        }
       },
       onFirstFrameRendered: firstFrameRendered,
       onImageFailed: failed,
@@ -517,6 +529,9 @@ class _ForumHtmlImageViewState extends State<ForumHtmlImageView> {
         return;
       }
       setState(() => _cachedLayout = dimensions!.layout);
+    }
+    if (mounted && revision == _bindingRevision) {
+      widget.onImageLayoutResolved?.call(_layout);
     }
   }
 

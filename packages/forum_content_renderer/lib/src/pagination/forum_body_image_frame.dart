@@ -36,6 +36,13 @@ final class ForumBodyImageInput {
   final ForumHtmlImageLayout layout;
   final bool isSticker;
 
+  double get aspectRatio =>
+      layout.aspectRatio ??
+      layout.displaySize?.aspectRatio ??
+      (entry.htmlWidth != null && entry.htmlHeight != null
+          ? entry.htmlWidth! / entry.htmlHeight!
+          : .7);
+
   int get retainedCodeUnits =>
       entry.url.length +
       entry.rawSrc.length +
@@ -58,12 +65,7 @@ final class ForumBodyImageFrame {
     required TextAlign align,
     required TextDirection direction,
   }) {
-    final ratio =
-        input.layout.aspectRatio ??
-        input.layout.displaySize?.aspectRatio ??
-        (input.entry.htmlWidth != null && input.entry.htmlHeight != null
-            ? input.entry.htmlWidth! / input.entry.htmlHeight!
-            : .7);
+    final ratio = input.aspectRatio;
     if (!width.isFinite ||
         width <= 0 ||
         !maxHeight.isFinite ||

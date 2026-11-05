@@ -18,6 +18,7 @@ void main() {
     final resolved = <Size>[];
     final shifts = <ForumHtmlImageLayoutShift>[];
     final displayStates = <bool>[];
+    final layouts = <ForumHtmlImageLayout>[];
     Widget build(_ImageHost host) => MaterialApp(
       home: Align(
         alignment: Alignment.topLeft,
@@ -35,6 +36,7 @@ void main() {
               onImageResolved: resolved.add,
               onImageLayoutShift: shifts.add,
               onImageDisplayChanged: displayStates.add,
+              onImageLayoutResolved: layouts.add,
             ),
           ),
         ),
@@ -60,6 +62,7 @@ void main() {
     expect(hostB.blockSizes, isEmpty);
     expect(resolved, isEmpty);
     expect(displayStates.where((ready) => ready), isEmpty);
+    expect(layouts, isEmpty);
     expect(shifts, isEmpty);
     expect(
       tester.getSize(find.byType(_DisplayedImage)).aspectRatio,
@@ -69,6 +72,8 @@ void main() {
     await _frames(tester);
     expect(tester.getSize(find.byType(_DisplayedImage)).aspectRatio, 2);
     expect(hostA.blockSizes, [const Size(400, 200)]);
+    expect(layouts.single.aspectRatio, 2);
+    expect(displayStates.where((ready) => ready), isEmpty);
     expect(shifts, hasLength(1));
     final current = tester.widget<_DisplayedImage>(
       find.byType(_DisplayedImage),
@@ -76,6 +81,8 @@ void main() {
     current.onResolved!(const Size(800, 400));
     await _frames(tester);
     expect(resolved, [const Size(800, 400)]);
+    current.onResolved!(const Size(800, 200));
+    expect(layouts.last.aspectRatio, 4);
     final count = hostA.blockSizes.length;
     current.onFirstFrame?.call();
     expect(displayStates.last, isTrue);
@@ -86,12 +93,14 @@ void main() {
     expect(displayStates.last, isFalse);
     await tester.pumpWidget(const SizedBox.shrink());
     final disposedFrameCount = displayStates.length;
+    final disposedLayoutCount = layouts.length;
     current.reportAll();
     retired.reportAll();
     await _frames(tester);
     expect(hostA.blockSizes, hasLength(count));
-    expect(resolved, hasLength(1));
+    expect(resolved, hasLength(2));
     expect(displayStates, hasLength(disposedFrameCount));
+    expect(layouts, hasLength(disposedLayoutCount));
     expect(tester.takeException(), isNull);
   });
 

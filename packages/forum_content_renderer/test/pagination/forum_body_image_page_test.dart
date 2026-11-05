@@ -418,6 +418,7 @@ void main() {
       final images = _prepare(s, 0);
       final host = _Host();
       final image = images.single as ForumBodyPreparedImageFragment;
+      final resolvedLayouts = <ForumHtmlImageLayout>[];
       expect(s.activeIssuedFragments, 1);
       expect(s.activeIssuedLeases, 0);
       expect(image.hasRenderedImage, isFalse);
@@ -440,6 +441,10 @@ void main() {
               layoutId: s.snapshot.layoutId,
               fragments: images,
               imageHost: host,
+              onImageLayoutResolved: (binding, layout) {
+                expect(binding, same(image));
+                resolvedLayouts.add(layout);
+              },
             ),
           ),
         ),
@@ -452,6 +457,7 @@ void main() {
       );
       expect(host.fit, BoxFit.contain);
       host.reportSize!(const Size(400, 100));
+      expect(resolvedLayouts.single.aspectRatio, 4);
       expect(image.hasRenderedImage, isFalse);
       host.reportFrame!();
       expect(image.hasRenderedImage, isTrue);
