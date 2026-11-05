@@ -129,11 +129,13 @@ final class NovelReaderNativePageCoverageCursor {
   final String layoutId;
   final NovelReaderNativeCoverageLimits limits;
   final _points = <NovelReaderNativeCoveragePoint>[];
+  final _images = <NovelReaderNativeImageCoverage>[];
   NovelReaderNativeCoverageState _state = NovelReaderNativeCoverageState.active;
   NovelReaderNativePageCoverage? _result;
   int _fragmentIndex = 0;
   int _graphemes = 0;
   bool _hasClippedGlyphs = false;
+  bool _hasClippedResources = false;
   Iterator<({int startUtf16, int endUtf16})>? _ranges;
   ForumBodyPreparedTextFragment? _fragment;
   HtmlDisplayTextProjection? _projection;
@@ -234,6 +236,10 @@ final class NovelReaderNativePageCoverageCursor {
         snapshot.height,
       ),
     );
+    if (prepared is ForumBodyPreparedImageFragment) {
+      _includeImage(prepared);
+      return const <({int startUtf16, int endUtf16})>[].iterator;
+    }
     if (_clip.isEmpty) {
       return const <({int startUtf16, int endUtf16})>[].iterator;
     }
@@ -298,7 +304,7 @@ final class NovelReaderNativePageCoverageCursor {
       requireAdjacentOrigin: true,
     );
     if (anchor == null) return;
-    if (_points.length >= limits.maxPoints) {
+    if (_points.length + _images.length >= limits.maxPoints) {
       _fail(NovelReaderNativeCoverageFailure.budget);
     }
     _points.add(
@@ -308,6 +314,33 @@ final class NovelReaderNativePageCoverageCursor {
         displayUtf16: offset,
         sourceRune: source.sourceRune,
         affinity: affinity,
+      ),
+    );
+  }
+
+  void _includeImage(ForumBodyPreparedImageFragment image) {
+    final input = image.content.input, frame = image.content.frame;
+    final source = _anchors!.imageAtPath(input.element.path);
+    if (source == null ||
+        source.rawSource != input.entry.rawSrc ||
+        source.url != input.entry.url ||
+        source.imageIndex != input.entry.index) {
+      _fail(NovelReaderNativeCoverageFailure.identity);
+    }
+    if (!_contains(frame.imageRect)) {
+      _hasClippedResources = true;
+      return;
+    }
+    if (_points.length + _images.length >= limits.maxPoints) {
+      _fail(NovelReaderNativeCoverageFailure.budget);
+    }
+    _images.add(
+      NovelReaderNativeImageCoverage(
+        anchor: source.anchor,
+        fragmentIndex: _fragmentIndex,
+        path: source.path,
+        imageIndex: source.imageIndex,
+        rect: frame.imageRect,
       ),
     );
   }
@@ -325,7 +358,9 @@ final class NovelReaderNativePageCoverageCursor {
       layoutId: layoutId,
       pageIndex: pageIndex,
       hasClippedGlyphs: _hasClippedGlyphs,
+      hasClippedResources: _hasClippedResources,
       points: _points,
+      images: _images,
     );
     _state = NovelReaderNativeCoverageState.complete;
     _dropBorrowed();
@@ -333,6 +368,7 @@ final class NovelReaderNativePageCoverageCursor {
 
   void _dropBorrowed() {
     _points.clear();
+    _images.clear();
     _anchors = null;
     _snapshot = null;
     _fragments = const [];

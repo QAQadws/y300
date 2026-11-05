@@ -208,6 +208,7 @@ final class NovelReaderNativePrefixVerifier {
   ) =>
       old.paragraphIndex == next.paragraphIndex &&
       old.kind == next.kind &&
+      old.imageFrame == next.imageFrame &&
       old.listMarker?.baseline == next.listMarker?.baseline &&
       old.listMarker?.bounds == next.listMarker?.bounds &&
       old.path == next.path &&

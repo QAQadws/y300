@@ -116,7 +116,7 @@ final class NovelReaderNativeRestoreCursor {
         coverage.pageIndex >= snapshot.length) {
       throw StateError('Native restore coverage scope changed');
     }
-    if (coverage.points.length > maxCoveragePoints) {
+    if (coverage.locationCount > maxCoveragePoints) {
       throw StateError('Native restore coverage budget exceeded');
     }
     if (isResolved ||
@@ -136,7 +136,7 @@ final class NovelReaderNativeRestoreCursor {
       _exactPage ??= coverage.pageIndex;
       if (isExplicitNavigation) _resolvedNavigationAnchor ??= exact.anchor;
     }
-    for (final point in coverage.points) {
+    for (final point in coverage.locations) {
       final anchor = point.anchor;
       if (anchor.episodeId != episodeId || anchor.nodeId != saved.nodeId) {
         continue;

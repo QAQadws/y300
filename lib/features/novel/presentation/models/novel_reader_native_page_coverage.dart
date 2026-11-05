@@ -1,8 +1,20 @@
+import 'dart:ui' show Rect;
+
 import 'package:html_pagination_core/html_pagination_core.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 
-final class NovelReaderNativeCoveragePoint {
+sealed class NovelReaderNativeCoverageLocation {
+  const NovelReaderNativeCoverageLocation();
+  NovelReaderTextAnchor get anchor;
+  int get fragmentIndex;
+  int? get displayUtf16 => null;
+  int? get sourceRune => null;
+  HtmlProjectionAffinity get affinity => HtmlProjectionAffinity.downstream;
+}
+
+final class NovelReaderNativeCoveragePoint
+    extends NovelReaderNativeCoverageLocation {
   const NovelReaderNativeCoveragePoint({
     required this.anchor,
     required this.fragmentIndex,
@@ -10,15 +22,41 @@ final class NovelReaderNativeCoveragePoint {
     required this.sourceRune,
     required this.affinity,
   });
+  @override
   final NovelReaderTextAnchor anchor;
+  @override
   final int fragmentIndex;
+  @override
   final int displayUtf16;
+  @override
   final int sourceRune;
+  @override
   final HtmlProjectionAffinity affinity;
 }
 
-/// Pure proof for one fully checked page. A point is supported by a complete
-/// visible native grapheme on its explicit side, not a min/max source interval.
+/// Proof of the actual visible resource frame, not of loaded pixels or text.
+/// Source and UTF-16 coordinates are deliberately absent.
+final class NovelReaderNativeImageCoverage
+    extends NovelReaderNativeCoverageLocation {
+  const NovelReaderNativeImageCoverage({
+    required this.anchor,
+    required this.fragmentIndex,
+    required this.path,
+    required this.imageIndex,
+    required this.rect,
+  });
+  @override
+  final NovelReaderTextAnchor anchor;
+  @override
+  final int fragmentIndex;
+  final String path;
+  final int imageIndex;
+  final Rect rect;
+}
+
+/// Pure geometry proof for one fully checked page. Text points require a
+/// complete visible native grapheme; images require their actual resource
+/// rectangle. Loaded pixels are checked separately on the mounted fragment.
 /// No layouts/leases or whole chapter/page snapshots are retained.
 final class NovelReaderNativePageCoverage {
   NovelReaderNativePageCoverage({
@@ -27,11 +65,33 @@ final class NovelReaderNativePageCoverage {
     required this.pageIndex,
     required Iterable<NovelReaderNativeCoveragePoint> points,
     this.hasClippedGlyphs = false,
-  }) : points = List.unmodifiable(points);
+    Iterable<NovelReaderNativeImageCoverage> images = const [],
+    this.hasClippedResources = false,
+  }) : points = List.unmodifiable(points),
+       images = List.unmodifiable(images);
   final ForumBodyIdentity identity;
   final String layoutId;
   final int pageIndex;
   final List<NovelReaderNativeCoveragePoint> points;
+  final List<NovelReaderNativeImageCoverage> images;
+  final bool hasClippedResources;
+  int get locationCount => points.length + images.length;
+  bool get hasLocations => points.isNotEmpty || images.isNotEmpty;
+
+  /// Both source walks are already ordered by actual fragment index. Merge
+  /// without sorting/copying an entire page or treating an image as a glyph.
+  Iterable<NovelReaderNativeCoverageLocation> get locations sync* {
+    var text = 0, image = 0;
+    while (text < points.length || image < images.length) {
+      if (image == images.length ||
+          (text < points.length &&
+              points[text].fragmentIndex <= images[image].fragmentIndex)) {
+        yield points[text++];
+      } else {
+        yield images[image++];
+      }
+    }
+  }
 
   /// A visible-style glyph extends outside the actual fragment/page clip.
   /// Complete native rows alone cannot prove body-end visibility in that case.
@@ -40,14 +100,14 @@ final class NovelReaderNativePageCoverage {
   /// Only matching format/text/episode/node/offset is exact. Endpoint plateaus
   /// choose the first downstream or last upstream point in this page. This
   /// does not confirm navigation, migrate old rows or authorize persistence.
-  NovelReaderNativeCoveragePoint? locate(
+  NovelReaderNativeCoverageLocation? locate(
     NovelReaderTextAnchor anchor, {
     HtmlProjectionAffinity affinity = HtmlProjectionAffinity.downstream,
   }) {
     if (!anchor.hasCanonicalTextOffset || anchor.textOffset < 0) return null;
-    NovelReaderNativeCoveragePoint? preferred;
-    NovelReaderNativeCoveragePoint? fallback;
-    for (final point in points) {
+    NovelReaderNativeCoverageLocation? preferred;
+    NovelReaderNativeCoverageLocation? fallback;
+    for (final point in locations) {
       final candidate = point.anchor;
       if (candidate.episodeId != anchor.episodeId ||
           candidate.nodeId != anchor.nodeId ||

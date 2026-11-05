@@ -100,7 +100,7 @@ final class NovelReaderNativeViewWindow {
   int get centerPageIndex => _center;
   int get retainedPageCount => _views.length;
   int get retainedCoveragePoints =>
-      _views.values.fold(0, (sum, view) => sum + view.coverage.points.length);
+      _views.values.fold(0, (sum, view) => sum + view.coverage.locationCount);
   int get retainedFragments => _views.values.fold(
     0,
     (sum, view) => sum + view.snapshot[view.pageIndex].itemCount,
@@ -333,7 +333,7 @@ final class NovelReaderNativeViewWindow {
 
   bool _admit(NovelReaderNativePageView view) {
     final fragments = view.snapshot[view.pageIndex].itemCount;
-    final points = view.coverage.points.length;
+    final points = view.coverage.locationCount;
     if (fragments > limits.maxRetainedFragments ||
         points > limits.maxRetainedCoveragePoints) {
       return false;
