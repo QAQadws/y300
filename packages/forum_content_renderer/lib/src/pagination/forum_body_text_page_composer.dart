@@ -145,6 +145,7 @@ final class ForumBodyTextPageRule {
 /// Source identity and frozen viewport geometry for a dedicated table page.
 typedef ForumBodyTextPageTable = ({
   String path,
+  ({int runeStart, int runeEnd}) sourceRange,
   Rect bounds,
   Size contentSize,
   String fingerprint,
@@ -260,7 +261,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 24;
+  static const revision = 25;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;

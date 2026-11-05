@@ -8,6 +8,8 @@ import 'package:y300/features/novel/presentation/services/novel_reader_native_an
 import 'package:y300/features/novel/presentation/services/novel_reader_native_image_resources.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_page_coverage_cursor.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_prefix_verifier.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_native_page_hint_search.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_native_table_anchor_probe.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_native_paged_controller.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_work_scheduler.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_view_window.dart';
@@ -53,6 +55,7 @@ final class _Fixture {
     double height = 100,
     double width = 100,
     bool inline = false,
+    bool dedicatedTables = false,
     Size imageSize = const Size(20, 10),
     NativeReaderImageTestHost? imageHost,
   }) {
@@ -74,6 +77,7 @@ final class _Fixture {
       layoutId: 'images-$ratio',
       width: width,
       height: height,
+      dedicatedTables: dedicatedTables,
       limits: const ForumBodyTextPageSessionLimits(
         maxPages: 100,
         maxFragments: 100,
@@ -172,6 +176,48 @@ NovelReaderNativePageCoverage _coverage(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'a table image is found by its original path and returns a cell reveal',
+    () async {
+      final fixture = _Fixture(
+        '<p>before</p><table width="150"><tr>'
+        '<td width="110">left</td>'
+        '<td><img src="https://x/a.png" width="24" height="12"></td>'
+        '</tr></table><p>after</p>',
+      );
+      final session = fixture.session(dedicatedTables: true);
+      final anchor = fixture.chapter.anchors.images.single.anchor;
+      final snapshot = session.snapshot;
+      final hint = NovelReaderNativePageHintSearch(
+        snapshot: snapshot,
+        layoutId: snapshot.layoutId,
+        anchors: fixture.chapter.anchors,
+        anchor: anchor,
+      );
+      addTearDown(hint.close);
+      hint.advance(maxPages: 8, maxFragments: 8);
+      expect(hint.takeCandidates().single.pageIndex, 1);
+      final token = NovelReaderPaginationCancellationToken();
+      addTearDown(token.cancel);
+      final result = await probeNovelReaderNativeTableAnchor(
+        session: session,
+        anchors: fixture.chapter.anchors,
+        pageIndex: 1,
+        target: anchor,
+        allowNodeCompatibility: false,
+        scheduler: NovelReaderNativeWorkScheduler(nextFrame: () async {}),
+        token: token,
+      );
+      expect(result, isNotNull);
+      expect(result!.anchor.nodeId, anchor.nodeId);
+      expect(result.anchor.textIdentity, anchor.textIdentity);
+      expect(result.bounds.left, greaterThanOrEqualTo(110));
+      expect(result.bounds.width, 24);
+      expect(fixture.cache.activeLeases, 0);
+      expect(session.activeIssuedTablePages, 0);
+    },
+  );
 
   test('viewport clipping cannot prove an image from a partial frame', () {
     final fixture = _Fixture('<img src="https://x/a.png">');

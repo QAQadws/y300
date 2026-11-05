@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show Rect;
 
 import 'package:flutter/foundation.dart' show precisionErrorTolerance;
 
@@ -18,6 +19,7 @@ import '../services/novel_reader_native_pagination_watchdog.dart';
 import '../services/novel_reader_native_prefix_verifier.dart';
 import '../services/novel_reader_native_restore_cursor.dart';
 import '../services/novel_reader_native_source_run.dart';
+import '../services/novel_reader_native_table_anchor_probe.dart';
 import '../services/novel_reader_native_table_window_proof.dart';
 import '../services/novel_reader_native_view_window.dart';
 import '../services/novel_reader_native_work_scheduler.dart';
@@ -152,6 +154,7 @@ final class NovelReaderNativePagedController {
   NovelReaderTextAnchor? _bootstrapConversionAnchor;
   NovelReaderChapterEdge? _bootstrapEntry;
   NovelReaderTextAnchor? _restoredAnchor;
+  ({int request, int page, Rect bounds})? _tableFocus;
   int? _requestedPage;
   int _requestId = 0;
   int? _unavailableAnchorRevision;
@@ -249,9 +252,12 @@ final class NovelReaderNativePagedController {
       return false;
     }
     if (anchor.episodeId != episodeId ||
-        _anchors!
-            .sourceCandidates(anchor, allowNodeCompatibility: true)
-            .isEmpty) {
+        (_anchors!
+                .sourceCandidates(anchor, allowNodeCompatibility: true)
+                .isEmpty &&
+            _anchors!
+                .imageCandidatePaths(anchor, allowNodeCompatibility: true)
+                .isEmpty)) {
       cancelPendingNavigation();
       return false;
     }
@@ -425,13 +431,16 @@ final class NovelReaderNativePagedController {
           delivery.isReadOnlyCompatibilityRestore ||
           unmatchedTableRestore ||
           actual == null,
-      hasUserNavigated: delivery.hasUserNavigated,
+      hasUserNavigated:
+          delivery.hasUserNavigated &&
+          !(delivery.tableFocus != null && unmatchedTableRestore),
       isBodyEndVisible: wholePage,
       isWholeBodyVisible: wholePage,
       appliedChapterEntry: entryArrived ? entry : null,
     );
     _entryEdge = null;
     _resolvedEntryEdge = null;
+    _tableFocus = null;
     _lastPosition = position;
     _bootstrapPosition = null;
     _bootstrapConversionAnchor = null;
@@ -845,6 +854,7 @@ final class NovelReaderNativePagedController {
     if (ticket != null) _watch!.cancelTarget(ticket);
     _ticket = null;
     _target = null;
+    _tableFocus = null;
     _restore?.close();
     _restore = null;
     _userNavigation = false;
@@ -1098,6 +1108,39 @@ final class NovelReaderNativePagedController {
               return rank != 0 ? rank : a.pageIndex.compareTo(b.pageIndex);
             });
           for (final hint in candidates) {
+            if (prefix[hint.pageIndex].table != null) {
+              final candidate = await probeNovelReaderNativeTableAnchor(
+                session: _session!,
+                anchors: _anchors!,
+                pageIndex: hint.pageIndex,
+                target: target,
+                allowNodeCompatibility: !restore.isConversionRestore,
+                scheduler: _scheduler!,
+                token: token,
+              );
+              _guard(epoch, token);
+              if (candidate == null) continue;
+              restore.observeTableProbe(
+                snapshot: prefix,
+                pageIndex: hint.pageIndex,
+                candidate: candidate.anchor,
+              );
+              final result = restore.resolve(prefix);
+              if (result == null) continue;
+              _requestedPage = result.pageIndex;
+              _readOnly = result.isReadOnlyCompatibilityRestore;
+              if (result.pageIndex == hint.pageIndex) {
+                _restoredAnchor = candidate.anchor;
+                _tableFocus = (
+                  request: _requestId,
+                  page: result.pageIndex,
+                  bounds: candidate.bounds,
+                );
+              } else {
+                _restoredAnchor = restore.resolvedNavigationAnchor ?? target;
+              }
+              break;
+            }
             final job = NovelReaderNativePageViewJob(
               session: _session!,
               anchors: _anchors!,
@@ -1175,12 +1218,19 @@ final class NovelReaderNativePagedController {
         identical(_target?.view, view)) {
       return;
     }
+    final focus = _tableFocus;
     _target = NovelReaderNativePageDelivery(
       requestId: _requestId,
       view: view,
       isReadOnlyCompatibilityRestore: _readOnly,
       hasUserNavigated: _userNavigation,
       restoredAnchor: _restoredAnchor,
+      tableFocus:
+          focus != null &&
+              focus.request == _requestId &&
+              focus.page == view.pageIndex
+          ? focus.bounds
+          : null,
       chapterEntryEdge: _resolvedEntryEdge,
     );
     _notify();
@@ -1293,6 +1343,7 @@ final class NovelReaderNativePagedController {
     _resolvedEntryEdge = null;
     _prefixNavigation = false;
     _restoredAnchor = null;
+    _tableFocus = null;
     _ticket = null;
     _error = null;
     final changes = _changes;

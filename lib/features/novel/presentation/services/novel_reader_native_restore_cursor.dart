@@ -137,21 +137,70 @@ final class NovelReaderNativeRestoreCursor {
       if (isExplicitNavigation) _resolvedNavigationAnchor ??= exact.anchor;
     }
     for (final point in coverage.locations) {
-      final anchor = point.anchor;
-      if (anchor.episodeId != episodeId || anchor.nodeId != saved.nodeId) {
-        continue;
-      }
-      if (_nodePage == null || coverage.pageIndex < _nodePage!) {
-        _nodePage = coverage.pageIndex;
-        _nodeAnchor = anchor;
-      }
-      if (saved.hasCanonicalTextOffset &&
-          anchor.formatVersion == saved.formatVersion &&
-          anchor.textIdentity == saved.textIdentity) {
-        _hasMatchingTextIdentity = true;
-      }
+      _observeNode(saved, point.anchor, coverage.pageIndex);
     }
   }
+
+  /// Accept an actual native cell location as a candidate for this outer page.
+  /// A source envelope alone can never enter this path.
+  void observeTableProbe({
+    required ForumBodyTextPageSnapshot snapshot,
+    required int pageIndex,
+    required NovelReaderTextAnchor candidate,
+  }) {
+    _checkPrefix(snapshot);
+    if (pageIndex < 0 ||
+        pageIndex >= snapshot.length ||
+        snapshot[pageIndex].table == null) {
+      throw StateError('Native table restore candidate scope changed');
+    }
+    if (isResolved ||
+        (_position != null && _position!.episodeId != episodeId)) {
+      return;
+    }
+    if (_sameCanonical(_conversionAnchor, candidate)) {
+      _convertedPage ??= pageIndex;
+    }
+    final saved = _savedAnchor;
+    if (saved == null) return;
+    if (_sameCanonical(saved, candidate)) {
+      _exactPage ??= pageIndex;
+      if (isExplicitNavigation) _resolvedNavigationAnchor ??= candidate;
+    }
+    _observeNode(saved, candidate, pageIndex);
+  }
+
+  void _observeNode(
+    NovelReaderTextAnchor saved,
+    NovelReaderTextAnchor candidate,
+    int page,
+  ) {
+    if (candidate.episodeId != episodeId || candidate.nodeId != saved.nodeId) {
+      return;
+    }
+    if (_nodePage == null || page < _nodePage!) {
+      _nodePage = page;
+      _nodeAnchor = candidate;
+    }
+    if (saved.hasCanonicalTextOffset &&
+        candidate.formatVersion == saved.formatVersion &&
+        candidate.textIdentity == saved.textIdentity) {
+      _hasMatchingTextIdentity = true;
+    }
+  }
+
+  bool _sameCanonical(
+    NovelReaderTextAnchor? target,
+    NovelReaderTextAnchor candidate,
+  ) =>
+      target != null &&
+      target.hasCanonicalTextOffset &&
+      target.textOffset >= 0 &&
+      candidate.episodeId == target.episodeId &&
+      candidate.nodeId == target.nodeId &&
+      candidate.formatVersion == target.formatVersion &&
+      candidate.textIdentity == target.textIdentity &&
+      candidate.textOffset == target.textOffset;
 
   NovelReaderPaginationRestoreResolution? resolve(
     ForumBodyTextPageSnapshot snapshot,

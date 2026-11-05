@@ -131,6 +131,11 @@ final class NovelReaderNativePageHintSearch {
         pages < maxPages &&
         fragments < maxFragments) {
       final page = _snapshot![_pageIndex];
+      if (page.table case final table?) {
+        _rank = _imagePaths.any((path) => path.startsWith('${table.path}/'))
+            ? 2
+            : _hintRank(table.sourceRange.runeStart, table.sourceRange.runeEnd);
+      }
       if (_fragmentIndex < page.fragments.length) {
         final fragment = page.fragments[_fragmentIndex++];
         final hint = fragment.sourceHint;

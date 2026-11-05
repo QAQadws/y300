@@ -136,6 +136,7 @@ Future<void> _show(
   double height = 400,
   ReaderChromeInsets insets = const ReaderChromeInsets.zero(),
   NovelReaderPreferences? preferences,
+  NovelReaderProgressSnapshot? progress,
   bool active = true,
   TextScaler scaler = TextScaler.noScaling,
   Object? authority,
@@ -168,7 +169,7 @@ Future<void> _show(
             semanticDocument: reader.document,
             preferences: preferences ?? reader.preferences,
             resolvedFont: ResolvedFont.system,
-            progressSnapshot: reader.snapshot,
+            progressSnapshot: progress ?? reader.snapshot,
             readingAuthorityIdentity: authority ?? reader.authority,
             preparationService: reader.service,
             chromeInsets: insets,
@@ -336,6 +337,101 @@ void main() {
       expect(old.isClosed, isTrue);
       expect(reader.owner.activeCacheHandles, 1);
       await _unmount(tester, reader);
+    },
+  );
+
+  testWidgets(
+    'table source restores across geometry and can seek inside its mounted page',
+    (tester) async {
+      final reader = _Reader(
+        html:
+            '<p>before</p><table width="480" cellpadding="3">'
+            '<tr height="520"><td rowspan="2">first</td><td>right</td></tr>'
+            '<tr><td>tail</td></tr></table><p>after</p>',
+      );
+      await _show(tester, reader);
+      await tester.pumpAndSettle();
+      expect(reader.navigation.turnNext(), isTrue);
+      await tester.pumpAndSettle();
+      expect(reader.positions.last.pageIndex, 1);
+      final first = reader.positions.last.anchor;
+      final table = find.byType(ForumBodyTableBookViewport);
+      final old = tester.widget<ForumBodyTableBookViewport>(table);
+      old.horizontalController.jumpTo(
+        old.horizontalController.position.maxScrollExtent,
+      );
+      await tester.pumpAndSettle();
+      await tester.drag(table, const Offset(0, -650));
+      await tester.pumpAndSettle();
+      final saved = reader.positions.last;
+      expect(saved.hasUserNavigated, isTrue);
+      expect(saved.anchor.hasCanonicalTextOffset, isTrue);
+      expect((
+        saved.anchor.nodeId,
+        saved.anchor.textOffset,
+      ), isNot((first.nodeId, first.textOffset)));
+      final oldOffset = old.verticalController.offset;
+      expect(oldOffset, greaterThan(0));
+
+      await _show(
+        tester,
+        reader,
+        width: 290,
+        height: 280,
+        preferences: reader.preferences.copyWith(
+          fontSize: 14,
+          contentMaxWidth: 210,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final restored = reader.positions.last;
+      final now = tester.widget<ForumBodyTableBookViewport>(table);
+      expect(restored.paginationKey, isNot(saved.paginationKey));
+      expect(restored.pageIndex, saved.pageIndex);
+      expect(restored.anchor.nodeId, saved.anchor.nodeId);
+      expect(restored.anchor.textOffset, saved.anchor.textOffset);
+      expect(restored.anchor.textIdentity, saved.anchor.textIdentity);
+      expect(restored.hasUserNavigated, isFalse);
+      expect(restored.isReadOnlyCompatibilityRestore, isFalse);
+      expect(restored.isBodyEndVisible, isFalse);
+      expect(now.verticalController.offset, greaterThan(0));
+      expect(now.verticalController.offset, isNot(oldOffset));
+      expect(now.horizontalController.offset, greaterThan(0));
+
+      expect(reader.statuses.last.controller!.requestAnchor(first), isTrue);
+      await tester.pumpAndSettle();
+      final sought = reader.positions.last;
+      expect(sought.pageIndex, 1);
+      expect(sought.hasUserNavigated, isTrue);
+      expect(sought.anchor.nodeId, first.nodeId);
+      expect(sought.anchor.textOffset, first.textOffset);
+      expect(now.horizontalController.offset, 0);
+      expect(now.verticalController.offset, 0);
+      await _unmount(tester, reader);
+
+      final reopened = _Reader(html: reader.rawHtml);
+      final persisted = const NovelReaderProgressPolicy().pagedSnapshot(
+        novelId: _episode.novelId,
+        episodeId: _episode.episodeId,
+        flowMode: NovelReaderFlowMode.pagedLtr,
+        pageIndex: saved.pageIndex,
+        pageCount: saved.pageCount,
+        paginationKey: saved.paginationKey,
+        anchorNodeId: saved.anchor.nodeId,
+        anchorTextOffset: saved.anchor.textOffset,
+        anchorFormatVersion: saved.anchor.formatVersion,
+        anchorTextIdentity: saved.anchor.textIdentity,
+      );
+      await _show(tester, reopened, width: 310, progress: persisted);
+      await tester.pumpAndSettle();
+      final resumed = reopened.positions.last;
+      expect(resumed.pageIndex, saved.pageIndex);
+      expect(resumed.anchor.nodeId, saved.anchor.nodeId);
+      expect(resumed.anchor.textOffset, saved.anchor.textOffset);
+      expect(resumed.anchor.textIdentity, saved.anchor.textIdentity);
+      expect(resumed.hasUserNavigated, isFalse);
+      expect(resumed.isReadOnlyCompatibilityRestore, isFalse);
+      await _unmount(tester, reopened);
     },
   );
 

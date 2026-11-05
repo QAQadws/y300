@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show precisionErrorTolerance;
 import 'package:flutter/widgets.dart';
@@ -12,6 +13,7 @@ import '../controllers/novel_reader_native_paged_controller.dart';
 import '../controllers/novel_reader_chapter_drag_controller.dart';
 import '../controllers/novel_reader_paged_navigation_controller.dart';
 import '../models/novel_reader_chapter_turn.dart';
+import '../models/novel_reader_native_page_delivery.dart';
 import '../models/novel_reader_native_page_view.dart';
 import '../models/novel_reader_pagination_position.dart';
 import '../models/novel_reader_native_text_selection.dart';
@@ -832,7 +834,8 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
         if (_pages.page != target.pageIndex) {
           _pages.jumpToPage(target.pageIndex);
           _afterFrame();
-        } else if (_readyTables.contains(target.view)) {
+        } else if (_readyTables.contains(target.view) &&
+            _tableFocusVisible(target)) {
           presented(target.view);
         }
         return;
@@ -879,7 +882,9 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
       final fragments = _mountedPages[target.view];
       final table = _tableMounts[target.view];
       if (fragments == null ||
-          (table != null && !_readyTables.contains(target.view))) {
+          (table != null &&
+              (!_readyTables.contains(target.view) ||
+                  !_tableFocusVisible(target)))) {
         return;
       }
       final proof = table == null
@@ -1024,6 +1029,7 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
       _tableWindows.remove(view);
     } else {
       _tableWindows[view] = window;
+      _tableOffsets[view.pageIndex] = window.bounds.topLeft;
     }
     if (_tableWork?.window.isCurrent == false) _cancelTableProof();
     if (_tableProof?.proof.isCurrent == false) _tableProof = null;
@@ -1119,6 +1125,36 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
     _tableWork?.token.cancel();
     _tableWork = null;
     _tableProof = null;
+  }
+
+  bool _tableFocusVisible(NovelReaderNativePageDelivery delivery) {
+    final focus = delivery.tableFocus;
+    if (focus == null) return true;
+    final window = _tableWindows[delivery.view];
+    if (window == null || !window.isCurrent) return false;
+    final clip = window.bounds;
+    return focus.left >= clip.left - precisionErrorTolerance &&
+        focus.top >= clip.top - precisionErrorTolerance &&
+        focus.right <= clip.right + precisionErrorTolerance &&
+        focus.bottom <= clip.bottom + precisionErrorTolerance;
+  }
+
+  ({int request, Offset offset})? _tableFocusFor(
+    NovelReaderNativePageView view,
+    NovelReaderNativePageDelivery? target,
+  ) {
+    final focus = target?.tableFocus;
+    if (focus == null || !identical(target!.view, view)) return null;
+    final page = view.snapshot[view.pageIndex].table!;
+    double center(double target, double dimension, double extent) =>
+        (target - dimension / 2).clamp(0.0, math.max(0.0, extent - dimension));
+    return (
+      request: target.requestId,
+      offset: Offset(
+        center(focus.center.dx, page.bounds.width, page.contentSize.width),
+        center(focus.center.dy, page.bounds.height, page.contentSize.height),
+      ),
+    );
   }
 
   void _tableFailed(NovelReaderNativePageView view, Object error) {
@@ -1282,6 +1318,20 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
                           onTableFailure: (error) => _tableFailed(view, error),
                           initialTableOffset:
                               _tableOffsets[page] ?? Offset.zero,
+                          tableFocus: _tableFocusFor(view, target),
+                          isTableFocusCurrent: (revision) {
+                            final delivery = controller.readyTarget;
+                            return !controller.isSuspended &&
+                                identical(delivery?.view, view) &&
+                                delivery!.requestId == revision;
+                          },
+                          onTableUserDrag: () {
+                            final delivery = controller.readyTarget;
+                            if (identical(delivery?.view, view) &&
+                                delivery?.tableFocus != null) {
+                              controller.cancelPendingNavigation();
+                            }
+                          },
                           onTableOffsetChanged: (offset) =>
                               _tableOffsets[page] = offset,
                           onTextSelection:
@@ -1370,6 +1420,9 @@ class _NativeMountedPage extends StatefulWidget {
     required this.onTableWindowChanged,
     required this.onTableFailure,
     required this.initialTableOffset,
+    required this.tableFocus,
+    required this.isTableFocusCurrent,
+    required this.onTableUserDrag,
     required this.onTableOffsetChanged,
   });
   final NovelReaderNativePageView view;
@@ -1397,6 +1450,9 @@ class _NativeMountedPage extends StatefulWidget {
   final ValueChanged<ForumBodyTableVisibleWindow?> onTableWindowChanged;
   final ValueChanged<Object> onTableFailure;
   final Offset initialTableOffset;
+  final ({int request, Offset offset})? tableFocus;
+  final bool Function(int revision) isTableFocusCurrent;
+  final VoidCallback onTableUserDrag;
   final ValueChanged<Offset> onTableOffsetChanged;
 
   @override
@@ -1416,7 +1472,7 @@ class _NativeMountedPageState extends State<_NativeMountedPage>
     _fragments = mount.fragments;
     _table = mount.table;
     if (_table != null) {
-      final offset = widget.initialTableOffset;
+      final offset = widget.tableFocus?.offset ?? widget.initialTableOffset;
       _tableHorizontal = ScrollController(
         initialScrollOffset: offset.dx,
         keepScrollOffset: false,
@@ -1440,6 +1496,22 @@ class _NativeMountedPageState extends State<_NativeMountedPage>
   void didUpdateWidget(covariant _NativeMountedPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.keepAlive != oldWidget.keepAlive) updateKeepAlive();
+    final focus = widget.tableFocus;
+    if (focus == null || focus == oldWidget.tableFocus) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          widget.tableFocus != focus ||
+          _table?.isActive != true ||
+          !widget.isTableFocusCurrent(focus.request)) {
+        return;
+      }
+      final horizontal = _tableHorizontal!, vertical = _tableVertical!;
+      if (!horizontal.hasClients || !vertical.hasClients) return;
+      if (horizontal.offset != focus.offset.dx) {
+        horizontal.jumpTo(focus.offset.dx);
+      }
+      if (vertical.offset != focus.offset.dy) vertical.jumpTo(focus.offset.dy);
+    });
   }
 
   @override
@@ -1463,18 +1535,24 @@ class _NativeMountedPageState extends State<_NativeMountedPage>
         Positioned.fromRect(
           rect: view.snapshot[view.pageIndex].table!.bounds,
           child: ReaderOwnedTapRegion(
-            child: ForumBodyTableBookViewport(
-              layout: table.layout,
-              horizontalController: _tableHorizontal!,
-              verticalController: _tableVertical!,
-              onReadyChanged: widget.onTableReadyChanged,
-              onWindowChanged: widget.onTableWindowChanged,
-              onFailure: (error, _) => widget.onTableFailure(error),
-              buildSlice: (context, area, page, fragments) => _buildSurface(
-                area.snapshot,
-                page,
-                fragments,
-                compactHeight: true,
+            child: NotificationListener<ScrollStartNotification>(
+              onNotification: (notification) {
+                if (notification.dragDetails != null) widget.onTableUserDrag();
+                return false;
+              },
+              child: ForumBodyTableBookViewport(
+                layout: table.layout,
+                horizontalController: _tableHorizontal!,
+                verticalController: _tableVertical!,
+                onReadyChanged: widget.onTableReadyChanged,
+                onWindowChanged: widget.onTableWindowChanged,
+                onFailure: (error, _) => widget.onTableFailure(error),
+                buildSlice: (context, area, page, fragments) => _buildSurface(
+                  area.snapshot,
+                  page,
+                  fragments,
+                  compactHeight: true,
+                ),
               ),
             ),
           ),

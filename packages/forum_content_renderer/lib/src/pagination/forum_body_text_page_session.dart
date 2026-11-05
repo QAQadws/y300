@@ -1139,8 +1139,10 @@ final class ForumBodyTextPageSession {
       final index = snapshot.length;
       final left = math.max(0.0, table.left);
       final right = math.min(snapshot.width, table.left + table.width);
+      final source = table.table.element.source;
       _composer.publishTable((
         path: table.table.element.path,
+        sourceRange: (runeStart: source.runeStart, runeEnd: source.runeEnd),
         bounds: Rect.fromLTRB(left, 0, right, snapshot.height),
         contentSize: layout.size,
         fingerprint: layout.fingerprint,
