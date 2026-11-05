@@ -1,6 +1,9 @@
 part of 'forum_body_flow_sliver.dart';
 
-typedef _FlowImageLocation = ({Rect bounds, double? tableOffset});
+typedef _FlowImageLocation = ({
+  Rect bounds,
+  ({String path, double offset})? tableTarget,
+});
 
 extension on _ForumBodyFlowState {
   void _bindImageLocator() {
@@ -99,34 +102,40 @@ extension on _ForumBodyFlowState {
           rect: candidate.bounds.shift(Offset(0, _top(slice))),
         )
         .offset;
-    final tableOffset = candidate.tableOffset;
-    final previous = _tableOffsets[slice];
+    final table = candidate.tableTarget;
+    final key = table == null ? null : (slice, table.path);
+    final previous = key == null
+        ? null
+        : widget.session.flowTableOffset(key.$1, key.$2);
     final request = _imageReveal = (slice: slice, request: Object());
-    if (tableOffset != null) _setTableOffset(slice, tableOffset);
+    if (table != null) _setTableOffset(key!, table.offset);
     var found = false;
     try {
       return found = await revealAt(offset, layoutIsCurrent);
     } finally {
       if (_imageReveal == request) _imageReveal = null;
-      if (!found && tableOffset != null && active()) {
-        _setTableOffset(slice, previous);
+      if (!found && key != null && active()) {
+        _setTableOffset(key, previous);
       }
     }
   }
 
-  void _setTableOffset(int slice, double? offset) {
-    final horizontal = _ready[slice]?.horizontal;
+  void _setTableOffset((int, String) key, double? offset) {
+    ScrollController? horizontal;
+    for (final table
+        in _ready[key.$1]?.tables ?? const <_FlowTableDelivery>[]) {
+      if (table.frame.path == key.$2) {
+        horizontal = table.horizontal;
+        break;
+      }
+    }
     if (horizontal != null &&
         horizontal.hasClients &&
         horizontal.position.hasContentDimensions) {
       final max = horizontal.position.maxScrollExtent;
       horizontal.jumpTo((offset ?? 0).clamp(0.0, max));
     }
-    if (offset == null) {
-      _tableOffsets.remove(slice);
-    } else {
-      _tableOffsets[slice] = offset;
-    }
+    widget.session.setFlowTableOffset(key.$1, key.$2, offset);
   }
 }
 
@@ -139,35 +148,37 @@ Iterable<_FlowImageLocation?> _imageLocations(
 ) sync* {
   for (final fragment in slice.fragments) {
     yield fragment.imagePaths.contains(path)
-        ? (bounds: _imageHintBounds(fragment), tableOffset: null)
+        ? (bounds: _imageHintBounds(fragment), tableTarget: null)
         : null;
   }
-  final frame = slice.table;
-  if (frame == null || !path.startsWith('${frame.path}/')) {
+  for (final frame in slice.tableFrames) {
     yield null;
-    return;
-  }
-  final table = session.tableLayoutForPage(slice.index)!;
-  for (final area in table.captions.followedBy(table.cells)) {
-    yield null;
-    if (!path.startsWith('${area.element.path}/')) continue;
-    for (final page in area.snapshot) {
+    if (!path.startsWith('${frame.path}/')) continue;
+    final table = session.tableLayoutForPage(slice.index, path: frame.path)!;
+    for (final area in table.captions.followedBy(table.cells)) {
       yield null;
-      for (final fragment in page.fragments) {
-        if (!fragment.imagePaths.contains(path)) {
-          yield null;
-          continue;
+      if (!path.startsWith('${area.element.path}/')) continue;
+      for (final page in area.snapshot) {
+        yield null;
+        for (final fragment in page.fragments) {
+          if (!fragment.imagePaths.contains(path)) {
+            yield null;
+            continue;
+          }
+          final bounds = _imageHintBounds(fragment).shift(
+            area.contentBounds.topLeft + Offset(0, area.pageTop(page.index)),
+          );
+          yield (
+            bounds: bounds.shift(frame.bounds.topLeft),
+            tableTarget: (
+              path: frame.path,
+              offset: bounds.left.clamp(
+                0.0,
+                math.max(0.0, table.size.width - frame.bounds.width),
+              ),
+            ),
+          );
         }
-        final bounds = _imageHintBounds(fragment).shift(
-          area.contentBounds.topLeft + Offset(0, area.pageTop(page.index)),
-        );
-        yield (
-          bounds: bounds.shift(frame.bounds.topLeft),
-          tableOffset: bounds.left.clamp(
-            0.0,
-            math.max(0.0, table.size.width - frame.bounds.width),
-          ),
-        );
       }
     }
   }

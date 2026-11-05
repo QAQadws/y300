@@ -64,6 +64,7 @@ final class ForumBodyFlowSliver extends _ForumBodyFlow {
     super.isCurrentLayout,
     super.onReadyChanged,
     super.onTableWindowChanged,
+    super.onFloatedTableWindowChanged,
     super.initialTableOffset,
   });
 }
@@ -80,6 +81,7 @@ final class ForumBodyFlowBox extends _ForumBodyFlow {
     super.isCurrentLayout,
     super.onReadyChanged,
     super.onTableWindowChanged,
+    super.onFloatedTableWindowChanged,
     super.initialTableOffset,
     this.imageAnchorController,
     this.imagePathForIndex,
@@ -155,6 +157,7 @@ abstract class _ForumBodyFlow extends StatefulWidget {
     this.isCurrentLayout = true,
     this.onReadyChanged,
     this.onTableWindowChanged,
+    this.onFloatedTableWindowChanged,
     this.initialTableOffset,
   });
 
@@ -166,6 +169,12 @@ abstract class _ForumBodyFlow extends StatefulWidget {
   final ValueChanged<bool>? onReadyChanged;
   final void Function(int slice, ForumBodyTableVisibleWindow? window)?
   onTableWindowChanged;
+  final void Function(
+    int slice,
+    ForumBodyTextPageTable frame,
+    ForumBodyTableVisibleWindow? window,
+  )?
+  onFloatedTableWindowChanged;
 
   /// A one-time, measured horizontal offset for a table in this layout. Once
   /// mounted, the viewport's actual scrolling position takes precedence.
@@ -178,10 +187,9 @@ abstract class _ForumBodyFlow extends StatefulWidget {
 final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
   final _ends = <double>[];
   final _ready = <int, _FlowDelivery>{};
-  final _readyTables = <int>{};
   final _failed = <int>{};
-  final _tableOffsets = <int, double>{};
   ({int start, int end}) _visible = (start: 0, end: 0);
+  ({double start, double end}) _clip = (start: 0, end: 0);
   StreamSubscription<int>? _budget;
   StreamSubscription<void>? _retirement;
   ForumBodyTextPagePreparation? _preparation;
@@ -232,7 +240,6 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
       _unlisten();
       _clear();
       _ends.clear();
-      _tableOffsets.clear();
       _imageReveal = null;
       _visible = (start: 0, end: 0);
       _listen();
@@ -254,10 +261,12 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
     if (flow is! ForumBodyFlowBox) return;
     final seed = flow.initialSlice;
     final fragments = seed?._take(flow);
-    if (fragments != null) _ready[seed!.index] = _FlowDelivery(fragments);
+    if (fragments != null) {
+      _ready[seed!.index] = _makeDelivery(seed.index, fragments);
+    }
     final table = flow.initialTableSlice;
     if (table != null && table.slice.isPending) {
-      _ready[table.index] = _tableDelivery(table.index);
+      _ready[table.index] = _makeDelivery(table.index, const []);
     }
   }
 
@@ -336,9 +345,8 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
         for (final index in offscreen) {
           final delivery = _ready.remove(index)!;
           delivery.close();
-          _readyTables.remove(index);
-          if (delivery.table != null) {
-            widget.onTableWindowChanged?.call(index, null);
+          for (final table in delivery.tables) {
+            _reportTableWindow(index, table.frame, null);
           }
         }
       });
@@ -352,7 +360,9 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
       if (delivery == null) {
         ready = false;
         if (!_failed.contains(index)) missing ??= index;
-      } else if (delivery.table != null && !_readyTables.contains(index)) {
+      } else if (delivery.tables.any(
+        (table) => !table.ready && _tableIntersects(index, table.frame),
+      )) {
         ready = false;
       }
     }
@@ -362,7 +372,7 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
     _working = index;
     try {
       if (widget.prefix[index].table != null) {
-        _deliver(index, _tableDelivery(index));
+        _deliver(index, _makeDelivery(index, const []));
       } else {
         final work = _preparation ??= session.openPagePreparation(index);
         final steps = index == target ? 6 : 1;
@@ -371,7 +381,7 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
           final progress = work.advance(maxFragments: 1, maxParts: 8);
           _waiting = progress.waitingForLayoutBudget;
           if (progress.isReady) {
-            _deliver(index, _FlowDelivery(work.takeFragments()));
+            _deliver(index, _makeDelivery(index, work.takeFragments()));
             break;
           }
           if (_waiting || (clock?.elapsedMicroseconds ?? 0) >= 2000) break;
@@ -387,23 +397,72 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
     if (!_waiting) _schedule();
   }
 
-  _FlowDelivery _tableDelivery(int index) {
+  _FlowDelivery _makeDelivery(
+    int index,
+    List<ForumBodyPreparedTextFragment> fragments,
+  ) {
+    final page = widget.prefix[index];
+    final delivery = _FlowDelivery(fragments);
+    try {
+      for (final frame in page.tableFrames) {
+        delivery.tables.add(_tableDelivery(index, frame));
+      }
+      return delivery;
+    } catch (_) {
+      delivery.close();
+      rethrow;
+    }
+  }
+
+  _FlowTableDelivery _tableDelivery(int index, ForumBodyTextPageTable frame) {
     final initial = widget.initialTableOffset;
+    final session = widget.session;
     final offset =
-        _tableOffsets[index] ??
-        (initial?.slice == index ? initial!.offset : 0.0);
+        session.flowTableOffset(index, frame.path) ??
+        (initial?.slice == index &&
+                widget.prefix[index].table?.path == frame.path
+            ? initial!.offset
+            : 0.0);
     if (!offset.isFinite || offset < 0) {
       throw ArgumentError.value(offset, 'initialTableOffset');
     }
-    final table = widget.session.acquireTablePage(index)!;
+    final table = session.acquireTablePage(index, path: frame.path)!;
     final controller = ScrollController(
       initialScrollOffset: offset,
       keepScrollOffset: false,
     );
     controller.addListener(() {
-      if (controller.hasClients) _tableOffsets[index] = controller.offset;
+      if (table.isActive && controller.hasClients) {
+        final position = controller.position;
+        if (position.hasContentDimensions) {
+          session.setFlowTableOffset(
+            index,
+            frame.path,
+            position.pixels.clamp(0.0, position.maxScrollExtent),
+          );
+        }
+      }
     });
-    return _FlowDelivery(const [], table, controller);
+    return _FlowTableDelivery(frame, table, controller);
+  }
+
+  bool _tableIntersects(int index, ForumBodyTextPageTable frame) {
+    final top = _top(index);
+    return frame.bounds.height > 0 &&
+        top + frame.bounds.top < _clip.end &&
+        top + frame.bounds.bottom > _clip.start;
+  }
+
+  void _reportTableWindow(
+    int index,
+    ForumBodyTextPageTable frame,
+    ForumBodyTableVisibleWindow? window,
+  ) {
+    if (widget.prefix[index].table?.path == frame.path) {
+      widget.onTableWindowChanged?.call(index, window);
+    } else {
+      widget.onFloatedTableWindowChanged?.call(index, frame, window);
+    }
   }
 
   void _deliver(int index, _FlowDelivery delivery) {
@@ -430,7 +489,6 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
       delivery.close();
     }
     _ready.clear();
-    _readyTables.clear();
     _failed.clear();
   }
 
@@ -464,6 +522,13 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
       _schedule();
     }
     final end = math.min(_extent, viewportEnd);
+    final clip = (start: start, end: end);
+    if (_clip != clip) {
+      _clip = clip;
+      if (_ready.values.any((delivery) => delivery.tables.isNotEmpty)) {
+        _schedule();
+      }
+    }
     final next = start >= end
         ? (start: 0, end: 0)
         : (
@@ -570,7 +635,6 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
     for (var index = _visible.start; index < _visible.end; index++) {
       final delivery = _ready[index];
       if (delivery == null ||
-          delivery.table != null ||
           delivery.fragments.isEmpty ||
           !delivery.isMounted) {
         continue;
@@ -608,46 +672,57 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
       index,
       delivery.fragments,
     );
-    final lease = delivery.table;
-    if (lease == null) return surface;
-    final flow = widget;
-    final initial = flow is ForumBodyFlowBox ? flow.initialTableSlice : null;
+    if (delivery.tables.isEmpty) return surface;
     return Stack(
       fit: StackFit.expand,
       children: [
         surface,
-        Positioned.fromRect(
-          rect: prefix[index].table!.bounds,
-          child: ForumBodyTableFlowViewport(
-            layout: lease.layout,
-            horizontalController: delivery.horizontal!,
-            initialSlice: initial?.index == index ? initial!.slice : null,
-            onFailure: (error, stack) {
-              if (identical(_ready[index], delivery)) {
-                widget.onFailure(error, stack);
-              }
-            },
-            onReadyChanged: (ready) {
-              if (!identical(_ready[index], delivery)) return;
-              if (ready) {
-                _readyTables.add(index);
-              } else {
-                _readyTables.remove(index);
-              }
-              _schedule();
-            },
-            onWindowChanged: widget.onTableWindowChanged == null
-                ? null
-                : (window) {
-                    if (_fits && identical(_ready[index], delivery)) {
-                      widget.onTableWindowChanged?.call(index, window);
-                    }
-                  },
-            buildSlice: (context, area, page, fragments) =>
-                widget.buildSlice(context, area.snapshot, page, fragments),
-          ),
-        ),
+        for (final table in delivery.tables) _tableView(index, delivery, table),
       ],
+    );
+  }
+
+  Widget _tableView(
+    int index,
+    _FlowDelivery delivery,
+    _FlowTableDelivery table,
+  ) {
+    final flow = widget;
+    final initial = flow is ForumBodyFlowBox ? flow.initialTableSlice : null;
+    final frame = table.frame;
+    final dedicated = widget.prefix[index].table?.path == frame.path;
+    final reportsWindow = dedicated
+        ? widget.onTableWindowChanged != null
+        : widget.onFloatedTableWindowChanged != null;
+    return Positioned.fromRect(
+      key: ValueKey(frame.path),
+      rect: frame.bounds,
+      child: ForumBodyTableFlowViewport(
+        layout: table.lease.layout,
+        horizontalController: table.horizontal,
+        initialSlice: dedicated && initial?.index == index
+            ? initial!.slice
+            : null,
+        onFailure: (error, stack) {
+          if (identical(_ready[index], delivery)) {
+            widget.onFailure(error, stack);
+          }
+        },
+        onReadyChanged: (ready) {
+          if (!identical(_ready[index], delivery)) return;
+          table.ready = ready;
+          _schedule();
+        },
+        onWindowChanged: !reportsWindow
+            ? null
+            : (window) {
+                if (_fits && identical(_ready[index], delivery)) {
+                  _reportTableWindow(index, frame, window);
+                }
+              },
+        buildSlice: (context, area, page, fragments) =>
+            widget.buildSlice(context, area.snapshot, page, fragments),
+      ),
     );
   }
 
@@ -745,10 +820,9 @@ final class RenderForumBodyFlowBoundary extends RenderProxySliver {
 }
 
 final class _FlowDelivery {
-  _FlowDelivery(this.fragments, [this.table, this.horizontal]);
+  _FlowDelivery(this.fragments);
   final List<ForumBodyPreparedTextFragment> fragments;
-  final ForumBodyTablePageLease? table;
-  final ScrollController? horizontal;
+  final tables = <_FlowTableDelivery>[];
   final mountKey = GlobalKey();
 
   bool get isMounted {
@@ -760,10 +834,20 @@ final class _FlowDelivery {
   }
 
   void close() {
-    horizontal?.dispose();
-    table?.close();
+    for (final table in tables) {
+      table.horizontal.dispose();
+      table.lease.close();
+    }
     for (final fragment in fragments) {
       fragment.close();
     }
   }
+}
+
+final class _FlowTableDelivery {
+  _FlowTableDelivery(this.frame, this.lease, this.horizontal);
+  final ForumBodyTextPageTable frame;
+  final ForumBodyTablePageLease lease;
+  final ScrollController horizontal;
+  bool ready = false;
 }

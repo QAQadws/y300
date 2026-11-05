@@ -10,6 +10,21 @@ List<ForumBodyTextPageContent> borrowForumBodyFloatInputs(
   return List.unmodifiable(session._content.items);
 }
 
+/// Only a successful placement takes ownership of the lazily prepared cells.
+Map<String, ForumBodyTableLayout> takeForumBodyFloatTables(
+  ForumBodyTextPageSession child,
+) {
+  child._ensureUsable();
+  if (!child.isComplete || child._issuedTables.isNotEmpty) {
+    throw StateError('Float tables cannot be transferred');
+  }
+  final tables = {
+    for (final entry in child._tables.entries) entry.key.$2: entry.value,
+  };
+  child._tables.clear();
+  return tables;
+}
+
 sealed class _HeldFloatLine {
   const _HeldFloatLine(this.window, this.line);
 
@@ -110,12 +125,11 @@ final class _FloatFlowAdmission {
         }
         final layout = _layout!;
         final inputs = _inputs ??= layout.borrowInputs();
-        var text = 0, runs = 0;
-        for (final input in inputs) {
-          text += input.retainedTextCodeUnits;
-          runs += input.retainedRuns;
-        }
-        _session._content.checkCounts(text, runs, paragraphs: inputs.length);
+        _session._content.checkCounts(
+          layout.retainedTextCodeUnits,
+          layout.retainedRuns,
+          paragraphs: layout.retainedParagraphCount,
+        );
         if (!_session._composer.placeMeasuredFloat(
           layout: layout,
           inputCount: inputs.length,
@@ -129,6 +143,16 @@ final class _FloatFlowAdmission {
         }
         for (final input in inputs) {
           _session._content.add(input);
+        }
+        final page = _session.snapshot.length;
+        for (final entry in layout.takeTables().entries) {
+          _session._tables[(page, entry.key)] = entry.value;
+          final usage = entry.value.usage;
+          _session._content.addTable(
+            usage.paragraphs,
+            usage.textCodeUnits,
+            usage.runs,
+          );
         }
         _session._margin = 0;
         layout.close();

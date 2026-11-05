@@ -228,6 +228,176 @@ void main() {
     expect(cache.activeLeases, 0);
   });
 
+  test(
+    'a tall floated table wraps text past the nominal flow slice height',
+    () {
+      final document = _parse(
+        'AB<table style="float:right;margin-left:5px" width="35" height="72">'
+        '<tr><td>字</td></tr></table> ${'aa ' * 24}END',
+      );
+      final session = _book(
+        document,
+        _cache(),
+        extent: ForumBodyTableExtent.natural,
+        captureFloats: true,
+      );
+      _advanceBook(session, 2);
+      final page = session.snapshot.first;
+      final frame = page.floatedTables.single;
+      final source = document.tableElements.single;
+      expect(frame.path, source.path);
+      expect(page.table, isNull);
+      expect(frame.bounds, const Rect.fromLTWH(65, 0, 35, 72));
+      final fragment = page.fragments.single;
+      expect(fragment.width, 60);
+      expect(fragment.top, 0);
+      expect(fragment.height, greaterThan(session.snapshot.height));
+      expect(fragment.height, greaterThanOrEqualTo(frame.bounds.bottom));
+      final layout = session.tableLayoutForPage(0, path: frame.path)!;
+      final cell = _open(layout.cells.single).single;
+      expect(cell.projection.text, '字');
+      cell.close();
+      expect(session.snapshot.last.floatedTables, isEmpty);
+      expect(session.snapshot.last.fragments.single.width, 100);
+      session.close();
+      expect(layout.isClosed, isTrue);
+    },
+  );
+
+  test('a failure discards an unpublished floated table and its budget', () {
+    final cache = _cache();
+    final session = _book(
+      _parse(
+        '<p>before</p><table style="float:right" width="30" height="60">'
+        '<tr><td>cell</td></tr></table><hr>',
+      ),
+      cache,
+      extent: ForumBodyTableExtent.natural,
+      captureFloats: true,
+    );
+    _advanceBook(session, 1);
+    final prefix = session.snapshot;
+    final text = session.retainedTextCodeUnits;
+    final runs = session.retainedRuns;
+    expect(
+      () => _advanceBook(session, 2),
+      throwsA(
+        isA<ForumBodyTextPageSessionException>().having(
+          (error) => error.failure,
+          'failure',
+          ForumBodyTextPageSessionFailure.floatLineLayout,
+        ),
+      ),
+    );
+    expect(session.snapshot, same(prefix));
+    expect(session.retainedParagraphCount, 1);
+    expect(session.retainedTextCodeUnits, text);
+    expect(session.retainedRuns, runs);
+    expect(session.activeIssuedTablePages, 0);
+    expect(cache.activeLeases, 0);
+  });
+
+  testWidgets('a wrapped float shares its slice and keeps table scroll state', (
+    tester,
+  ) async {
+    final cache = _cache();
+    final document = _parse(
+      '<span style="float:left;width:54px;margin-right:4px">'
+      '<div><table width="150" cellspacing="0" cellpadding="0">'
+      '<tr height="25"><td width="70">left</td><td>right</td></tr>'
+      '</table></div></span>${'aa ' * 15}END',
+    );
+    final session = _book(
+      document,
+      cache,
+      extent: ForumBodyTableExtent.natural,
+      captureFloats: true,
+    );
+    _advanceBook(session, 2);
+    final page = session.snapshot.first;
+    final frame = page.floatedTables.single;
+    expect(frame.bounds, const Rect.fromLTWH(0, 0, 54, 25));
+    expect(frame.contentSize.width, 150);
+    expect(page.fragments.first.left, 58);
+    expect(page.fragments.first.width, 42);
+    final outer = ScrollController();
+    addTearDown(outer.dispose);
+    final errors = <Object>[];
+    final windows = <ForumBodyTableVisibleWindow>[];
+    final app = MaterialApp(
+      home: Align(
+        child: SizedBox(
+          width: 100,
+          height: 40,
+          child: CustomScrollView(
+            controller: outer,
+            slivers: [
+              ForumBodyFlowSliver(
+                session: session,
+                prefix: session.snapshot,
+                onFailure: (error, _) => errors.add(error),
+                onFloatedTableWindowChanged: (slice, actual, window) {
+                  expect(slice, 0);
+                  expect(actual, frame);
+                  if (window != null) windows.add(window);
+                },
+                buildSlice: (context, snapshot, index, fragments) =>
+                    ForumBodyTextPageSurface.prepared(
+                      snapshot: snapshot,
+                      pageIndex: index,
+                      layoutId: snapshot.layoutId,
+                      fragments: fragments,
+                      compactHeight: true,
+                    ),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 80)),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpWidget(app);
+    await tester.pumpAndSettle();
+    final finder = find.byType(ForumBodyTableFlowViewport);
+    final viewport = tester.widget<ForumBodyTableFlowViewport>(finder);
+    expect(tester.getSize(finder), frame.bounds.size);
+    expect(viewport.horizontalController.position.maxScrollExtent, 96);
+    expect(session.activeIssuedTablePages, 1);
+    final boundary = tester.renderObject<RenderForumBodyFlowBoundary>(
+      find.byType(ForumBodyFlowSliver),
+    );
+    expect(boundary.borrowTextWindow()!.slices.first.index, 0);
+    viewport.horizontalController.jumpTo(96);
+    await tester.pumpAndSettle();
+    expect(windows.last.bounds.left, 96);
+    expect(
+      windows.last.slices.single.area.element.path,
+      viewport.layout.cells.last.element.path,
+    );
+    outer.jumpTo(outer.position.maxScrollExtent);
+    await tester.pumpAndSettle();
+    expect(finder, findsNothing);
+    expect(session.activeIssuedTablePages, 0);
+    expect(windows.last.isCurrent, isFalse);
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(session.flowTableOffset(0, frame.path), 96);
+    await tester.pumpWidget(app);
+    outer.jumpTo(0);
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<ForumBodyTableFlowViewport>(finder)
+          .horizontalController
+          .offset,
+      96,
+    );
+    expect(errors, isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(session.activeIssuedTablePages, 0);
+    expect(session.activeIssuedFragments, 0);
+    expect(cache.activeLeases, 0);
+  });
+
   test('positive paragraph gaps survive flowing slice boundaries', () {
     final session = _book(
       _parse(

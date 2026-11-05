@@ -35,6 +35,12 @@ part 'forum_body_float_session.dart';
 part 'forum_body_float_text.dart';
 part 'forum_body_float_inline.dart';
 
+typedef _TableAdmission = ({
+  ForumBodyElement element,
+  double left,
+  double width,
+});
+
 enum ForumBodyTextPageSessionState { active, complete, failed, closed }
 
 enum ForumBodyTextPageSessionFailure {
@@ -278,11 +284,11 @@ final class ForumBodyTextPageSession {
         composeTables
             ? (table, remaining) => ForumBodyTablePreparation(
                 document: document,
-                table: table.table.element,
+                table: table.element,
                 reader: reader,
                 cache: cache,
                 availableWidth: table.width,
-                layoutId: '$layoutId/table/${table.table.element.path}',
+                layoutId: '$layoutId/table/${table.element.path}',
                 limits: remaining,
                 textScaler: textScaler,
                 collapses: collapses,
@@ -318,6 +324,7 @@ final class ForumBodyTextPageSession {
                     : height,
               )
             : null,
+        contentRoot?.kind == ForumBodyElementKind.table,
       );
       if (scopedImage != null) {
         try {
@@ -336,6 +343,15 @@ final class ForumBodyTextPageSession {
           session.close();
           rethrow;
         }
+      }
+      if (session._scopedTable) {
+        if (!composeTables ||
+            session.contentRootStyle.hidden ||
+            collapses?.hidesPath(contentRoot!.path) == true) {
+          session.close();
+          throw ArgumentError('Invalid scoped table');
+        }
+        session._pendingTable = (element: contentRoot!, left: 0, width: width);
       }
       return session;
     } catch (_) {
@@ -356,6 +372,7 @@ final class ForumBodyTextPageSession {
     this._tableExtent,
     this._openTable,
     this._openFloat,
+    this._scopedTable,
   ) : _content = _RetainedParagraphs(limits);
   final ForumBodyBlockFlowCursor _flow;
   final ForumBodyTextPageComposer _composer;
@@ -363,10 +380,11 @@ final class ForumBodyTextPageSession {
   final TextScaler _textScaler;
   final ForumBodyImageResolver? _imageResolver;
   final bool _scopedBody;
+  final bool _scopedTable;
   final ForumBodyTableExtent _tableExtent;
   final ForumBodyFlowWidthMeasure? _intrinsic;
   final ForumBodyTablePreparation Function(
-    ForumBodyBlockFlowTable table,
+    _TableAdmission table,
     ForumBodyTextPageSessionLimits remaining,
   )?
   _openTable;
@@ -380,7 +398,8 @@ final class ForumBodyTextPageSession {
   final _RetainedParagraphs _content;
   final _issued = <ForumBodyPreparedTextFragment>{};
   final _preparations = <ForumBodyTextPagePreparation>{};
-  final _tables = <int, ForumBodyTableLayout>{};
+  final _tables = <(int, String), ForumBodyTableLayout>{};
+  final _flowTableOffsets = <(int, String), double>{};
   final _issuedTables = <ForumBodyTablePageLease>{};
   int _reservedLeases = 0;
   int _reservedFragments = 0;
@@ -390,7 +409,7 @@ final class ForumBodyTextPageSession {
   ForumBodyTextPageSessionState _state = ForumBodyTextPageSessionState.active;
   ForumBodyBlockFlowParagraph? _pendingParagraph;
   ForumBodyBlockFlowImage? _pendingImage;
-  ForumBodyBlockFlowTable? _pendingTable;
+  _TableAdmission? _pendingTable;
   ForumBodyTablePreparation? _tablePreparation;
   ForumBodyListMarkerPlanPreparation? _listPreparation;
   ForumBodyListMarkerPlan? _listPlan;
@@ -455,18 +474,36 @@ final class ForumBodyTextPageSession {
 
   /// Borrow a published table while this session is alive. The session owns
   /// the table's cell bodies even when the published prefix survives a failure.
-  ForumBodyTableLayout? tableLayoutForPage(int page) {
+  ForumBodyTableLayout? tableLayoutForPage(int page, {String? path}) {
     _ensureUsable();
-    RangeError.checkValidIndex(page, snapshot);
-    return _tables[page];
+    final frame = snapshot[page];
+    final source = path ?? frame.table?.path;
+    return source == null ? null : _tables[(page, source)];
   }
 
-  ForumBodyTablePageLease? acquireTablePage(int page) {
-    final layout = tableLayoutForPage(page);
+  ForumBodyTablePageLease? acquireTablePage(int page, {String? path}) {
+    final layout = tableLayoutForPage(page, path: path);
     if (layout == null) return null;
     final lease = ForumBodyTablePageLease._(layout, this, page);
     _issuedTables.add(lease);
     return lease;
+  }
+
+  /// Flow widgets can be evicted by the outer list while their layout survives.
+  double? flowTableOffset(int page, String path) =>
+      _flowTableOffsets[(page, path)];
+
+  void setFlowTableOffset(int page, String path, double? offset) {
+    _ensureUsable();
+    final key = (page, path);
+    if (offset == null) {
+      _flowTableOffsets.remove(key);
+    } else {
+      if (!_tables.containsKey(key) || !offset.isFinite || offset < 0) {
+        throw ArgumentError('Offset does not match a flowing table');
+      }
+      _flowTableOffsets[key] = offset;
+    }
   }
 
   bool ownsTablePageLease(int page, ForumBodyTablePageLease lease) =>
@@ -761,6 +798,7 @@ final class ForumBodyTextPageSession {
           _publishTable(table, layout);
           _pendingTable = null;
           _margin = 0;
+          if (_scopedTable) _finishSource();
           return result(completed: true);
         }
         if (work >= maxEvents) return result();
@@ -773,7 +811,14 @@ final class ForumBodyTextPageSession {
         units++;
         switch (unit) {
           case ForumBodyBlockFlowTable():
-            _pendingTable = unit;
+            _pendingTable = (
+              element: unit.table.element,
+              left: unit.left,
+              width: math.min(
+                unit.width,
+                _intrinsic?.availableWidth ?? unit.width,
+              ),
+            );
           case ForumBodyBlockFlowImage():
             _consumeFlowIndex(unit.image.index);
             _ensureFloatLineAvailable();
@@ -844,9 +889,7 @@ final class ForumBodyTextPageSession {
           case ForumBodyBlockFlowBoundary():
             if (unit.boundary.kind ==
                 ForumBodyTextFlowBoundaryKind.endDocument) {
-              _composer.finish();
-              _flow.close();
-              _state = ForumBodyTextPageSessionState.complete;
+              _finishSource();
               return result(completed: true);
             }
             final event = unit.boundary.event!;
@@ -1334,10 +1377,13 @@ final class ForumBodyTextPageSession {
     );
   }
 
-  void _publishTable(
-    ForumBodyBlockFlowTable table,
-    ForumBodyTableLayout layout,
-  ) {
+  void _finishSource() {
+    _composer.finish();
+    _flow.close();
+    _state = ForumBodyTextPageSessionState.complete;
+  }
+
+  void _publishTable(_TableAdmission table, ForumBodyTableLayout layout) {
     try {
       final usage = layout.usage;
       _content.checkCounts(
@@ -1348,21 +1394,31 @@ final class ForumBodyTextPageSession {
       final index = snapshot.length;
       final left = math.max(0.0, table.left);
       final right = math.min(snapshot.width, table.left + table.width);
-      final source = table.table.element.source;
+      final source = table.element.source;
       final natural = _tableExtent == ForumBodyTableExtent.natural;
       final height = natural ? layout.size.height : snapshot.height;
+      final preferred = math.max(
+        1.0,
+        math.min(right - left, layout.size.width),
+      );
+      _intrinsic?.add(preferred, preferred);
       _composer.publishTable(
         (
-          path: table.table.element.path,
+          path: table.element.path,
           sourceRange: (runeStart: source.runeStart, runeEnd: source.runeEnd),
-          bounds: Rect.fromLTWH(left, 0, right - left, height),
+          bounds: Rect.fromLTWH(
+            left,
+            0,
+            _scopedTable ? preferred : right - left,
+            height,
+          ),
           contentSize: layout.size,
           fingerprint: layout.fingerprint,
         ),
         retainedItems: usage.items + usage.pages,
         extent: _tableExtent,
       );
-      _tables[index] = layout;
+      _tables[(index, table.element.path)] = layout;
       _content.addTable(usage.paragraphs, usage.textCodeUnits, usage.runs);
     } catch (_) {
       layout.close();
@@ -1420,6 +1476,13 @@ final class ForumBodyTextPageSession {
     _margin = 0;
     _waiting = false;
     _content.retain(_publishedParagraphCount);
+    _tables.removeWhere((key, layout) {
+      if (key.$1 < _publishedPageCount) return false;
+      layout.close();
+      final usage = layout.usage;
+      _content.addTable(-usage.paragraphs, -usage.textCodeUnits, -usage.runs);
+      return true;
+    });
     _state = ForumBodyTextPageSessionState.failed;
   }
 
@@ -1443,6 +1506,7 @@ final class ForumBodyTextPageSession {
       table.close();
     }
     _tables.clear();
+    _flowTableOffsets.clear();
     _content.clearTables();
     _listPreparation?.close();
     _listPreparation = null;

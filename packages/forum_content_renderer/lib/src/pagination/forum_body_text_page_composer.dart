@@ -147,7 +147,7 @@ final class ForumBodyTextPageRule {
 /// The containing box requested for a separately materialized table.
 enum ForumBodyTableExtent { bookPage, natural }
 
-/// Source identity and frozen geometry for a dedicated table slice.
+/// Source identity and frozen geometry for one table viewport.
 typedef ForumBodyTextPageTable = ({
   String path,
   ({int runeStart, int runeEnd}) sourceRange,
@@ -164,20 +164,26 @@ final class ForumBodyTextPage {
     List<ForumBodyTextPageBackground> backgrounds,
     this.usedHeight, {
     this.table,
+    List<ForumBodyTextPageTable> floatedTables = const [],
     this.nativeUsage,
   }) : fragments = List.unmodifiable(fragments),
        rules = List.unmodifiable(rules),
-       backgrounds = List.unmodifiable(backgrounds);
+       backgrounds = List.unmodifiable(backgrounds),
+       floatedTables = List.unmodifiable(floatedTables);
   final int index;
   final List<ForumBodyTextPageFragment> fragments;
   final List<ForumBodyTextPageRule> rules;
   final List<ForumBodyTextPageBackground> backgrounds;
   final ForumBodyTextPageTable? table;
+  final List<ForumBodyTextPageTable> floatedTables;
+  Iterable<ForumBodyTextPageTable> get tableFrames =>
+      table == null ? floatedTables : [table!];
   final ({int handles, int entries, int bytes, int images})? nativeUsage;
   int get itemCount =>
       fragments.length +
       rules.length +
       backgrounds.length +
+      floatedTables.length +
       (table == null ? 0 : 1);
   final double usedHeight;
 }
@@ -271,7 +277,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 35;
+  static const revision = 36;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;
@@ -301,6 +307,8 @@ final class ForumBodyTextPageComposer {
   final _rules = <ForumBodyTextPageRule>[];
   final _backgrounds = _PageBackgrounds();
   final _floatBackgrounds = <ForumBodyTextPageBackground>[];
+  final _floatedTables = <ForumBodyTextPageTable>[];
+  int _floatedTableItems = 0;
   final _floats = <({ForumBodyFloatSide side, Rect bounds})>[];
   _OpenCollapseHeader? _collapseHeader;
   ForumBodyTextPageSnapshot? _snapshot;
@@ -315,6 +323,7 @@ final class ForumBodyTextPageComposer {
   // A float can touch the page bottom while ordinary lines can still fit
   // beside it. Only the in-flow cursor can exhaust that remaining space.
   double get _flowSealExtent => _floats.isEmpty ? _usedHeight : _flowHeight;
+  int get _draftDeliveries => _draft.length + _floatedTables.length;
   bool _complete = false;
   bool _closed = false;
 
@@ -380,7 +389,9 @@ final class ForumBodyTextPageComposer {
 
   bool sealBeforeTable() {
     _ensureTableBoundary();
-    if (_usedHeight == 0 && _draft.isEmpty && _rules.isEmpty) return false;
+    if (_usedHeight == 0 && _draftDeliveries == 0 && _rules.isEmpty) {
+      return false;
+    }
     _seal();
     return true;
   }
@@ -391,7 +402,7 @@ final class ForumBodyTextPageComposer {
     ForumBodyTableExtent extent = ForumBodyTableExtent.bookPage,
   }) {
     _ensureTableBoundary();
-    if (_usedHeight != 0 || _draft.isNotEmpty || _rules.isNotEmpty) {
+    if (_usedHeight != 0 || _draftDeliveries != 0 || _rules.isNotEmpty) {
       throw StateError('Table requires an empty page');
     }
     final bounds = table.bounds;
@@ -535,7 +546,7 @@ final class ForumBodyTextPageComposer {
     final before = _pages.length;
     try {
       if (maxDeliveriesPerPage != null &&
-          _draft.length >= maxDeliveriesPerPage!) {
+          _draftDeliveries >= maxDeliveriesPerPage!) {
         _seal();
         return (pagesPublished: 1, isComplete: false);
       }
@@ -981,6 +992,10 @@ final class ForumBodyTextPageComposer {
     try {
       final active = _active!;
       final layout = active.input;
+      // A flowing float can occupy more than a nominal slice. Keep wrapping
+      // until its edge is reached while still applying the delivery budgets.
+      final extendedBand =
+          _flowing && floatBandBottom != null && floatBandBottom > height;
       layout.ensureActive();
       _ensureOpen();
       while (true) {
@@ -1010,7 +1025,7 @@ final class ForumBodyTextPageComposer {
             _draft.isNotEmpty && _draft.last.paragraphIndex == active.index;
         if (!continuation &&
             maxDeliveriesPerPage != null &&
-            _draft.length >= maxDeliveriesPerPage!) {
+            _draftDeliveries >= maxDeliveriesPerPage!) {
           _seal();
           return _result(inspected, pagesBefore, false);
         }
@@ -1069,7 +1084,8 @@ final class ForumBodyTextPageComposer {
             bottom < top) {
           _fail(ForumBodyTextPageFailure.invalidGeometry);
         }
-        if (bottom > height) {
+        if (bottom > height &&
+            !(extendedBand && _flowHeight < floatBandBottom)) {
           if (_draft.isEmpty && _usedHeight == 0) {
             _fail(ForumBodyTextPageFailure.oversizedGroup);
           }
@@ -1355,6 +1371,7 @@ final class ForumBodyTextPageComposer {
         // A still-open rounded box can end at this exact edge. Resolve its
         // actual close/continuation before publishing immutable corner metadata.
         if (_flowSealExtent == height &&
+            !extendedBand &&
             (!paragraphComplete || !_backgrounds.needsEndBoundary)) {
           _seal();
         }
@@ -1389,7 +1406,7 @@ final class ForumBodyTextPageComposer {
     if (!_backgrounds.isBalanced) throw StateError('Unclosed page background');
     if (_collapseHeader != null) throw StateError('Unclosed collapse title');
     try {
-      if (_draft.isNotEmpty || _usedHeight > 0) _seal();
+      if (_draftDeliveries != 0 || _usedHeight > 0) _seal();
       _complete = true;
       _snapshot = null;
     } catch (_) {
@@ -1413,6 +1430,7 @@ final class ForumBodyTextPageComposer {
             : [...backgrounds, ..._floatBackgrounds],
         _usedHeight,
         table: table,
+        floatedTables: _floatedTables,
         nativeUsage: _captureNativeUsage
             ? (
                 handles: _usedNativeHandles,
@@ -1426,6 +1444,8 @@ final class ForumBodyTextPageComposer {
     _draft.clear();
     _rules.clear();
     _floatBackgrounds.clear();
+    _floatedTables.clear();
+    _floatedTableItems = 0;
     _floats.clear();
     _usedNativeHandles = 0;
     _nativeEntries.clear();
@@ -1460,11 +1480,14 @@ final class ForumBodyTextPageComposer {
         _draft.length +
         _rules.length +
         _backgrounds.itemCount +
-        _floatBackgrounds.length;
+        _floatBackgrounds.length +
+        _floatedTableItems;
     _draft.clear();
     _rules.clear();
     _backgrounds.clear();
     _floatBackgrounds.clear();
+    _floatedTables.clear();
+    _floatedTableItems = 0;
     _floats.clear();
     _collapseHeader = null;
     _usedNativeHandles = 0;

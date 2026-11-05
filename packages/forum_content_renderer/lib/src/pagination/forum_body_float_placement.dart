@@ -53,7 +53,7 @@ extension ForumBodyFloatPlacement on ForumBodyTextPageComposer {
       _fail(ForumBodyTextPageFailure.oversizedGroup);
     }
 
-    final atStart = _usedHeight == 0 && _draft.isEmpty && _rules.isEmpty;
+    final atStart = _usedHeight == 0 && _draftDeliveries == 0 && _rules.isEmpty;
     final top = math.max(
       math.max(0.0, _flowHeight + (atStart ? 0 : spaceBefore)),
       _floats.lastOrNull?.bounds.top ?? 0,
@@ -88,14 +88,22 @@ extension ForumBodyFloatPlacement on ForumBodyTextPageComposer {
 
     final background = layout.background;
     var items = (background?.a ?? 0) > 0 ? 1 : 0;
-    var fragments = 0, handles = 0, entries = 0, bytes = 0, images = 0;
+    var deliveries = 0, handles = 0, entries = 0, bytes = 0, images = 0;
+    var tableItems = 0;
     for (final page in child) {
       final usage = page.nativeUsage;
-      if (page.table != null || usage == null) {
+      if ((!_flowing && page.table != null) || usage == null) {
         _fail(ForumBodyTextPageFailure.invalidGeometry);
       }
       items += page.itemCount;
-      fragments += page.fragments.length;
+      deliveries += page.fragments.length;
+      if (page.table != null) {
+        final tableUsage = layout.tableLayoutForPage(page.index)!.usage;
+        final retained = tableUsage.items + tableUsage.pages;
+        items += retained;
+        tableItems += retained + 1;
+        deliveries++;
+      }
       handles += usage.handles;
       entries += usage.entries;
       bytes += usage.bytes;
@@ -106,7 +114,7 @@ extension ForumBodyFloatPlacement on ForumBodyTextPageComposer {
       _fail(ForumBodyTextPageFailure.fragmentLimit);
     }
     if (maxDeliveriesPerPage case final limit?
-        when _draft.length + fragments + (precedingLine == null ? 0 : 1) >
+        when _draftDeliveries + deliveries + (precedingLine == null ? 0 : 1) >
             limit) {
       return retry(ForumBodyTextPageFailure.fragmentLimit);
     }
@@ -157,6 +165,15 @@ extension ForumBodyFloatPlacement on ForumBodyTextPageComposer {
     }
     for (final (index, page) in child.indexed) {
       final offset = contentOrigin + Offset(0, layout.pageTop(index));
+      if (page.table case final table?) {
+        _floatedTables.add((
+          path: table.path,
+          sourceRange: table.sourceRange,
+          bounds: table.bounds.shift(offset),
+          contentSize: table.contentSize,
+          fingerprint: table.fingerprint,
+        ));
+      }
       _draft.addAll(
         page.fragments.map(
           (fragment) =>
@@ -193,6 +210,7 @@ extension ForumBodyFloatPlacement on ForumBodyTextPageComposer {
     }
     _nextParagraphIndex += inputCount;
     _fragmentCount += items;
+    _floatedTableItems += tableItems;
     _usedNativeHandles += handles;
     // Imported entries may share cache keys with normal flow. Counting the
     // child totals conservatively keeps admission bounded without its keys.

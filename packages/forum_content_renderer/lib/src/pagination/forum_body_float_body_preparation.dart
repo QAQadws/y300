@@ -13,6 +13,7 @@ import '../style/forum_body_box_style.dart';
 import '../style/forum_body_length.dart';
 import '../style/forum_body_replaced_image_size.dart';
 import '../style/forum_body_style_options.dart';
+import '../table/forum_body_table_preparation.dart';
 import 'forum_body_frozen_images.dart';
 import 'forum_body_image_frame.dart';
 import 'forum_body_text_page_composer.dart';
@@ -60,6 +61,13 @@ final class ForumBodyFloatBodyLayout {
   ForumBodyTextPageSnapshot get snapshot => _body.snapshot;
   List<ForumBodyTextPageContent> borrowInputs() =>
       borrowForumBodyFloatInputs(_body);
+  ForumBodyTableLayout? tableLayoutForPage(int index) =>
+      _body.tableLayoutForPage(index);
+  Map<String, ForumBodyTableLayout> takeTables() =>
+      takeForumBodyFloatTables(_body);
+  int get retainedParagraphCount => _body.retainedParagraphCount;
+  int get retainedTextCodeUnits => _body.retainedTextCodeUnits;
+  int get retainedRuns => _body.retainedRuns;
   bool get isClosed => _body.isClosed || _body.isLayoutOwnerRetired;
   double pageTop(int index) => _pageTops[index];
   ForumBodyTextPagePreparation openPagePreparation(int index) =>
@@ -112,13 +120,19 @@ final class ForumBodyFloatBodyPreparation {
           ForumBodyElementKind.paragraph,
           ForumBodyElementKind.heading,
           ForumBodyElementKind.image,
+          ForumBodyElementKind.table,
         }.contains(element.kind)) {
       _fail(ForumBodyFloatBodyFailure.structure);
     }
     _margin = _insets(_style.margin);
     _padding = _insets(_style.padding);
     final specified = _contentLength(_style.box.width);
-    if (specified != null && !_isRootImage) _setWidth(specified);
+    if (_isRootTable) {
+      _width = _availableWidth;
+      if (_width! <= 0) _fail(ForumBodyFloatBodyFailure.extentLimit);
+    } else if (specified != null && !_isRootImage) {
+      _setWidth(specified);
+    }
   }
 
   static const _maxWidth = 16384.0;
@@ -151,6 +165,11 @@ final class ForumBodyFloatBodyPreparation {
 
   ForumBodyResolvedStyle get _style => source.event.style;
   bool get _isRootImage => source.element.kind == ForumBodyElementKind.image;
+  bool get _isRootTable => source.element.kind == ForumBodyElementKind.table;
+  double get _availableWidth =>
+      math.min(containingWidth, _maxWidth) -
+      _margin.horizontal -
+      _padding.horizontal;
   bool get isReady => _ready != null;
   bool get isClosed => _closed;
 
@@ -192,10 +211,11 @@ final class ForumBodyFloatBodyPreparation {
       if (session.isComplete) {
         if (probe) {
           final widths = session.intrinsicWidths!;
-          final available =
-              containingWidth - _margin.horizontal - _padding.horizontal;
           _setWidth(
-            math.min(widths.preferred, math.max(widths.minimum, available)),
+            math.min(
+              widths.preferred,
+              math.max(widths.minimum, _availableWidth),
+            ),
           );
           session.close();
         } else {
@@ -234,7 +254,7 @@ final class ForumBodyFloatBodyPreparation {
     collapses: _collapses,
     contentRoot: source.element,
     scopedImage: rootImage,
-    intrinsicAvailableWidth: probe ? containingWidth : null,
+    intrinsicAvailableWidth: probe ? math.max(1.0, _availableWidth) : null,
     captureNativeUsage: !probe,
     maxNativeHandlesPerPage: probe ? null : maxNativeHandlesPerPage,
     maxNativeEntriesPerPage: probe ? null : maxNativeEntriesPerPage,
@@ -263,10 +283,7 @@ final class ForumBodyFloatBodyPreparation {
         ForumBodyTextPageSessionFailure.imageStructure,
       );
     }
-    final availableWidth =
-        math.min(containingWidth, _maxWidth) -
-        _margin.horizontal -
-        _padding.horizontal;
+    final availableWidth = _availableWidth;
     final availableHeight =
         math.min(rootImageMaxHeight ?? _maxHeight, _maxHeight) -
         _margin.vertical -
@@ -314,9 +331,13 @@ final class ForumBodyFloatBodyPreparation {
   }
 
   void _finish(ForumBodyTextPageSession session) {
-    final width = _width!;
+    final width = _isRootTable
+        ? session.snapshot.single.table!.bounds.width
+        : _width!;
     if (width == 0 && _height != 0) _fail(ForumBodyFloatBodyFailure.geometry);
-    final authorHeight = _isRootImage ? null : _style.box.height;
+    final authorHeight = _isRootImage || _isRootTable
+        ? null
+        : _style.box.height;
     // A float in this flow has no definite containing height. Keep overflow
     // inside the exclusion even when a fixed author height is smaller.
     final resolvedHeight = authorHeight?.unit == ForumBodyLengthUnit.percent
