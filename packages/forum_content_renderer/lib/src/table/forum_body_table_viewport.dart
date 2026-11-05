@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show precisionErrorTolerance;
 import 'package:flutter/rendering.dart'
     show
         MatrixUtils,
@@ -303,7 +304,7 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
     final clip = outerClip.intersect(Offset.zero & box.size);
     if (!clip.isFinite || clip.isEmpty) return Rect.zero;
     final horizontal = widget.horizontalController;
-    return horizontal.hasClients
+    return horizontal.hasClients && horizontal.position.hasPixels
         ? clip.shift(Offset(horizontal.offset, 0))
         : clip;
   }
@@ -450,8 +451,11 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
         _schedule();
         final vertical = widget.verticalController;
         if (vertical == null) {
+          final overflows =
+              layout.size.width - constraints.maxWidth >
+              precisionErrorTolerance;
           final content = SizedBox(
-            width: math.max(constraints.maxWidth, layout.size.width),
+            width: overflows ? layout.size.width : constraints.maxWidth,
             height: layout.size.height,
             child: _tableSurface(),
           );
@@ -462,9 +466,9 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
                 _schedule();
               }
             },
-            child: layout.size.width <= constraints.maxWidth
-                ? content
-                : _horizontal(context, content, const ClampingScrollPhysics()),
+            child: overflows
+                ? _horizontal(context, content, const ClampingScrollPhysics())
+                : content,
           );
         }
         assert(constraints.hasBoundedHeight);

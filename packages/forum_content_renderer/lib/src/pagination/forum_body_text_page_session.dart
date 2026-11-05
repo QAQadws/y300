@@ -343,6 +343,7 @@ final class ForumBodyTextPageSession {
   bool get isClosed => _state == ForumBodyTextPageSessionState.closed;
   bool get waitingForLayoutBudget => _waiting;
   ForumBodyTextPageSnapshot get snapshot => _composer.snapshot;
+  ForumBodyTableExtent get tableExtent => _tableExtent;
   int get resolvedNodeCount => _flow.resolvedNodeCount;
   int get retainedParagraphCount => _content.paragraphCount;
   int get retainedTextCodeUnits => _content.textCodeUnits;

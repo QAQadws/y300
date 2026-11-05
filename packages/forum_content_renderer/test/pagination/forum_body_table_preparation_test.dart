@@ -550,6 +550,121 @@ void main() {
     expect(find.byType(ForumBodyTextPageSurface), findsOneWidget);
   });
 
+  testWidgets('native flowing sliver materializes its exact measured prefix', (
+    tester,
+  ) async {
+    final cache = _cache();
+    final session = _book(
+      _parse(
+        '<p>before</p><table width="240" cellspacing="0" cellpadding="0">'
+        '<tr height="240"><td width="140">left</td><td width="100">right</td></tr>'
+        '<tr><td colspan="2">tail</td></tr></table><p>after</p>',
+      ),
+      cache,
+      extent: ForumBodyTableExtent.natural,
+    );
+    _advanceBook(session, 1);
+    final prefix = ValueNotifier(session.snapshot);
+    final width = ValueNotifier(100.0);
+    final outer = ScrollController();
+    addTearDown(prefix.dispose);
+    addTearDown(width.dispose);
+    addTearDown(outer.dispose);
+    final errors = <Object>[];
+    final readiness = <bool>[];
+    const viewportHeight = 55.0;
+    const trailingHeight = 120.0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Align(
+          child: ValueListenableBuilder(
+            valueListenable: width,
+            builder: (context, value, child) =>
+                SizedBox(width: value, height: viewportHeight, child: child),
+            child: CustomScrollView(
+              controller: outer,
+              slivers: [
+                ValueListenableBuilder(
+                  valueListenable: prefix,
+                  builder: (context, value, _) => ForumBodyFlowSliver(
+                    session: session,
+                    prefix: value,
+                    onFailure: (error, _) => errors.add(error),
+                    onReadyChanged: readiness.add,
+                    buildSlice: (context, snapshot, index, fragments) =>
+                        ForumBodyTextPageSurface.prepared(
+                          snapshot: snapshot,
+                          pageIndex: index,
+                          layoutId: snapshot.layoutId,
+                          fragments: fragments,
+                          compactHeight: true,
+                        ),
+                  ),
+                ),
+                const SliverToBoxAdapter(
+                  child: SizedBox(height: trailingHeight),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(readiness, [true]);
+    expect(session.activeIssuedFragments, 1);
+    final table = find.byType(ForumBodyTableFlowViewport);
+    expect(table, findsNothing);
+    final originalExtent = outer.position.maxScrollExtent;
+
+    _advanceBook(session, 3);
+    prefix.value = session.snapshot;
+    await tester.pumpAndSettle();
+    final height = prefix.value.fold<double>(
+      0,
+      (sum, page) => sum + page.usedHeight,
+    );
+    expect(
+      outer.position.maxScrollExtent,
+      height + trailingHeight - viewportHeight,
+    );
+    expect(outer.position.maxScrollExtent, greaterThan(originalExtent + 240));
+    expect(table, findsOneWidget);
+    expect(session.activeIssuedTablePages, 1);
+    expect(readiness.last, isTrue);
+    final current = tester.widget<ForumBodyTableFlowViewport>(table);
+    current.horizontalController.jumpTo(80);
+    await tester.pumpAndSettle();
+
+    outer.jumpTo(height - prefix.value.last.usedHeight);
+    await tester.pumpAndSettle();
+    expect(table, findsNothing);
+    expect(session.activeIssuedTablePages, 0);
+    expect(session.activeIssuedFragments, 1);
+    expect(
+      outer.position.maxScrollExtent,
+      height + trailingHeight - viewportHeight,
+    );
+    outer.jumpTo(0);
+    await tester.pumpAndSettle();
+    final returned = tester.widget<ForumBodyTableFlowViewport>(table);
+    expect(returned.horizontalController.offset, 80);
+    expect(readiness.last, isTrue);
+    width.value = 90;
+    await tester.pumpAndSettle();
+    expect(readiness.last, isFalse);
+    expect(tester.getSize(table).width, 100);
+    width.value = 100;
+    await tester.pumpAndSettle();
+    expect(readiness.last, isTrue);
+    expect(returned.horizontalController.offset, 80);
+    expect(errors, isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(session.activeIssuedTablePages, 0);
+    expect(session.activeIssuedFragments, 0);
+    expect(cache.activeLeases, 0);
+  });
+
   test('real width probes feed columns and wrapping feeds height', () {
     final document = _parse(
       '<table cellspacing="0" cellpadding="3" style="max-width:300px">'
