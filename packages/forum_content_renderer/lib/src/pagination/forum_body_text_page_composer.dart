@@ -271,7 +271,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 32;
+  static const revision = 33;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;
@@ -1267,6 +1267,7 @@ final class ForumBodyTextPageComposer {
             bytes:
                 (addedEntries?.values.fold(0, (sum, cost) => sum + cost) ?? 0) +
                 (sceneAddition?.estimatedBytes ?? 0),
+            images: proposedImages - _usedImages,
           );
           return _result(inspected, pagesBefore, false);
         }

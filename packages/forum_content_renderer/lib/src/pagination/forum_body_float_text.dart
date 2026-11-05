@@ -1,11 +1,5 @@
 part of 'forum_body_text_page_session.dart';
 
-typedef _HeldFloatText = ({
-  ForumBodyParagraphContent content,
-  ForumBodyParagraphWindow window,
-  ForumBodyPendingFloatLine line,
-});
-
 /// One source paragraph consuming native line groups across physical bands.
 /// A band uses the full unconsumed projection so its last visible row has
 /// the same native wrapping and justification as the rest of that layout.
@@ -105,7 +99,7 @@ final class _FloatTextAdmission {
         _band = null;
         if (end.heldLine case final line?) {
           _session._margin = line.spaceBefore;
-          held = (content: _content, window: _window, line: line);
+          held = _HeldFloatText(_content, _window, line);
           isComplete = true;
         }
         if (end.blocked && !pageSealed) _skipBand(band);

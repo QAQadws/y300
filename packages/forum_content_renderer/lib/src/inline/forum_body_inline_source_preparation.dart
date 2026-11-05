@@ -15,11 +15,16 @@ final class ForumBodyInlineSourcePreparation {
     required ForumBodyInlineFlowContent input,
     required this.width,
     required void Function() ensureOwner,
+    ForumBodyInlinePlanInput? prefix,
+    this.keepTrailingSpace = false,
   }) : _input = input,
+       _prefix = prefix,
        _ensureOwner = ensureOwner;
   ForumBodyInlineFlowContent? _input;
+  ForumBodyInlinePlanInput? _prefix;
   void Function()? _ensureOwner;
   final double width;
+  final bool keepTrailingSpace;
   Map<ForumBodyRubyGroupContent, ForumBodyRubyTreeInput> _trees =
       Map.identity();
   ForumBodyRubyTreeInputPreparation? _tree;
@@ -107,6 +112,8 @@ final class ForumBodyInlineSourcePreparation {
             width,
             trees: _trees,
             emphasisTrees: _emphasisTrees,
+            prefix: _prefix,
+            keepTrailingSpace: keepTrailingSpace,
           );
           _guard();
           _result = result;
@@ -165,6 +172,7 @@ final class ForumBodyInlineSourcePreparation {
     _inspection = null;
     _emphasisTrees.clear();
     _input = null;
+    _prefix = null;
     _group = null;
     _result = null;
     _trees = Map.identity();

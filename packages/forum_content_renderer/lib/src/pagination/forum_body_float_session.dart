@@ -10,6 +10,26 @@ List<ForumBodyTextPageContent> borrowForumBodyFloatInputs(
   return List.unmodifiable(session._content.items);
 }
 
+sealed class _HeldFloatLine {
+  const _HeldFloatLine(this.window, this.line);
+
+  final ForumBodyParagraphWindow window;
+  final ForumBodyPendingFloatLine line;
+}
+
+final class _HeldFloatText extends _HeldFloatLine {
+  const _HeldFloatText(this.content, super.window, super.line);
+
+  final ForumBodyParagraphContent content;
+}
+
+final class _HeldFloatInline extends _HeldFloatLine {
+  const _HeldFloatInline(this.source, this.engineCut, super.window, super.line);
+
+  final ForumBodyInlinePlanInput source;
+  final int? engineCut;
+}
+
 final class _FloatFlowAdmission {
   _FloatFlowAdmission(this._session, this._unit)
     // Text flow reuses the already admitted source to express a trailing
@@ -27,14 +47,14 @@ final class _FloatFlowAdmission {
   ForumBodyFloatBodyPreparation? _preparation;
   ForumBodyFloatBodyLayout? _layout;
   List<ForumBodyTextPageContent>? _inputs;
-  _HeldFloatText? _held;
+  _HeldFloatLine? _held;
 
   bool get isComplete =>
       _next == _unit.paragraph.content.parts.length && _held == null;
 
-  void hold(_HeldFloatText text) {
+  void hold(_HeldFloatLine line) {
     if (_held != null) throw StateError('Float line is already held');
-    _held = text;
+    _held = line;
   }
 
   /// Returns whether this work is waiting for shared native cache capacity.
@@ -115,12 +135,13 @@ final class _FloatFlowAdmission {
         _layout = null;
         _inputs = null;
       case ForumBodyInlineFlowText()
-          when text!.projection.text.isEmpty && prefix == null:
+          when text!.projection.text.isEmpty && _held == null:
         break;
       case ForumBodyInlineFlowText()
-          when beforeFloat ||
-              following == null ||
-              following is ForumBodyInlineFlowClear:
+          when _held is! _HeldFloatInline &&
+              (beforeFloat ||
+                  following == null ||
+                  following is ForumBodyInlineFlowClear):
         final terminalRow =
             _unit.paragraph.window ==
             ForumBodyParagraphWindow.terminalEmptyLine;
@@ -151,40 +172,36 @@ final class _FloatFlowAdmission {
             content.parts[end] is! ForumBodyInlineFlowExclusion) {
           end++;
         }
-        if (end < content.parts.length &&
-            content.parts[end] is ForumBodyInlineFlowFloat) {
-          _session._requiresFloatLineLayout();
-        }
+        final held = _held;
         final pending = _heldPrefix();
         _held = null;
-        _session._floatInline = _FloatInlineAdmission(
-          _session,
-          ForumBodyInlineFlowContent(
-            identity: content.identity,
-            path: content.path,
-            fontRevision: content.fontRevision,
-            styleRevision: content.styleRevision,
-            style: content.style,
-            layoutMode: content.layoutMode,
-            appliesFirstLineIndent:
-                pending?.appliesFirstLineIndent ??
-                (content.appliesFirstLineIndent && !_startedText && !_cleared),
-            trimCollapsibleEdges: content.trimCollapsibleEdges,
-            parts: [
-              if (pending != null && pending.projection.text.isNotEmpty)
-                ForumBodyInlineFlowText(pending),
-              ...content.parts.getRange(_next, end),
-            ],
-            ignored: content.ignored,
-            issues: content.issues,
-          ),
+        final inline =
+            held is _HeldFloatInline &&
+                held.window != ForumBodyParagraphWindow.terminalEmptyLine
+            ? held
+            : null;
+        _startInline(
+          [
+            if (pending != null && pending.projection.text.isNotEmpty)
+              ForumBodyInlineFlowText(pending),
+            ...content.parts.getRange(_next, end),
+          ],
           end == content.parts.length
               ? _unit.paragraph.window
               : ForumBodyParagraphWindow.full,
-          left: _unit.contentLeft,
-          width: _unit.contentWidth,
+          prefix: inline,
+          appliesFirstLineIndent:
+              pending?.appliesFirstLineIndent ??
+              (inline != null
+                  ? inline.engineCut == null &&
+                        inline.source.content.appliesFirstLineIndent
+                  : content.appliesFirstLineIndent &&
+                        !_startedText &&
+                        !_cleared),
+          holdLastLine:
+              end < content.parts.length &&
+              content.parts[end] is ForumBodyInlineFlowFloat,
         );
-        _startedText = true;
         _next = end;
         return false;
     }
@@ -194,7 +211,7 @@ final class _FloatFlowAdmission {
 
   ForumBodyParagraphContent? _heldPrefix() {
     final held = _held;
-    if (held == null) return null;
+    if (held is! _HeldFloatText) return null;
     if (held.window != ForumBodyParagraphWindow.terminalEmptyLine) {
       return held.content;
     }
@@ -209,10 +226,55 @@ final class _FloatFlowAdmission {
   void _flushHeld() {
     final held = _held!;
     _held = null;
-    _startText(
-      trimForumBodyInlineText(held.content, leading: false, trailing: true),
-      held.window,
+    switch (held) {
+      case _HeldFloatText():
+        _startText(
+          trimForumBodyInlineText(held.content, leading: false, trailing: true),
+          held.window,
+        );
+      case _HeldFloatInline():
+        _startInline(
+          const [],
+          held.window,
+          prefix: held,
+          appliesFirstLineIndent:
+              held.engineCut == null &&
+              held.window != ForumBodyParagraphWindow.terminalEmptyLine &&
+              held.source.content.appliesFirstLineIndent,
+        );
+    }
+  }
+
+  void _startInline(
+    List<ForumBodyInlineFlowPart> parts,
+    ForumBodyParagraphWindow window, {
+    required _HeldFloatInline? prefix,
+    required bool appliesFirstLineIndent,
+    bool holdLastLine = false,
+  }) {
+    final content = _unit.paragraph.content;
+    _session._floatInline = _FloatInlineAdmission(
+      _session,
+      ForumBodyInlineFlowContent(
+        identity: content.identity,
+        path: content.path,
+        fontRevision: content.fontRevision,
+        styleRevision: content.styleRevision,
+        style: content.style,
+        layoutMode: content.layoutMode,
+        appliesFirstLineIndent: appliesFirstLineIndent,
+        trimCollapsibleEdges: content.trimCollapsibleEdges,
+        parts: parts,
+        ignored: content.ignored,
+        issues: content.issues,
+      ),
+      window,
+      left: _unit.contentLeft,
+      width: _unit.contentWidth,
+      prefix: prefix,
+      holdLastLine: holdLastLine,
     );
+    _startedText = true;
   }
 
   void _startText(
@@ -237,5 +299,6 @@ final class _FloatFlowAdmission {
     _layout?.close();
     _layout = null;
     _inputs = null;
+    _held = null;
   }
 }

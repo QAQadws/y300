@@ -613,30 +613,112 @@ void main() {
     },
   );
 
+  test('ruby on both sides of an encountered float shares one native row', () {
+    final session = _open(
+      '<ruby><rb>A</rb><rb>B</rb><rt>a</rt><rt>b</rt></ruby> '
+      '<span style="float:right;width:35px;height:18px">F</span> '
+      '<ruby>C<rt>c</rt></ruby>D',
+      issuedLeases: 24,
+    );
+    _advance(session);
+    final page = session.snapshot.single;
+    expect(page.fragments.map((part) => (part.left, part.top, part.width)), [
+      (65.0, 0.0, 35.0),
+      (0.0, 0.0, 65.0),
+    ]);
+    final delivered = _prepare(session, 0);
+    expect(delivered.last.projection.text, 'AaBb CcD');
+    expect(delivered.last.projection.sourceAtUtf16(0).sourceRune, 0);
+    expect(delivered.last.projection.sourceAtUtf16(1).sourceRune, 2);
+    expect(delivered.last.projection.sourceAtUtf16(5).sourceRune, 7);
+    for (final part in delivered) {
+      part.close();
+    }
+  });
+
+  test('only the pending same-URL image slot moves beside a float', () {
+    final images = <ForumBodyInlineImageInput>[];
+    final session = _open(
+      '${'<img src="same.png" style="display:inline;width:45px">' * 3}'
+      '<span style="float:left;width:40px;height:20px">F</span>'
+      '<img src="same.png" style="display:inline;width:10px">Z',
+      imageInputs: images,
+    );
+    _advance(session);
+    final page = session.snapshot.single;
+    expect(images, hasLength(4));
+    expect(page.fragments.map((part) => part.imagePaths), [
+      [images[0].element.path, images[1].element.path],
+      isEmpty,
+      [images[2].element.path, images[3].element.path],
+    ]);
+    expect(page.fragments[0].top, lessThan(page.fragments[1].top));
+    expect(page.fragments[1].top, page.fragments[2].top);
+    expect(page.fragments[2].left, 40);
+    final delivered = _prepare(session, 0);
+    final pending = delivered.last as ForumBodyPreparedInlineFragment;
+    expect(pending.projection.text, 'Z');
+    expect(pending.view.images.values.map((image) => image.input.source), [
+      images[2].source,
+      images[3].source,
+    ]);
+    for (final part in delivered) {
+      part.close();
+    }
+  });
+
+  test('a too-tall float leaves its held ruby on the stable prior page', () {
+    final session = _open(
+      '<p>lead</p><ruby>A<rt>a</rt></ruby>'
+      '<span style="float:left;width:40px;height:35px">F</span>Z',
+      height: 40,
+    );
+    _advance(session, untilPages: 1);
+    final prefix = session.snapshot;
+    _advance(session);
+    expect(session.snapshot, hasLength(2));
+    expect(session.snapshot.first, same(prefix.single));
+    final before = _prepare(session, 0);
+    final after = _prepare(session, 1);
+    expect(before.map((part) => part.projection.text), ['lead', 'Aa']);
+    expect(after.map((part) => part.projection.text), ['F', 'Z']);
+    for (final part in [...before, ...after]) {
+      part.close();
+    }
+  });
+
   test(
-    'a failure in unresolved float lines leaves the stable prefix readable',
+    'the held image reserves its page slot before a float with an image',
     () {
+      final images = <ForumBodyInlineImageInput>[];
       final session = _open(
-        '<p>lead</p>preceding<ruby>甲<rt>a</rt></ruby><span style="float:left">AA</span>alongside',
-        height: 10,
+        '<img src="same.png" style="display:inline;width:15px">'
+        '<span style="float:left;width:30px">'
+        '<img src="same.png" style="display:inline;width:15px"></span>Z',
+        imageInputs: images,
+        pageImages: 1,
       );
-      _advance(session, untilPages: 1);
-      final prefix = session.snapshot;
-      expect(
-        () => _advance(session),
-        throwsA(
-          isA<ForumBodyTextPageSessionException>().having(
-            (error) => error.failure,
-            'failure',
-            ForumBodyTextPageSessionFailure.floatLineLayout,
-          ),
-        ),
-      );
-      expect(session.state, ForumBodyTextPageSessionState.failed);
-      expect(session.snapshot.single, same(prefix.single));
-      final delivered = _prepare(session, 0).single;
-      expect(delivered.projection.text, 'lead');
-      delivered.close();
+      _advance(session);
+      expect(images, hasLength(2));
+      expect(session.snapshot, hasLength(2));
+      expect(session.snapshot.first.fragments.single.imagePaths, [
+        images[0].element.path,
+      ]);
+      expect(session.snapshot.last.fragments.first.imagePaths, [
+        images[1].element.path,
+      ]);
+      for (final (index, page) in session.snapshot.indexed) {
+      expect(page.fragments.expand((part) => part.imagePaths), hasLength(1));
+        final delivered = _prepare(session, index);
+        final image = delivered.first as ForumBodyPreparedInlineFragment;
+        expect(
+          image.view.images.values.single.input.source,
+          same(images[index].source),
+        );
+        for (final part in delivered) {
+          part.close();
+        }
+      }
     },
   );
 }

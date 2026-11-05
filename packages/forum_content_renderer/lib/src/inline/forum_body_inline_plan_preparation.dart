@@ -79,6 +79,8 @@ final class ForumBodyInlinePlanPreparation {
     required ForumBodyParagraphCache cache,
     required TextScaler textScaler,
     required void Function() ensureOwner,
+    ForumBodyInlinePlanInput? prefix,
+    bool keepTrailingSpace = false,
     void Function(ForumBodyInlinePlanInput)? validateInput,
     Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
   }) : _cache = cache,
@@ -90,6 +92,8 @@ final class ForumBodyInlinePlanPreparation {
       input: input,
       width: width,
       ensureOwner: _guard,
+      prefix: prefix,
+      keepTrailingSpace: keepTrailingSpace,
     );
   }
 

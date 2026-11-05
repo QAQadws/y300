@@ -55,6 +55,8 @@ final class ForumBodyInlinePlanInput {
     Map<ForumBodyRubyGroupContent, ForumBodyRubyGlyphTreeInput> emphasisTrees =
         const {},
     bool groupMixedWords = true,
+    ForumBodyInlinePlanInput? prefix,
+    bool keepTrailingSpace = false,
   }) {
     if (input.layoutMode == ForumBodyParagraphLayoutMode.fitSingleLine) {
       _unsupported(input.path);
@@ -65,8 +67,13 @@ final class ForumBodyInlinePlanInput {
     final atoms = <({int startUtf16, int endUtf16})>[];
     Set<int>? softSpaceAtoms;
     Map<int, ForumBodyInlineImageInput>? images;
+    Map<String, ForumBodyInlineImageInput>? sourceImages;
     final levelIds = <int>[];
     final roots = <String, int>{};
+    final firstNewLevel =
+        1 +
+        (prefix?.rubyLevelIds.fold<int>(-1, (max, id) => id > max ? id : max) ??
+            -1);
     var offset = 0;
     var previousCollapsibleSpace = false;
     var atLineStart = input.trimCollapsibleEdges;
@@ -349,6 +356,67 @@ final class ForumBodyInlinePlanInput {
       }
     }
 
+    if (prefix != null) {
+      final parent = prefix.content;
+      if (parent.identity != input.identity ||
+          parent.path != input.path ||
+          parent.fontRevision != input.fontRevision ||
+          parent.styleRevision != input.styleRevision ||
+          prefix.layoutMode != input.layoutMode ||
+          prefix.width != width) {
+        throw ForumBodyParagraphInputException(
+          ForumBodyParagraphInputFailure.identity,
+          input.path,
+        );
+      }
+      final indices = Map<ForumBodyParagraphContent, int>.identity();
+      for (final context in parent.contexts) {
+        indices[context.content] = append(context.content);
+      }
+      sourceOrder.addAll(
+        prefix.sourceContexts.map((context) => indices[context]!),
+      );
+      final projection = parent.projectionForLayout(prefix.layoutMode);
+      for (final atom in projection.atoms) {
+        atoms.add((
+          startUtf16: atom.displayStartUtf16,
+          endUtf16: atom.displayEndUtf16,
+        ));
+        final request = prefix.atoms[atom.index];
+        requestsByAtom.add(request);
+        if (request is ForumBodyInlineImageAtomRequest) {
+          (images ??= {})[atom.index] =
+              prefix.sourceImages[request.input.element.path] ?? request.input;
+        }
+        if (atom.isSoftSpace) (softSpaceAtoms ??= {}).add(atom.index);
+        levelIds.add(prefix.rubyLevelIds[atom.index]);
+      }
+      if (prefix.sourceImages.isNotEmpty) {
+        sourceImages = Map.of(prefix.sourceImages);
+      }
+      // Only ordinary text after the final atom participates in the seam's
+      // whitespace collapse. A resource at the same fence is still an atom.
+      final lastAtomEnd = projection.atoms.lastOrNull?.displayEndUtf16 ?? 0;
+      for (final (index, context) in parent.contexts.indexed) {
+        if (context.startUtf16 >= lastAtomEnd &&
+            context.startUtf16 < context.endUtf16) {
+          lastPlain = index;
+        }
+      }
+      if (lastPlain case final index?) {
+        final plain = contexts[index];
+        previousCollapsibleSpace = forumBodyInlineHasCollapsibleEdge(
+          plain,
+          leading: false,
+        );
+        atLineStart = forumBodyIsDisplayLineBreak(
+          plain.projection.text.codeUnitAt(plain.projection.text.length - 1),
+        );
+      } else if (atoms.isNotEmpty || offset != 0) {
+        atLineStart = false;
+      }
+    }
+
     for (final part in input.parts) {
       switch (part) {
         case ForumBodyInlineFlowExclusion():
@@ -361,6 +429,7 @@ final class ForumBodyInlinePlanInput {
             );
           }
           (images ??= {})[atoms.length] = image;
+          (sourceImages ??= {})[image.element.path] = image;
           atoms.add((startUtf16: offset, endUtf16: offset));
           requestsByAtom.add(ForumBodyInlineImageAtomRequest(image));
           levelIds.add(-1);
@@ -372,7 +441,10 @@ final class ForumBodyInlinePlanInput {
         case ForumBodyInlineFlowRuby():
           final group = part.group;
           if (!group.style.baselineShift.isEmpty) _unsupported(group.rootPath);
-          final levelId = roots.putIfAbsent(group.rootPath, () => roots.length);
+          final levelId = roots.putIfAbsent(
+            group.rootPath,
+            () => firstNewLevel + roots.length,
+          );
           if (group.identity != input.identity ||
               group.fontRevision != input.fontRevision ||
               group.styleRevision != input.styleRevision) {
@@ -797,7 +869,7 @@ final class ForumBodyInlinePlanInput {
     }
     // Empty trailing source contexts must not keep a previous collapsed space
     // alive. Only a final ordinary context is eligible; atomic children are not.
-    if (input.trimCollapsibleEdges) trimTrailingPlain();
+    if (input.trimCollapsibleEdges && !keepTrailingSpace) trimTrailingPlain();
     const maxParentContexts = 512;
     if (groupMixedWords && contexts.length > maxParentContexts) {
       // Word boxes add source windows. Keep the existing input limit and the
@@ -808,6 +880,8 @@ final class ForumBodyInlinePlanInput {
         trees: trees,
         emphasisTrees: emphasisTrees,
         groupMixedWords: false,
+        prefix: prefix,
+        keepTrailingSpace: keepTrailingSpace,
       );
     }
     if (images != null) {
@@ -887,13 +961,7 @@ final class ForumBodyInlinePlanInput {
           ),
       content.runs.length +
           requestsByAtom.fold<int>(0, (sum, atom) => sum + atom.extraRuns),
-      images == null
-          ? const {}
-          : Map.unmodifiable({
-              for (final part in input.parts)
-                if (part is ForumBodyInlineFlowImage)
-                  part.input.element.path: part.input,
-            }),
+      sourceImages == null ? const {} : Map.unmodifiable(sourceImages),
     );
   }
 

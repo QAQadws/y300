@@ -10,12 +10,16 @@ final class _FloatInlineAdmission {
     this._window, {
     required this.left,
     required this.width,
-  });
+    _HeldFloatInline? prefix,
+    this.holdLastLine = false,
+  }) : _prefix = prefix;
 
   final ForumBodyTextPageSession _session;
   ForumBodyInlineFlowContent? _flow;
   ForumBodyParagraphWindow _window;
   final double left, width;
+  final bool holdLastLine;
+  _HeldFloatInline? _prefix;
   ForumBodyInlinePlanInput? _source;
   int? _engineCut;
   ForumBodyFloatLineBand? _band;
@@ -25,6 +29,7 @@ final class _FloatInlineAdmission {
   ForumBodyInlineNativeEntriesPreparation? _entries;
   int? _inputIndex;
   bool isComplete = false;
+  _HeldFloatInline? held;
 
   ({bool waiting, int lines}) advance({
     required int maxLines,
@@ -46,6 +51,11 @@ final class _FloatInlineAdmission {
         try {
           final plan = _plan ??= ForumBodyInlinePageAdmission(
             input: _flow,
+            prefix: _prefix?.source.remainingAt(
+              width: band.width,
+              engineEndUtf16: _prefix?.engineCut,
+            ),
+            keepTrailingSpace: holdLastLine,
             continuation: _source?.remainingAt(
               width: band.width,
               engineEndUtf16: _engineCut,
@@ -61,7 +71,9 @@ final class _FloatInlineAdmission {
             return (waiting: step.waitingForLayoutBudget, lines: 0);
           }
           _source = plan.readySource;
+          _engineCut = null;
           _flow = null;
+          _prefix = null;
           final ready = _ready = plan.take();
           _plan = null;
           if (!identical(_source!.content, ready.content.content)) {
@@ -115,29 +127,39 @@ final class _FloatInlineAdmission {
     final step = composer.advance(
       maxLines: maxLines,
       floatBandBottom: reduced ? band.bottom : null,
+      holdFloatLineInset: holdLastLine
+          ? _source!.content.horizontalInset
+          : null,
     );
     if (step.paragraphCompleted) {
       isComplete = true;
-    } else if (reduced) {
+    } else if (reduced || holdLastLine) {
       final sealed = step.pagesPublished != 0;
       final end = composer.retireFloatTextBand(
         bottom: band.bottom,
-        pageSealed: sealed,
+        pageSealed: reduced && sealed,
       );
       if (end != null) {
-        _engineCut = end.engineEndUtf16;
-        if (_engineCut == null) {
+        final cut = end.engineEndUtf16;
+        if (cut == null) {
           _session._content.retain(_inputIndex!);
-        } else if (_engineCut ==
+        } else if (cut ==
             _source!.content
                 .projectionForLayout(_source!.layoutMode)
                 .engineText
                 .length) {
           _engineCut = null;
           _window = ForumBodyParagraphWindow.terminalEmptyLine;
+        } else {
+          _engineCut = cut;
         }
         _inputIndex = null;
         _band = null;
+        if (end.heldLine case final line?) {
+          _session._margin = line.spaceBefore;
+          held = _HeldFloatInline(_source!, _engineCut, _window, line);
+          isComplete = true;
+        }
         if (end.blocked && !sealed) _skipBand(band);
       }
     }

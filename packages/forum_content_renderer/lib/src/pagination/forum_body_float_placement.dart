@@ -14,6 +14,7 @@ typedef ForumBodyPendingFloatLine = ({
   int handles,
   int entries,
   int bytes,
+  int images,
 });
 
 extension ForumBodyFloatPlacement on ForumBodyTextPageComposer {
@@ -127,7 +128,8 @@ extension ForumBodyFloatPlacement on ForumBodyTextPageComposer {
             limit) {
       return retry(ForumBodyTextPageFailure.nativeByteLimit);
     }
-    if (maxImagesPerPage case final limit? when _usedImages + images > limit) {
+    if (maxImagesPerPage case final limit?
+        when _usedImages + images + (precedingLine?.images ?? 0) > limit) {
       return retry(ForumBodyTextPageFailure.imageLimit);
     }
 

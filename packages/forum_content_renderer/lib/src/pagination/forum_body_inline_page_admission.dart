@@ -26,6 +26,8 @@ final class ForumBodyInlinePageAdmission {
   ForumBodyInlinePageAdmission({
     ForumBodyInlineFlowContent? input,
     ForumBodyInlinePlanInput? continuation,
+    ForumBodyInlinePlanInput? prefix,
+    bool keepTrailingSpace = false,
     required double width,
     required ForumBodyParagraphCache cache,
     required TextScaler textScaler,
@@ -38,7 +40,7 @@ final class ForumBodyInlinePageAdmission {
     try {
       _guard();
       if (continuation != null) {
-        if (input != null || continuation.width != width) {
+        if (input != null || prefix != null || continuation.width != width) {
           throw ArgumentError(
             'Inline continuation belongs to a different input',
           );
@@ -54,6 +56,8 @@ final class ForumBodyInlinePageAdmission {
         if (input == null) throw ArgumentError.notNull('input');
         _initial = ForumBodyInlinePlanPreparation.fromFlow(
           input: input,
+          prefix: prefix,
+          keepTrailingSpace: keepTrailingSpace,
           width: width,
           cache: cache,
           textScaler: textScaler,
