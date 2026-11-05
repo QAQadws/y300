@@ -835,22 +835,31 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
           identical(old.authority, config.readingAuthorityIdentity) &&
           identical(old.owner, config.owner) &&
           old.handle.isCurrent) {
-        old.epoch = epoch;
-        // A matching paragraph signature can carry a newer canvas color.
-        // Keep the session/views, but publish the accepted immutable inputs.
-        old.scope = scope;
-        old.reverse =
-            config.preferences.flowMode == NovelReaderFlowMode.pagedRtl;
-        old.controller.resume();
-        setState(() {
-          _busy = false;
-          _empty = false;
-        });
-        _pending = null;
-        token.cancel();
-        _notifyStatus();
-        _scheduleNavigation();
-        return;
+        // A reused Session still delivers its original catalog objects. Only
+        // update the canvas; replacing that catalog breaks resource ownership.
+        final reused = old.scope.tryUpdateCanvas(
+          environment: environment,
+          width: box.width,
+          height: box.height,
+          fontCollectionGeneration: handle.fontGeneration,
+          isCurrent: current,
+        );
+        if (reused != null) {
+          old.epoch = epoch;
+          old.scope = reused;
+          old.reverse =
+              config.preferences.flowMode == NovelReaderFlowMode.pagedRtl;
+          old.controller.resume();
+          setState(() {
+            _busy = false;
+            _empty = false;
+          });
+          _pending = null;
+          token.cancel();
+          _notifyStatus();
+          _scheduleNavigation();
+          return;
+        }
       }
       var position = config.progressSnapshot;
       var hint = config.conversionAnchor;

@@ -531,4 +531,41 @@ void main() {
       expect(reader.owner.activeCacheHandles, 0);
     },
   );
+
+  testWidgets(
+    'reused image Session still accepts resolved dimensions after resume',
+    (tester) async {
+      final reader = _Reader();
+      await tester.pumpWidget(reader.widget());
+      await _until(tester, () => reader.positions.isNotEmpty);
+      final original = reader.controller;
+      await tester.pumpWidget(reader.widget(active: false));
+      await tester.pump();
+      await tester.pumpWidget(reader.widget());
+      await _until(
+        tester,
+        () =>
+            reader.statuses.last.phase == NovelReaderNativeHostPhase.reading &&
+            !reader.controller.hasPendingNavigation,
+      );
+      expect(reader.controller, same(original));
+      reader.host.callback(0).resolved?.call(const Size(400, 100));
+      await _until(
+        tester,
+        () =>
+            reader.statuses.last.controller != null &&
+            !identical(reader.controller, original) &&
+            reader.controller.visiblePageIndex != null,
+      );
+      expect(
+        reader.controller.visibleView!.coverage.images.single.rect.height,
+        25,
+      );
+      expect(reader.build.calls, 1);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      expect(reader.owner.activeCacheHandles, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
