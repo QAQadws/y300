@@ -169,6 +169,9 @@ final class ForumBodyTextPageSession {
   static const inlinePlanRevision = ForumBodyInlinePlanInput.revision;
   static const paragraphPlanRevision = 1;
   static const inlineFontFrameRevision = ForumBodyInlineFontFramePlan.revision;
+  // Same numeric ceiling as an individual natural table extent. The native
+  // text slice height is a work boundary, not a block image fitting limit.
+  static const _maxFlowImageHeight = 1048576.0;
   factory ForumBodyTextPageSession({
     required ForumBodyDocument document,
     required ForumBodyReaderStyle reader,
@@ -222,6 +225,7 @@ final class ForumBodyTextPageSession {
       height: height,
       maxPages: limits.maxPages,
       maxFragments: limits.maxFragments,
+      flowing: tableExtent == ForumBodyTableExtent.natural,
       maxNativeHandlesPerPage: maxNativeHandlesPerPage,
       maxNativeEntriesPerPage: maxNativeEntriesPerPage,
       maxNativeEstimatedBytesPerPage: maxNativeEstimatedBytesPerPage,
@@ -1074,7 +1078,9 @@ final class ForumBodyTextPageSession {
     final frame = ForumBodyImageFrame.resolve(
       input: input,
       width: unit.contentWidth,
-      maxHeight: _composer.height,
+      maxHeight: _tableExtent == ForumBodyTableExtent.natural
+          ? _maxFlowImageHeight
+          : _composer.height,
       maxImageWidth: _tableBody ? imageWidth : null,
       align: style.textAlign,
       direction: style.textDirection,

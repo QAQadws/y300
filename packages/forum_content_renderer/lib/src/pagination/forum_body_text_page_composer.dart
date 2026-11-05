@@ -242,12 +242,13 @@ final class ForumBodyTextPageComposer {
     required this.height,
     required this.maxPages,
     required this.maxFragments,
+    bool flowing = false,
     this.maxNativeHandlesPerPage,
     this.maxNativeEntriesPerPage,
     this.maxNativeEstimatedBytesPerPage,
     this.maxDeliveriesPerPage,
     this.maxImagesPerPage,
-  }) {
+  }) : _flowing = flowing {
     if (layoutId.isEmpty ||
         !width.isFinite ||
         width <= 0 ||
@@ -264,11 +265,12 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 27;
+  static const revision = 28;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;
   final double height;
+  final bool _flowing;
 
   /// Explicit metadata budgets, not measured native/GPU memory.
   final int maxPages;
@@ -357,7 +359,7 @@ final class ForumBodyTextPageComposer {
     _ensureOpen();
     if (!needsInput) throw StateError('Composition input is still pending');
     _backgrounds.close(path, _flowHeight);
-    if (_usedHeight == height && !_backgrounds.needsEndBoundary) _seal();
+    if (_usedHeight >= height && !_backgrounds.needsEndBoundary) _seal();
   }
 
   void _touchBackgrounds(double top) {
@@ -494,7 +496,7 @@ final class ForumBodyTextPageComposer {
     }
     if (!left.isFinite ||
         !spaceBefore.isFinite ||
-        frame.height > height ||
+        (!_flowing && frame.height > height) ||
         left < 0 ||
         left + frame.width > width) {
       throw ArgumentError('Invalid image composition inputs');
@@ -555,9 +557,11 @@ final class ForumBodyTextPageComposer {
           inset;
       if (!bottom.isFinite) _fail(ForumBodyTextPageFailure.invalidGeometry);
       if (bottom > height) {
-        if (atStart) _fail(ForumBodyTextPageFailure.oversizedGroup);
-        _seal();
-        return (pagesPublished: 1, isComplete: false);
+        if (!atStart) {
+          _seal();
+          return (pagesPublished: 1, isComplete: false);
+        }
+        if (!_flowing) _fail(ForumBodyTextPageFailure.oversizedGroup);
       }
       final handles = plan?.preparationHandleCount ?? 0;
       final handleLimit = maxNativeHandlesPerPage;
@@ -630,7 +634,7 @@ final class ForumBodyTextPageComposer {
       _flowHeight = bottom;
       _usedHeight = math.max(_usedHeight, bottom);
       _image = null;
-      if (_usedHeight == height && !_backgrounds.needsEndBoundary) _seal();
+      if (_usedHeight >= height && !_backgrounds.needsEndBoundary) _seal();
       return (pagesPublished: _pages.length - before, isComplete: true);
     } catch (_) {
       close();
@@ -1357,7 +1361,9 @@ final class ForumBodyTextPageComposer {
         _pages.length,
         _draft,
         _rules,
-        _backgrounds.seal(table?.bounds.bottom ?? height),
+        _backgrounds.seal(
+          _flowing ? _usedHeight : table?.bounds.bottom ?? height,
+        ),
         _usedHeight,
         table: table,
       ),

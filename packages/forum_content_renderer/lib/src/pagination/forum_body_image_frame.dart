@@ -53,9 +53,9 @@ final class ForumBodyImageInput {
 }
 
 /// Physical placement only. It contains no text row, glyph or source offset.
-/// A tall block fits proportionally inside one page; the Host retains the
-/// original resource for its image viewer. Unknown dimensions use the explicit
-/// current Host hint and must reflow in a new generation when it changes.
+/// The caller supplies the height limit for its reading mode. The Host retains
+/// the original resource for the viewer. Unknown dimensions use the current
+/// Host hint and reflow in a new generation when it changes.
 final class ForumBodyImageFrame {
   ForumBodyImageFrame._(this.width, this.height, this.imageRect);
   factory ForumBodyImageFrame.resolve({

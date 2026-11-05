@@ -67,6 +67,7 @@ final class _Fixture {
     int? maxNativeHandlesPerPage,
     int? maxNativeEntriesPerPage,
     int? maxNativeEstimatedBytesPerPage,
+    ForumBodyTableExtent extent = ForumBodyTableExtent.bookPage,
   }) {
     final result = ForumBodyTextPageSession(
       document: document,
@@ -84,6 +85,7 @@ final class _Fixture {
       maxNativeHandlesPerPage: maxNativeHandlesPerPage,
       maxNativeEntriesPerPage: maxNativeEntriesPerPage,
       maxNativeEstimatedBytesPerPage: maxNativeEstimatedBytesPerPage,
+      tableExtent: extent,
     );
     addTearDown(result.close);
     return result;
@@ -251,6 +253,89 @@ void main() {
       },
     );
   }
+
+  testWidgets(
+    'flowing image keeps its full block height and releases offscreen',
+    (tester) async {
+      final fixture = _Fixture(
+        '<p>before</p><div style="background-color:#ddeeff">'
+        '<img src="https://x/tall"></div><p>after</p>',
+      );
+      final session = fixture.session(
+        resolver: (identity, node) =>
+            fixture.resolve(identity, node, ratio: .05),
+        extent: ForumBodyTableExtent.natural,
+      );
+      _finish(session, pages: 1);
+      final prefix = session.snapshot;
+      _finish(session);
+      final pages = session.snapshot;
+      expect(prefix, hasLength(1));
+      expect(pages, hasLength(3));
+      expect(pages.first, same(prefix.first));
+      final imagePage = pages[1];
+      final image = imagePage.fragments.single;
+      expect(image.imageFrame!.imageRect, const Rect.fromLTWH(0, 0, 100, 2000));
+      expect(image.sourceHint, isNull);
+      expect(imagePage.usedHeight, 2000);
+      expect(imagePage.backgrounds.single.height, 2000);
+      expect(pages.last.fragments.single.paragraphIndex, 2);
+
+      final host = _Host();
+      final controller = ScrollController();
+      addTearDown(controller.dispose);
+      final errors = <Object>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 100,
+              height: 80,
+              child: CustomScrollView(
+                controller: controller,
+                slivers: [
+                  ForumBodyFlowSliver(
+                    session: session,
+                    prefix: pages,
+                    onFailure: (error, _) => errors.add(error),
+                    buildSlice: (_, snapshot, index, fragments) =>
+                        ForumBodyTextPageSurface.prepared(
+                          snapshot: snapshot,
+                          pageIndex: index,
+                          layoutId: snapshot.layoutId,
+                          fragments: fragments,
+                          compactHeight: true,
+                          imageHost: host,
+                        ),
+                  ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 80)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final view = find.byType(ForumHtmlImageView);
+      expect(view, findsOneWidget);
+      expect(tester.getSize(view), const Size(100, 2000));
+      final extent = pages.fold<double>(
+        0,
+        (sum, page) => sum + page.usedHeight,
+      );
+      expect(controller.position.maxScrollExtent, extent);
+      controller.jumpTo(1000);
+      await tester.pumpAndSettle();
+      expect(view, findsOneWidget);
+      controller.jumpTo(pages.first.usedHeight + imagePage.usedHeight);
+      await tester.pumpAndSettle();
+      expect(view, findsNothing);
+      expect(session.activeIssuedImages, 0);
+      expect(errors, isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   test(
     'new dimensions create another layout, old published geometry stays fixed',
