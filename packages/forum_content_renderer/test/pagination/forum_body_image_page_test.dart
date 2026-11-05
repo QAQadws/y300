@@ -419,6 +419,7 @@ void main() {
       final host = _Host();
       final image = images.single as ForumBodyPreparedImageFragment;
       final resolvedLayouts = <ForumHtmlImageLayout>[];
+      final taps = <ForumBodyPreparedImageFragment>[];
       expect(s.activeIssuedFragments, 1);
       expect(s.activeIssuedLeases, 0);
       expect(image.hasRenderedImage, isFalse);
@@ -441,6 +442,7 @@ void main() {
               layoutId: s.snapshot.layoutId,
               fragments: images,
               imageHost: host,
+              onImageTap: taps.add,
               onImageLayoutResolved: (binding, layout) {
                 expect(binding, same(image));
                 resolvedLayouts.add(layout);
@@ -456,6 +458,23 @@ void main() {
         const Size(10, 100),
       );
       expect(host.fit, BoxFit.contain);
+      await tester.tapAt(
+        tester.getTopLeft(find.byType(ForumBodyTextPageSurface)) +
+            const Offset(50, 50),
+      );
+      expect(taps, isEmpty);
+      await tester.tap(find.byType(ForumHtmlImageView));
+      expect(taps.single, same(image));
+      final retiredTap = tester
+          .widget<GestureDetector>(
+            find
+                .ancestor(
+                  of: find.byType(ForumHtmlImageView),
+                  matching: find.byType(GestureDetector),
+                )
+                .first,
+          )
+          .onTap!;
       host.reportSize!(const Size(400, 100));
       expect(resolvedLayouts.single.aspectRatio, 4);
       expect(image.hasRenderedImage, isFalse);
@@ -475,6 +494,8 @@ void main() {
       expect(images.single.isActive, isFalse);
       expect(image.hasRenderedImage, isFalse);
       expect(s.activeIssuedFragments, 0);
+      retiredTap();
+      expect(taps, hasLength(1));
       expect(tester.takeException(), isNull);
     },
   );

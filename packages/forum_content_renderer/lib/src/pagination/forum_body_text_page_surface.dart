@@ -78,6 +78,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     void Function(ForumBodyPreparedImageFragment, bool)? onImageDisplayChanged,
     void Function(ForumBodyPreparedImageFragment, ForumHtmlImageLayout)?
     onImageLayoutResolved,
+    ValueChanged<ForumBodyPreparedImageFragment>? onImageTap,
     void Function(ForumBodyTextPageFragment, HtmlProjectedSourcePosition)?
     onSourceTap,
     void Function(ForumBodyTextPageFragment, ForumBodyTextSelectionSnapshot)?
@@ -125,6 +126,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
       Map.unmodifiable(images),
       onImageDisplayChanged,
       onImageLayoutResolved,
+      onImageTap,
     );
   }
 
@@ -141,6 +143,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     this._images,
     this._onImageDisplayChanged,
     this._onImageLayoutResolved,
+    this._onImageTap,
   ) : super(key: key);
   final ForumBodyTextPage _page;
   final String _layoutId;
@@ -160,6 +163,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
   _onImageDisplayChanged;
   final void Function(ForumBodyPreparedImageFragment, ForumHtmlImageLayout)?
   _onImageLayoutResolved;
+  final ValueChanged<ForumBodyPreparedImageFragment>? _onImageTap;
 
   static Never _fail(ForumBodyTextPageSurfaceFailure failure) =>
       throw ForumBodyTextPageSurfaceException(failure);
@@ -209,6 +213,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
         image: _images[binding]!,
         onDisplayChanged: _onImageDisplayChanged,
         onLayoutResolved: _onImageLayoutResolved,
+        onTap: _onImageTap,
       ),
       ForumBodyPreparedListItemFragment() => throw StateError(
         'Nested list delivery',
@@ -328,6 +333,7 @@ final class _ImageFragmentSurface extends StatefulWidget {
     required this.image,
     this.onDisplayChanged,
     this.onLayoutResolved,
+    this.onTap,
   });
   final ForumBodyPreparedImageFragment binding;
   final ForumHtmlImageHost host;
@@ -335,6 +341,7 @@ final class _ImageFragmentSurface extends StatefulWidget {
   final void Function(ForumBodyPreparedImageFragment, bool)? onDisplayChanged;
   final void Function(ForumBodyPreparedImageFragment, ForumHtmlImageLayout)?
   onLayoutResolved;
+  final ValueChanged<ForumBodyPreparedImageFragment>? onTap;
   @override
   State<_ImageFragmentSurface> createState() => _ImageFragmentSurfaceState();
 }
@@ -352,19 +359,34 @@ final class _ImageFragmentSurfaceState extends State<_ImageFragmentSurface> {
       children: [
         Positioned.fromRect(
           rect: widget.binding.content.frame.imageRect,
-          child: ForumHtmlImageView(
-            host: widget.host,
-            image: widget.image,
-            fit: BoxFit.contain,
-            onImageLayoutResolved: (layout) {
-              if (!mounted || !widget.binding.isActive) return;
-              widget.onLayoutResolved?.call(widget.binding, layout);
-            },
-            onImageDisplayChanged: (ready) {
-              if (!mounted || !widget.binding.isActive) return;
-              widget.binding.reportDisplayFrame(ready);
-              widget.onDisplayChanged?.call(widget.binding, ready);
-            },
+          child: Semantics(
+            image: true,
+            label:
+                widget.binding.content.input.entry.alt ??
+                widget.binding.content.input.entry.title,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: widget.onTap == null
+                  ? null
+                  : () {
+                      if (!mounted || !widget.binding.isActive) return;
+                      widget.onTap?.call(widget.binding);
+                    },
+              child: ForumHtmlImageView(
+                host: widget.host,
+                image: widget.image,
+                fit: BoxFit.contain,
+                onImageLayoutResolved: (layout) {
+                  if (!mounted || !widget.binding.isActive) return;
+                  widget.onLayoutResolved?.call(widget.binding, layout);
+                },
+                onImageDisplayChanged: (ready) {
+                  if (!mounted || !widget.binding.isActive) return;
+                  widget.binding.reportDisplayFrame(ready);
+                  widget.onDisplayChanged?.call(widget.binding, ready);
+                },
+              ),
+            ),
           ),
         ),
       ],
