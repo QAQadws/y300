@@ -275,6 +275,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
   bool _surfaceResumed = true;
   int _transitionRequestSerial = 0;
   int _readingRefreshSerial = 0;
+  int _bookmarkReadSerial = 0;
   int _preferenceCommitSerial = 0;
   int _preferenceWritesInFlight = 0;
   int _fontPreviewSerial = 0;
@@ -1170,15 +1171,18 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     final hydrationService = ref.read(
       novelReaderSupplementalHydrationServiceProvider,
     );
+    final bookmarkRead = ++_bookmarkReadSerial;
     try {
       final bookmarks = await hydrationService.loadBookmarks(
         novelId: context.novelId,
       );
-      _mergeSupplementalBookmarks(
-        sessionToken: sessionToken,
-        episodeId: critical.currentEpisode.episodeId,
-        bookmarks: bookmarks,
-      );
+      if (bookmarkRead == _bookmarkReadSerial) {
+        _mergeSupplementalBookmarks(
+          sessionToken: sessionToken,
+          episodeId: critical.currentEpisode.episodeId,
+          bookmarks: bookmarks,
+        );
+      }
     } catch (_) {}
     if (!_isSupplementalRequestCurrent(
       sessionToken: sessionToken,
@@ -1945,13 +1949,19 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
   }
 
   Future<void> _reloadBookmarks(NovelRepository repository) async {
-    final current = state.value;
-    if (current == null) {
-      return;
-    }
+    if (!ref.mounted || state.asData == null) return;
+    final session = _activeSessionToken;
+    final read = ++_bookmarkReadSerial;
     final bookmarks = await repository.listReaderBookmarks(
       novelId: _args.novelId,
     );
+    if (!ref.mounted ||
+        session != _activeSessionToken ||
+        read != _bookmarkReadSerial) {
+      return;
+    }
+    final current = state.asData?.value;
+    if (current == null) return;
     state = AsyncData(
       current.copyWith(
         bookmarks: bookmarks,

@@ -2746,6 +2746,39 @@ void main() {
     expect(state.currentEpisodeBookmarks.length, 1);
   });
 
+  test('delayed initial hydration cannot undo a saved bookmark', () async {
+    final repository = _ControllerNovelRepository();
+    final hydration = _ControlledNovelReaderSupplementalHydrationService();
+    final container = _buildContainer(
+      repository: repository,
+      supplementalHydrationService: hydration,
+    );
+    addTearDown(container.dispose);
+    const args = NovelReaderArgs(
+      novelId: 'novel:49:100',
+      episodeId: 'novel:49:100:5001',
+    );
+    final provider = novelReaderControllerProvider(args);
+    addTearDown(_keepReaderAlive(container, args).close);
+
+    await container.read(provider.future);
+    await Future<void>.delayed(Duration.zero);
+    await container
+        .read(provider.notifier)
+        .addBookmarkAtCurrentPosition(
+          const NovelReaderTextAnchor(episodeId: 'novel:49:100:5001'),
+        );
+    final saved = repository.bookmarks.single;
+    hydration.completeInitialBookmarks([]);
+    hydration.completeInitialNovel(_supplementalNovel());
+    await Future<void>.delayed(Duration.zero);
+
+    final current = container.read(provider).requireValue;
+    expect(current.bookmarks, [saved]);
+    expect(current.currentEpisodeBookmarks, [saved]);
+    expect(current.isHydratingSupplemental, isFalse);
+  });
+
   test(
     'bookmark snippets use exact rune coordinates and preserve whole graphemes',
     () async {
