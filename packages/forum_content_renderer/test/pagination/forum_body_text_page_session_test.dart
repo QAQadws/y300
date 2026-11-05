@@ -42,6 +42,7 @@ final class _Fixture {
     TextScaler textScaler = TextScaler.noScaling,
     String id = 'generation-1',
     ForumBodyRubyContentLimits rubyLimits = const ForumBodyRubyContentLimits(),
+    ForumBodyTableExtent tableExtent = ForumBodyTableExtent.bookPage,
   }) {
     final session = ForumBodyTextPageSession(
       document: document,
@@ -57,6 +58,7 @@ final class _Fixture {
       height: height,
       textScaler: textScaler,
       rubyLimits: rubyLimits,
+      tableExtent: tableExtent,
     );
     addTearDown(session.close);
     return session;
@@ -88,6 +90,57 @@ Matcher _failure(ForumBodyTextPageSessionFailure failure) => throwsA(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  for (final extent in ForumBodyTableExtent.values) {
+    test('attachment lists and notices survive ${extent.name} flow', () {
+      final fixture = _Fixture('''
+        <p>前文</p><div class="pattl"><ignore_js_op><dl class="tattl">
+          <dt></dt><dd><p><a href="forum.php?mod=attachment&amp;aid=1"
+            onclick="download()">01.png</a> <em>(3.46 MB, 下载次数: 2)</em></p>
+          <div class="tip" style="display:none">保存到相册</div></dd>
+        </dl></ignore_js_op></div>
+        <div class="locked">请登录后查看附件</div>
+        <div class="showhide">此处内容需要回复</div>
+        <script>download()</script><p>后文</p>
+        ''');
+      final session = fixture.session(
+        width: 400,
+        height: 30,
+        tableExtent: extent,
+      );
+      _advance(session);
+      expect(session.snapshot.length, greaterThan(1));
+      final visible = <String>[];
+      for (final page in session.snapshot) {
+        final preparation = session.openPagePreparation(page.index);
+        try {
+          while (!preparation.isReady) {
+            preparation.advance(maxFragments: 8);
+          }
+          final fragments = preparation.takeFragments();
+          try {
+            visible.addAll(
+              fragments.map((fragment) => fragment.projection.text),
+            );
+          } finally {
+            for (final fragment in fragments) {
+              fragment.close();
+            }
+          }
+        } finally {
+          preparation.close();
+        }
+      }
+      expect(visible, [
+        '前文',
+        '01.png (3.46 MB, 下载次数: 2)',
+        '请登录后查看附件',
+        '此处内容需要回复',
+        '后文',
+      ]);
+      expect(fixture.cache.activeLeases, 0);
+    });
+  }
 
   for (final items in [15, 16]) {
     test(

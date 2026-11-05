@@ -338,6 +338,8 @@ final class ForumBodyBlockFlowCursor {
               ForumBodyElementKind.rule,
               ForumBodyElementKind.editStatus,
               ForumBodyElementKind.code,
+              ForumBodyElementKind.attachment,
+              ForumBodyElementKind.locked,
               ForumBodyElementKind.image,
               ForumBodyElementKind.inline,
               ForumBodyElementKind.unknown,
