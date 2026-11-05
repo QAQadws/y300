@@ -192,6 +192,8 @@ final class ForumBodyTextPageSession {
     double? intrinsicAvailableWidth,
     int? maxImagesPerPage,
     bool dedicatedTables = false,
+    // A flowing host consumes a table's actual occupied height as one slice.
+    ForumBodyTableExtent tableExtent = ForumBodyTableExtent.bookPage,
   }) {
     limits._validate();
     if (intrinsicAvailableWidth != null &&
@@ -228,6 +230,8 @@ final class ForumBodyTextPageSession {
       maxDeliveriesPerPage: maxNativeHandlesPerPage ?? limits.maxIssuedLeases,
       maxImagesPerPage: maxImagesPerPage ?? limits.maxIssuedImages,
     );
+    final composeTables =
+        dedicatedTables || tableExtent == ForumBodyTableExtent.natural;
     try {
       return ForumBodyTextPageSession._(
         ForumBodyBlockFlowCursor(
@@ -239,7 +243,7 @@ final class ForumBodyTextPageSession {
           inlineImageResolver: inlineImageResolver,
           collapses: collapses,
           contentRoot: contentRoot,
-          dedicatedTables: dedicatedTables,
+          dedicatedTables: composeTables,
         ),
         composer,
         cache,
@@ -251,7 +255,8 @@ final class ForumBodyTextPageSession {
         intrinsicAvailableWidth == null
             ? null
             : ForumBodyFlowWidthMeasure(intrinsicAvailableWidth),
-        dedicatedTables
+        tableExtent,
+        composeTables
             ? (table, remaining) => ForumBodyTablePreparation(
                 document: document,
                 table: table.table.element,
@@ -282,6 +287,7 @@ final class ForumBodyTextPageSession {
     this._imageResolver,
     this._tableBody,
     this._intrinsic,
+    this._tableExtent,
     this._openTable,
   ) : _content = _RetainedParagraphs(limits);
   final ForumBodyBlockFlowCursor _flow;
@@ -290,6 +296,7 @@ final class ForumBodyTextPageSession {
   final TextScaler _textScaler;
   final ForumBodyImageResolver? _imageResolver;
   final bool _tableBody;
+  final ForumBodyTableExtent _tableExtent;
   final ForumBodyFlowWidthMeasure? _intrinsic;
   final ForumBodyTablePreparation Function(
     ForumBodyBlockFlowTable table,
@@ -1140,13 +1147,20 @@ final class ForumBodyTextPageSession {
       final left = math.max(0.0, table.left);
       final right = math.min(snapshot.width, table.left + table.width);
       final source = table.table.element.source;
-      _composer.publishTable((
-        path: table.table.element.path,
-        sourceRange: (runeStart: source.runeStart, runeEnd: source.runeEnd),
-        bounds: Rect.fromLTRB(left, 0, right, snapshot.height),
-        contentSize: layout.size,
-        fingerprint: layout.fingerprint,
-      ), retainedItems: usage.items + usage.pages);
+      final natural = _tableExtent == ForumBodyTableExtent.natural;
+      final top = natural ? math.max(0.0, _margin) : 0.0;
+      final height = natural ? layout.size.height : snapshot.height;
+      _composer.publishTable(
+        (
+          path: table.table.element.path,
+          sourceRange: (runeStart: source.runeStart, runeEnd: source.runeEnd),
+          bounds: Rect.fromLTWH(left, top, right - left, height),
+          contentSize: layout.size,
+          fingerprint: layout.fingerprint,
+        ),
+        retainedItems: usage.items + usage.pages,
+        extent: _tableExtent,
+      );
       _tables[index] = layout;
       _content.addTable(usage.paragraphs, usage.textCodeUnits, usage.runs);
     } catch (_) {

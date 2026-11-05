@@ -142,7 +142,10 @@ final class ForumBodyTextPageRule {
   final Color color;
 }
 
-/// Source identity and frozen viewport geometry for a dedicated table page.
+/// The containing box requested for a separately materialized table.
+enum ForumBodyTableExtent { bookPage, natural }
+
+/// Source identity and frozen geometry for a dedicated table slice.
 typedef ForumBodyTextPageTable = ({
   String path,
   ({int runeStart, int runeEnd}) sourceRange,
@@ -261,7 +264,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 25;
+  static const revision = 26;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;
@@ -371,30 +374,38 @@ final class ForumBodyTextPageComposer {
   void publishTable(
     ForumBodyTextPageTable table, {
     required int retainedItems,
+    ForumBodyTableExtent extent = ForumBodyTableExtent.bookPage,
   }) {
     _ensureTableBoundary();
     if (_usedHeight != 0 || _draft.isNotEmpty || _rules.isNotEmpty) {
       throw StateError('Table requires an empty page');
     }
     final bounds = table.bounds;
+    final validExtent = switch (extent) {
+      ForumBodyTableExtent.bookPage =>
+        bounds.top == 0 && bounds.height == height,
+      ForumBodyTableExtent.natural =>
+        bounds.top >= 0 &&
+            bounds.height >= 0 &&
+            bounds.bottom == bounds.top + table.contentSize.height,
+    };
     if (!bounds.isFinite ||
         bounds.left < 0 ||
-        bounds.top != 0 ||
         bounds.width <= 0 ||
         bounds.right > width + precisionErrorTolerance ||
-        bounds.height != height) {
+        !validExtent) {
       _fail(ForumBodyTextPageFailure.invalidGeometry);
     }
     if (_pages.length >= maxPages) _fail(ForumBodyTextPageFailure.pageLimit);
     if (retainedItems < 0 || retainedItems >= maxFragments - _fragmentCount) {
       _fail(ForumBodyTextPageFailure.fragmentLimit);
     }
-    _touchBackgrounds(0);
+    _touchBackgrounds(bounds.top);
     if (retainedItems >= maxFragments - _fragmentCount) {
       _fail(ForumBodyTextPageFailure.fragmentLimit);
     }
     _fragmentCount += 1 + retainedItems;
-    _usedHeight = _flowHeight = height;
+    _usedHeight = _flowHeight = bounds.bottom;
     _seal(table: table);
   }
 
@@ -1340,7 +1351,7 @@ final class ForumBodyTextPageComposer {
         _pages.length,
         _draft,
         _rules,
-        _backgrounds.seal(height),
+        _backgrounds.seal(table?.bounds.bottom ?? height),
         _usedHeight,
         table: table,
       ),

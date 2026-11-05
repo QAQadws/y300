@@ -89,6 +89,7 @@ ForumBodyTextPageSession _book(
   ForumBodyParagraphCache cache, {
   String layoutId = 'table-book',
   ForumBodyTextPageSessionLimits limits = _limits,
+  ForumBodyTableExtent extent = ForumBodyTableExtent.bookPage,
 }) {
   final session = ForumBodyTextPageSession(
     document: document,
@@ -99,6 +100,7 @@ ForumBodyTextPageSession _book(
     width: 100,
     height: 45,
     dedicatedTables: true,
+    tableExtent: extent,
   );
   addTearDown(session.close);
   return session;
@@ -157,6 +159,35 @@ void main() {
     session.close();
     expect(layout.isClosed, isTrue);
     expect(() => session.tableLayoutForPage(1), throwsStateError);
+  });
+
+  test('flowing table slices keep their measured height and source order', () {
+    final document = _parse(
+      '<p style="margin-bottom:11px">before</p>'
+      '<div style="background-color:#ddeeff"><table width="190" height="240">'
+      '<caption>cap</caption><tr><td>cell</td></tr></table></div><p>after</p>',
+    );
+    final cache = _cache();
+    final session = _book(
+      document,
+      cache,
+      extent: ForumBodyTableExtent.natural,
+    );
+    _advanceBook(session, 3);
+    final pages = session.snapshot;
+    final tablePage = pages[1];
+    final table = tablePage.table!;
+    final layout = session.tableLayoutForPage(1)!;
+    expect(table.bounds.top, 11);
+    expect(table.bounds.height, layout.size.height);
+    expect(table.bounds.height, greaterThan(240));
+    expect(tablePage.usedHeight, table.bounds.bottom);
+    expect(tablePage.backgrounds.single.height, layout.size.height);
+    expect(tablePage.fragments, isEmpty);
+    expect(pages.first.fragments.single.paragraphIndex, 0);
+    expect(pages.last.fragments.single.paragraphIndex, 1);
+    expect(session.isComplete, isTrue);
+    expect(cache.activeLeases, 0);
   });
 
   test('table content counts towards the chapter budget across pages', () {
