@@ -3388,17 +3388,18 @@ void main() {
     await _show(tester, reader);
     await tester.pumpAndSettle();
     expect(reader.statuses.last.phase, NovelReaderNativeHostPhase.empty);
-    const html = '<p></p>';
+    const html = '<p>Replacement source</p>';
     final semantic =
         const DiscuzNovelReaderDocumentParser(captureSourceProvenance: true)
             .parse(
               episodeId: reader.episodeId,
-              rawHtml: html,
+              rawHtml: '<p>Stale semantic source</p>',
               fallbackParagraphs: const [],
             );
     await _show(tester, reader, rawHtml: html, semantic: semantic);
     await tester.pumpAndSettle();
     expect(reader.statuses.last.phase, NovelReaderNativeHostPhase.failed);
+    expect(reader.service.calls, 2);
     expect(reader.positions, isEmpty);
     expect(reader.owner.activeCacheHandles, 0);
     await _unmount(tester, reader);
