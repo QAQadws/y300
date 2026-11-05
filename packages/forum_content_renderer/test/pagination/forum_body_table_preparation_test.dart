@@ -637,6 +637,10 @@ void main() {
       find.byType(ForumBodyFlowSliver),
     );
     expect(boundary.finalBoundaryKnown, isFalse);
+    final firstWindow = boundary.borrowTextWindow()!;
+    expect(firstWindow.slices.single.index, 0);
+    expect(firstWindow.slices.single.top, 0);
+    expect(firstWindow.slices.single.fragments.single.isActive, isTrue);
     expect(session.activeIssuedFragments, 1);
     final table = find.byType(ForumBodyTableFlowViewport);
     expect(table, findsNothing);
@@ -663,11 +667,19 @@ void main() {
     current.horizontalController.jumpTo(80);
     await tester.pumpAndSettle();
 
+    outer.jumpTo(prefix.value.first.usedHeight + 20);
+    await tester.pumpAndSettle();
+    expect(boundary.borrowTextWindow(), isNull);
+    expect(firstWindow.isCurrent, isFalse);
+
     outer.jumpTo(height - prefix.value.last.usedHeight);
     await tester.pumpAndSettle();
     expect(table, findsNothing);
     expect(session.activeIssuedTablePages, 0);
     expect(session.activeIssuedFragments, 1);
+    final lastWindow = boundary.borrowTextWindow()!;
+    expect(lastWindow.slices.single.index, 2);
+    expect(lastWindow.slices.single.top, height - prefix.value.last.usedHeight);
     expect(
       outer.position.maxScrollExtent,
       height + trailingHeight - viewportHeight,

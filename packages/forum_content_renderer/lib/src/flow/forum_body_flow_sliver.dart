@@ -3,7 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show precisionErrorTolerance;
 import 'package:flutter/rendering.dart'
-    show GrowthDirection, RenderProxySliver, SliverConstraints;
+    show GrowthDirection, RenderBox, RenderProxySliver, SliverConstraints;
 import 'package:flutter/widgets.dart';
 
 import '../pagination/forum_body_prepared_text_fragment.dart';
@@ -19,6 +19,31 @@ typedef ForumBodyFlowSliceBuilder =
       int slice,
       List<ForumBodyPreparedTextFragment> fragments,
     );
+
+typedef ForumBodyFlowVisibleSlice = ({
+  int index,
+  double top,
+  List<ForumBodyPreparedTextFragment> fragments,
+});
+
+/// The currently mounted non-table slices and their clip in body coordinates.
+/// The window borrows deliveries. Check [isCurrent] after each asynchronous
+/// wait and before accepting a result from any of its fragments.
+final class ForumBodyFlowTextWindow {
+  const ForumBodyFlowTextWindow._(
+    this.snapshot,
+    this.bounds,
+    this.slices,
+    this._isCurrent,
+  );
+
+  final ForumBodyTextPageSnapshot snapshot;
+  final Rect bounds;
+  final List<ForumBodyFlowVisibleSlice> slices;
+  final bool Function() _isCurrent;
+
+  bool get isCurrent => _isCurrent();
+}
 
 /// Presents an append-only prefix from a native body session in a downward
 /// scrolling document. The host drives and owns the source session. The sliver
@@ -300,6 +325,7 @@ final class _ForumBodyFlowSliverState extends State<ForumBodyFlowSliver> {
   Widget build(BuildContext context) => _FlowExtentBoundary(
     width: widget.prefix.width,
     complete: widget.prefix.isComplete && widget.isCurrentLayout,
+    borrowTextWindow: _borrowTextWindow,
     child: SliverLayoutBuilder(
       builder: (context, constraints) {
         _updateVisible(constraints);
@@ -307,7 +333,7 @@ final class _ForumBodyFlowSliverState extends State<ForumBodyFlowSliver> {
           children: [
             for (final entry in _ready.entries)
               Positioned(
-                key: ObjectKey(entry.value),
+                key: entry.value.mountKey,
                 top: _top(entry.key),
                 left: 0,
                 right: 0,
@@ -333,6 +359,53 @@ final class _ForumBodyFlowSliverState extends State<ForumBodyFlowSliver> {
       },
     ),
   );
+
+  ForumBodyFlowTextWindow? _borrowTextWindow(
+    Rect bounds,
+    bool Function() stillLaidOut,
+  ) {
+    final session = widget.session;
+    if (!_fits ||
+        !widget.isCurrentLayout ||
+        session.isClosed ||
+        session.isLayoutOwnerRetired) {
+      return null;
+    }
+    final prefix = widget.prefix;
+    final slices = <ForumBodyFlowVisibleSlice>[];
+    final deliveries = <int, _FlowDelivery>{};
+    for (var index = _visible.start; index < _visible.end; index++) {
+      final delivery = _ready[index];
+      if (delivery == null ||
+          delivery.table != null ||
+          delivery.fragments.isEmpty ||
+          !delivery.isMounted) {
+        continue;
+      }
+      final top = _top(index);
+      if (top >= bounds.bottom || _ends[index] <= bounds.top) continue;
+      deliveries[index] = delivery;
+      slices.add((index: index, top: top, fragments: delivery.fragments));
+    }
+    if (slices.isEmpty) return null;
+    return ForumBodyFlowTextWindow._(
+      prefix,
+      bounds,
+      List.unmodifiable(slices),
+      () =>
+          mounted &&
+          widget.isCurrentLayout &&
+          identical(widget.session, session) &&
+          !session.isClosed &&
+          !session.isLayoutOwnerRetired &&
+          stillLaidOut() &&
+          deliveries.entries.every(
+            (entry) =>
+                identical(_ready[entry.key], entry.value) &&
+                entry.value.isMounted,
+          ),
+    );
+  }
 
   Widget _slice(BuildContext context, int index, _FlowDelivery delivery) {
     final prefix = widget.prefix;
@@ -394,35 +467,67 @@ final class _FlowExtentBoundary extends SingleChildRenderObjectWidget {
   const _FlowExtentBoundary({
     required this.width,
     required this.complete,
+    required this.borrowTextWindow,
     required super.child,
   });
 
   final double width;
   final bool complete;
+  final _BorrowTextWindow borrowTextWindow;
 
   @override
   RenderForumBodyFlowBoundary createRenderObject(BuildContext context) =>
-      RenderForumBodyFlowBoundary._(width, complete);
+      RenderForumBodyFlowBoundary._(width, complete, borrowTextWindow);
 
   @override
   void updateRenderObject(
     BuildContext context,
     RenderForumBodyFlowBoundary renderObject,
-  ) => renderObject._update(width, complete);
+  ) => renderObject._update(width, complete, borrowTextWindow);
 }
+
+typedef _BorrowTextWindow =
+    ForumBodyFlowTextWindow? Function(Rect bounds, bool Function() isCurrent);
 
 /// Exposes the terminal extent laid out by [ForumBodyFlowSliver]. An append-only
 /// prefix has an exact extent of its own but is not necessarily the whole body.
 final class RenderForumBodyFlowBoundary extends RenderProxySliver {
-  RenderForumBodyFlowBoundary._(this._width, this._complete);
+  RenderForumBodyFlowBoundary._(
+    this._width,
+    this._complete,
+    this._borrowTextWindow,
+  );
 
   double _width;
   bool _complete;
+  _BorrowTextWindow _borrowTextWindow;
   bool _finalBoundaryKnown = false;
 
   bool get finalBoundaryKnown => _finalBoundaryKnown;
 
-  void _update(double width, bool complete) {
+  /// Borrow the visible mounted deliveries after layout.
+  ForumBodyFlowTextWindow? borrowTextWindow() {
+    final laidOut = geometry;
+    if (!attached || laidOut == null || laidOut.paintExtent <= 0) return null;
+    final viewport = constraints;
+    if ((viewport.crossAxisExtent - _width).abs() > precisionErrorTolerance) {
+      return null;
+    }
+    return _borrowTextWindow(
+      Rect.fromLTWH(0, viewport.scrollOffset, _width, laidOut.paintExtent),
+      () =>
+          attached &&
+          constraints == viewport &&
+          geometry?.paintExtent == laidOut.paintExtent,
+    );
+  }
+
+  void _update(
+    double width,
+    bool complete,
+    _BorrowTextWindow borrowTextWindow,
+  ) {
+    _borrowTextWindow = borrowTextWindow;
     if (_width == width && _complete == complete) return;
     _width = width;
     _complete = complete;
@@ -442,10 +547,19 @@ final class RenderForumBodyFlowBoundary extends RenderProxySliver {
 }
 
 final class _FlowDelivery {
-  const _FlowDelivery(this.fragments, [this.table, this.horizontal]);
+  _FlowDelivery(this.fragments, [this.table, this.horizontal]);
   final List<ForumBodyPreparedTextFragment> fragments;
   final ForumBodyTablePageLease? table;
   final ScrollController? horizontal;
+  final mountKey = GlobalKey();
+
+  bool get isMounted {
+    final render = mountKey.currentContext?.findRenderObject();
+    return render is RenderBox &&
+        render.attached &&
+        render.hasSize &&
+        fragments.every((fragment) => fragment.isActive);
+  }
 
   void close() {
     horizontal?.dispose();
