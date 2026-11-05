@@ -196,6 +196,7 @@ void main() {
       expect(f.cache.activeLeases, 0);
       for (var page = 0; page < 3; page++) {
         final job = s.openPagePreparation(page);
+        expect(s.reservedViewFragments, 1);
         final probe = job.advance(maxFragments: 1, maxParts: 1);
         expect(probe.fragmentsInspected, 1);
         expect(probe.partsInspected, 1);
@@ -206,6 +207,8 @@ void main() {
             job.takeFragments().single as ForumBodyPreparedImageFragment;
         job.close();
         expect(image.isActive, isTrue);
+        expect(s.reservedViewFragments, 0);
+        expect(s.activeIssuedFragments, 1);
         expect(s.activeIssuedLeases, 0);
         expect(s.snapshot[page].fragments.single.sourceHint, isNull);
         expect(
@@ -414,6 +417,10 @@ void main() {
       _finish(s);
       final images = _prepare(s, 0);
       final host = _Host();
+      final image = images.single as ForumBodyPreparedImageFragment;
+      expect(s.activeIssuedFragments, 1);
+      expect(s.activeIssuedLeases, 0);
+      expect(image.hasRenderedImage, isFalse);
       expect(
         () => ForumBodyTextPageSurface.prepared(
           snapshot: s.snapshot,
@@ -445,6 +452,12 @@ void main() {
       );
       expect(host.fit, BoxFit.contain);
       host.reportSize!(const Size(400, 100));
+      expect(image.hasRenderedImage, isFalse);
+      host.reportFrame!();
+      expect(image.hasRenderedImage, isTrue);
+      host.reportFailure!();
+      expect(image.hasRenderedImage, isFalse);
+      host.reportFrame!();
       await tester.pump();
       expect(
         tester.getSize(find.byType(ForumHtmlImageView)),
@@ -454,6 +467,8 @@ void main() {
       expect(f.cache.layoutBuildCount, 0);
       await tester.pumpWidget(const SizedBox.shrink());
       expect(images.single.isActive, isFalse);
+      expect(image.hasRenderedImage, isFalse);
+      expect(s.activeIssuedFragments, 0);
       expect(tester.takeException(), isNull);
     },
   );
@@ -646,6 +661,7 @@ final class _Host implements ForumHtmlImageHost {
   final ForumHtmlDisplayImage display;
   BoxFit? fit;
   ValueChanged<Size>? reportSize;
+  VoidCallback? reportFrame, reportFailure;
   @override
   ForumHtmlDisplayImage? resolveImage({
     required Uri url,
@@ -682,6 +698,8 @@ final class _Host implements ForumHtmlImageHost {
   }) {
     this.fit = fit;
     reportSize = onImageResolved;
+    reportFrame = onFirstFrameRendered;
+    reportFailure = onImageFailed;
     return const ColoredBox(color: Colors.blue);
   }
 }

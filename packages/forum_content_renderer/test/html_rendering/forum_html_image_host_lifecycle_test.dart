@@ -17,6 +17,7 @@ void main() {
     final hostB = _ImageHost(dimensionsB);
     final resolved = <Size>[];
     final shifts = <ForumHtmlImageLayoutShift>[];
+    final displayStates = <bool>[];
     Widget build(_ImageHost host) => MaterialApp(
       home: Align(
         alignment: Alignment.topLeft,
@@ -33,6 +34,7 @@ void main() {
               ),
               onImageResolved: resolved.add,
               onImageLayoutShift: shifts.add,
+              onImageDisplayChanged: displayStates.add,
             ),
           ),
         ),
@@ -57,6 +59,7 @@ void main() {
     expect(hostA.blockSizes, isEmpty);
     expect(hostB.blockSizes, isEmpty);
     expect(resolved, isEmpty);
+    expect(displayStates.where((ready) => ready), isEmpty);
     expect(shifts, isEmpty);
     expect(
       tester.getSize(find.byType(_DisplayedImage)).aspectRatio,
@@ -74,12 +77,21 @@ void main() {
     await _frames(tester);
     expect(resolved, [const Size(800, 400)]);
     final count = hostA.blockSizes.length;
+    current.onFirstFrame?.call();
+    expect(displayStates.last, isTrue);
+    final frameCount = displayStates.length;
+    retired.onFirstFrame?.call();
+    expect(displayStates, hasLength(frameCount));
+    current.onFailed?.call();
+    expect(displayStates.last, isFalse);
     await tester.pumpWidget(const SizedBox.shrink());
+    final disposedFrameCount = displayStates.length;
     current.reportAll();
     retired.reportAll();
     await _frames(tester);
     expect(hostA.blockSizes, hasLength(count));
     expect(resolved, hasLength(1));
+    expect(displayStates, hasLength(disposedFrameCount));
     expect(tester.takeException(), isNull);
   });
 

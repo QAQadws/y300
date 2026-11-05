@@ -254,6 +254,10 @@ final class ForumBodyTextPageSession {
       .length;
   int get pendingPreparationCount => _preparations.length;
   int get reservedViewLeases => _reservedLeases;
+  int get activeIssuedFragments => isClosed || _cache.isClosed
+      ? 0
+      : _issued.where((fragment) => fragment.isActive).length;
+  int get reservedViewFragments => _reservedFragments;
   int get layoutBudgetRevision => _cache.budgetRevision;
   Stream<int> get layoutBudgetChanges => _cache.budgetChanges;
   bool get isLayoutOwnerRetired => _cache.isClosed;

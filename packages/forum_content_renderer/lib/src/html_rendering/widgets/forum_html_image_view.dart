@@ -24,6 +24,7 @@ class ForumHtmlImageView extends StatefulWidget {
     this.onImageLayoutShift,
     this.viewportCoordinator,
     this.fit,
+    this.onImageDisplayChanged,
   });
 
   final ForumHtmlImageHost host;
@@ -36,6 +37,7 @@ class ForumHtmlImageView extends StatefulWidget {
 
   /// Native fixed-page frames use contain; HTML keeps its existing fit policy.
   final BoxFit? fit;
+  final ValueChanged<bool>? onImageDisplayChanged;
 
   @override
   State<ForumHtmlImageView> createState() => _ForumHtmlImageViewState();
@@ -114,6 +116,7 @@ class _ForumHtmlImageViewState extends State<ForumHtmlImageView> {
       _intrinsicSize = null;
       _hasResolvedImageSize = false;
       _firstFrameRendered = false;
+      widget.onImageDisplayChanged?.call(false);
       _inlineDisplaySettled = false;
       _restoreInlineLayout();
       _dimensionRetryUsed = false;
@@ -231,6 +234,7 @@ class _ForumHtmlImageViewState extends State<ForumHtmlImageView> {
         _firstFrameRendered = true;
         _inlineDisplaySettled = true;
         if (!sticker) _reportRenderedFrame();
+        if (_acceptCallback(revision)) widget.onImageDisplayChanged?.call(true);
       }
     }
 
@@ -239,6 +243,7 @@ class _ForumHtmlImageViewState extends State<ForumHtmlImageView> {
         _firstFrameRendered = false;
         _inlineDisplaySettled = true;
         _viewportHandle?.reportImageFailed();
+        widget.onImageDisplayChanged?.call(false);
       }
     }
 
@@ -382,6 +387,7 @@ class _ForumHtmlImageViewState extends State<ForumHtmlImageView> {
     if (!mounted) return;
     _callbackRevision++;
     _firstFrameRendered = false;
+    widget.onImageDisplayChanged?.call(false);
     _viewportHandle?.reportLoadStarted();
     setState(() => _retryToken++);
   }

@@ -67,6 +67,15 @@ final class ForumBodyPreparedImageFragment
   }) : _ensureOwner = ensureOwner,
        super._();
   final ForumBodyImagePageContent content;
+  bool _displayFrameReady = false;
+  bool get hasRenderedImage => isActive && _displayFrameReady;
+
+  /// The mounted Page surface reports only callbacks accepted by the shared
+  /// view's current Host/display binding. This does not create text coverage.
+  void reportDisplayFrame(bool ready) {
+    if (isActive) _displayFrameReady = ready;
+  }
+
   void Function()? _ensureOwner;
   static final _emptyProjection = HtmlDisplayTextProjection.build(const []);
   @override
@@ -97,6 +106,7 @@ final class ForumBodyPreparedImageFragment
 
   @override
   void close() {
+    _displayFrameReady = false;
     _ensureOwner = null;
   }
 }

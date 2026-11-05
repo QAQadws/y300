@@ -75,6 +75,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     required String layoutId,
     required List<ForumBodyPreparedTextFragment> fragments,
     ForumHtmlImageHost? imageHost,
+    void Function(ForumBodyPreparedImageFragment, bool)? onImageDisplayChanged,
     void Function(ForumBodyTextPageFragment, HtmlProjectedSourcePosition)?
     onSourceTap,
     void Function(ForumBodyTextPageFragment, ForumBodyTextSelectionSnapshot)?
@@ -120,6 +121,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
       onSourceLongPress,
       imageHost,
       Map.unmodifiable(images),
+      onImageDisplayChanged,
     );
   }
 
@@ -134,6 +136,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     this._onSourceLongPress,
     this._imageHost,
     this._images,
+    this._onImageDisplayChanged,
   ) : super(key: key);
   final ForumBodyTextPage _page;
   final String _layoutId;
@@ -149,6 +152,8 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
   _onSourceLongPress;
   final ForumHtmlImageHost? _imageHost;
   final Map<ForumBodyPreparedImageFragment, ForumHtmlDisplayImage> _images;
+  final void Function(ForumBodyPreparedImageFragment, bool)?
+  _onImageDisplayChanged;
 
   static Never _fail(ForumBodyTextPageSurfaceFailure failure) =>
       throw ForumBodyTextPageSurfaceException(failure);
@@ -196,6 +201,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
         binding: binding,
         host: _imageHost!,
         image: _images[binding]!,
+        onDisplayChanged: _onImageDisplayChanged,
       ),
       ForumBodyPreparedListItemFragment() => throw StateError(
         'Nested list delivery',
@@ -313,10 +319,12 @@ final class _ImageFragmentSurface extends StatefulWidget {
     required this.binding,
     required this.host,
     required this.image,
+    this.onDisplayChanged,
   });
   final ForumBodyPreparedImageFragment binding;
   final ForumHtmlImageHost host;
   final ForumHtmlDisplayImage image;
+  final void Function(ForumBodyPreparedImageFragment, bool)? onDisplayChanged;
   @override
   State<_ImageFragmentSurface> createState() => _ImageFragmentSurfaceState();
 }
@@ -338,6 +346,11 @@ final class _ImageFragmentSurfaceState extends State<_ImageFragmentSurface> {
             host: widget.host,
             image: widget.image,
             fit: BoxFit.contain,
+            onImageDisplayChanged: (ready) {
+              if (!mounted || !widget.binding.isActive) return;
+              widget.binding.reportDisplayFrame(ready);
+              widget.onDisplayChanged?.call(widget.binding, ready);
+            },
           ),
         ),
       ],
