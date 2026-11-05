@@ -44,7 +44,7 @@ final class ForumBodyInlinePlanInput {
             .atoms
             .map((atom) => atom.engineUtf16),
       );
-  static const revision = 30;
+  static const revision = 31;
 
   factory ForumBodyInlinePlanInput(
     ForumBodyInlineFlowContent input,
@@ -822,7 +822,10 @@ final class ForumBodyInlinePlanInput {
                     ]),
             );
       for (final index in images.keys) {
-        final fitted = images[index]!.fitWidth(availableWidth);
+        final fitted = images[index]!.fitWidth(
+          availableWidth,
+          containingWidth: width,
+        );
         images[index] = fitted;
         requestsByAtom[index] = ForumBodyInlineImageAtomRequest(fitted);
       }

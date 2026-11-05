@@ -10,7 +10,7 @@ import 'forum_body_style_options.dart';
 import 'forum_body_text_emphasis_resolver.dart';
 import 'forum_body_list_style_resolver.dart';
 
-const forumBodyStyleRevision = 21;
+const forumBodyStyleRevision = 22;
 ForumBodyLength forumBodyReaderIndent(
   ForumBodyReaderStyle reader,
   double size,
@@ -73,6 +73,7 @@ final class ForumBodyStyleBuilder {
     'display',
     'visibility',
     'width',
+    'height',
     'min-width',
     'max-width',
     'box-sizing',

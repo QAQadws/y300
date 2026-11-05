@@ -105,7 +105,7 @@ final class ForumBodyBlockBox {
           : resolved;
     }
 
-    var width = box.width == null
+    var width = box.width == null || box.width!.unit == ForumBodyLengthUnit.auto
         ? math.max(0.0, containingWidth - horizontalEdges - left - right)
         : contentLength(box.width!);
     if (box.maxWidth != null) {

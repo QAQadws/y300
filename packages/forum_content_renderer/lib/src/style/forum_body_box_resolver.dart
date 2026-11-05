@@ -14,6 +14,7 @@ final class ForumBodyBoxResolver {
     required void Function(String property, String value) onUnsupported,
   }) {
     var width = const ForumBodyBoxStyle().width;
+    ForumBodyLength? height;
     var minimum = ForumBodyLength.zero;
     ForumBodyLength? maximum;
     var sizing = ForumBodyBoxSizing.contentBox;
@@ -22,6 +23,7 @@ final class ForumBodyBoxResolver {
       final name = declaration.property;
       if (!const {
         'width',
+        'height',
         'min-width',
         'max-width',
         'box-sizing',
@@ -47,10 +49,16 @@ final class ForumBodyBoxResolver {
         continue;
       }
       ForumBodyLength? candidate;
-      final initial = name == 'min-width' ? ForumBodyLength.zero : null;
+      final initial = switch (name) {
+        'min-width' => ForumBodyLength.zero,
+        'width' || 'height' when node.kind == ForumBodyElementKind.image =>
+          const ForumBodyLength(0, ForumBodyLengthUnit.auto),
+        _ => null,
+      };
       if (raw == 'inherit') {
         candidate = switch (name) {
-          'width' => parent.width,
+          'width' => parent.width ?? initial,
+          'height' => parent.height ?? initial,
           'min-width' => parent.minWidth,
           _ => parent.maxWidth,
         };
@@ -80,6 +88,8 @@ final class ForumBodyBoxResolver {
         switch (name) {
           case 'width':
             width = candidate;
+          case 'height':
+            height = candidate;
           case 'min-width':
             minimum = candidate!;
           case 'max-width':
@@ -90,6 +100,7 @@ final class ForumBodyBoxResolver {
     }
     return ForumBodyBoxStyle(
       width: width,
+      height: height,
       minWidth: minimum,
       maxWidth: maximum,
       sizing: sizing,

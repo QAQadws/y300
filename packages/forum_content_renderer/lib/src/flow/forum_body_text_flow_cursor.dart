@@ -75,7 +75,7 @@ final class ForumBodyTextFlowCursor {
     this.rubyLimits = const ForumBodyRubyContentLimits(),
     this.inlineImageResolver,
   }) : _flow = ForumBodyStyledFlowCursor(document: document, reader: reader);
-  static const revision = 9;
+  static const revision = 10;
   final ForumBodyInlineImageResolver? inlineImageResolver;
   final ForumBodyParagraphContentBuilder paragraphBuilder;
   final ForumBodyRubyContentLimits rubyLimits;
@@ -263,7 +263,8 @@ final class ForumBodyTextFlowCursor {
             event.node is ForumBodyElement) {
           final element = event.node as ForumBodyElement;
           if (element.kind == ForumBodyElementKind.image &&
-              event.style.display == ForumBodyDisplay.inline &&
+              (event.style.display == ForumBodyDisplay.inline ||
+                  event.style.display == ForumBodyDisplay.inlineBlock) &&
               !event.style.visibilityHidden &&
               !_insideEditStatus) {
             final image = inlineImageResolver?.call(

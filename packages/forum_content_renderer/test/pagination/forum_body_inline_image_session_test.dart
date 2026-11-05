@@ -22,6 +22,7 @@ final class _Fixture {
     int textLimit = 10000,
     TextScaler textScaler = TextScaler.noScaling,
     Size imageSize = const Size(40, 20),
+    double? maxImageHeight,
   }) {
     document = const ForumBodyParser().parse(
       html: html,
@@ -48,12 +49,22 @@ final class _Fixture {
       textScaler: textScaler,
       inlineImageResolver: (identity, element, style) {
         expect(identity, document.identity);
-        final input = ForumBodyInlineImageInput(
+        final source = ForumBodyInlineImageSource(
           document: document,
           element: element,
           image: const InlineImageDescription(),
-          dimensions: inlineImageDimensions(imageSize),
         );
+        final input = maxImageHeight == null
+            ? ForumBodyInlineImageInput.fromSource(
+                source: source,
+                dimensions: inlineImageDimensions(imageSize),
+              )
+            : ForumBodyInlineImageInput.replaced(
+                source: source,
+                box: style.box,
+                intrinsicSize: imageSize,
+                maxHeight: maxImageHeight,
+              );
         images.add(input);
         return input;
       },
@@ -107,6 +118,49 @@ final class _Fixture {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'inline-block image uses actual containing width and author size before native fit',
+    () {
+      final f = _Fixture(
+        '<div style="padding-left:10px;padding-right:10px">'
+        '<p style="letter-spacing:2px">A'
+        '<img src="a" width="6" height="9" '
+        'style="display:inline-block;width:50%!important;width:1px;height:auto">B'
+        '</p></div>',
+        imageSize: const Size(120, 60),
+        textScaler: const TextScaler.linear(2),
+        maxImageHeight: 90,
+      );
+      f.finish();
+      final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+      final image = fragment.view.images.values.single;
+      expect(fragment.view.width, 80);
+      expect(fragment.view.content.horizontalInset, 2);
+      expect(image.rect.size, const Size(40, 20));
+      expect(image.input.dimensions.baselineOffset, 20);
+      expect(image.input.source, same(f.images.single.source));
+      expect(image.input.usesIntrinsicSize, isTrue);
+      fragment.close();
+      expect(f.cache.activeLeases, 0);
+    },
+  );
+
+  test('oversized author dimensions fit the page budget proportionally', () {
+    final f = _Fixture(
+      '<p>A<img src="a" style="display:inline;width:60px;height:300px">B</p>',
+      maxImageHeight: 80,
+    );
+    f.finish();
+    final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+    final image = fragment.view.images.values.single;
+    expect(image.rect.width, closeTo(16, 0.001));
+    expect(image.rect.height, closeTo(80, 0.001));
+    expect(image.input.usesIntrinsicSize, isFalse);
+    expect(image.input.source, same(f.images.single.source));
+    fragment.close();
+    expect(f.cache.activeLeases, 0);
+  });
 
   test(
     'actual nested width and tracking fit geometry while preserving frozen source',
