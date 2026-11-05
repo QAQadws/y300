@@ -18,6 +18,7 @@ import '../services/novel_reader_native_pagination_watchdog.dart';
 import '../services/novel_reader_native_prefix_verifier.dart';
 import '../services/novel_reader_native_restore_cursor.dart';
 import '../services/novel_reader_native_source_run.dart';
+import '../services/novel_reader_native_table_window_proof.dart';
 import '../services/novel_reader_native_view_window.dart';
 import '../services/novel_reader_native_work_scheduler.dart';
 import '../services/novel_reader_pagination_cancellation.dart';
@@ -350,6 +351,7 @@ final class NovelReaderNativePagedController {
     NovelReaderNativePageDelivery delivery,
     List<ForumBodyPreparedTextFragment> fragments, {
     ForumBodyTablePageLease? table,
+    NovelReaderNativeTableWindowProof? tableProof,
   }) {
     if (isClosed ||
         _suspended ||
@@ -364,7 +366,7 @@ final class NovelReaderNativePagedController {
     final tablePage = delivery.view.snapshot[delivery.pageIndex].table;
     if ((tablePage == null) != (table == null) ||
         (table != null &&
-            !_session!.ownsTablePageLease(delivery.pageIndex, table))) {
+            !_acceptsTableProof(delivery.view, table, tableProof))) {
       return null;
     }
     try {
@@ -382,9 +384,17 @@ final class NovelReaderNativePagedController {
         ? null
         : coverage.locate(delivery.restoredAnchor!);
     final actual =
+        tableProof?.anchor ??
         anchor?.anchor ??
         (coverage.hasLocations ? coverage.locations.first.anchor : null);
-    final wholePage = actual != null && _wholePageVisible(delivery, fragments);
+    final wholePage =
+        table == null &&
+        actual != null &&
+        _wholePageVisible(delivery, fragments);
+    final unmatchedTableRestore =
+        tableProof != null &&
+        delivery.restoredAnchor?.hasCanonicalTextOffset == true &&
+        !tableProof.matchesPreferred;
     _visible = delivery;
     _target = null;
     _phase = _error == null
@@ -412,7 +422,9 @@ final class NovelReaderNativePagedController {
         pageIndex: delivery.pageIndex,
       ),
       isReadOnlyCompatibilityRestore:
-          delivery.isReadOnlyCompatibilityRestore || actual == null,
+          delivery.isReadOnlyCompatibilityRestore ||
+          unmatchedTableRestore ||
+          actual == null,
       hasUserNavigated: delivery.hasUserNavigated,
       isBodyEndVisible: wholePage,
       isWholeBodyVisible: wholePage,
@@ -426,6 +438,76 @@ final class NovelReaderNativePagedController {
     _bootstrapEntry = null;
     return position;
   }
+
+  Future<NovelReaderNativeTableWindowProof?> prepareTableWindow(
+    ForumBodyTablePageLease table,
+    ForumBodyTableVisibleWindow window,
+    NovelReaderPaginationCancellationToken token, {
+    NovelReaderTextAnchor? preferred,
+  }) {
+    if (isClosed ||
+        _suspended ||
+        !window.isCurrent ||
+        !identical(window.layout, table.layout) ||
+        !_session!.ownsTablePageLease(table.pageIndex, table)) {
+      return Future.value(null);
+    }
+    return NovelReaderNativeTableWindowProof.prepare(
+      window: window,
+      anchors: _anchors!,
+      scheduler: _scheduler!,
+      token: token,
+      preferred: preferred,
+    );
+  }
+
+  NovelReaderPaginationPosition? refreshTableVisible(
+    NovelReaderNativePageView view,
+    ForumBodyTablePageLease table,
+    NovelReaderNativeTableWindowProof proof,
+  ) {
+    final previous = _lastPosition;
+    final anchor = proof.anchor;
+    if (isClosed ||
+        _suspended ||
+        _ticket != null ||
+        _target != null ||
+        !identical(_visible?.view, view) ||
+        previous == null ||
+        anchor == null ||
+        !proof.window.hasUserScrolled ||
+        !_acceptsTableProof(view, table, proof)) {
+      return null;
+    }
+    if (!previous.isReadOnlyCompatibilityRestore &&
+        anchor.nodeId == previous.anchor.nodeId &&
+        anchor.textOffset == previous.anchor.textOffset &&
+        anchor.formatVersion == previous.anchor.formatVersion &&
+        anchor.textIdentity == previous.anchor.textIdentity) {
+      return null;
+    }
+    return _lastPosition = NovelReaderPaginationPosition(
+      episodeId: episodeId,
+      paginationKey: paginationKey,
+      pageIndex: view.pageIndex,
+      pageCount: _snapshot!.length,
+      isPageCountFinal: _snapshot!.isComplete,
+      anchor: anchor.copyWith(pageIndex: view.pageIndex),
+      hasUserNavigated: true,
+      isWholeBodyVisible: false,
+      isBodyEndVisible: false,
+    );
+  }
+
+  bool _acceptsTableProof(
+    NovelReaderNativePageView view,
+    ForumBodyTablePageLease table,
+    NovelReaderNativeTableWindowProof? proof,
+  ) =>
+      proof != null &&
+      proof.isCurrent &&
+      identical(table.layout, proof.window.layout) &&
+      _session!.ownsTablePageLease(view.pageIndex, table);
 
   void reportTablePresentationFailure(
     NovelReaderNativePageView view,

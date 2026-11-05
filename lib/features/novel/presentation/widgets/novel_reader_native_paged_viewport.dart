@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_tap_zones.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_paged_turn_motion.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 import '../controllers/novel_reader_native_paged_controller.dart';
@@ -14,6 +15,8 @@ import '../models/novel_reader_chapter_turn.dart';
 import '../models/novel_reader_native_page_view.dart';
 import '../models/novel_reader_pagination_position.dart';
 import '../models/novel_reader_native_text_selection.dart';
+import '../services/novel_reader_native_table_window_proof.dart';
+import '../services/novel_reader_pagination_cancellation.dart';
 
 typedef NovelReaderNativeImageLayoutResolved = void Function(
   NovelReaderNativePageView,
@@ -444,6 +447,18 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
       <NovelReaderNativePageView, List<ForumBodyPreparedTextFragment>>{};
   final _tableMounts = <NovelReaderNativePageView, ForumBodyTablePageLease>{};
   final _readyTables = <NovelReaderNativePageView>{};
+  final _tableWindows =
+      <NovelReaderNativePageView, ForumBodyTableVisibleWindow>{};
+  ({
+    ForumBodyTableVisibleWindow window,
+    NovelReaderTextAnchor? preferred,
+    int revision,
+    NovelReaderPaginationCancellationToken token,
+  })?
+  _tableWork;
+  ({NovelReaderNativeTableWindowProof proof, NovelReaderTextAnchor? preferred})?
+  _tableProof;
+  ForumBodyTableVisibleWindow? _consumedTableWindow;
   final _tableOffsets = <int, Offset>{};
   int _page = 0;
   int _frame = 0;
@@ -472,6 +487,11 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
     _changes = widget.controller.changes.listen(
       (_) {
         if (!mounted) return;
+        final work = _tableWork;
+        if (work != null &&
+            work.revision != widget.controller.navigationRevision) {
+          _cancelTableProof();
+        }
         _reconcileTapTurn();
         _reconcileChapterDrag();
         setState(() {});
@@ -479,6 +499,7 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
       },
       onDone: () {
         if (mounted) {
+          _cancelTableProof();
           _resetChapterDrag();
           setState(() {});
         }
@@ -518,6 +539,7 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
     }
     if (widget.frozen != oldWidget.frozen ||
         widget.reverse != oldWidget.reverse) {
+      _cancelTableProof();
       _retireTapTurn(cancelNavigation: true);
       _frame++;
       _userDrag = false;
@@ -845,7 +867,10 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
         final view = controller.visibleView;
         final fragments = view == null ? null : _mountedPages[view];
         if (view != null && fragments != null && view.pageIndex == _page) {
-          final position = controller.refreshPreparedVisible(view, fragments);
+          final table = _tableMounts[view];
+          final position = table == null
+              ? controller.refreshPreparedVisible(view, fragments)
+              : _refreshTable(view, table);
           if (position != null) widget.onPositionChanged(position);
         }
         _confirmChapterRelease();
@@ -857,12 +882,22 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
           (table != null && !_readyTables.contains(target.view))) {
         return;
       }
+      final proof = table == null
+          ? null
+          : _proveTableWindow(
+              target.view,
+              table,
+              preferred: target.restoredAnchor,
+            );
+      if (table != null && proof == null) return;
       final position = controller.confirmPreparedVisible(
         target,
         fragments,
         table: table,
+        tableProof: proof,
       );
       if (position != null) {
+        _consumedTableWindow = proof?.window;
         _tapTurn = null;
         widget.onPositionChanged(position);
       }
@@ -980,6 +1015,112 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
     }
   }
 
+  void _tableWindowChanged(
+    NovelReaderNativePageView view,
+    ForumBodyTableVisibleWindow? window,
+  ) {
+    if (!_tableMounts.containsKey(view)) return;
+    if (window == null) {
+      _tableWindows.remove(view);
+    } else {
+      _tableWindows[view] = window;
+    }
+    if (_tableWork?.window.isCurrent == false) _cancelTableProof();
+    if (_tableProof?.proof.isCurrent == false) _tableProof = null;
+    if (_consumedTableWindow?.isCurrent == false) _consumedTableWindow = null;
+    _afterFrame();
+  }
+
+  NovelReaderPaginationPosition? _refreshTable(
+    NovelReaderNativePageView view,
+    ForumBodyTablePageLease table,
+  ) {
+    final window = _tableWindows[view];
+    if (window == null ||
+        !window.hasUserScrolled ||
+        identical(window, _consumedTableWindow)) {
+      return null;
+    }
+    final proof = _proveTableWindow(view, table);
+    if (proof == null) return null;
+    _consumedTableWindow = window;
+    return widget.controller.refreshTableVisible(view, table, proof);
+  }
+
+  NovelReaderNativeTableWindowProof? _proveTableWindow(
+    NovelReaderNativePageView view,
+    ForumBodyTablePageLease table, {
+    NovelReaderTextAnchor? preferred,
+  }) {
+    final window = _tableWindows[view];
+    if (window == null || !window.isCurrent) return null;
+    final checked = _tableProof;
+    if (checked != null &&
+        identical(checked.proof.window, window) &&
+        identical(checked.preferred, preferred)) {
+      return checked.proof;
+    }
+    final pending = _tableWork;
+    if (pending != null &&
+        identical(pending.window, window) &&
+        identical(pending.preferred, preferred)) {
+      return null;
+    }
+    _cancelTableProof();
+    final token = NovelReaderPaginationCancellationToken();
+    _tableWork = (
+      window: window,
+      preferred: preferred,
+      revision: widget.controller.navigationRevision,
+      token: token,
+    );
+    unawaited(_prepareTableWindow(view, table, window, token, preferred));
+    // This starts in a settled post-frame callback. The first frame yield
+    // needs another frame even when the table's last slice already painted.
+    WidgetsBinding.instance.ensureVisualUpdate();
+    return null;
+  }
+
+  Future<void> _prepareTableWindow(
+    NovelReaderNativePageView view,
+    ForumBodyTablePageLease table,
+    ForumBodyTableVisibleWindow window,
+    NovelReaderPaginationCancellationToken token,
+    NovelReaderTextAnchor? preferred,
+  ) async {
+    bool current() =>
+        mounted &&
+        !widget.frozen &&
+        !token.isCancelled &&
+        identical(_tableWork?.token, token) &&
+        identical(_tableWindows[view], window) &&
+        _tableWork!.revision == widget.controller.navigationRevision &&
+        window.isCurrent;
+    try {
+      final proof = await widget.controller.prepareTableWindow(
+        table,
+        window,
+        token,
+        preferred: preferred,
+      );
+      if (proof != null && current()) {
+        _tableProof = (proof: proof, preferred: preferred);
+        _afterFrame();
+      }
+    } catch (error) {
+      if (current()) _tableFailed(view, error);
+    } finally {
+      if (identical(_tableWork?.token, token)) _tableWork = null;
+      token.cancel();
+    }
+  }
+
+  void _cancelTableProof() {
+    _tableWork?.token.cancel();
+    _tableWork = null;
+    _tableProof = null;
+  }
+
   void _tableFailed(NovelReaderNativePageView view, Object error) {
     final table = _tableMounts[view];
     if (table != null) {
@@ -988,6 +1129,14 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
   }
 
   void _unmounted(NovelReaderNativePageView view) {
+    final window = _tableWindows.remove(view);
+    if (window != null) {
+      if (identical(_tableWork?.window, window) ||
+          identical(_tableProof?.proof.window, window)) {
+        _cancelTableProof();
+      }
+      if (identical(_consumedTableWindow, window)) _consumedTableWindow = null;
+    }
     _mountedPages.remove(view);
     _tableMounts.remove(view);
     _readyTables.remove(view);
@@ -1128,6 +1277,8 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
                           onUnmounted: _unmounted,
                           onTableReadyChanged: (ready) =>
                               _tableReady(view, ready),
+                          onTableWindowChanged: (window) =>
+                              _tableWindowChanged(view, window),
                           onTableFailure: (error) => _tableFailed(view, error),
                           initialTableOffset:
                               _tableOffsets[page] ?? Offset.zero,
@@ -1181,6 +1332,7 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
   @override
   void dispose() {
     _tapTurn = null;
+    _cancelTableProof();
     _tapResetPage = null;
     _frame++;
     _activityRevision++;
@@ -1215,6 +1367,7 @@ class _NativeMountedPage extends StatefulWidget {
     required this.onImageTap,
     required this.onCollapseToggle,
     required this.onTableReadyChanged,
+    required this.onTableWindowChanged,
     required this.onTableFailure,
     required this.initialTableOffset,
     required this.onTableOffsetChanged,
@@ -1241,6 +1394,7 @@ class _NativeMountedPage extends StatefulWidget {
   final void Function(ForumBodyTextSelectionSnapshot, bool Function())?
   onTextSelection;
   final ValueChanged<bool> onTableReadyChanged;
+  final ValueChanged<ForumBodyTableVisibleWindow?> onTableWindowChanged;
   final ValueChanged<Object> onTableFailure;
   final Offset initialTableOffset;
   final ValueChanged<Offset> onTableOffsetChanged;
@@ -1314,6 +1468,7 @@ class _NativeMountedPageState extends State<_NativeMountedPage>
               horizontalController: _tableHorizontal!,
               verticalController: _tableVertical!,
               onReadyChanged: widget.onTableReadyChanged,
+              onWindowChanged: widget.onTableWindowChanged,
               onFailure: (error, _) => widget.onTableFailure(error),
               buildSlice: (context, area, page, fragments) => _buildSurface(
                 area.snapshot,

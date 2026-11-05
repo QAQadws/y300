@@ -231,6 +231,8 @@ void main() {
     expect(reader.navigation.turnNext(), isTrue);
     await tester.pumpAndSettle();
     expect(reader.positions.last.pageIndex, 1);
+    final startAnchor = reader.positions.last.anchor;
+    expect(startAnchor.hasCanonicalTextOffset, isTrue);
     expect(reader.positions.last.isWholeBodyVisible, isFalse);
     final table = find.byType(ForumBodyTableBookViewport);
     final next = find.byKey(const Key('novel-reader-table-next'));
@@ -254,6 +256,24 @@ void main() {
     expect(reader.positions, hasLength(oldCount));
     expect(reader.positions.last.pageIndex, 1);
     expect(reader.edges, isEmpty);
+
+    v.jumpTo(maxY * .4);
+    await tester.pumpAndSettle();
+    expect(reader.positions, hasLength(oldCount));
+    await tester.drag(table, const Offset(0, -600));
+    await tester.pumpAndSettle();
+    expect(v.offset, maxY);
+    expect(reader.positions, hasLength(oldCount + 1));
+    final tail = reader.positions.last;
+    expect(tail.pageIndex, 1);
+    expect(tail.hasUserNavigated, isTrue);
+    expect(tail.isReadOnlyCompatibilityRestore, isFalse);
+    expect(tail.isBodyEndVisible, isFalse);
+    expect(tail.anchor.hasCanonicalTextOffset, isTrue);
+    expect((
+      tail.anchor.nodeId,
+      tail.anchor.textOffset,
+    ), isNot((startAnchor.nodeId, startAnchor.textOffset)));
 
     await tester.tap(next);
     await tester.pumpAndSettle();
