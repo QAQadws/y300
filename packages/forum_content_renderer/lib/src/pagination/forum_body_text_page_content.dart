@@ -133,8 +133,7 @@ final class ForumBodyImagePageContent extends ForumBodyTextPageContent {
         fragment.sourceHint != null ||
         fragment.imageCount != 1 ||
         fragment.imagePaths.length != 1 ||
-        fragment.imagePaths.single != input.element.path ||
-        fragment.listMarker != null) {
+        fragment.imagePaths.single != input.element.path) {
       throw const ForumBodyTextPageSurfaceException(
         ForumBodyTextPageSurfaceFailure.geometry,
       );
@@ -181,6 +180,12 @@ final class ForumBodyListItemPageContent extends ForumBodyTextPageContent {
       body.requestWidthFor(fragment);
   void _validate(ForumBodyTextPageFragment fragment) {
     final marker = fragment.listMarker;
+    if (body is ForumBodyImagePageContent &&
+        marker?.baseline != markers.blockTopBaseline) {
+      throw const ForumBodyTextPageSurfaceException(
+        ForumBodyTextPageSurfaceFailure.geometry,
+      );
+    }
     if (marker != null &&
         (fragment.startLine != 0 ||
             marker.bounds !=
@@ -199,9 +204,12 @@ final class ForumBodyListItemPageContent extends ForumBodyTextPageContent {
   }
 
   @override
-  int nativePreparationHandleCountFor(ForumBodyTextPageFragment fragment) =>
-      nativeHandleCountFor(fragment) +
-      (fragment.listMarker == null ? 0 : 2 * markers.fontCount);
+  int nativePreparationHandleCountFor(ForumBodyTextPageFragment fragment) {
+    _validate(fragment);
+    return body.nativePreparationHandleCountFor(fragment) +
+        (fragment.listMarker == null ? 0 : markers.preparationHandleCount);
+  }
+
   @override
   Iterable<ForumBodyNativeRequestSlot> nativeFootprintFor(
     ForumBodyTextPageFragment fragment,

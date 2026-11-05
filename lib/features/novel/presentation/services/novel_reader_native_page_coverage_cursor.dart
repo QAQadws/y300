@@ -267,7 +267,7 @@ final class NovelReaderNativePageCoverageCursor {
         snapshot.height,
       ),
     );
-    if (prepared is ForumBodyPreparedImageFragment) {
+    if (fragment.kind == ForumBodyTextPageFragmentKind.image) {
       return const <({int startUtf16, int endUtf16})>[].iterator;
     }
     if (_clip.isEmpty) {

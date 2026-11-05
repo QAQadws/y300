@@ -604,17 +604,17 @@ final class ForumBodyTextPagePreparation {
     for (final (index, input) in _inputs.indexed) {
       final body = input.bodyContent;
       final fragment = page.fragments[index];
+      var parent = true;
       if (body is ForumBodyImagePageContent) {
-        // Even a zero-native resource consumes a bounded inspection unit.
+        // Inspect the resource once, then any real marker font and picture.
         yield (
           startsFragment: true,
           inspect: () {
             input.nativeHandleCountFor(fragment);
           },
         );
-        continue;
+        parent = false;
       }
-      var parent = true;
       for (final slot in input.nativeBudgetFootprintFor(fragment)) {
         yield (
           startsFragment: parent,

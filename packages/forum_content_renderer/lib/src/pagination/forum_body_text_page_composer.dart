@@ -234,7 +234,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 21;
+  static const revision = 22;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;
@@ -333,6 +333,18 @@ final class ForumBodyTextPageComposer {
     _fragmentCount += _backgrounds.touch(top, maxFragments - _fragmentCount);
   }
 
+  ({int entries, int bytes}) _nativeCostIncrease(Map<Object, int> additions) {
+    var entries = 0, bytes = 0;
+    for (final cost in additions.entries) {
+      final old = _nativeEntries[cost.key];
+      if (old == null) entries++;
+      final previousBytes = old ?? 0;
+      bytes += math.max(0, cost.value - previousBytes);
+      additions[cost.key] = math.max(previousBytes, cost.value);
+    }
+    return (entries: entries, bytes: bytes);
+  }
+
   /// Already resolved block geometry, sharing text's ordered input and page
   /// metadata budgets. Resources never create native rows or text coverage.
   void appendImage({
@@ -343,11 +355,15 @@ final class ForumBodyTextPageComposer {
     required int styleRevision,
     required double left,
     double spaceBefore = 0,
+    ForumBodyListMarkerPlan? listMarkers,
   }) {
     _ensureOpen();
     if (!needsInput) throw StateError('Composition input is still pending');
     if (input.identity != identity || inputIndex != _nextParagraphIndex) {
       throw ArgumentError('Unordered or foreign image input');
+    }
+    if (listMarkers != null && listMarkers.identity != identity) {
+      throw ArgumentError('Foreign image list marker');
     }
     if (!left.isFinite ||
         !spaceBefore.isFinite ||
@@ -364,6 +380,7 @@ final class ForumBodyTextPageComposer {
       styleRevision,
       left,
       spaceBefore,
+      listMarkers,
     );
     _nextParagraphIndex++;
   }
@@ -390,10 +407,57 @@ final class ForumBodyTextPageComposer {
         0.0,
         _flowHeight + (atStart ? 0 : active.spaceBefore),
       );
-      final bottom = top + active.frame.height;
+      final plan = active.listMarkers;
+      final marker = plan == null
+          ? null
+          : ForumBodyTextPageListMarker._(
+              plan.blockTopBaseline,
+              plan.bounds.shift(Offset(0, plan.blockTopBaseline)),
+            );
+      if (marker != null &&
+          (active.left + marker.bounds.left < -precisionErrorTolerance ||
+              active.left + marker.bounds.right >
+                  width + precisionErrorTolerance)) {
+        _fail(ForumBodyTextPageFailure.invalidGeometry);
+      }
+      final bottom =
+          top + math.max(active.frame.height, marker?.bounds.bottom ?? 0);
       if (!bottom.isFinite) _fail(ForumBodyTextPageFailure.invalidGeometry);
       if (bottom > height) {
         if (atStart) _fail(ForumBodyTextPageFailure.oversizedGroup);
+        _seal();
+        return (pagesPublished: 1, isComplete: false);
+      }
+      final handles = plan?.preparationHandleCount ?? 0;
+      final handleLimit = maxNativeHandlesPerPage;
+      final entryLimit = maxNativeEntriesPerPage;
+      final byteLimit = maxNativeEstimatedBytesPerPage;
+      ForumBodyTextPageFailure? budgetFailure;
+      Map<Object, int>? addedEntries;
+      var addedBytes = 0;
+      if (handleLimit != null && _usedNativeHandles + handles > handleLimit) {
+        budgetFailure = ForumBodyTextPageFailure.nativeHandleLimit;
+      } else if (plan != null && (entryLimit != null || byteLimit != null)) {
+        addedEntries = {};
+        for (final cost in plan.costs) {
+          addedEntries[cost.identity] = math.max(
+            addedEntries[cost.identity] ?? 0,
+            cost.estimatedBytes,
+          );
+        }
+        final increase = _nativeCostIncrease(addedEntries);
+        addedBytes = increase.bytes;
+        if (entryLimit != null &&
+            _nativeEntries.length + _sceneEntries + increase.entries >
+                entryLimit) {
+          budgetFailure = ForumBodyTextPageFailure.nativeEntryLimit;
+        } else if (byteLimit != null &&
+            _nativeBytes + _sceneBytes + addedBytes > byteLimit) {
+          budgetFailure = ForumBodyTextPageFailure.nativeByteLimit;
+        }
+      }
+      if (budgetFailure != null) {
+        if (atStart) _fail(budgetFailure);
         _seal();
         return (pagesPublished: 1, isComplete: false);
       }
@@ -417,13 +481,17 @@ final class ForumBodyTextPageComposer {
           width: active.frame.width,
           height: active.frame.height,
           kind: ForumBodyTextPageFragmentKind.image,
+          listMarker: marker,
           imageFrame: active.frame,
           imageCount: 1,
           imagePaths: List.unmodifiable([active.path]),
         ),
       );
       _fragmentCount++;
-      _lastFragmentNativeHandles = 0;
+      _usedNativeHandles += handles;
+      _lastFragmentNativeHandles = handles;
+      if (addedEntries != null) _nativeEntries.addAll(addedEntries);
+      _nativeBytes += addedBytes;
       _usedImages++;
       _lastFragmentImages = 1;
       _lastSceneReservation = null;
@@ -919,7 +987,7 @@ final class ForumBodyTextPageComposer {
             bodyHandles +
             (marker == null || limit == null
                 ? 0
-                : 1 + 2 * active.listMarkers!.fontCount);
+                : active.listMarkers!.preparationHandleCount);
         if (limit != null && handles <= 0) {
           _fail(ForumBodyTextPageFailure.invalidGeometry);
         }
@@ -992,12 +1060,9 @@ final class ForumBodyTextPageComposer {
           if (addedEntries.isEmpty) {
             _fail(ForumBodyTextPageFailure.invalidGeometry);
           }
+          final increase = _nativeCostIncrease(addedEntries);
           final proposedEntries =
-              _nativeEntries.length +
-              proposedSceneEntries +
-              addedEntries.keys
-                  .where((entry) => !_nativeEntries.containsKey(entry))
-                  .length;
+              _nativeEntries.length + proposedSceneEntries + increase.entries;
           if (entryLimit != null && proposedEntries > entryLimit) {
             if (_draft.isEmpty && _usedHeight == 0) {
               _fail(ForumBodyTextPageFailure.nativeEntryLimit);
@@ -1005,11 +1070,7 @@ final class ForumBodyTextPageComposer {
             _seal();
             return _result(inspected, pagesBefore, false);
           }
-          for (final entry in addedEntries.entries) {
-            final old = _nativeEntries[entry.key] ?? 0;
-            addedBytes += math.max(0, entry.value - old);
-            addedEntries[entry.key] = math.max(old, entry.value);
-          }
+          addedBytes = increase.bytes;
           if (byteLimit != null &&
               _nativeBytes + addedBytes + proposedSceneBytes > byteLimit) {
             if (_draft.isEmpty && _usedHeight == 0) {
@@ -1210,11 +1271,13 @@ final class _ActiveImage {
     this.styleRevision,
     this.left,
     this.spaceBefore,
+    this.listMarkers,
   );
   final String path, fontRevision;
   final ForumBodyImageFrame frame;
   final int index, styleRevision;
   final double left, spaceBefore;
+  final ForumBodyListMarkerPlan? listMarkers;
 }
 
 final class _ActiveRule {

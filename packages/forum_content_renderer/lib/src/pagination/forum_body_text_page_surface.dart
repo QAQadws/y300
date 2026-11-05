@@ -107,17 +107,15 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     );
     final images = <ForumBodyPreparedImageFragment, ForumHtmlDisplayImage>{};
     for (final fragment in fragments) {
-      final body = fragment is ForumBodyPreparedListItemFragment
+      final binding = fragment is ForumBodyPreparedListItemFragment
           ? fragment.body
           : fragment;
-      if (body is ForumBodyPreparedInlineFragment &&
-          body.view.images.isNotEmpty &&
+      if (binding is ForumBodyPreparedInlineFragment &&
+          binding.view.images.isNotEmpty &&
           imageHost == null) {
         _fail(ForumBodyTextPageSurfaceFailure.leases);
       }
-    }
-    for (final binding
-        in fragments.whereType<ForumBodyPreparedImageFragment>()) {
+      if (binding is! ForumBodyPreparedImageFragment) continue;
       if (imageHost == null) _fail(ForumBodyTextPageSurfaceFailure.leases);
       final entry = binding.content.input.entry;
       final uri = Uri.tryParse(entry.url);
@@ -353,7 +351,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
                 top: fragment.top,
                 width: fragment.width,
                 height: fragment.height,
-                child: _bindings[index] is ForumBodyPreparedImageFragment
+                child: fragment.kind == ForumBodyTextPageFragmentKind.image
                     ? _fragmentSurface(fragment, _bindings[index])
                     : _TextLongPressSurface(
                         identity: (

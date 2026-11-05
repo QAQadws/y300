@@ -239,6 +239,7 @@ final class ForumBodyTextPageSession {
   final _issues = <ForumBodyStyleIssue>[];
   ForumBodyTextPageSessionState _state = ForumBodyTextPageSessionState.active;
   ForumBodyBlockFlowParagraph? _pendingParagraph;
+  ForumBodyBlockFlowImage? _pendingImage;
   ForumBodyListMarkerPlanPreparation? _listPreparation;
   ForumBodyListMarkerPlan? _listPlan;
   bool _markersReady = false;
@@ -379,7 +380,9 @@ final class ForumBodyTextPageSession {
           return result();
         }
         final markers =
-            _pendingParagraph?.listMarkers ?? _pendingInline?.listMarkers;
+            _pendingParagraph?.listMarkers ??
+            _pendingInline?.listMarkers ??
+            _pendingImage?.listMarkers;
         if (markers != null && markers.isNotEmpty && !_markersReady) {
           final preparation = _listPreparation ??=
               ForumBodyListMarkerPlanPreparation(
@@ -387,7 +390,8 @@ final class ForumBodyTextPageSession {
                 markers: markers,
                 left:
                     _pendingParagraph?.contentLeft ??
-                    _pendingInline!.contentLeft,
+                    _pendingInline?.contentLeft ??
+                    _pendingImage!.contentLeft,
                 fontRevision: _flow.fontRevision,
                 styleRevision: _flow.styleRevision,
                 cache: _cache,
@@ -527,6 +531,15 @@ final class ForumBodyTextPageSession {
           _margin = 0;
           admitted = 1;
         }
+        final image = _pendingImage;
+        if (image != null) {
+          _admitImage(image);
+          _pendingImage = null;
+          _listPlan = null;
+          _markersReady = false;
+          _margin = 0;
+          admitted = 1;
+        }
         if (_composer.hasPendingRule) {
           final step = _composer.advanceRule();
           return result(
@@ -562,59 +575,10 @@ final class ForumBodyTextPageSession {
         units++;
         switch (unit) {
           case ForumBodyBlockFlowImage():
-            final node = unit.image.event.node as ForumBodyElement;
             if (unit.image.index != _content.items.length) {
               throw StateError('Unordered image input');
             }
-            // First-content list markers and inline stickers need their own
-            // real baseline layout. Do not silently consume a marker here.
-            if (unit.listMarkers.isNotEmpty ||
-                unit.image.event.style.visibilityHidden) {
-              throw const ForumBodyTextPageSessionException(
-                ForumBodyTextPageSessionFailure.imageStructure,
-              );
-            }
-            final input = _imageResolver?.call(unit.identity, node);
-            _ensureActivePlan();
-            if (input == null ||
-                input.identity != unit.identity ||
-                !identical(input.element, node)) {
-              throw const ForumBodyTextPageSessionException(
-                ForumBodyTextPageSessionFailure.imageResource,
-              );
-            }
-            final style = unit.image.event.style;
-            if (input.isSticker) {
-              throw const ForumBodyTextPageSessionException(
-                ForumBodyTextPageSessionFailure.imageStructure,
-              );
-            }
-            final frame = ForumBodyImageFrame.resolve(
-              input: input,
-              width: unit.contentWidth,
-              maxHeight: _composer.height,
-              align: style.textAlign,
-              direction: style.textDirection,
-            );
-            final content = ForumBodyImagePageContent(
-              input: input,
-              frame: frame,
-              fontRevision: _flow.fontRevision,
-              styleRevision: _flow.styleRevision,
-            );
-            _content.check(content);
-            _composer.appendImage(
-              input: input,
-              frame: frame,
-              inputIndex: unit.image.index,
-              fontRevision: _flow.fontRevision,
-              styleRevision: _flow.styleRevision,
-              left: unit.contentLeft,
-              spaceBefore: _margin,
-            );
-            _content.add(content);
-            _margin = 0;
-            admitted = 1;
+            _pendingImage = unit;
           case ForumBodyBlockFlowListItemStart():
             _pendingListItem = unit;
           case ForumBodyBlockFlowSpace():
@@ -682,6 +646,7 @@ final class ForumBodyTextPageSession {
     } on ForumBodyParagraphBudgetException catch (error) {
       if (error.failure == ForumBodyParagraphBudgetFailure.pinned &&
           (_pendingParagraph != null ||
+              _pendingImage != null ||
               _pendingInline != null ||
               _pendingListItem != null)) {
         _waiting = true;
@@ -900,6 +865,56 @@ final class ForumBodyTextPageSession {
     );
   }
 
+  void _admitImage(ForumBodyBlockFlowImage unit) {
+    final style = unit.image.event.style;
+    if (style.visibilityHidden) {
+      throw const ForumBodyTextPageSessionException(
+        ForumBodyTextPageSessionFailure.imageStructure,
+      );
+    }
+    final node = unit.image.event.node as ForumBodyElement;
+    final input = _imageResolver?.call(unit.identity, node);
+    _ensureActivePlan();
+    if (input == null ||
+        input.identity != unit.identity ||
+        !identical(input.element, node)) {
+      throw const ForumBodyTextPageSessionException(
+        ForumBodyTextPageSessionFailure.imageResource,
+      );
+    }
+    if (input.isSticker) {
+      throw const ForumBodyTextPageSessionException(
+        ForumBodyTextPageSessionFailure.imageStructure,
+      );
+    }
+    final frame = ForumBodyImageFrame.resolve(
+      input: input,
+      width: unit.contentWidth,
+      maxHeight: _composer.height,
+      align: style.textAlign,
+      direction: style.textDirection,
+    );
+    final content = _decorate(
+      ForumBodyImagePageContent(
+        input: input,
+        frame: frame,
+        fontRevision: _flow.fontRevision,
+        styleRevision: _flow.styleRevision,
+      ),
+    );
+    _composer.appendImage(
+      input: input,
+      frame: frame,
+      inputIndex: unit.image.index,
+      fontRevision: _flow.fontRevision,
+      styleRevision: _flow.styleRevision,
+      left: unit.contentLeft,
+      spaceBefore: _margin,
+      listMarkers: _listPlan,
+    );
+    _content.add(content);
+  }
+
   ForumBodyTextPageContent _decorate(ForumBodyTextPageContent body) {
     final result = _listPlan == null
         ? body
@@ -920,6 +935,7 @@ final class ForumBodyTextPageSession {
     _recordPublished();
     _flow.close();
     _pendingListItem = null;
+    _pendingImage = null;
     _listPreparation?.close();
     _listPreparation = null;
     _listPlan = null;
@@ -943,6 +959,7 @@ final class ForumBodyTextPageSession {
     _state = ForumBodyTextPageSessionState.closed;
     _flow.close();
     _pendingListItem = null;
+    _pendingImage = null;
     _listPreparation?.close();
     _listPreparation = null;
     _listPlan = null;

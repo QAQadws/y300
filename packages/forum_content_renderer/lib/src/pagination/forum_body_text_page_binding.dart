@@ -83,10 +83,12 @@ ForumBodyTextPage validateForumBodyPreparedTextPageBinding({
         ? delivery.body
         : delivery;
     if (delivery is ForumBodyPreparedListItemFragment) {
-      final baseline =
-          binding is ForumBodyPreparedParagraphFragment && binding.lines.isEmpty
-          ? binding.lease.layout.alphabeticBaseline
-          : binding.lines.first.baseline;
+      final baseline = switch (binding) {
+        ForumBodyPreparedImageFragment() => delivery.plan.blockTopBaseline,
+        ForumBodyPreparedParagraphFragment() when binding.lines.isEmpty =>
+          binding.lease.layout.alphabeticBaseline,
+        _ => binding.lines.first.baseline,
+      };
       if (delivery.plan.identity != snapshot.identity ||
           !identical(delivery.placement, fragment.listMarker) ||
           delivery.picture.input != delivery.plan.picture ||

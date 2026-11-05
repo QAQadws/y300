@@ -65,6 +65,8 @@ final class _Fixture {
     String id = 'images-1',
     ForumBodyTextPageSessionLimits limits = _limits,
     int? maxNativeHandlesPerPage,
+    int? maxNativeEntriesPerPage,
+    int? maxNativeEstimatedBytesPerPage,
   }) {
     final result = ForumBodyTextPageSession(
       document: document,
@@ -80,6 +82,8 @@ final class _Fixture {
       height: height,
       imageResolver: missingResolver ? null : resolver ?? resolve,
       maxNativeHandlesPerPage: maxNativeHandlesPerPage,
+      maxNativeEntriesPerPage: maxNativeEntriesPerPage,
+      maxNativeEstimatedBytesPerPage: maxNativeEstimatedBytesPerPage,
     );
     addTearDown(result.close);
     return result;
@@ -295,24 +299,116 @@ void main() {
     '<img src="https://x/a">',
     '<li><img src="https://x/a"></li>',
   ]) {
+    test('missing resources cannot disappear: $html', () {
+      final f = _Fixture(html);
+      final s = f.session(missingResolver: true);
+      expect(
+        () => _finish(s),
+        _failure(ForumBodyTextPageSessionFailure.imageResource),
+      );
+      expect(s.state, ForumBodyTextPageSessionState.failed);
+      expect(s.snapshot, isEmpty);
+    });
+  }
+
+  for (final handleLimit in [3, 16]) {
     test(
-      'missing resources or image-first list marker cannot disappear: $html',
+      'an image-first marker travels with its block at handle limit $handleLimit',
       () {
-        final f = _Fixture(html);
-        final s = f.session(missingResolver: true);
-        expect(
-          () => _finish(s),
-          _failure(
-            html.startsWith('<li>')
-                ? ForumBodyTextPageSessionFailure.imageStructure
-                : ForumBodyTextPageSessionFailure.imageResource,
-          ),
+        final f = _Fixture(
+          '<p>intro</p><ol start="12"><li><img src="https://x/a"><p>tail</p></li></ol>',
         );
-        expect(s.state, ForumBodyTextPageSessionState.failed);
-        expect(s.snapshot, isEmpty);
+        final s = f.session(
+          height: 200,
+          resolver: (identity, node) => f.resolve(identity, node, ratio: 100),
+          maxNativeHandlesPerPage: handleLimit,
+        );
+        _finish(s);
+        final pages = s.snapshot;
+        expect(pages, hasLength(handleLimit == 3 ? 3 : 1));
+        expect(
+          pages
+              .expand((page) => page.fragments)
+              .where((fragment) => fragment.listMarker != null),
+          hasLength(1),
+        );
+        final index = handleLimit == 3 ? 1 : 0;
+        final page = pages[index];
+        final slot = page.fragments.indexWhere(
+          (fragment) => fragment.kind == ForumBodyTextPageFragmentKind.image,
+        );
+        final fragment = page.fragments[slot];
+        final marker = fragment.listMarker!;
+        expect(fragment.imagePaths, ['1/0/0']);
+        expect(fragment.sourceHint, isNull);
+        expect(marker.bounds.top, 0);
+        expect(marker.bounds.bottom, greaterThan(fragment.height));
+        expect(fragment.left + marker.bounds.left, greaterThanOrEqualTo(0));
+        if (handleLimit == 16) {
+          expect(
+            page.fragments[slot + 1].top,
+            greaterThanOrEqualTo(fragment.top + marker.bounds.bottom),
+          );
+        }
+        final job = s.openPagePreparation(index);
+        expect(job.expectedImageCount, 1);
+        expect(job.expectedNativeLeaseCount, handleLimit == 3 ? 3 : 5);
+        expect(s.reservedViewImages, 1);
+        job.close();
+        expect(s.reservedViewLeases, 0);
+        expect(s.reservedViewImages, 0);
+
+        final delivery = _prepare(s, index);
+        final decorated = delivery[slot] as ForumBodyPreparedListItemFragment;
+        final image = decorated.body as ForumBodyPreparedImageFragment;
+        expect(decorated.nativeLeases, [decorated.picture]);
+        expect(decorated.projection.text, isEmpty);
+        expect(decorated.lines, isEmpty);
+        expect(decorated.hasRenderedImages, isFalse);
+        image.reportDisplayFrame(true);
+        expect(decorated.hasRenderedImages, isTrue);
+        expect(image.content.input.element, same(f.resolved.single));
+        for (final binding in delivery) {
+          binding.close();
+        }
+        expect(s.activeIssuedImages, 0);
+        expect(f.cache.activeLeases, 0);
       },
     );
   }
+
+  test(
+    'a decorated image charges the marker against each native page budget',
+    () {
+      for (final failure in [
+        ForumBodyTextPageFailure.nativeHandleLimit,
+        ForumBodyTextPageFailure.nativeEntryLimit,
+        ForumBodyTextPageFailure.nativeByteLimit,
+      ]) {
+        final f = _Fixture('<ol><li><img src="https://x/a"></li></ol>');
+        final s = f.session(
+          maxNativeHandlesPerPage:
+              failure == ForumBodyTextPageFailure.nativeHandleLimit ? 2 : null,
+          maxNativeEntriesPerPage:
+              failure == ForumBodyTextPageFailure.nativeEntryLimit ? 1 : null,
+          maxNativeEstimatedBytesPerPage:
+              failure == ForumBodyTextPageFailure.nativeByteLimit ? 1 : null,
+        );
+        expect(
+          () => _finish(s),
+          throwsA(
+            isA<ForumBodyTextPageException>().having(
+              (error) => error.failure,
+              'failure',
+              failure,
+            ),
+          ),
+        );
+        expect(s.snapshot, isEmpty);
+        expect(f.cache.activeLeases, 0);
+      }
+    },
+  );
 
   test('sticker cannot silently turn into a block image', () {
     final f = _Fixture('<img src="https://x/smiley">');

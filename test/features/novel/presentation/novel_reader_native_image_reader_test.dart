@@ -134,6 +134,65 @@ Future<void> _until(WidgetTester tester, bool Function() done) async {
 
 void main() {
   testWidgets(
+    'an image-first list item keeps its real anchor and opens its image',
+    (tester) async {
+      const url = 'https://bbs.yamibo.com/data/attachment/forum/a.png';
+      final reader = _Reader(
+        html: '<ol start="12"><li><img src="$url"><p>tail</p></li></ol>',
+      );
+      await tester.pumpWidget(reader.widget());
+      await _until(tester, () => reader.positions.isNotEmpty);
+      final initial = reader.positions.last;
+      final view = reader.controller.visibleView!;
+      final page = view.snapshot[view.pageIndex];
+      final numeric = page.fragments.first;
+      expect(numeric.kind, ForumBodyTextPageFragmentKind.image);
+      expect(numeric.listMarker, isNotNull);
+      expect(numeric.coverageEndUtf16, 0);
+      expect(
+        page.fragments.skip(1).every((fragment) => fragment.listMarker == null),
+        isTrue,
+      );
+      final image = view.coverage.images.single;
+      expect(image.path, numeric.imagePaths.single);
+      expect(initial.anchor.nodeId, image.anchor.nodeId);
+      expect(initial.anchor.textIdentity, image.anchor.textIdentity);
+      expect(initial.isWholeBodyVisible, isFalse);
+      expect(view.coverage.hasClippedGlyphs, isFalse);
+      expect(view.coverage.hasClippedResources, isFalse);
+      reader.host.callback(0).frame!();
+      await _until(tester, () => reader.positions.last.isWholeBodyVisible);
+      final surface = find.byKey(const ValueKey('native-test-image-0'));
+      await tester.tap(surface);
+      await tester.pump();
+      final tap = reader.taps.single;
+      expect(tap.entry.url, url);
+      expect(tap.entry, same(tap.sequence.entries.single));
+      expect(tap.isCurrent, isTrue);
+
+      reader.host.callback(0).resolved!(const Size(200, 40));
+      await _until(
+        tester,
+        () => reader.positions.last.paginationKey != initial.paginationKey,
+      );
+      final restored = reader.positions.last.anchor;
+      expect(restored.nodeId, initial.anchor.nodeId);
+      expect(restored.textOffset, initial.anchor.textOffset);
+      expect(restored.textIdentity, initial.anchor.textIdentity);
+      expect(tap.isCurrent, isFalse);
+      final reflowed = reader.controller.visibleView!;
+      expect(
+        reflowed.snapshot[reflowed.pageIndex].fragments.first.listMarker,
+        isNotNull,
+      );
+      expect(reader.build.calls, 1);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      expect(reader.owner.activeCacheHandles, 0);
+    },
+  );
+
+  testWidgets(
     'explicit inline images keep their actual viewer entries through natural-size reflow',
     (tester) async {
       const url = 'https://bbs.yamibo.com/data/attachment/forum/a.png';

@@ -48,6 +48,10 @@ final class ForumBodyListMarkerPlan {
   final ForumBodyIdentity identity;
   final List<_MarkerFont> _fonts;
   int get fontCount => _fonts.length;
+  int get preparationHandleCount => 1 + 2 * fontCount;
+
+  /// A block resource has no text baseline. Align the marker ink to its top.
+  double get blockTopBaseline => -bounds.top;
   final ForumBodyTextPictureInput picture;
   final Rect bounds;
   final List<ForumBodyNativeInputCost> costs;
