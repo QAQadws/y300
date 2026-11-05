@@ -18,6 +18,10 @@ typedef NovelReaderNativeImageLayoutResolved = void Function(
   ForumBodyPreparedImageFragment,
   ForumHtmlImageLayout,
 );
+typedef NovelReaderNativeImageTapHandler = void Function(
+  ForumBodyImageInput,
+  bool Function(),
+);
 
 /// Native page mounting and gesture boundary. The Host owns controllers,
 /// sessions and the paragraph cache, and supplies loading/recovery chrome.
@@ -49,6 +53,7 @@ class NovelReaderNativePagedViewport extends StatefulWidget {
     this.imageHost,
     this.onPageUnmounted,
     this.onImageLayoutResolved,
+    this.onImageTap,
   });
 
   final NovelReaderNativePagedController controller;
@@ -73,6 +78,7 @@ class NovelReaderNativePagedViewport extends StatefulWidget {
   final ForumHtmlImageHost? imageHost;
   final VoidCallback? onPageUnmounted;
   final NovelReaderNativeImageLayoutResolved? onImageLayoutResolved;
+  final NovelReaderNativeImageTapHandler? onImageTap;
 
   @override
   State<NovelReaderNativePagedViewport> createState() =>
@@ -218,6 +224,25 @@ class _NovelReaderNativePagedViewportState
       imageHost: displayed.imageHost,
       onPageUnmounted: widget.onPageUnmounted,
       onImageLayoutResolved: widget.onImageLayoutResolved,
+      onImageTap: widget.onImageTap == null
+          ? null
+          : (image, isCurrent) {
+              if (frozen ||
+                  !widget.active ||
+                  !identical(displayed.controller, widget.controller)) {
+                return;
+              }
+              final binding = _binding;
+              widget.onImageTap!(
+                image,
+                () =>
+                    mounted &&
+                    binding == _binding &&
+                    identical(displayed.controller, widget.controller) &&
+                    identical(displayed.imageHost, widget.imageHost) &&
+                    isCurrent(),
+              );
+            },
       frozen: frozen,
       reverse: widget.reverse,
       navigationController: widget.navigationController,
@@ -301,11 +326,13 @@ class _NativeLayoutViewport extends StatefulWidget {
     required this.imageHost,
     required this.onPageUnmounted,
     required this.onImageLayoutResolved,
+    required this.onImageTap,
   });
   final NovelReaderNativePagedController controller;
   final ForumHtmlImageHost? imageHost;
   final VoidCallback? onPageUnmounted;
   final NovelReaderNativeImageLayoutResolved? onImageLayoutResolved;
+  final NovelReaderNativeImageTapHandler? onImageTap;
   final double width;
   final double height;
   final int initialPage;
@@ -898,6 +925,38 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
                           imageHost: widget.imageHost,
                           onImageDisplayChanged: _afterFrame,
                           onImageLayoutResolved: widget.onImageLayoutResolved,
+                          onImageTap: widget.onImageTap == null
+                              ? null
+                              : (fragment) {
+                                  final fragments = _mountedPages[view];
+                                  bool current() =>
+                                      mounted &&
+                                      _fits &&
+                                      !_scrolling &&
+                                      !controller.isClosed &&
+                                      !controller.hasPendingNavigation &&
+                                      identical(controller.visibleView, view) &&
+                                      _page == page &&
+                                      fragment.isActive &&
+                                      fragments != null &&
+                                      identical(
+                                        _mountedPages[view],
+                                        fragments,
+                                      ) &&
+                                      fragments.contains(fragment) &&
+                                      _pages.hasClients &&
+                                      !_pages
+                                          .position
+                                          .isScrollingNotifier
+                                          .value &&
+                                      ((_pages.page ?? -1) - page).abs() <=
+                                          precisionErrorTolerance;
+                                  if (widget.frozen || !current()) return;
+                                  widget.onImageTap!(
+                                    fragment.content.input,
+                                    current,
+                                  );
+                                },
                           key: ObjectKey(view),
                           view: view,
                           // Retain the confirmed origin through cancellation
@@ -986,11 +1045,13 @@ class _NativeMountedPage extends StatefulWidget {
     required this.imageHost,
     required this.onImageDisplayChanged,
     required this.onImageLayoutResolved,
+    required this.onImageTap,
   });
   final NovelReaderNativePageView view;
   final ForumHtmlImageHost? imageHost;
   final VoidCallback onImageDisplayChanged;
   final NovelReaderNativeImageLayoutResolved? onImageLayoutResolved;
+  final ValueChanged<ForumBodyPreparedImageFragment>? onImageTap;
   final bool keepAlive;
   final void Function(
     NovelReaderNativePageView,
@@ -1038,6 +1099,7 @@ class _NativeMountedPageState extends State<_NativeMountedPage>
       fragments: _fragments,
       imageHost: widget.imageHost,
       onImageDisplayChanged: (_, _) => widget.onImageDisplayChanged(),
+      onImageTap: widget.onImageTap,
       onImageLayoutResolved: (fragment, layout) =>
           widget.onImageLayoutResolved?.call(widget.view, fragment, layout),
       onSourceLongPress: widget.onTextSelection == null

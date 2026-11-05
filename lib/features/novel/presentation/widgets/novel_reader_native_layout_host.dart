@@ -17,6 +17,7 @@ import '../models/novel_reader_chapter_turn.dart';
 import '../models/novel_reader_anchor_navigation_request.dart';
 import '../models/novel_reader_native_host_status.dart';
 import '../models/novel_reader_native_page_view.dart';
+import '../models/novel_reader_native_image_tap.dart';
 import '../models/novel_reader_native_prepared_chapter.dart';
 import '../models/novel_reader_pagination_position.dart';
 import '../models/novel_reader_native_text_selection.dart';
@@ -75,6 +76,7 @@ class NovelReaderNativeLayoutHost extends StatefulWidget {
     this.onContentTerminal,
     this.onScrollActivityChanged,
     this.onTextSelection,
+    this.onImageTap,
     this.active = true,
     this.activity,
     this.placeholderBuilder,
@@ -136,6 +138,7 @@ class NovelReaderNativeLayoutHost extends StatefulWidget {
   final VoidCallback? onContentTerminal;
   final ValueChanged<bool>? onScrollActivityChanged;
   final ValueChanged<NovelReaderNativeTextSelection>? onTextSelection;
+  final ValueChanged<NovelReaderNativeImageTap>? onImageTap;
 
   /// Shell supplies frontmost && resumed && unobstructed reading authority.
   /// Hidden content keeps its mounted paint but owns no active pagination work.
@@ -665,6 +668,40 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         imageHost: imageHost,
         onImageLayoutResolved: (view, fragment, layout) =>
             _imageLayoutResolved(request, view, fragment, layout, imageHost),
+        onImageTap: widget.onImageTap == null
+            ? null
+            : (input, isCurrent) {
+                final images = request.scope.images;
+                if (!_live(request) ||
+                    images == null ||
+                    !images.owns(input) ||
+                    !identical(imageHost, widget.imageHost) ||
+                    !isCurrent()) {
+                  return;
+                }
+                final revision = _selectionRevision;
+                widget.onImageTap!(
+                  NovelReaderNativeImageTap(
+                    input.entry,
+                    images.sequence,
+                    () =>
+                        mounted &&
+                        !_disposed &&
+                        revision == _selectionRevision &&
+                        identical(request, _current) &&
+                        !request.closed &&
+                        request.handle.isCurrent &&
+                        identical(request.owner, widget.owner) &&
+                        !widget.owner.isClosed &&
+                        identical(
+                          request.authority,
+                          widget.readingAuthorityIdentity,
+                        ) &&
+                        identical(imageHost, widget.imageHost) &&
+                        isCurrent(),
+                  ),
+                );
+              },
         onPageUnmounted: () {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && !_disposed) _reap();

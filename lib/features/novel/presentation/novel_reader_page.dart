@@ -69,6 +69,8 @@ import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/link_copy_feedback.dart';
 import 'package:y300/shared/widgets/forum_content_selection_copy_page.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_native_text_selection.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_native_image_tap.dart';
+import 'package:y300/features/novel/presentation/services/novel_html_image_reader_bridge.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 
 const _progressDiagnostics = NovelReaderProgressDiagnostics();
@@ -147,6 +149,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   bool _allowPopAfterProgressFlush = false;
   bool _isHandlingPop = false;
   bool _textSelectionOpening = false;
+  bool _nativeImageOpening = false;
   int _pageSeekSerial = 0;
   int _chapterEntrySerial = 0;
   NovelReaderChapterEntryRequest? _pendingChapterEntryRequest;
@@ -1161,6 +1164,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       activity: _nativeActivity,
       onTextSelection: (selection) =>
           unawaited(_openNativeTextSelection(identity, selection)),
+      onImageTap: (tap) => unawaited(_openNativeImage(identity, tap)),
       idleScheduler: widget.nativeIdleScheduler,
       navigationController: _pagedNavigationController,
       pageSeekRequest: _pendingPageSeekRequest,
@@ -3017,7 +3021,58 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     _showReaderSnackBar(AppLocalizations.of(context).novelLinkOpenFailed);
   }
 
-  Future<void> _openHtmlReaderImage(ThreadImageOpenRequest request) async {
+  Future<void> _openNativeImage(
+    String identity,
+    NovelReaderNativeImageTap tap,
+  ) async {
+    if (_nativeImageOpening ||
+        !_isReadingVisible ||
+        !_isCurrentReaderSurface(identity) ||
+        !tap.isCurrent) {
+      return;
+    }
+    final viewState = ref
+        .read(novelReaderControllerProvider(_args))
+        .asData
+        ?.value;
+    if (viewState == null) return;
+    final episode = viewState.currentEpisode;
+    final request = const NovelHtmlImageReaderBridge().buildOpenRequestForEntry(
+      threadId: episode.sourceTid,
+      episodeId: episode.episodeId,
+      postNumber: episode.orderIndex + 1,
+      imageReferer: _imageRefererFor(viewState),
+      sequence: tap.sequence,
+      entry: tap.entry,
+    );
+    if (request == null) return;
+    _nativeImageOpening = true;
+    _cancelPendingReaderTap();
+    try {
+      await _openHtmlReaderImage(
+        request,
+        isCurrent: () =>
+            mounted &&
+            _elementActive &&
+            _resumed &&
+            (ModalRoute.of(context)?.isCurrent ?? true) &&
+            _isCurrentReaderSurface(identity) &&
+            tap.isCurrent,
+      );
+    } on Object {
+      if (mounted && _isCurrentReaderSurface(identity)) {
+        _showReaderSnackBar(AppLocalizations.of(context).readerImageLoadFailed);
+      }
+    } finally {
+      _nativeImageOpening = false;
+    }
+  }
+
+  Future<void> _openHtmlReaderImage(
+    ThreadImageOpenRequest request, {
+    bool Function()? isCurrent,
+  }) async {
+    if (isCurrent?.call() == false) return;
     if (request.continuousImages.isEmpty) {
       final entry = request.initialEntry;
       if (entry != null) {
@@ -3026,15 +3081,15 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       return;
     }
     await _runWithReaderSemanticsSuspended(() async {
-      if (!mounted) return;
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => ThreadImageReaderPage(
-            request: request,
-            imageReferer: ref.read(forumImageRefererProvider),
-          ),
+      if (!mounted || isCurrent?.call() == false) return;
+      final route = MaterialPageRoute<void>(
+        builder: (_) => ThreadImageReaderPage(
+          request: request,
+          imageReferer: ref.read(forumImageRefererProvider),
         ),
       );
+      await Navigator.of(context).push<void>(route);
+      await route.completed;
     });
   }
 

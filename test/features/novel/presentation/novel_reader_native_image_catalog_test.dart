@@ -62,6 +62,13 @@ void main() {
       expect(after.resolve(chapter.identity, second)!.aspectRatio, 1);
       expect(after.geometryIdentity, isNot(before.geometryIdentity));
       expect(after.geometryIdentity, equivalent.geometryIdentity);
+      expect(after.sequence.sourceId, 'episode');
+      expect(after.sequence.entries.map((entry) => entry.index), [0, 1]);
+      expect(
+        after.sequence.entries.first,
+        same(after.resolve(chapter.identity, first)!.entry),
+      );
+      expect(() => after.sequence.entries.clear(), throwsUnsupportedError);
       expect(after.owns(before.resolve(chapter.identity, first)!), isFalse);
       final foreign = const ForumBodyParser().parse(
         html: '$_image$_image',

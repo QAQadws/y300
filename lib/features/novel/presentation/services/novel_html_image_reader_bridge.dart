@@ -31,6 +31,47 @@ class NovelHtmlImageReaderBridge {
     if (entry.index < 0 || entry.index >= sequence.entries.length) {
       return null;
     }
+    return _buildRequest(
+      threadId: threadId,
+      episodeId: episodeId,
+      postNumber: postNumber,
+      imageReferer: imageReferer,
+      sequence: sequence,
+      initialIndex: entry.index,
+    );
+  }
+
+  /// Native taps already identify an actual resource object. Never infer that
+  /// slot from an equal URL or confuse source ordinals with viewer positions.
+  ThreadImageOpenRequest? buildOpenRequestForEntry({
+    required String threadId,
+    required String episodeId,
+    required int postNumber,
+    required String imageReferer,
+    required ForumHtmlReadableImageSequence sequence,
+    required ForumHtmlReadableImageEntry entry,
+  }) {
+    if (sequence.sourceId != episodeId || entry.index < 0) return null;
+    final index = sequence.entries.indexWhere((item) => identical(item, entry));
+    if (index < 0) return null;
+    return _buildRequest(
+      threadId: threadId,
+      episodeId: episodeId,
+      postNumber: postNumber,
+      imageReferer: imageReferer,
+      sequence: sequence,
+      initialIndex: index,
+    );
+  }
+
+  ThreadImageOpenRequest _buildRequest({
+    required String threadId,
+    required String episodeId,
+    required int postNumber,
+    required String imageReferer,
+    required ForumHtmlReadableImageSequence sequence,
+    required int initialIndex,
+  }) {
     final group = ThreadPostImageGroup(
       tid: threadId,
       pid: episodeId,
@@ -43,7 +84,7 @@ class NovelHtmlImageReaderBridge {
       postNumber: postNumber,
       referer: imageReferer,
       group: group,
-      initialIndex: entry.index,
+      initialIndex: initialIndex,
     );
     return ThreadImageOpenRequest(
       tid: readerRequest.tid,
@@ -81,8 +122,9 @@ class NovelHtmlImageReaderBridge {
   }
 
   String _normalize(String value) {
-    return Uri.parse(
-      'https://bbs.yamibo.com/',
-    ).resolve(value.trim()).removeFragment().toString();
+    return Uri.parse('https://bbs.yamibo.com/')
+        .resolve(value.trim())
+        .removeFragment()
+        .toString();
   }
 }

@@ -90,6 +90,7 @@ final class NovelReaderNativeImageResources {
       chapter.identity,
       inputs,
       digest.value!.toString(),
+      chapter.episodeId,
     );
   }
 
@@ -162,10 +163,19 @@ final class NovelReaderNativeImageCatalog {
     this.identity,
     Map<String, ForumBodyImageInput?> inputs,
     this.geometryIdentity,
-  ) : _inputs = Map.unmodifiable(inputs);
+    String episodeId,
+  ) : _inputs = Map.unmodifiable(inputs),
+      sequence = ForumHtmlReadableImageSequence(
+        sourceId: episodeId,
+        entries: List.unmodifiable([
+          for (final input in inputs.values)
+            if (input != null) input.entry,
+        ]),
+      );
   final ForumBodyIdentity identity;
   final Map<String, ForumBodyImageInput?> _inputs;
   final String geometryIdentity;
+  final ForumHtmlReadableImageSequence sequence;
 
   ForumBodyImageInput? resolve(
     ForumBodyIdentity identity,

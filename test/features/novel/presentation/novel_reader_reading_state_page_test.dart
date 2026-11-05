@@ -46,6 +46,7 @@ import 'package:y300/features/thread/data/providers/thread_repository_providers.
 import 'package:y300/features/thread/domain/models/thread_post_target.dart';
 import 'package:y300/features/thread/domain/repositories/thread_post_locator.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
+import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
 
 import '../../../test_support/localized_test_app.dart';
 
@@ -57,6 +58,157 @@ const _args = NovelReaderArgs(novelId: _work, episodeId: _chapter);
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+  });
+
+  for (final future in [false, true]) {
+    testWidgets(
+      'native main reader opens the exact repeated image and returns without migrating its position: future=$future',
+      (tester) async {
+        const image =
+            '<img width="400" height="400" src="https://bbs.yamibo.com/data/attachment/forum/a.png">';
+        final repository = _ReadingRepository('$image$image');
+        if (future) {
+          repository.progress[_chapter] = NovelReadingProgress(
+            novelId: _work,
+            episodeId: _chapter,
+            scrollOffset: 0,
+            updatedAt: DateTime(2026),
+            flowMode: NovelReaderFlowMode.pagedLtr,
+            pageIndex: 1,
+            pageCount: 2,
+            paginationKey: 'obsolete-image-layout',
+            anchorNodeId: 'node-1',
+            anchorTextOffset: -17,
+            anchorFormatVersion: 37,
+            anchorTextIdentity: 'future-image-identity',
+            progressPercent: .5,
+            isProgressPercentValid: true,
+          );
+        }
+        final navigation = GlobalKey<NavigatorState>();
+        final images = _PendingImageCache();
+        await tester.pumpWidget(
+          _app(
+            repository,
+            nativePagination: true,
+            navigation: navigation,
+            images: images,
+          ),
+        );
+        await _pumpNativeReady(tester);
+        final original = _nativeController(tester);
+        if (!future) expect(original.requestPage(1), isTrue);
+        await _pumpNativeReady(tester, page: 1);
+        await tester.pump(const Duration(milliseconds: 300));
+        final before = repository.progress[_chapter]!;
+        final owner = tester
+            .widget<NovelReaderNativePagedSurface>(
+              find.byType(NovelReaderNativePagedSurface),
+            )
+            .owner;
+        final rect = tester.getRect(find.byType(ForumHtmlImageView).first);
+        // Exercise a page-turn tap zone, not only the center menu zone.
+        final point = Offset(rect.right - 2, rect.center.dy);
+        await tester.tapAt(point);
+        await tester.tapAt(point);
+        for (
+          var frame = 0;
+          frame < 60 && find.byType(ThreadImageReaderPage).evaluate().isEmpty;
+          frame++
+        ) {
+          await tester.pump(const Duration(milliseconds: 10));
+        }
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(
+          find.byType(ThreadImageReaderPage, skipOffstage: false),
+          findsOneWidget,
+        );
+        final request = tester
+            .widget<ThreadImageReaderPage>(find.byType(ThreadImageReaderPage))
+            .request;
+        expect(request.initialIndex, 1);
+        expect(request.initialEntry!.indexInPost, 1);
+        expect(request.group.entries, hasLength(2));
+        expect(request.group.entries.map((e) => e.url).toSet(), hasLength(1));
+        expect(request.continuousImages.map((e) => e.id).toSet(), hasLength(2));
+        expect(request.tid, '100');
+        expect(request.pid, _chapter);
+        expect(
+          request.continuousImages.every((e) => e.cacheKey.isNotEmpty),
+          isTrue,
+        );
+        expect(original.isSuspended, isTrue);
+        expect(repository.completed, isEmpty);
+        await navigation.currentState!.maybePop();
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pump(const Duration(milliseconds: 400));
+        await _pumpNativeReady(tester, page: 1, advanceTime: true);
+        expect(find.byType(ThreadImageReaderPage), findsNothing);
+        expect(_nativeController(tester), same(original));
+        expect(
+          repository.progress[_chapter]!.anchorNodeId,
+          before.anchorNodeId,
+        );
+        expect(
+          repository.progress[_chapter]!.anchorTextIdentity,
+          before.anchorTextIdentity,
+        );
+        expect(repository.progress[_chapter]!.pageIndex, 1);
+        expect(
+          repository.progress[_chapter]!.anchorFormatVersion,
+          future ? 37 : 1,
+        );
+        expect(
+          repository.progress[_chapter]!.anchorTextOffset,
+          before.anchorTextOffset,
+        );
+        expect(repository.completed, isEmpty);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+        expect(owner.isClosed, isTrue);
+        expect(owner.activeCacheHandles, 0);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('a delayed image-opening flush cannot open above another route', (
+    tester,
+  ) async {
+    const image =
+        '<img width="400" height="400" src="https://bbs.yamibo.com/data/attachment/forum/a.png">';
+    final repository = _ReadingRepository('$image$image');
+    final navigation = GlobalKey<NavigatorState>();
+    await tester.pumpWidget(
+      _app(repository, nativePagination: true, navigation: navigation),
+    );
+    await _pumpNativeReady(tester);
+    final gate = repository.commitGate = Completer<void>();
+    addTearDown(() {
+      if (!gate.isCompleted) gate.complete();
+    });
+    await tester.tap(find.byType(ForumHtmlImageView).first);
+    await tester.pump();
+    expect(find.byType(ThreadImageReaderPage), findsNothing);
+    final covering = MaterialPageRoute<void>(
+      builder: (_) => const SizedBox.expand(),
+    );
+    unawaited(navigation.currentState!.push<void>(covering));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    gate.complete();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(
+      find.byType(ThreadImageReaderPage, skipOffstage: false),
+      findsNothing,
+    );
+    expect(covering.isCurrent, isTrue);
+    navigation.currentState!.pop();
+    await tester.pump(const Duration(milliseconds: 400));
+    await _pumpNativeReady(tester, page: 0, advanceTime: true);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(

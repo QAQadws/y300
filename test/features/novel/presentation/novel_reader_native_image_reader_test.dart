@@ -11,6 +11,7 @@ import 'package:y300/features/novel/domain/services/novel_reader_progress_policy
 import 'package:y300/features/novel/presentation/controllers/novel_reader_native_paged_controller.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_native_host_status.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_native_prepared_chapter.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_native_image_tap.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_owner.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_preparation_service.dart';
@@ -63,6 +64,7 @@ final class _Reader {
   final policy = NativeReaderImageTestHost();
   final positions = <NovelReaderPaginationPosition>[];
   final statuses = <NovelReaderNativeHostStatus>[];
+  final taps = <NovelReaderNativeImageTap>[];
   final build = _Build();
   late final preparation = DefaultNovelReaderNativePreparationService(
     executor: build,
@@ -114,6 +116,7 @@ final class _Reader {
           ),
           onPositionChanged: positions.add,
           onStatusChanged: statuses.add,
+          onImageTap: taps.add,
         ),
       ),
     ),
@@ -129,6 +132,62 @@ Future<void> _until(WidgetTester tester, bool Function() done) async {
 }
 
 void main() {
+  testWidgets(
+    'image taps identify the actual settled slot and survive only the opening suspension',
+    (tester) async {
+      final reader = _Reader();
+      await tester.pumpWidget(reader.widget());
+      await _until(tester, () => reader.positions.isNotEmpty);
+      expect(reader.controller.requestPage(1), isTrue);
+      await _until(tester, () => reader.controller.visiblePageIndex == 1);
+      final before = reader.positions.length;
+      await tester.tap(find.byType(ForumHtmlImageView).first);
+      expect(reader.taps.single.entry.index, 1);
+      expect(reader.taps.single.sequence.entries.map((e) => e.index), [0, 1]);
+      final tap = reader.taps.single;
+      expect(tap.isCurrent, isTrue);
+      expect(reader.positions, hasLength(before));
+      expect(reader.controller.visiblePageIndex, 1);
+      await tester.pumpWidget(reader.widget(active: false));
+      await tester.pump();
+      // The root pauses reading after flushing, then validates before pushing.
+      expect(tap.isCurrent, isTrue);
+      await tester.pumpWidget(reader.widget());
+      await _until(
+        tester,
+        () =>
+            reader.statuses.last.phase == NovelReaderNativeHostPhase.reading &&
+            !reader.controller.hasPendingNavigation,
+      );
+      expect(tap.isCurrent, isFalse);
+      final current = reader.controller;
+      await tester.tap(find.byType(ForumHtmlImageView).first);
+      final currentTap = reader.taps.last, a = reader.host;
+      expect(currentTap.isCurrent, isTrue);
+      addTearDown(a.completeDimensions);
+      reader.host = NativeReaderImageTestHost();
+      addTearDown(reader.host.completeDimensions);
+      await tester.pumpWidget(reader.widget());
+      await _until(
+        tester,
+        () => reader.statuses.last.phase == NovelReaderNativeHostPhase.reading,
+      );
+      reader.host = a;
+      await tester.pumpWidget(reader.widget());
+      await _until(
+        tester,
+        () => reader.statuses.last.phase == NovelReaderNativeHostPhase.reading,
+      );
+      expect(reader.controller, same(current));
+      expect(currentTap.isCurrent, isFalse);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      expect(tap.isCurrent, isFalse);
+      expect(reader.owner.activeCacheHandles, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'new source at the same image path cannot inherit old resolved geometry',
     (tester) async {
