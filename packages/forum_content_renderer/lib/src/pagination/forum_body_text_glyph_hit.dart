@@ -34,6 +34,7 @@ final class ForumBodyTextGlyphHit {
     required ForumBodyTextPageFragment fragment,
     required Size pageSize,
     required Offset point,
+    bool requireExactSource = true,
   }) {
     final clip = Rect.fromLTWH(0, 0, fragment.width, fragment.height).intersect(
       Rect.fromLTWH(
@@ -76,7 +77,7 @@ final class ForumBodyTextGlyphHit {
         role = body.plan.content.style.role;
     }
     if (position == null ||
-        !position.isExact ||
+        (requireExactSource && !position.isExact) ||
         start >= end ||
         position.displayUtf16 < start ||
         position.displayUtf16 > end) {

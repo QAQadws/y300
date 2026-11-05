@@ -16,6 +16,8 @@ import '../inline/forum_body_inline_paragraph_view.dart';
 import '../inline/forum_body_emphasis_fragment_surface.dart';
 import '../services/forum_html_image_anchor_controller.dart';
 import 'forum_body_prepared_text_fragment.dart';
+import 'forum_body_selectable_fragment.dart';
+import '../style/forum_body_style_options.dart' show ForumBodyTextRole;
 import 'forum_body_text_page_composer.dart';
 import 'forum_body_text_page_binding.dart';
 import 'forum_body_text_glyph_hit.dart';
@@ -372,6 +374,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
       fragment.height,
     );
     final pageSize = Size(_width, _height);
+    final registrar = SelectionContainer.maybeOf(context);
     final surface =
         fragment.kind != ForumBodyTextPageFragmentKind.image &&
             ForumBodyTextPageSemantics.needsStructuredSemantics(
@@ -405,6 +408,16 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
                     pageSize: pageSize,
                     point: point,
                   )?.linkTarget,
+            acceptsLongPress: registrar == null
+                ? null
+                : (point) =>
+                      ForumBodyTextGlyphHit.at(
+                        binding: binding,
+                        fragment: fragment,
+                        pageSize: pageSize,
+                        point: point,
+                      )?.role ==
+                      ForumBodyTextRole.ruby,
             onLongPress: _onSourceLongPress == null
                 ? null
                 : (point) {
@@ -418,7 +431,14 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
                       _onSourceLongPress(fragment, selected);
                     }
                   },
-            child: surface,
+            child: ForumBodySelectableFragment(
+              binding: binding,
+              fragment: fragment,
+              pageSize: pageSize,
+              identity: identity,
+              registrar: registrar,
+              child: surface,
+            ),
           );
     final header = fragment.collapseHeader;
     if (header == null) {
@@ -639,12 +659,14 @@ final class _TextInteractionSurface extends StatefulWidget {
   const _TextInteractionSurface({
     required this.identity,
     required this.onLongPress,
+    required this.acceptsLongPress,
     required this.linkAt,
     required this.onLinkTap,
     required this.child,
   });
   final Object identity;
   final ValueChanged<Offset>? onLongPress;
+  final bool Function(Offset)? acceptsLongPress;
   final String? Function(Offset)? linkAt;
   final ValueChanged<String>? onLinkTap;
   final Widget child;
@@ -693,7 +715,10 @@ final class _TextInteractionSurfaceState
     if (_tap != null && widget.linkAt?.call(event.localPosition) != null) {
       _tap!.addPointer(event);
     }
-    _press?.addPointer(event);
+    if (_press != null &&
+        (widget.acceptsLongPress?.call(event.localPosition) ?? true)) {
+      _press!.addPointer(event);
+    }
   }
 
   @override

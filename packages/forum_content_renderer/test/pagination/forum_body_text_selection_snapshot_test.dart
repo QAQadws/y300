@@ -1,3 +1,7 @@
+import 'dart:ui' show PointerDeviceKind;
+
+import 'package:flutter/material.dart'
+    show MaterialApp, Scaffold, SelectionArea;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
@@ -77,6 +81,90 @@ final class _Fixture {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  testWidgets('Flutter selection copies only the current visible base text', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      '<p>甲<ruby>字<rt>note</rt></ruby>'
+      '<span style="visibility:hidden">secret</span>🦊e\u0301 乙</p>',
+    );
+    final fragments = fixture.prepare(0);
+    String? selected;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SelectionArea(
+            onSelectionChanged: (content) => selected = content?.plainText,
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: ForumBodyTextPageSurface.prepared(
+                snapshot: fixture.session.snapshot,
+                pageIndex: 0,
+                layoutId: 'selection',
+                fragments: fragments,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    final region = tester.state<SelectableRegionState>(
+      find.byType(SelectableRegion),
+    );
+    region.selectAll(SelectionChangedCause.toolbar);
+    await tester.pump();
+    expect(selected, '甲字🦊e\u0301 乙');
+    region.clearSelection();
+    await tester.pump();
+    expect(selected, isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(fixture.cache.activeLeases, 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('mouse drag selects the actual native glyph range in reverse', (
+    tester,
+  ) async {
+    final fixture = _Fixture('<p>First second third</p>');
+    final fragments = fixture.prepare(0);
+    final binding = fragments.single;
+    final snapshots = <String?>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SelectionArea(
+            onSelectionChanged: (content) => snapshots.add(content?.plainText),
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: ForumBodyTextPageSurface.prepared(
+                snapshot: fixture.session.snapshot,
+                pageIndex: 0,
+                layoutId: 'selection',
+                fragments: fragments,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    final fragment = fixture.session.snapshot.single.fragments.single;
+    final origin =
+        tester.getTopLeft(find.byType(ForumBodyTextPageSurface)) +
+        Offset(fragment.left, fragment.top);
+    final start = binding.glyphBoxes(6, 7).single.toRect();
+    final end = binding.glyphBoxes(11, 12).single.toRect();
+    final drag = await tester.startGesture(
+      origin + Offset(end.right - 1, end.center.dy),
+      kind: PointerDeviceKind.mouse,
+    );
+    await drag.moveTo(origin + Offset(start.left + 1, start.center.dy));
+    await drag.up();
+    await tester.pump();
+    expect(snapshots.last, 'second');
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(fixture.cache.activeLeases, 0);
+    expect(tester.takeException(), isNull);
+  });
   test(
     'code copy preserves whitespace, excludes hidden text and source-free numbers',
     () {
