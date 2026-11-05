@@ -1,5 +1,6 @@
 import 'package:html_pagination_core/html_pagination_core.dart';
 
+import '../document/forum_body_collapse_layout.dart';
 import '../document/forum_body_document.dart';
 import '../inline/forum_body_inline_image_input.dart';
 import '../inline/forum_body_ruby_content.dart';
@@ -74,7 +75,12 @@ final class ForumBodyTextFlowCursor {
     this.paragraphBuilder = const ForumBodyParagraphContentBuilder(),
     this.rubyLimits = const ForumBodyRubyContentLimits(),
     this.inlineImageResolver,
-  }) : _flow = ForumBodyStyledFlowCursor(document: document, reader: reader);
+    ForumBodyCollapseLayout? collapses,
+  }) : _flow = ForumBodyStyledFlowCursor(
+         document: document,
+         reader: reader,
+         collapses: collapses,
+       );
   static const revision = 10;
   final ForumBodyInlineImageResolver? inlineImageResolver;
   final ForumBodyParagraphContentBuilder paragraphBuilder;

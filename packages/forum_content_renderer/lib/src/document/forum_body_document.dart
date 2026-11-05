@@ -184,9 +184,11 @@ final class ForumBodyDocument {
     required this.parsedNodeCount,
     required this.uniqueStyleCount,
     Iterable<ForumBodyElement> imageElements = const [],
+    Iterable<ForumBodyElement> collapseElements = const [],
   }) : nodes = List.unmodifiable(nodes),
        issues = List.unmodifiable(issues),
-       imageElements = List.unmodifiable(imageElements);
+       imageElements = List.unmodifiable(imageElements),
+       collapseElements = List.unmodifiable(collapseElements);
 
   final ForumBodyIdentity identity;
   final List<ForumBodyNode> nodes;
@@ -195,6 +197,7 @@ final class ForumBodyDocument {
 
   /// Actual image occurrences in source order, indexed during parsing.
   final List<ForumBodyElement> imageElements;
+  final List<ForumBodyElement> collapseElements;
   final int parsedNodeCount;
   final int uniqueStyleCount;
 

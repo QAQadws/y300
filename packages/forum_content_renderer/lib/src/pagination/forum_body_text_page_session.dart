@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/painting.dart';
 
 import '../block/forum_body_block_flow_cursor.dart';
+import '../document/forum_body_collapse_layout.dart';
 import '../document/forum_body_document.dart';
 import '../flow/forum_body_text_flow_cursor.dart';
 import '../inline/forum_body_inline_plan_input.dart';
@@ -163,6 +164,7 @@ final class ForumBodyTextPageSession {
     int? maxNativeEstimatedBytesPerPage,
     ForumBodyImageResolver? imageResolver,
     ForumBodyInlineImageResolver? inlineImageResolver,
+    ForumBodyCollapseLayout? collapses,
     int? maxImagesPerPage,
   }) {
     limits._validate();
@@ -202,6 +204,7 @@ final class ForumBodyTextPageSession {
           paragraphBuilder: paragraphBuilder,
           rubyLimits: rubyLimits,
           inlineImageResolver: inlineImageResolver,
+          collapses: collapses,
         ),
         composer,
         cache,

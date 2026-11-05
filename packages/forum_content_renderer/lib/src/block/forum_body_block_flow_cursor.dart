@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/painting.dart';
 
+import '../document/forum_body_collapse_layout.dart';
 import '../document/forum_body_document.dart';
 import '../inline/forum_body_ruby_content.dart';
 import '../inline/forum_body_inline_image_input.dart';
@@ -168,13 +169,16 @@ final class ForumBodyBlockFlowCursor {
         const ForumBodyParagraphContentBuilder(),
     ForumBodyRubyContentLimits rubyLimits = const ForumBodyRubyContentLimits(),
     ForumBodyInlineImageResolver? inlineImageResolver,
+    ForumBodyCollapseLayout? collapses,
   }) : _flow = ForumBodyTextFlowCursor(
          document: document,
          reader: reader,
          paragraphBuilder: paragraphBuilder,
          rubyLimits: rubyLimits,
          inlineImageResolver: inlineImageResolver,
+         collapses: collapses,
        ),
+       _collapses = collapses,
        _rootFontSize = reader.textStyle.fontSize!,
        _rootDirection = reader.textDirection {
     if (!width.isFinite || width <= 0) {
@@ -182,12 +186,13 @@ final class ForumBodyBlockFlowCursor {
       throw ArgumentError.value(width, 'width');
     }
   }
-  static const revision = 10;
+  static const revision = 11;
   final double width;
   final ForumBodyBlockEdgeMargins edgeMargins;
   final double _rootFontSize;
   final TextDirection _rootDirection;
   final ForumBodyTextFlowCursor _flow;
+  ForumBodyCollapseLayout? _collapses;
   final _frames = <_Frame>[];
   final _rootListCounter = _ListCounter(1, 1);
   final _pending = Queue<ForumBodyBlockFlowUnit>();
@@ -291,19 +296,20 @@ final class ForumBodyBlockFlowCursor {
       case ForumBodyTextFlowBoundaryKind.openBlock:
         final node = event!.node as ForumBodyElement;
         if (!const {
-          ForumBodyElementKind.container,
-          ForumBodyElementKind.paragraph,
-          ForumBodyElementKind.heading,
-          ForumBodyElementKind.quote,
-          ForumBodyElementKind.list,
-          ForumBodyElementKind.listItem,
-          ForumBodyElementKind.rule,
-          ForumBodyElementKind.editStatus,
-          ForumBodyElementKind.code,
-          ForumBodyElementKind.image,
-          ForumBodyElementKind.inline,
-          ForumBodyElementKind.unknown,
-        }.contains(node.kind)) {
+              ForumBodyElementKind.container,
+              ForumBodyElementKind.paragraph,
+              ForumBodyElementKind.heading,
+              ForumBodyElementKind.quote,
+              ForumBodyElementKind.list,
+              ForumBodyElementKind.listItem,
+              ForumBodyElementKind.rule,
+              ForumBodyElementKind.editStatus,
+              ForumBodyElementKind.code,
+              ForumBodyElementKind.image,
+              ForumBodyElementKind.inline,
+              ForumBodyElementKind.unknown,
+            }.contains(node.kind) &&
+            _collapses?.sectionFor(node) == null) {
           throw ForumBodyBlockFlowException(
             ForumBodyBlockFlowFailure.structure,
             node.path,
@@ -608,6 +614,7 @@ final class ForumBodyBlockFlowCursor {
     if (_closed) return;
     _closed = true;
     _flow.close();
+    _collapses = null;
     _frames.clear();
     _pending.clear();
     _issues.clear();

@@ -1,3 +1,4 @@
+import '../document/forum_body_collapse_layout.dart';
 import '../document/forum_body_document.dart';
 import 'forum_body_style_builder.dart';
 import 'forum_body_style_cursor.dart';
@@ -10,8 +11,13 @@ final class ForumBodyStyleResolver {
 
   ForumBodyStyleCursor open(
     ForumBodyDocument document,
-    ForumBodyReaderStyle reader,
-  ) => ForumBodyStyleCursor(document: document, reader: reader);
+    ForumBodyReaderStyle reader, {
+    ForumBodyCollapseLayout? collapses,
+  }) => ForumBodyStyleCursor(
+    document: document,
+    reader: reader,
+    collapses: collapses,
+  );
 
   ForumBodyStyleResult resolve(
     ForumBodyDocument document,

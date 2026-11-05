@@ -68,6 +68,7 @@ final class ForumBodyParser {
       nodes: builder.children(fragment.nodes, ''),
       issues: builder.issues,
       imageElements: builder.imageElements,
+      collapseElements: builder.collapseElements,
       parsedNodeCount: count,
       uniqueStyleCount: builder.styles.length,
     );
@@ -122,6 +123,7 @@ final class _BodyBuilder {
   final HtmlSourceTextMap source;
   final issues = <ForumBodyIssue>[];
   final imageElements = <ForumBodyElement>[];
+  final collapseElements = <ForumBodyElement>[];
   final styles = <String, ForumBodyAuthorStyle>{};
   final codec = CssInlineStyleDeclarationCodec.scoped();
 
@@ -204,6 +206,7 @@ final class _BodyBuilder {
           : null,
     );
     if (kind == ForumBodyElementKind.image) imageElements.add(element);
+    if (kind == ForumBodyElementKind.collapse) collapseElements.add(element);
     return element;
   }
 

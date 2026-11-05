@@ -1,3 +1,4 @@
+import '../document/forum_body_collapse_layout.dart';
 import '../document/forum_body_document.dart';
 import 'forum_body_style_builder.dart';
 import 'forum_body_style_inheritance.dart';
@@ -10,8 +11,10 @@ final class ForumBodyStyleCursor {
   ForumBodyStyleCursor({
     required ForumBodyDocument document,
     required ForumBodyReaderStyle reader,
+    ForumBodyCollapseLayout? collapses,
   }) : identity = document.identity,
        fontRevision = reader.fontRevision,
+       _collapses = collapses,
        root = ForumBodyResolvedStyle(
          textStyle: reader.textStyle,
          role: ForumBodyTextRole.body,
@@ -26,6 +29,9 @@ final class ForumBodyStyleCursor {
            ? ForumBodyStyleBuilder(reader, applyPolicy: false)
            : null,
        _inheritance = ForumBodyStyleInheritance(reader.policy) {
+    if (collapses != null && !identical(collapses.document, document)) {
+      throw ArgumentError('Collapse layout belongs to another document');
+    }
     _frames.add((
       nodes: document.nodes.iterator,
       parent: root,
@@ -39,6 +45,7 @@ final class ForumBodyStyleCursor {
   final ForumBodyStyleBuilder _builder;
   final ForumBodyStyleBuilder? _authorBuilder;
   final ForumBodyStyleInheritance _inheritance;
+  ForumBodyCollapseLayout? _collapses;
   final _frames =
       <
         ({
@@ -81,6 +88,7 @@ final class ForumBodyStyleCursor {
       }
       final node = frame.nodes.current;
       if (node is ForumBodyElement) {
+        if (_collapses?.omitsBody(node) ?? false) continue;
         final author =
             _authorBuilder?.resolve(
               node,
@@ -152,6 +160,7 @@ final class ForumBodyStyleCursor {
     if (_closed) return;
     _closed = true;
     _frames.clear();
+    _collapses = null;
     _currentNode = null;
     _currentStyle = null;
     _pendingIssues.clear();

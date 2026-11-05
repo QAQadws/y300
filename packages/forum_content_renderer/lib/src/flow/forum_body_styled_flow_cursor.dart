@@ -1,3 +1,4 @@
+import '../document/forum_body_collapse_layout.dart';
 import '../document/forum_body_document.dart';
 import '../style/forum_body_style_cursor.dart';
 import '../style/forum_body_style_options.dart';
@@ -35,7 +36,12 @@ final class ForumBodyStyledFlowCursor {
   ForumBodyStyledFlowCursor({
     required ForumBodyDocument document,
     required ForumBodyReaderStyle reader,
-  }) : _styles = const ForumBodyStyleResolver().open(document, reader);
+    ForumBodyCollapseLayout? collapses,
+  }) : _styles = const ForumBodyStyleResolver().open(
+         document,
+         reader,
+         collapses: collapses,
+       );
 
   final ForumBodyStyleCursor _styles;
   final _owner = Object();
