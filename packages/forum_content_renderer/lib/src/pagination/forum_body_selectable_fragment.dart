@@ -2,7 +2,9 @@ import 'dart:math' as math;
 
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
+import 'package:html_pagination_core/html_pagination_core.dart';
 
+import '../services/forum_http_text_link_detector.dart';
 import 'forum_body_prepared_text_fragment.dart';
 import 'forum_body_selectable_text.dart';
 import 'forum_body_text_glyph_hit.dart';
@@ -26,6 +28,11 @@ final class ForumBodyFlowSelectionScopeState
 
   /// Live copy payload. Retired or unmounted deliveries contribute nothing.
   String? get selectedText => _delegate.getSelectedContent()?.plainText;
+
+  /// Verifies a detected occurrence using the live selected display ranges.
+  /// The detector's offsets address [selectedText], including paragraph breaks.
+  bool confirmsSelectedLink(ForumHttpTextLink link) =>
+      _delegate.confirmsSelectedLink(link);
 
   static _FlowSelectionDelegate? _of(BuildContext context) => context
       .dependOnInheritedWidgetOfExactType<_FlowSelectionRegistry>()
@@ -57,24 +64,84 @@ final class _FlowSelectionRegistry extends InheritedWidget {
 final class _FlowSelectionDelegate extends StaticSelectionContainerDelegate {
   final fragments = <_RenderSelectableFragment>{};
 
+  List<_RenderSelectableFragment> get _selected =>
+      fragments
+          .where(
+            (fragment) => fragment.value.status == SelectionStatus.uncollapsed,
+          )
+          .toList()
+        ..sort((a, b) {
+          final first = a._input.fragment;
+          final second = b._input.fragment;
+          final order = (first.sourceHint?.runeStart ?? -1).compareTo(
+            second.sourceHint?.runeStart ?? -1,
+          );
+          return order != 0 ? order : compareOrder(a, b);
+        });
+
   @override
-  SelectedContent? getSelectedContent() {
-    final selected =
-        fragments
-            .where(
-              (fragment) =>
-                  fragment.value.status == SelectionStatus.uncollapsed,
-            )
-            .toList()
-          ..sort((a, b) {
-            final first = a._input.fragment;
-            final second = b._input.fragment;
-            final order = (first.sourceHint?.runeStart ?? -1).compareTo(
-              second.sourceHint?.runeStart ?? -1,
-            );
-            return order != 0 ? order : compareOrder(a, b);
-          });
-    return _joinSelected(selected);
+  SelectedContent? getSelectedContent() => _joinSelected(_selected);
+
+  bool confirmsSelectedLink(ForumHttpTextLink link) {
+    if (link.start < 0 || link.start >= link.end) return false;
+    HtmlDisplayTextProjection? projection;
+    var selectedOffset = 0;
+    var displayStart = 0, displayEnd = 0;
+    for (final (binding, range) in _selectionPieces(_selected)) {
+      final next = selectedOffset + (range.end - range.start);
+      if (next > link.start && selectedOffset < link.end) {
+        if (binding == null) return false;
+        final start =
+            range.start + math.max<int>(0, link.start - selectedOffset);
+        final end =
+            range.start + math.min<int>(next, link.end) - selectedOffset;
+        if (projection == null) {
+          projection = binding.projection;
+          displayStart = start;
+        } else if (!identical(binding.projection, projection) ||
+            start != displayEnd) {
+          return false;
+        }
+        displayEnd = end;
+        // Inline resources occupy an engine slot but no display text units.
+        if (binding is ForumBodyPreparedInlineFragment &&
+            binding.view.content.images.keys.any((index) {
+              final offset = binding
+                  .view
+                  .content
+                  .projection
+                  .atoms[index]
+                  .displayStartUtf16;
+              return displayStart < offset && offset < end;
+            })) {
+          return false;
+        }
+      }
+      selectedOffset = next;
+      if (next >= link.end) break;
+    }
+    if (projection == null || selectedOffset < link.end) return false;
+    final text = projection.text;
+    final breaks = projection.collapsibleSegmentBreakOffsets;
+    var evidence = text;
+    if (breaks.isNotEmpty) {
+      final units = text.codeUnits.toList();
+      for (final offset in breaks) {
+        units[offset] = 0x0A;
+      }
+      evidence = String.fromCharCodes(units);
+    }
+    final scan = const ForumHttpTextLinkDetector().detect(
+      evidence,
+      maxCandidates: evidence.length,
+    );
+    return !scan.isLimited &&
+        scan.links.any(
+          (candidate) =>
+              candidate.start == displayStart &&
+              candidate.end == displayEnd &&
+              candidate.text == link.text,
+        );
   }
 }
 
@@ -112,23 +179,41 @@ final class _PageSelectionDelegate extends StaticSelectionContainerDelegate {
 
 SelectedContent? _joinSelected(Iterable<_RenderSelectableFragment> selected) {
   final output = StringBuffer();
+  for (final (binding, range) in _selectionPieces(selected)) {
+    output.write(
+      binding == null ? '\n' : range.textInside(binding.projection.text),
+    );
+  }
+  return output.isEmpty ? null : SelectedContent(plainText: output.toString());
+}
+
+Iterable<(ForumBodyPreparedTextFragment?, TextRange)> _selectionPieces(
+  Iterable<_RenderSelectableFragment> selected,
+) sync* {
   ForumBodyTextPageFragment? previous;
   var endsWithBreak = false;
   for (final selectable in selected) {
-    final text = selectable.getSelectedContent()?.plainText;
-    if (text == null || text.isEmpty) continue;
+    if (selectable.value.status != SelectionStatus.uncollapsed) continue;
+    final binding = selectable._input.binding;
+    final text = binding.projection.text;
     final current = selectable._input.fragment;
-    if (previous != null &&
-        previous.path != current.path &&
-        !endsWithBreak &&
-        !text.startsWith('\n')) {
-      output.write('\n');
+    final base = selectable._base!, extent = selectable._extent!;
+    final ranges = selectable._text!.intersection(
+      math.min(base, extent),
+      math.max(base, extent),
+    );
+    for (final range in ranges) {
+      if (previous != null &&
+          previous.path != current.path &&
+          !endsWithBreak &&
+          text.codeUnitAt(range.start) != 0x0A) {
+        yield (null, const TextRange(start: 0, end: 1));
+      }
+      yield (binding, range);
+      previous = current;
+      endsWithBreak = text.codeUnitAt(range.end - 1) == 0x0A;
     }
-    output.write(text);
-    previous = current;
-    endsWithBreak = text.endsWith('\n');
   }
-  return output.isEmpty ? null : SelectedContent(plainText: output.toString());
 }
 
 /// Registers the exact mounted native fragment with Flutter's selection area.
@@ -198,6 +283,7 @@ final class _RenderSelectableFragment extends RenderProxyBox
   ) {
     final changed =
         input.identity != _input.identity ||
+        !identical(input.binding, _input.binding) ||
         input.pageSize != _input.pageSize ||
         input.registrar != _input.registrar ||
         flow != _flow;
@@ -498,13 +584,25 @@ final class _RenderSelectableFragment extends RenderProxyBox
     required bool collapsed,
   }) {
     final text = _text!;
-    final forward = (leading && position < text.end) || position <= text.start;
+    var forward = (leading && position < text.end) || position <= text.start;
     final step = text.step(position, forward: forward);
-    final box = _boxes(
+    var box = _boxes(
       math.min(position, step),
       math.max(position, step),
     ).firstOrNull;
-    if (box == null) return null;
+    if (box == null) {
+      // Line breaks and trimmed wrap spaces still count in the copy range,
+      // but a Flutter selection edge needs the nearest painted box.
+      TextBox? nearest(bool after) => after
+          ? _boxes(position, text.end).firstOrNull
+          : _boxes(text.start, position).lastOrNull;
+      box = nearest(forward);
+      if (box == null) {
+        forward = !forward;
+        box = nearest(forward);
+      }
+      if (box == null) return null;
+    }
     final left = forward == (box.direction == TextDirection.ltr);
     return SelectionPoint(
       localPosition: Offset(left ? box.left : box.right, box.bottom),

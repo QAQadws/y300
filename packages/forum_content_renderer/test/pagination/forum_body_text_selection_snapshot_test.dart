@@ -126,7 +126,13 @@ void main() {
     tester,
   ) async {
     final text = '甲' * 40;
-    final fixture = _Fixture('<p>$text</p><p>Second</p>', height: 10);
+    const url = 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=521519';
+    const longer = '$url&page=2';
+    final fixture = _Fixture(
+      '<p>$text</p><p>Second</p><p>$url</p><p>$longer</p>'
+      '<p>$url\n&amp;page=3</p>',
+      height: 10,
+    );
     final snapshot = fixture.session.snapshot;
     expect(snapshot.length, greaterThan(2));
     final fragments = [
@@ -166,8 +172,25 @@ void main() {
     );
     region.selectAll(SelectionChangedCause.toolbar);
     await tester.pump();
-    expect(selected, '$text\nSecond');
-    expect(flow.currentState!.selectedText, '$text\nSecond');
+    expect(selected, '$text\nSecond\n$url\n$longer\n$url &page=3');
+    final selection = flow.currentState!;
+    expect(selection.selectedText, selected);
+    final links = const ForumHttpTextLinkDetector().detect(selected!).links;
+    expect(links.map((link) => link.text), [url, longer, url]);
+    expect(selection.confirmsSelectedLink(links[0]), isTrue);
+    expect(selection.confirmsSelectedLink(links[1]), isTrue);
+    expect(selection.confirmsSelectedLink(links[2]), isFalse);
+    expect(
+      selection.confirmsSelectedLink(
+        ForumHttpTextLink(
+          start: links[1].start,
+          end: links[1].start + url.length,
+          text: url,
+          uri: Uri.parse(url),
+        ),
+      ),
+      isFalse,
+    );
 
     await tester.pumpWidget(build(enabled: false));
     expect(flow.currentState!.selectedText, isNull);

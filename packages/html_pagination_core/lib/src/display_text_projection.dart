@@ -271,6 +271,10 @@ final class HtmlDisplayTextProjection {
   bool get hasCollapsibleSegmentBreaks =>
       _collapsibleSegmentBreakOffsets.isNotEmpty;
 
+  /// UTF-16 locations of displayed spaces originating in a source line break.
+  List<int> get collapsibleSegmentBreakOffsets =>
+      _collapsibleSegmentBreakOffsets;
+
   String? get firstGrapheme =>
       text.isEmpty ? null : text.substring(0, _graphemeBoundaries[1]);
   String? get lastGrapheme => text.isEmpty
