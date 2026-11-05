@@ -190,7 +190,7 @@ final class ForumBodyTextPageSession {
     ForumBodyImageResolver? imageResolver,
     ForumBodyInlineImageResolver? inlineImageResolver,
     ForumBodyCollapseLayout? collapses,
-    // Scope a cell or caption to its actual descendants, with inherited style.
+    // Scope a measured body to its actual descendants, with inherited style.
     ForumBodyElement? contentRoot,
     double? intrinsicAvailableWidth,
     int? maxImagesPerPage,
@@ -254,8 +254,7 @@ final class ForumBodyTextPageSession {
         limits,
         textScaler,
         imageResolver,
-        contentRoot?.kind == ForumBodyElementKind.tableCell ||
-            contentRoot?.kind == ForumBodyElementKind.tableCaption,
+        contentRoot != null,
         intrinsicAvailableWidth == null
             ? null
             : ForumBodyFlowWidthMeasure(intrinsicAvailableWidth),
@@ -289,7 +288,7 @@ final class ForumBodyTextPageSession {
     this.limits,
     this._textScaler,
     this._imageResolver,
-    this._tableBody,
+    this._scopedBody,
     this._intrinsic,
     this._tableExtent,
     this._openTable,
@@ -299,7 +298,7 @@ final class ForumBodyTextPageSession {
   final ForumBodyParagraphCache _cache;
   final TextScaler _textScaler;
   final ForumBodyImageResolver? _imageResolver;
-  final bool _tableBody;
+  final bool _scopedBody;
   final ForumBodyTableExtent _tableExtent;
   final ForumBodyFlowWidthMeasure? _intrinsic;
   final ForumBodyTablePreparation Function(
@@ -1086,7 +1085,7 @@ final class ForumBodyTextPageSession {
       maxHeight: _tableExtent == ForumBodyTableExtent.natural
           ? _maxFlowImageHeight
           : _composer.height,
-      maxImageWidth: _tableBody ? imageWidth : null,
+      maxImageWidth: _scopedBody ? imageWidth : null,
       align: style.textAlign,
       direction: style.textDirection,
     );
