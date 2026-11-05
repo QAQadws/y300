@@ -334,6 +334,9 @@ void main() {
     expect(selected, '$text\nSecond\n$url\n$longer\n$url &page=3');
     final selection = flow.currentState!;
     expect(selection.selectedText, selected);
+    final logicalRange = selection.selectedSourceRange;
+    expect(logicalRange, fixture.entireSource);
+    final mountedText = selected;
     final links = const ForumHttpTextLinkDetector().detect(selected!).links;
     expect(links.map((link) => link.text), [url, longer, url]);
     expect(selection.confirmsSelectedLink(links[0]), isTrue);
@@ -353,8 +356,14 @@ void main() {
 
     await tester.pumpWidget(build(enabled: false));
     expect(flow.currentState!.selectedText, isNull);
+    expect(flow.currentState!.selectedSourceRange, isNull);
     expect(fragments.expand((page) => page).every((f) => f.isActive), isTrue);
     await tester.pumpWidget(const SizedBox.shrink());
+    expect(fixture.cache.activeLeases, 0);
+    expect(
+      fixture.copy(fixture.session.openSelectionCopy(logicalRange!)),
+      mountedText,
+    );
     expect(fixture.cache.activeLeases, 0);
     expect(tester.takeException(), isNull);
   });
@@ -366,24 +375,29 @@ void main() {
     final fragments = fixture.prepare(0);
     final binding = fragments.single;
     final snapshots = <String?>[];
+    final flow = GlobalKey<ForumBodyFlowSelectionScopeState>();
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: SelectionArea(
             onSelectionChanged: (content) => snapshots.add(content?.plainText),
-            child: Align(
-              alignment: Alignment.topLeft,
-              child: ForumBodyTextPageSurface.prepared(
-                snapshot: fixture.session.snapshot,
-                pageIndex: 0,
-                layoutId: 'selection',
-                fragments: fragments,
+            child: ForumBodyFlowSelectionScope(
+              key: flow,
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: ForumBodyTextPageSurface.prepared(
+                  snapshot: fixture.session.snapshot,
+                  pageIndex: 0,
+                  layoutId: 'selection',
+                  fragments: fragments,
+                ),
               ),
             ),
           ),
         ),
       ),
     );
+    await tester.pumpAndSettle();
     final fragment = fixture.session.snapshot.single.fragments.single;
     final origin =
         tester.getTopLeft(find.byType(ForumBodyTextPageSurface)) +
@@ -398,7 +412,10 @@ void main() {
     await drag.up();
     await tester.pump();
     expect(snapshots.last, 'second');
+    final range = flow.currentState!.selectedSourceRange!;
+    expect((range.startRune, range.endRune), (6, 12));
     await tester.pumpWidget(const SizedBox.shrink());
+    expect(fixture.copy(fixture.session.openSelectionCopy(range)), 'second');
     expect(fixture.cache.activeLeases, 0);
     expect(tester.takeException(), isNull);
   });

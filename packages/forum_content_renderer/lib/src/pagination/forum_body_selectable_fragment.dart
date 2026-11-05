@@ -4,10 +4,12 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:html_pagination_core/html_pagination_core.dart';
 
+import '../document/forum_body_document.dart';
 import '../services/forum_http_text_link_detector.dart';
 import 'forum_body_prepared_text_fragment.dart';
 import 'forum_body_selectable_text.dart';
 import 'forum_body_text_glyph_hit.dart';
+import 'forum_body_text_highlight.dart';
 import 'forum_body_text_page_composer.dart';
 
 /// Collects selection across the mounted slices of one native flow. Flutter
@@ -28,6 +30,11 @@ final class ForumBodyFlowSelectionScopeState
 
   /// Live copy payload. Retired or unmounted deliveries contribute nothing.
   String? get selectedText => _delegate.getSelectedContent()?.plainText;
+
+  /// Source endpoints of the live selection. The value retains no layout or
+  /// view; a host must qualify it against its own current document and layout.
+  ForumBodySourceRange? get selectedSourceRange =>
+      _delegate.selectedSourceRange;
 
   /// Verifies a detected occurrence using the live selected display ranges.
   /// The detector's offsets address [selectedText], including paragraph breaks.
@@ -81,6 +88,27 @@ final class _FlowSelectionDelegate extends StaticSelectionContainerDelegate {
 
   @override
   SelectedContent? getSelectedContent() => _joinSelected(_selected);
+
+  ForumBodySourceRange? get selectedSourceRange {
+    final selected = _selected;
+    final identity = selected.firstOrNull?._input.sourceIdentity;
+    if (identity == null ||
+        selected.any((item) => item._input.sourceIdentity != identity)) {
+      return null;
+    }
+    int? start, end;
+    for (final (binding, range) in _selectionPieces(selected)) {
+      if (binding == null) continue;
+      final source = binding.projection.sourceEnvelope(
+        startUtf16: range.start,
+        endUtf16: range.end,
+      )!;
+      start = math.min(start ?? source.runeStart, source.runeStart);
+      end = math.max(end ?? source.runeEnd, source.runeEnd);
+    }
+    if (start == null || end == null || end <= start) return null;
+    return ForumBodySourceRange(identity, start, end);
+  }
 
   bool confirmsSelectedLink(ForumHttpTextLink link) {
     if (link.start < 0 || link.start >= link.end) return false;
@@ -223,6 +251,7 @@ final class ForumBodySelectableFragment extends SingleChildRenderObjectWidget {
     required this.binding,
     required this.fragment,
     required this.pageSize,
+    required this.sourceIdentity,
     required this.identity,
     required this.registrar,
     required super.child,
@@ -232,6 +261,7 @@ final class ForumBodySelectableFragment extends SingleChildRenderObjectWidget {
   final ForumBodyPreparedTextFragment binding;
   final ForumBodyTextPageFragment fragment;
   final Size pageSize;
+  final ForumBodyIdentity sourceIdentity;
   final Object identity;
   final SelectionRegistrar? registrar;
 
@@ -283,6 +313,7 @@ final class _RenderSelectableFragment extends RenderProxyBox
   ) {
     final changed =
         input.identity != _input.identity ||
+        input.sourceIdentity != _input.sourceIdentity ||
         !identical(input.binding, _input.binding) ||
         input.pageSize != _input.pageSize ||
         input.registrar != _input.registrar ||

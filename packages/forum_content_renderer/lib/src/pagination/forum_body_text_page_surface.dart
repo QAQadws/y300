@@ -449,6 +449,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
               binding: binding,
               fragment: fragment,
               pageSize: pageSize,
+              sourceIdentity: _sourceIdentity,
               identity: identity,
               registrar: registrar,
               child: surface,
