@@ -135,6 +135,7 @@ final class ForumBodyResolvedStyle {
     this.ownDecoration = TextDecoration.none,
     this.ownBackground,
     this.linkTarget,
+    this.linkPath,
     this.boxBackground,
     this.display = ForumBodyDisplay.inline,
     this.visibilityHidden = false,
@@ -165,6 +166,9 @@ final class ForumBodyResolvedStyle {
   final TextDecoration ownDecoration;
   final Color? ownBackground;
   final String? linkTarget;
+
+  /// Original anchor occurrence, shared by its styled descendants.
+  final String? linkPath;
   final Color? boxBackground;
   final ForumBodyDisplay display;
   final bool visibilityHidden;
@@ -207,6 +211,7 @@ final class ForumBodyResolvedStyle {
           ownDecoration: ownDecoration,
           ownBackground: ownBackground,
           linkTarget: linkTarget,
+          linkPath: linkPath,
           boxBackground: boxBackground,
           display: display,
           visibilityHidden: visibilityHidden,

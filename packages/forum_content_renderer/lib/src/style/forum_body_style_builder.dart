@@ -10,7 +10,7 @@ import 'forum_body_style_options.dart';
 import 'forum_body_text_emphasis_resolver.dart';
 import 'forum_body_list_style_resolver.dart';
 
-const forumBodyStyleRevision = 25;
+const forumBodyStyleRevision = 26;
 ForumBodyLength forumBodyReaderIndent(
   ForumBodyReaderStyle reader,
   double size,
@@ -268,6 +268,11 @@ final class ForumBodyStyleBuilder {
     final linkTarget = node.tag == 'a'
         ? node.attributes['href']
         : parent.linkTarget;
+    final linkPath = linkTarget == null
+        ? null
+        : node.tag == 'a'
+        ? node.path
+        : parent.linkPath;
     var foreground = node.tag == 'a' ? reader.linkColor : style.color;
     if (quoteSurface) foreground = reader.theme?.quoteForeground ?? foreground;
     if (node.kind == ForumBodyElementKind.editStatus) {
@@ -625,6 +630,7 @@ final class ForumBodyStyleBuilder {
       ownDecoration: ownDecoration,
       ownBackground: ownBackground,
       linkTarget: linkTarget,
+      linkPath: linkPath,
       boxBackground: boxBackground,
       indentFromReader: indentFromReader,
       alignmentFromReader: alignmentFromReader,

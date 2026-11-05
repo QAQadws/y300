@@ -70,6 +70,7 @@ final class ForumBodyStyleInheritance {
       strong: effective.strong,
       ownDecoration: effective.ownDecoration,
       linkTarget: effective.linkTarget,
+      linkPath: effective.linkPath,
       boxBackground: restore(ForumBodyStyleProperty.background)
           ? author.boxBackground
           : effective.boxBackground,

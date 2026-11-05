@@ -1,6 +1,8 @@
 import 'dart:ui' as ui;
 
+import 'package:flutter/material.dart' show MaterialApp, Scaffold;
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
@@ -120,6 +122,105 @@ Future<List<int>> _pagePixels(RenderRepaintBoundary boundary) async {
 }
 
 void main() {
+  testWidgets('linked heading exposes logical roles, actions and focus', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    try {
+      final fixture = _Fixture(
+        html:
+            '<h2>Before<a href="/same"><span>First</span><b>Link</b></a>'
+            '<a href="/same">Again</a>'
+            '<a href="/hidden" style="visibility:hidden">Hidden</a>After</h2>',
+      );
+      final first = fixture.plan(width: 400, height: 50, befores: [0]);
+      final next = fixture.plan(
+        id: 'generation-2',
+        width: 400,
+        height: 50,
+        befores: [0],
+      );
+      final lease = fixture.lease(0, width: 400);
+      final opened = <String>[];
+      Widget host(ForumBodyTextPageSnapshot snapshot, {bool enabled = true}) =>
+          MaterialApp(
+            home: Scaffold(
+              body: _host(
+                ForumBodyTextPageSurface(
+                  snapshot: snapshot,
+                  pageIndex: 0,
+                  layoutId: snapshot.layoutId,
+                  leases: [lease],
+                  onLinkTap: enabled ? opened.add : null,
+                ),
+              ),
+            ),
+          );
+      SemanticsNode node(String label) =>
+          tester.getSemantics(find.bySemanticsLabel(label));
+      await tester.pumpWidget(host(first));
+      expect(find.bySemanticsLabel('BeforeFirstLinkAgainAfter'), findsNothing);
+      expect(find.bySemanticsLabel('Hidden'), findsNothing);
+      final link = node('FirstLink');
+      expect(link.getSemanticsData().flagsCollection.isLink, isTrue);
+      expect(link.getSemanticsData().flagsCollection.isHeader, isTrue);
+      expect(
+        node('Before').getSemanticsData().flagsCollection.isHeader,
+        isTrue,
+      );
+      expect(
+        link.parent!
+            .debugListChildrenInOrder(DebugSemanticsDumpOrder.traversalOrder)
+            .map((child) => child.label),
+        ['Before', 'FirstLink', 'Again', 'After'],
+      );
+      final action = link.getSemanticsData();
+      expect(action.hasAction(ui.SemanticsAction.tap), isTrue);
+      link.owner!.performAction(link.id, ui.SemanticsAction.tap);
+      expect(opened, ['/same']);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(
+        node('FirstLink').getSemanticsData().flagsCollection.isFocused,
+        ui.Tristate.isTrue,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(
+        node('Again').getSemanticsData().flagsCollection.isFocused,
+        ui.Tristate.isTrue,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      expect(opened, ['/same', '/same', '/same']);
+
+      final retiredAction = tester
+          .widget<Semantics>(
+            find.byWidgetPredicate(
+              (widget) =>
+                  widget is Semantics && widget.properties.label == 'Again',
+            ),
+          )
+          .properties
+          .onTap!;
+      await tester.pumpWidget(host(next));
+      retiredAction();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      expect(opened, hasLength(3));
+      await tester.pumpWidget(host(next, enabled: false));
+      expect(
+        find.bySemanticsLabel('BeforeFirstLinkAgainAfter'),
+        findsOneWidget,
+      );
+      expect(lease.isActive, isTrue);
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(fixture.cache.activeLeases, 0);
+    } finally {
+      semantics.dispose();
+    }
+  });
+
   testWidgets('links use their painted glyphs and retire with the page', (
     tester,
   ) async {

@@ -9,6 +9,7 @@ final class ForumBodyInlineImageSurface extends StatefulWidget {
     this.onSourceTap,
     this.interactionIdentity,
     this.paintBackgrounds = true,
+    this.excludeTextSemantics = false,
     this.imageHost,
     this.imageAnchorController,
     this.onImageDisplayChanged,
@@ -19,6 +20,9 @@ final class ForumBodyInlineImageSurface extends StatefulWidget {
   final void Function(HtmlProjectedSourcePosition)? onSourceTap;
   final Object? interactionIdentity;
   final bool paintBackgrounds;
+
+  /// A page with its own text semantics still uses the real image semantics.
+  final bool excludeTextSemantics;
   final ForumHtmlImageHost? imageHost;
   final ForumHtmlImageAnchorController? imageAnchorController;
   final void Function(ForumBodyInlineImageBinding, bool)? onImageDisplayChanged;
@@ -77,11 +81,14 @@ final class _InlineSurfaceState extends State<ForumBodyInlineImageSurface> {
   Widget build(BuildContext context) {
     final view = widget.view;
     final bindings = view.images;
-    final text = ForumBodyInlineParagraphSurface._imageTextLayer(
-      view: view,
-      onSourceTap: widget.onSourceTap,
-      interactionIdentity: widget.interactionIdentity,
-      paintBackgrounds: widget.paintBackgrounds,
+    final text = ExcludeSemantics(
+      excluding: widget.excludeTextSemantics,
+      child: ForumBodyInlineParagraphSurface._imageTextLayer(
+        view: view,
+        onSourceTap: widget.onSourceTap,
+        interactionIdentity: widget.interactionIdentity,
+        paintBackgrounds: widget.paintBackgrounds,
+      ),
     );
     if (bindings.isEmpty) return text;
     final host = widget.imageHost;

@@ -19,6 +19,7 @@ import 'forum_body_prepared_text_fragment.dart';
 import 'forum_body_text_page_composer.dart';
 import 'forum_body_text_page_binding.dart';
 import 'forum_body_text_glyph_hit.dart';
+import 'forum_body_text_page_semantics.dart';
 import 'forum_body_text_selection_snapshot.dart';
 
 export 'forum_body_text_page_binding.dart'
@@ -252,13 +253,20 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
 
   Widget _fragmentSurface(
     ForumBodyTextPageFragment fragment,
-    ForumBodyPreparedTextFragment binding,
-  ) {
+    ForumBodyPreparedTextFragment binding, {
+    bool? excludeTextSemantics,
+  }) {
     if (binding is ForumBodyPreparedListItemFragment) {
       return Stack(
         clipBehavior: Clip.none,
         children: [
-          Positioned.fill(child: _fragmentSurface(fragment, binding.body)),
+          Positioned.fill(
+            child: _fragmentSurface(
+              fragment,
+              binding.body,
+              excludeTextSemantics: excludeTextSemantics,
+            ),
+          ),
           Positioned.fill(
             child: IgnorePointer(child: _ListMarkerSurface(binding)),
           ),
@@ -278,7 +286,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
         ? null
         : (HtmlProjectedSourcePosition position) =>
               _onSourceTap(fragment, position);
-    return switch (binding) {
+    final surface = switch (binding) {
       ForumBodyPreparedImageFragment() => _ImageFragmentSurface(
         binding: binding,
         host: _imageHost!,
@@ -321,6 +329,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
             ? null
             : (image) => _onInlineImageTap(binding, image),
         paintBackgrounds: false,
+        excludeTextSemantics: excludeTextSemantics ?? false,
         interactionIdentity: interaction,
         onSourceTap: tap,
       ),
@@ -335,6 +344,11 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
         onSourceTap: tap,
       ),
     };
+    if (excludeTextSemantics == null ||
+        surface is ForumBodyInlineImageSurface) {
+      return surface;
+    }
+    return ExcludeSemantics(excluding: excludeTextSemantics, child: surface);
   }
 
   Widget _placedFragment(
@@ -343,28 +357,45 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     ForumBodyPreparedTextFragment binding,
   ) {
     final key = ObjectKey(_bindingKey(binding));
-    final surface = _fragmentSurface(fragment, binding);
+    final identity = (
+      _layoutId,
+      _page.index,
+      fragment.paragraphIndex,
+      fragment.startLine,
+      fragment.endLine,
+      fragment.left,
+      fragment.top,
+      fragment.width,
+      fragment.height,
+    );
+    final pageSize = Size(_width, _height);
+    final surface =
+        fragment.kind != ForumBodyTextPageFragmentKind.image &&
+            ForumBodyTextPageSemantics.hasLink(binding, fragment)
+        ? ForumBodyTextPageSemantics(
+            binding: binding,
+            fragment: fragment,
+            pageSize: pageSize,
+            identity: identity,
+            onLinkTap: _onLinkTap,
+            buildSurface: (exclude) => _fragmentSurface(
+              fragment,
+              binding,
+              excludeTextSemantics: exclude,
+            ),
+          )
+        : _fragmentSurface(fragment, binding);
     final body = fragment.kind == ForumBodyTextPageFragmentKind.image
         ? surface
         : _TextInteractionSurface(
-            identity: (
-              _layoutId,
-              _page.index,
-              fragment.paragraphIndex,
-              fragment.startLine,
-              fragment.endLine,
-              fragment.left,
-              fragment.top,
-              fragment.width,
-              fragment.height,
-            ),
+            identity: identity,
             onLinkTap: _onLinkTap,
             linkAt: _onLinkTap == null
                 ? null
                 : (point) => ForumBodyTextGlyphHit.at(
                     binding: binding,
                     fragment: fragment,
-                    pageSize: Size(_width, _height),
+                    pageSize: pageSize,
                     point: point,
                   )?.linkTarget,
             onLongPress: _onSourceLongPress == null
@@ -373,7 +404,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
                     final selected = forumBodyTextSelectionAt(
                       binding: binding,
                       fragment: fragment,
-                      pageSize: Size(_width, _height),
+                      pageSize: pageSize,
                       point: point,
                     );
                     if (selected != null) {
