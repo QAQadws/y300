@@ -295,10 +295,7 @@ final class _NovelReaderNativeFlowHostState
       run.imageTracker = NovelReadingImageTracker((_) {
         if (_current(run)) _reportImages(run);
       });
-      run.imageHost = NovelReadingImageHost(
-        delegate: config.imageHost,
-        tracker: run.imageTracker!,
-      );
+      run.imageHost = config.imageHost;
       final source = run.source = NovelReaderNativeSourceRun(
         session: session,
         demand: run.demand,
@@ -392,6 +389,28 @@ final class _NovelReaderNativeFlowHostState
     int index,
     List<ForumBodyPreparedTextFragment> fragments,
   ) {
+    final images = fragments
+        .where((fragment) => fragment.imageCount > 0)
+        .toList();
+    Widget build(VoidCallback? onFrameChanged) =>
+        _pageSurface(context, run, snapshot, index, fragments, onFrameChanged);
+    return images.isEmpty
+        ? build(null)
+        : _FlowImageReadiness(
+            tracker: run.imageTracker!,
+            fragments: images,
+            buildSurface: build,
+          );
+  }
+
+  Widget _pageSurface(
+    BuildContext context,
+    _FlowRun run,
+    ForumBodyTextPageSnapshot snapshot,
+    int index,
+    List<ForumBodyPreparedTextFragment> fragments,
+    VoidCallback? onFrameChanged,
+  ) {
     final l10n = AppLocalizations.of(context);
     final catalog = run.scope!.images!;
     bool current() =>
@@ -429,6 +448,12 @@ final class _NovelReaderNativeFlowHostState
       onInlineImageTap: (_, binding) {
         if (binding.input.entry case final entry?) openImage(entry);
       },
+      onImageDisplayChanged: onFrameChanged == null
+          ? null
+          : (_, _) => onFrameChanged(),
+      onInlineImageDisplayChanged: onFrameChanged == null
+          ? null
+          : (_, _, _) => onFrameChanged(),
       onImageLayoutResolved: (fragment, layout) {
         final input = fragment.content.input;
         final ratio = layout.aspectRatio ?? layout.displaySize?.aspectRatio;
@@ -509,6 +534,58 @@ final class _NovelReaderNativeFlowHostState
       run.close();
     }
     _retiring.clear();
+    super.dispose();
+  }
+}
+
+/// The shared surface has already validated the display binding before it
+/// reports a frame. Register only its actual mounted resource deliveries.
+final class _FlowImageReadiness extends StatefulWidget {
+  const _FlowImageReadiness({
+    required this.tracker,
+    required this.fragments,
+    required this.buildSurface,
+  });
+
+  final NovelReadingImageTracker tracker;
+  final List<ForumBodyPreparedTextFragment> fragments;
+  final Widget Function(VoidCallback) buildSurface;
+
+  @override
+  State<_FlowImageReadiness> createState() => _FlowImageReadinessState();
+}
+
+final class _FlowImageReadinessState extends State<_FlowImageReadiness> {
+  @override
+  void initState() {
+    super.initState();
+    _report();
+  }
+
+  @override
+  void didUpdateWidget(covariant _FlowImageReadiness oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.tracker, widget.tracker)) {
+      oldWidget.tracker.remove(this);
+    }
+    _report();
+  }
+
+  void _report() {
+    if (mounted) {
+      widget.tracker.update(
+        this,
+        widget.fragments.every((fragment) => fragment.hasRenderedImages),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.buildSurface(_report);
+
+  @override
+  void dispose() {
+    widget.tracker.remove(this);
     super.dispose();
   }
 }
