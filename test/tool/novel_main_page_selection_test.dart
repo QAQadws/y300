@@ -34,7 +34,7 @@ void main() {
         .load();
   });
   testWidgets(
-    'actual reader long press copies base, explicit annotation and code; stale source cannot copy',
+    'actual reader selects in place, copies explicit annotation and retires stale actions',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       final writer = _Writer();
@@ -42,7 +42,8 @@ void main() {
       final id = data.add(
         '<p>before <ruby>BASE<rt>NOTE</rt></ruby> after.</p>'
         '<div class="blockcode"><ol><li>  code(); </li></ol></div>'
-        '<p>script <sup>UP</sup> and <sub>DOWN</sub>.</p>',
+        '<p>script <sup>UP</sup> and <sub>DOWN</sub>.</p>'
+        '<table><tr><td>Adjacent page</td></tr></table><p>Last page</p>',
       );
       final args = NovelReaderArgs(
         novelId: id.novelId,
@@ -96,7 +97,10 @@ void main() {
             observe().ready &&
             observe().complete,
       );
-      Future<void> longPressInline(String text) async {
+      Future<void> longPressInline(
+        String text, {
+        bool annotation = false,
+      }) async {
         final target = observe().nativeController!.viewForPage(
           observe().page!,
         )!;
@@ -137,47 +141,45 @@ void main() {
                 (box.top + box.bottom) * .5,
               ),
         );
-        await waitUntil(
-          () => find
-              .byKey(const Key('novel-native-selection-copy-page'))
-              .evaluate()
-              .isNotEmpty,
-        );
+        final targetFinder = annotation
+            ? find.byKey(const Key('novel-native-selection-copy-page'))
+            : find.byType(AdaptiveTextSelectionToolbar);
+        await waitUntil(() => targetFinder.evaluate().isNotEmpty);
       }
 
       ForumContentSelectionCopyPage selection() =>
           tester.widget(find.byType(ForumContentSelectionCopyPage));
+      VoidCallback copyButton() => tester
+          .widget<AdaptiveTextSelectionToolbar>(
+            find.byType(AdaptiveTextSelectionToolbar),
+          )
+          .buttonItems!
+          .singleWhere((b) => b.type == ContextMenuButtonType.copy)
+          .onPressed!;
       Future<VoidCallback> selectAll() async {
+        final copyPage = find.byType(ForumContentSelectionCopyPage);
         final region = tester.state<SelectableRegionState>(
-          find.byType(SelectableRegion),
+          copyPage.evaluate().isEmpty
+              ? find.byType(SelectableRegion)
+              : find.descendant(
+                  of: copyPage,
+                  matching: find.byType(SelectableRegion),
+                ),
         );
         region.selectAll(SelectionChangedCause.toolbar);
         await tester.pumpAndSettle();
-        final toolbar = tester.widget<AdaptiveTextSelectionToolbar>(
-          find.byType(AdaptiveTextSelectionToolbar),
-        );
-        return toolbar.buttonItems!
-            .singleWhere((b) => b.type == ContextMenuButtonType.copy)
-            .onPressed!;
+        return copyButton();
       }
 
       try {
         await ready();
         final owner = observe().nativeOwner!;
+        expect(observe().count, greaterThan(1));
         final originalPage = observe().page;
         final l10n = AppLocalizations.of(reader.currentContext!);
         await longPressInline('BASE');
-        expect(selection().title, l10n.novelSelectionCopyTitle);
-        expect(selection().isCurrent!(), isTrue);
-        expect(
-          tester
-              .widget<Text>(
-                find.byKey(const Key('novel-native-selection-copy-text')),
-              )
-              .data,
-          'BASE',
-        );
-        (await selectAll())();
+        expect(find.byType(ForumContentSelectionCopyPage), findsNothing);
+        copyButton()();
         await tester.pumpAndSettle();
         expect(writer.writes, ['BASE']);
         final stale = await selectAll();
@@ -185,19 +187,21 @@ void main() {
           reader.currentContext!,
           listen: false,
         );
+        final previousLayout = observe().paginationKey;
         final state = c.read(novelReaderControllerProvider(args)).requireValue;
         c
             .read(novelReaderControllerProvider(args).notifier)
             .previewPreferences(state.preferences.copyWith(fontSize: 22));
-        await waitUntil(() => !selection().isCurrent!());
+        await waitUntil(
+          () => observe().ready && observe().paginationKey != previousLayout,
+        );
         stale();
         await tester.pumpAndSettle();
         expect(writer.writes, ['BASE']);
-        navigator.currentState!.pop();
         await ready();
         expect(observe().page, originalPage);
 
-        await longPressInline('NOTE');
+        await longPressInline('NOTE', annotation: true);
         expect(selection().title, l10n.novelAnnotationSelectionCopyTitle);
         expect(selection().isCurrent!(), isTrue);
         expect(
@@ -216,21 +220,16 @@ void main() {
 
         for (final text in ['UP', 'DOWN']) {
           await longPressInline(text);
-          expect(selection().title, l10n.novelSelectionCopyTitle);
-          expect(selection().isCurrent!(), isTrue);
-          expect(
-            tester
-                .widget<Text>(
-                  find.byKey(const Key('novel-native-selection-copy-text')),
-                )
-                .data,
-            text,
-          );
-          (await selectAll())();
+          expect(find.byType(ForumContentSelectionCopyPage), findsNothing);
+          if (text == 'DOWN') {
+            await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+            await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
+            await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+          } else {
+            copyButton()();
+          }
           await tester.pumpAndSettle();
           expect(writer.writes.last, text);
-          navigator.currentState!.pop();
-          await ready();
         }
 
         final codeFinder = find.byWidgetPredicate(
@@ -249,25 +248,21 @@ void main() {
               ),
         );
         await waitUntil(
-          () =>
-              find.byType(ForumContentSelectionCopyPage).evaluate().isNotEmpty,
+          () => find.byType(AdaptiveTextSelectionToolbar).evaluate().isNotEmpty,
         );
-        expect(selection().isCurrent!(), isTrue);
-        expect(
-          tester
-              .widget<Text>(
-                find.byKey(const Key('novel-native-selection-copy-text')),
-              )
-              .data,
-          '  code(); ',
-        );
+        expect(find.byType(ForumContentSelectionCopyPage), findsNothing);
         (await selectAll())();
         await tester.pumpAndSettle();
-        expect(writer.writes, ['BASE', 'NOTE', 'UP', 'DOWN', '  code(); ']);
+        expect(writer.writes, [
+          'BASE',
+          'NOTE',
+          'UP',
+          'DOWN',
+          'before BASE after.\n  code(); \nscript UP and DOWN.',
+        ]);
         final retired = await selectAll();
         navigator.currentState!.removeRoute(route);
         await tester.pumpAndSettle();
-        expect(selection().isCurrent!(), isFalse);
         retired();
         await tester.pumpAndSettle();
         expect(writer.writes, hasLength(5));
@@ -275,8 +270,6 @@ void main() {
         expect(owner.activeCacheHandles, 0);
         expect(owner.retainedCacheGenerations, 0);
         expect(owner.estimatedRetainedBytes, 0);
-        navigator.currentState!.pop();
-        await tester.pumpAndSettle();
         data.release(args.episodeId);
         expect(data.retainedChapters, 0);
         expect(tester.takeException(), isNull);

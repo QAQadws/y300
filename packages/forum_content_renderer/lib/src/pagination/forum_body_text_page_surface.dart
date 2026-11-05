@@ -42,6 +42,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     required int pageIndex,
     required String layoutId,
     required List<ForumBodyParagraphLease> leases,
+    bool selectionEnabled = true,
     void Function(
       ForumBodyTextPageFragment fragment,
       HtmlProjectedSourcePosition position,
@@ -70,6 +71,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
             endLine: fragment.endLine,
           ),
       ],
+      selectionEnabled: selectionEnabled,
       onSourceTap: onSourceTap,
       onLinkTap: onLinkTap,
       onSourceLongPress: onSourceLongPress,
@@ -88,6 +90,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     // A cell's internal page has a large layout ceiling. Mount only the
     // occupied box when placing that already published slice in a table.
     bool compactHeight = false,
+    bool selectionEnabled = true,
     ForumHtmlImageHost? imageHost,
     ForumHtmlImageAnchorController? imageAnchorController,
     ForumHtmlCollapseLabels? collapseLabels,
@@ -159,6 +162,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
       layoutId,
       snapshot.width,
       compactHeight ? page.usedHeight : snapshot.height,
+      selectionEnabled,
       List.unmodifiable(fragments),
       onSourceTap,
       onLinkTap,
@@ -183,6 +187,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     this._layoutId,
     this._width,
     this._height,
+    this._selectionEnabled,
     this._bindings,
     this._onSourceTap,
     this._onLinkTap,
@@ -203,6 +208,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
   final String _layoutId;
   final double _width;
   final double _height;
+  final bool _selectionEnabled;
   final List<ForumBodyPreparedTextFragment> _bindings;
   final void Function(ForumBodyTextPageFragment, HtmlProjectedSourcePosition)?
   _onSourceTap;
@@ -360,6 +366,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     BuildContext context,
     ForumBodyTextPageFragment fragment,
     ForumBodyPreparedTextFragment binding,
+    bool canSelect,
   ) {
     final key = ObjectKey(_bindingKey(binding));
     final identity = (
@@ -374,7 +381,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
       fragment.height,
     );
     final pageSize = Size(_width, _height);
-    final registrar = SelectionContainer.maybeOf(context);
+    final registrar = canSelect ? SelectionContainer.maybeOf(context) : null;
     final surface =
         fragment.kind != ForumBodyTextPageFragmentKind.image &&
             ForumBodyTextPageSemantics.needsStructuredSemantics(
@@ -506,7 +513,14 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
+  Widget build(BuildContext context) => ForumBodyPageSelectionScope(
+    child: _buildBody(
+      canSelect:
+          _selectionEnabled && SelectionContainer.maybeOf(context) != null,
+    ),
+  );
+
+  Widget _buildBody({required bool canSelect}) => LayoutBuilder(
     builder: (context, constraints) {
       if (constraints.constrain(Size(_width, _height)) !=
           Size(_width, _height)) {
@@ -541,7 +555,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
                 ),
               ),
             for (final (index, fragment) in _page.fragments.indexed)
-              _placedFragment(context, fragment, _bindings[index]),
+              _placedFragment(context, fragment, _bindings[index], canSelect),
           ],
         ),
       );

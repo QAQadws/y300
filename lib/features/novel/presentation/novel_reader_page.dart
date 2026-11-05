@@ -1245,6 +1245,13 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       activity: _nativeActivity,
       onTextSelection: (selection) =>
           unawaited(_openNativeTextSelection(identity, selection)),
+      buildTextSelection: (layout, child) => ForumContentSelectionRegion(
+        clipboardTextWriter: ref.read(clipboardTextWriterProvider),
+        selectionIdentity: (identity, layout),
+        isCurrent: () => _isReadingVisible && _isCurrentReaderSurface(identity),
+        onSelectionStarted: _cancelPendingReaderTap,
+        child: child,
+      ),
       onLinkTap: (url, isCurrent) => _openNativeLink(identity, url, isCurrent),
       onImageTap: (tap) => unawaited(_openNativeImage(identity, tap)),
       idleScheduler: widget.nativeIdleScheduler,

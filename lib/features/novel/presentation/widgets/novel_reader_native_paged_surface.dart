@@ -75,6 +75,7 @@ class NovelReaderNativePagedSurface extends StatefulWidget {
     this.onContentTerminal,
     this.onScrollActivityChanged,
     this.onTextSelection,
+    this.buildTextSelection,
     this.onLinkTap,
     this.onImageTap,
     this.onStatusChanged,
@@ -123,6 +124,7 @@ class NovelReaderNativePagedSurface extends StatefulWidget {
   final VoidCallback? onContentTerminal;
   final ValueChanged<bool>? onScrollActivityChanged;
   final ValueChanged<NovelReaderNativeTextSelection>? onTextSelection;
+  final Widget Function(Object identity, Widget child)? buildTextSelection;
   final NovelReaderNativeLinkHandler? onLinkTap;
   final ValueChanged<NovelReaderNativeImageTap>? onImageTap;
   final ValueChanged<NovelReaderNativeHostStatus>? onStatusChanged;
@@ -386,76 +388,81 @@ class _NativePagedSurfaceState extends State<NovelReaderNativePagedSurface> {
                   child: Column(
                     children: [
                       Expanded(
-                        child: NovelReaderNativeLayoutHost(
-                          owner: widget.owner,
-                          sourceId: widget.episode.episodeId,
-                          rawHtml: widget.rawHtml,
-                          semanticDocument: widget.semanticDocument,
-                          preferences: widget.preferences,
-                          resolvedFont: widget.resolvedFont,
-                          progressSnapshot: widget.progressSnapshot,
-                          readingAuthorityIdentity:
-                              widget.readingAuthorityIdentity,
-                          preparationService: widget.preparationService,
-                          converter: widget.converter,
-                          imageHost: widget.imageHost,
-                          imagePolicy: widget.imagePolicy,
-                          imageThreadId: widget.episode.sourceTid,
-                          imageCacheOwnerId:
-                              widget.imageCacheOwnerId ??
-                              widget.episode.sourceTid,
-                          active: widget.active,
-                          activity: widget.activity,
-                          onTextSelection: widget.onTextSelection,
-                          onLinkTap: widget.onLinkTap,
-                          onImageTap: widget.onImageTap,
-                          startsAtBeginning: widget.startsAtBeginning,
-                          conversionAnchor: widget.conversionAnchor,
-                          navigationController: _navigation,
-                          pageSeekRequest: widget.pageSeekRequest,
-                          onPageSeekFinished: widget.onPageSeekFinished,
-                          navigationRequest: widget.navigationRequest,
-                          onNavigationFinished: widget.onNavigationFinished,
-                          chapterEntryRequest: widget.chapterEntryRequest,
-                          onChapterEntryApplied: widget.onChapterEntryApplied,
-                          onChapterEntryRetired: widget.onChapterEntryRetired,
-                          previousChapterTitle: widget.previousChapterTitle,
-                          nextChapterTitle: widget.nextChapterTitle,
-                          onTurnToAdjacentChapter:
-                              widget.onTurnToAdjacentChapter,
-                          chapterTurnIsInFlight: widget.chapterTurnIsInFlight,
-                          onChapterTurnHintChanged: (hint) {
-                            if (_hint != hint) setState(() => _hint = hint);
-                          },
-                          onPositionChanged: (position) {
-                            setState(() => _position = position);
-                            widget.onPositionChanged?.call(position);
-                          },
-                          onStatusChanged: (status) {
-                            setState(() => _status = status);
-                            widget.onStatusChanged?.call(status);
-                          },
-                          onContentReady: widget.onContentReady,
-                          onContentTerminal: widget.onContentTerminal,
-                          onScrollActivityChanged:
-                              widget.onScrollActivityChanged,
-                          retryRevision: _retry,
-                          performance: widget.performance,
-                          idleScheduler: widget.idleScheduler,
-                          placeholderBuilder: (context, status) => Center(
-                            child:
-                                status.phase == NovelReaderNativeHostPhase.empty
-                                ? Text(
-                                    l10n.novelPagedNoContent,
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(color: palette.foreground),
-                                  )
-                                : Icon(
-                                    status.error != null
-                                        ? Icons.warning_amber_outlined
-                                        : Icons.hourglass_empty,
-                                    color: palette.muted,
-                                  ),
+                        child: _withTextSelection(
+                          NovelReaderNativeLayoutHost(
+                            owner: widget.owner,
+                            sourceId: widget.episode.episodeId,
+                            rawHtml: widget.rawHtml,
+                            semanticDocument: widget.semanticDocument,
+                            preferences: widget.preferences,
+                            resolvedFont: widget.resolvedFont,
+                            progressSnapshot: widget.progressSnapshot,
+                            readingAuthorityIdentity:
+                                widget.readingAuthorityIdentity,
+                            preparationService: widget.preparationService,
+                            converter: widget.converter,
+                            imageHost: widget.imageHost,
+                            imagePolicy: widget.imagePolicy,
+                            imageThreadId: widget.episode.sourceTid,
+                            imageCacheOwnerId:
+                                widget.imageCacheOwnerId ??
+                                widget.episode.sourceTid,
+                            active: widget.active,
+                            activity: widget.activity,
+                            onTextSelection: widget.onTextSelection,
+                            onLinkTap: widget.onLinkTap,
+                            onImageTap: widget.onImageTap,
+                            startsAtBeginning: widget.startsAtBeginning,
+                            conversionAnchor: widget.conversionAnchor,
+                            navigationController: _navigation,
+                            pageSeekRequest: widget.pageSeekRequest,
+                            onPageSeekFinished: widget.onPageSeekFinished,
+                            navigationRequest: widget.navigationRequest,
+                            onNavigationFinished: widget.onNavigationFinished,
+                            chapterEntryRequest: widget.chapterEntryRequest,
+                            onChapterEntryApplied: widget.onChapterEntryApplied,
+                            onChapterEntryRetired: widget.onChapterEntryRetired,
+                            previousChapterTitle: widget.previousChapterTitle,
+                            nextChapterTitle: widget.nextChapterTitle,
+                            onTurnToAdjacentChapter:
+                                widget.onTurnToAdjacentChapter,
+                            chapterTurnIsInFlight: widget.chapterTurnIsInFlight,
+                            onChapterTurnHintChanged: (hint) {
+                              if (_hint != hint) setState(() => _hint = hint);
+                            },
+                            onPositionChanged: (position) {
+                              setState(() => _position = position);
+                              widget.onPositionChanged?.call(position);
+                            },
+                            onStatusChanged: (status) {
+                              setState(() => _status = status);
+                              widget.onStatusChanged?.call(status);
+                            },
+                            onContentReady: widget.onContentReady,
+                            onContentTerminal: widget.onContentTerminal,
+                            onScrollActivityChanged:
+                                widget.onScrollActivityChanged,
+                            retryRevision: _retry,
+                            performance: widget.performance,
+                            idleScheduler: widget.idleScheduler,
+                            placeholderBuilder: (context, status) => Center(
+                              child:
+                                  status.phase ==
+                                      NovelReaderNativeHostPhase.empty
+                                  ? Text(
+                                      l10n.novelPagedNoContent,
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        color: palette.foreground,
+                                      ),
+                                    )
+                                  : Icon(
+                                      status.error != null
+                                          ? Icons.warning_amber_outlined
+                                          : Icons.hourglass_empty,
+                                      color: palette.muted,
+                                    ),
+                            ),
                           ),
                         ),
                       ),
@@ -506,6 +513,14 @@ class _NativePagedSurfaceState extends State<NovelReaderNativePagedSurface> {
       ),
     );
   }
+
+  Widget _withTextSelection(Widget child) =>
+      widget.buildTextSelection?.call((
+        widget.readingAuthorityIdentity,
+        _status?.controller,
+        _position?.pageIndex,
+      ), child) ??
+      child;
 
   @override
   void dispose() {

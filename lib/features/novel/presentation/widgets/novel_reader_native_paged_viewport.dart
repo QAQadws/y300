@@ -1344,6 +1344,9 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
                               : (fragment) => _toggleCollapse(view, fragment),
                           key: ObjectKey(view),
                           view: view,
+                          selectionEnabled:
+                              !widget.frozen &&
+                              controller.visiblePageIndex == page,
                           // Retain the confirmed origin through cancellation
                           // and this one pending tap destination. Rapid return
                           // reuses its live Element instead of retiring and
@@ -1453,6 +1456,7 @@ class _NativeMountedPage extends StatefulWidget {
     super.key,
     required this.view,
     required this.keepAlive,
+    required this.selectionEnabled,
     required this.onMounted,
     required this.onUnmounted,
     required this.onTextSelection,
@@ -1484,6 +1488,7 @@ class _NativeMountedPage extends StatefulWidget {
   onImageTap;
   final ValueChanged<ForumBodyTextPageFragment>? onCollapseToggle;
   final bool keepAlive;
+  final bool selectionEnabled;
   final void Function(
     NovelReaderNativePageView,
     List<ForumBodyPreparedTextFragment>,
@@ -1624,6 +1629,7 @@ class _NativeMountedPageState extends State<_NativeMountedPage>
       layoutId: snapshot.layoutId,
       fragments: fragments,
       compactHeight: compactHeight,
+      selectionEnabled: widget.selectionEnabled,
       imageHost: widget.imageHost,
       collapseLabels: l10n == null
           ? null

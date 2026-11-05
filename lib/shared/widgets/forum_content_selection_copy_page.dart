@@ -10,10 +10,12 @@ import 'package:y300/shared/widgets/forum_native_surface.dart';
 
 /// The caller owns navigation/failure feedback and checks `isCurrent` before
 /// applying asynchronous results to this selection's source page.
-typedef ForumSelectionLinkOpener =
-    Future<void> Function(String url, bool Function() isCurrent);
+typedef ForumSelectionLinkOpener = Future<void> Function(
+  String url,
+  bool Function() isCurrent,
+);
 
-class ForumContentSelectionCopyPage extends StatefulWidget {
+class ForumContentSelectionCopyPage extends StatelessWidget {
   const ForumContentSelectionCopyPage({
     super.key,
     required this.title,
@@ -37,16 +39,75 @@ class ForumContentSelectionCopyPage extends StatefulWidget {
   final bool Function()? isCurrent;
 
   @override
-  State<ForumContentSelectionCopyPage> createState() =>
-      _ForumContentSelectionCopyPageState();
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final native = theme.y300NativeContent;
+    return Scaffold(
+      backgroundColor: native.background,
+      appBar: AppBar(centerTitle: false, title: Text(title)),
+      body: ForumContentSelectionRegion(
+        resolveForumLink: resolveForumLink,
+        onOpenForumLink: onOpenForumLink,
+        clipboardTextWriter: clipboardTextWriter,
+        isCurrent: isCurrent,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 18),
+          children: [
+            Container(
+              key: bodyKey,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: native.card,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: ForumNativeSurfaceShadows.card(native.stateLayer),
+              ),
+              child: DefaultTextStyle.merge(
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: native.body,
+                  height: 1.5,
+                ),
+                child: child,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
-class _ForumContentSelectionCopyPageState
-    extends State<ForumContentSelectionCopyPage> {
+/// Platform selection controls with the App clipboard and current-source guard.
+class ForumContentSelectionRegion extends StatefulWidget {
+  const ForumContentSelectionRegion({
+    super.key,
+    required this.child,
+    this.clipboardTextWriter,
+    this.resolveForumLink,
+    this.onOpenForumLink,
+    this.isCurrent,
+    this.selectionIdentity,
+    this.onSelectionStarted,
+  }) : assert((resolveForumLink == null) == (onOpenForumLink == null));
+
+  final Widget child;
+  final ClipboardTextWriter? clipboardTextWriter;
+  final String? Function(String selectedText)? resolveForumLink;
+  final ForumSelectionLinkOpener? onOpenForumLink;
+  final bool Function()? isCurrent;
+  final Object? selectionIdentity;
+  final VoidCallback? onSelectionStarted;
+
+  @override
+  State<ForumContentSelectionRegion> createState() =>
+      _ForumContentSelectionRegionState();
+}
+
+class _ForumContentSelectionRegionState
+    extends State<ForumContentSelectionRegion> {
+  final _areaKey = GlobalKey<SelectionAreaState>();
   final _selectionDetails = SelectionListenerNotifier();
   final _toolbarRevision = ValueNotifier<int>(0);
   String? _selectedText;
-  SelectedContentRange? _selectedRange;
   int _selectionGeneration = 0;
   int _actionGeneration = 0;
   int? _pendingCopyGeneration;
@@ -65,8 +126,21 @@ class _ForumContentSelectionCopyPageState
   }
 
   @override
-  void didUpdateWidget(ForumContentSelectionCopyPage oldWidget) {
+  void didUpdateWidget(ForumContentSelectionRegion oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectionIdentity != widget.selectionIdentity) {
+      _selectedText = null;
+      _invalidateSelection();
+      final identity = widget.selectionIdentity;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && widget.selectionIdentity == identity) {
+          // Replacing native deliveries already retires their selectables.
+          // Clearing through a registrar while its children are retiring
+          // can mutate Flutter's dispatch list during iteration.
+          _areaKey.currentState?.selectableRegion.hideToolbar();
+        }
+      });
+    }
     if (oldWidget.resolveForumLink != widget.resolveForumLink ||
         oldWidget.onOpenForumLink != widget.onOpenForumLink ||
         oldWidget.clipboardTextWriter != widget.clipboardTextWriter) {
@@ -82,18 +156,14 @@ class _ForumContentSelectionCopyPageState
     super.dispose();
   }
 
-  void _rangeChanged() {
-    final range = _selectionDetails.registered
-        ? _selectionDetails.selection.range
-        : null;
-    if (range == _selectedRange) return;
-    _selectedRange = range;
-    _invalidateSelection();
-  }
+  // The delegate may still be removing old geometry during its notification.
+  // Retire commands immediately without querying its intermediate range.
+  void _rangeChanged() => _invalidateSelection();
 
   void _textChanged(SelectedContent? content) {
     if (_selectedText == content?.plainText) return;
     _selectedText = content?.plainText;
+    if (_selectedText?.isNotEmpty == true) widget.onSelectionStarted?.call();
     _invalidateSelection();
   }
 
@@ -117,6 +187,10 @@ class _ForumContentSelectionCopyPageState
       ValueListenableBuilder<int>(
         valueListenable: _toolbarRevision,
         builder: (context, _, _) {
+          if (!_canInteract ||
+              (widget.selectionIdentity != null && _selectedText == null)) {
+            return const SizedBox.shrink();
+          }
           final generation = _selectionGeneration;
           final selectedText = _selectedText;
           final selectedUrl = selectedText == null || !_canInteract
@@ -148,7 +222,11 @@ class _ForumContentSelectionCopyPageState
         },
       );
 
-  Future<void> _copy(SelectableRegionState region, int generation) async {
+  Future<void> _copy(
+    SelectableRegionState region,
+    int generation, {
+    bool fromToolbar = true,
+  }) async {
     final text = _selectedText;
     final writer = widget.clipboardTextWriter;
     if (!_menuCurrent(generation, region) ||
@@ -161,7 +239,7 @@ class _ForumContentSelectionCopyPageState
     _pendingCopyGeneration = generation;
     try {
       await writer.writeText(text);
-      if (!_menuCurrent(generation, region)) return;
+      if (!fromToolbar || !_menuCurrent(generation, region)) return;
       // Match Flutter's public toolbar behavior without invoking its default
       // Copy callback, which would write to the clipboard a second time.
       switch (defaultTargetPlatform) {
@@ -211,49 +289,43 @@ class _ForumContentSelectionCopyPageState
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final native = theme.y300NativeContent;
     final customMenu =
         widget.onOpenForumLink != null || widget.clipboardTextWriter != null;
-    final content = ListView(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 18),
-      children: [
-        Container(
-          key: widget.bodyKey,
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: native.card,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: ForumNativeSurfaceShadows.card(native.stateLayer),
-          ),
-          child: DefaultTextStyle.merge(
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: native.body,
-              height: 1.5,
+    final region = SelectionArea(
+      key: _areaKey,
+      onSelectionChanged: customMenu ? _textChanged : null,
+      contextMenuBuilder: customMenu
+          ? _buildToolbar
+          : (context, region) => AdaptiveTextSelectionToolbar.selectableRegion(
+              selectableRegionState: region,
             ),
-            child: widget.child,
-          ),
-        ),
-      ],
+      child: customMenu
+          ? SelectionListener(
+              selectionNotifier: _selectionDetails,
+              child: widget.child,
+            )
+          : widget.child,
     );
-    return Scaffold(
-      backgroundColor: native.background,
-      appBar: AppBar(centerTitle: false, title: Text(widget.title)),
-      body: SelectionArea(
-        onSelectionChanged: customMenu ? _textChanged : null,
-        contextMenuBuilder: customMenu
-            ? _buildToolbar
-            : (context, region) =>
-                  AdaptiveTextSelectionToolbar.selectableRegion(
-                    selectableRegionState: region,
+    return Actions(
+      actions: {
+        if (widget.clipboardTextWriter != null)
+          CopySelectionTextIntent: CallbackAction<CopySelectionTextIntent>(
+            onInvoke: (_) {
+              final area = _areaKey.currentState;
+              if (area != null) {
+                unawaited(
+                  _copy(
+                    area.selectableRegion,
+                    _selectionGeneration,
+                    fromToolbar: false,
                   ),
-        child: customMenu
-            ? SelectionListener(
-                selectionNotifier: _selectionDetails,
-                child: content,
-              )
-            : content,
-      ),
+                );
+              }
+              return null;
+            },
+          ),
+      },
+      child: region,
     );
   }
 }

@@ -8,6 +8,62 @@ import 'forum_body_selectable_text.dart';
 import 'forum_body_text_glyph_hit.dart';
 import 'forum_body_text_page_composer.dart';
 
+/// Keeps paragraph separators local to the active page's selected fragments.
+final class ForumBodyPageSelectionScope extends StatefulWidget {
+  const ForumBodyPageSelectionScope({required this.child, super.key});
+
+  final Widget child;
+
+  @override
+  State<ForumBodyPageSelectionScope> createState() =>
+      _PageSelectionScopeState();
+}
+
+final class _PageSelectionScopeState
+    extends State<ForumBodyPageSelectionScope> {
+  final _delegate = _PageSelectionDelegate();
+
+  @override
+  Widget build(BuildContext context) =>
+      SelectionContainer(delegate: _delegate, child: widget.child);
+
+  @override
+  void dispose() {
+    _delegate.dispose();
+    super.dispose();
+  }
+}
+
+final class _PageSelectionDelegate extends StaticSelectionContainerDelegate {
+  @override
+  SelectedContent? getSelectedContent() {
+    final output = StringBuffer();
+    _RenderSelectableFragment? previous;
+    var endsWithBreak = false;
+    for (final selectable in selectables) {
+      final selected = selectable.getSelectedContent();
+      if (selected == null || selected.plainText.isEmpty) continue;
+      final current = selectable is _RenderSelectableFragment
+          ? selectable
+          : null;
+      final text = selected.plainText;
+      if (previous != null &&
+          current != null &&
+          previous._input.fragment.path != current._input.fragment.path &&
+          !endsWithBreak &&
+          !text.startsWith('\n')) {
+        output.write('\n');
+      }
+      output.write(text);
+      previous = current;
+      endsWithBreak = text.endsWith('\n');
+    }
+    return output.isEmpty
+        ? null
+        : SelectedContent(plainText: output.toString());
+  }
+}
+
 /// Registers the exact mounted native fragment with Flutter's selection area.
 /// This render object borrows the painted delivery and never owns its leases.
 final class ForumBodySelectableFragment extends SingleChildRenderObjectWidget {
