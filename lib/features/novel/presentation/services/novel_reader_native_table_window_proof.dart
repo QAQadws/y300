@@ -1,7 +1,10 @@
+import 'dart:ui' show Offset, Rect;
+
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 
 import '../models/novel_reader_native_anchor_map.dart';
+import '../models/novel_reader_native_page_coverage.dart';
 import 'novel_reader_native_page_coverage_cursor.dart';
 import 'novel_reader_native_work_scheduler.dart';
 import 'novel_reader_pagination_cancellation.dart';
@@ -12,11 +15,15 @@ final class NovelReaderNativeTableWindowProof {
   const NovelReaderNativeTableWindowProof._(
     this.window,
     this.anchor,
+    this.bounds,
     this.matchesPreferred,
   );
 
   final ForumBodyTableVisibleWindow window;
   final NovelReaderTextAnchor? anchor;
+
+  /// The accepted source rectangle in table coordinates.
+  final Rect? bounds;
   final bool matchesPreferred;
   bool get isCurrent => window.isCurrent;
 
@@ -26,15 +33,19 @@ final class NovelReaderNativeTableWindowProof {
     required NovelReaderNativeWorkScheduler scheduler,
     required NovelReaderPaginationCancellationToken token,
     NovelReaderTextAnchor? preferred,
+    Rect? viewportClip,
   }) async {
     await scheduler.nextFrame(token);
     final clock = Stopwatch()..start();
     var steps = 0;
-    NovelReaderTextAnchor? first;
+    NovelReaderNativeTableWindowProof? first;
+    final visible = viewportClip == null
+        ? window.bounds
+        : window.bounds.intersect(viewportClip);
     for (final slice in window.slices) {
       if (!window.isCurrent) return null;
       final snapshot = slice.area.snapshot;
-      final clip = window.bounds.intersect(slice.bounds);
+      final clip = visible.intersect(slice.bounds);
       if (clip.isEmpty) continue;
       NovelReaderNativePageCoverageCursor? cursor;
       try {
@@ -57,13 +68,35 @@ final class NovelReaderNativeTableWindowProof {
           steps++;
         }
         final coverage = work.result;
-        first ??= coverage.locations.firstOrNull?.anchor;
+        NovelReaderNativeTableWindowProof proof(
+          NovelReaderNativeCoverageLocation location, {
+          required bool matches,
+        }) {
+          final fragment =
+              snapshot[slice.page].fragments[location.fragmentIndex];
+          final local = switch (location) {
+            NovelReaderNativeCoveragePoint(:final fragmentBounds) =>
+              fragmentBounds,
+            NovelReaderNativeImageCoverage(:final rect) => rect,
+          };
+          return NovelReaderNativeTableWindowProof._(
+            window,
+            location.anchor,
+            local?.shift(
+              slice.bounds.topLeft + Offset(fragment.left, fragment.top),
+            ),
+            matches,
+          );
+        }
+
+        final firstLocation = coverage.locations.firstOrNull;
+        if (first == null && firstLocation != null) {
+          first = proof(firstLocation, matches: false);
+        }
         if (preferred == null && first != null) break;
         final exact = preferred == null ? null : coverage.locate(preferred);
         if (exact != null) {
-          return window.isCurrent
-              ? NovelReaderNativeTableWindowProof._(window, exact.anchor, true)
-              : null;
+          return window.isCurrent ? proof(exact, matches: true) : null;
         }
       } on NovelReaderNativeCoverageException catch (error) {
         if (error.failure != NovelReaderNativeCoverageFailure.budget) rethrow;
@@ -74,7 +107,8 @@ final class NovelReaderNativeTableWindowProof {
       }
     }
     return window.isCurrent
-        ? NovelReaderNativeTableWindowProof._(window, first, false)
+        ? first ??
+              NovelReaderNativeTableWindowProof._(window, null, null, false)
         : null;
   }
 }

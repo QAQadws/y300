@@ -34,6 +34,7 @@ final class ForumBodyFlowSliver extends StatefulWidget {
     this.isCurrentLayout = true,
     this.onReadyChanged,
     this.onTableWindowChanged,
+    this.initialTableOffset,
   });
 
   final ForumBodyTextPageSession session;
@@ -44,6 +45,10 @@ final class ForumBodyFlowSliver extends StatefulWidget {
   final ValueChanged<bool>? onReadyChanged;
   final void Function(int slice, ForumBodyTableVisibleWindow? window)?
   onTableWindowChanged;
+
+  /// A one-time, measured horizontal offset for a table in this layout. Once
+  /// mounted, the viewport's actual scrolling position takes precedence.
+  final ({int slice, double offset})? initialTableOffset;
 
   @override
   State<ForumBodyFlowSliver> createState() => _ForumBodyFlowSliverState();
@@ -162,8 +167,12 @@ final class _ForumBodyFlowSliverState extends State<ForumBodyFlowSliver> {
     if (offscreen.isNotEmpty) {
       setState(() {
         for (final index in offscreen) {
-          _ready.remove(index)!.close();
+          final delivery = _ready.remove(index)!;
+          delivery.close();
           _readyTables.remove(index);
+          if (delivery.table != null) {
+            widget.onTableWindowChanged?.call(index, null);
+          }
         }
       });
     }
@@ -186,9 +195,16 @@ final class _ForumBodyFlowSliverState extends State<ForumBodyFlowSliver> {
     _working = index;
     try {
       if (widget.prefix[index].table != null) {
+        final initial = widget.initialTableOffset;
+        final offset =
+            _tableOffsets[index] ??
+            (initial?.slice == index ? initial!.offset : 0.0);
+        if (!offset.isFinite || offset < 0) {
+          throw ArgumentError.value(offset, 'initialTableOffset');
+        }
         final table = session.acquireTablePage(index)!;
         final controller = ScrollController(
-          initialScrollOffset: _tableOffsets[index] ?? 0,
+          initialScrollOffset: offset,
           keepScrollOffset: false,
         );
         controller.addListener(() {

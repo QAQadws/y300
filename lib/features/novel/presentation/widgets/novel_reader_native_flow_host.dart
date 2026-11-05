@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/fonts/fonts.dart' show ResolvedFont;
 import 'package:y300/features/library_shared/presentation/services/library_error_summary.dart';
@@ -8,6 +10,7 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 import 'package:y300/l10n/app_localizations.dart';
 
 import '../../domain/models/novel_reader_document.dart';
+import '../../domain/models/novel_reader_marks.dart';
 import '../../domain/models/novel_reader_preferences.dart';
 import '../models/novel_reader_native_image_tap.dart';
 import '../models/novel_reader_native_prepared_chapter.dart';
@@ -18,9 +21,17 @@ import '../services/novel_reader_native_owner.dart';
 import '../services/novel_reader_native_preparation_service.dart';
 import '../services/novel_reader_native_render_environment.dart';
 import '../services/novel_reader_native_source_run.dart';
+import '../services/novel_reader_native_table_anchor_probe.dart';
+import '../services/novel_reader_native_table_window_proof.dart';
+import '../services/novel_reader_native_work_scheduler.dart';
 import '../services/novel_reader_pagination_cancellation.dart';
 import '../services/novel_reader_pagination_demand.dart';
 import '../services/novel_reading_image_host.dart';
+
+typedef NovelReaderFlowOffsetRestore = Future<bool> Function(
+  double offset,
+  bool Function() isCurrent,
+);
 
 /// Owns a native scrolling layout. Restoration, chapter navigation and
 /// progress still belong to the outer reader.
@@ -48,6 +59,9 @@ final class NovelReaderNativeFlowHost extends StatefulWidget {
     required this.onImageTap,
     required this.onTextSelection,
     this.idleScheduler,
+    this.viewportInsets = EdgeInsets.zero,
+    this.restoreReflowOffset,
+    this.onReflowRestored,
   });
 
   final NovelReaderNativeOwner owner;
@@ -71,6 +85,9 @@ final class NovelReaderNativeFlowHost extends StatefulWidget {
   final ValueChanged<NovelReaderNativeImageTap> onImageTap;
   final ValueChanged<NovelReaderNativeTextSelection> onTextSelection;
   final NovelReaderPaginationIdleScheduler? idleScheduler;
+  final EdgeInsets viewportInsets;
+  final NovelReaderFlowOffsetRestore? restoreReflowOffset;
+  final ValueChanged<NovelReaderTextAnchor>? onReflowRestored;
 
   @override
   State<NovelReaderNativeFlowHost> createState() =>
@@ -101,11 +118,13 @@ final class _NovelReaderNativeFlowHostState
   bool _emptyBody = false;
   int _revision = 0;
   bool _reflowScheduled = false;
+  double? _lastScrollOffset;
 
   @override
   void initState() {
     super.initState();
     widget.owner.addListener(_ownerChanged);
+    widget.scrollController.addListener(_outerMoved);
   }
 
   @override
@@ -114,6 +133,12 @@ final class _NovelReaderNativeFlowHostState
     if (!identical(oldWidget.owner, widget.owner)) {
       oldWidget.owner.removeListener(_ownerChanged);
       widget.owner.addListener(_ownerChanged);
+    }
+    if (!identical(oldWidget.scrollController, widget.scrollController)) {
+      oldWidget.scrollController.removeListener(_outerMoved);
+      widget.scrollController.addListener(_outerMoved);
+      _lastScrollOffset = null;
+      _cancelReflow();
     }
   }
 
@@ -157,7 +182,9 @@ final class _NovelReaderNativeFlowHostState
     );
     if (_layoutKey != key && widget.width > 0 && !widget.owner.isClosed) {
       _layoutKey = key;
-      if (_documentKey != documentKey) {
+      final sameDocument = _documentKey == documentKey;
+      final tablePosition = sameDocument ? _positionForReflow() : null;
+      if (!sameDocument) {
         _documentKey = documentKey;
         _expansion.clear();
         _imageLayouts.clear();
@@ -168,6 +195,7 @@ final class _NovelReaderNativeFlowHostState
       _request?.stop();
       if (!identical(_request, _displayed)) _retire(_request);
       final run = _request = _FlowRun(widget.idleScheduler);
+      if (tablePosition != null) run.reflow = _FlowTableReflow(tablePosition);
       _error = null;
       _emptyBody = false;
       final config = widget;
@@ -206,15 +234,31 @@ final class _NovelReaderNativeFlowHostState
         ),
       );
     }
-    final body = ForumBodyFlowSliver(
-      key: ObjectKey(run),
-      session: session,
-      prefix: prefix,
-      isCurrentLayout: _current(run) && error == null,
-      onReadyChanged: (ready) => _ready(run, ready),
-      onFailure: (error, _) => _fail(run, error),
-      buildSlice: (context, snapshot, index, fragments) =>
-          _slice(context, run, snapshot, index, fragments),
+    final body = NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        if (notification.metrics.axis == Axis.horizontal &&
+            ((notification is ScrollStartNotification &&
+                    notification.dragDetails != null) ||
+                (notification is UserScrollNotification &&
+                    notification.direction != ScrollDirection.idle))) {
+          _cancelReflow();
+        }
+        return false;
+      },
+      child: ForumBodyFlowSliver(
+        key: run.bodyKey,
+        session: session,
+        prefix: prefix,
+        initialTableOffset: run.initialTableOffset,
+        isCurrentLayout: _current(run) && error == null,
+        onReadyChanged: (ready) => _ready(run, ready),
+        onTableWindowChanged: widget.restoreReflowOffset == null
+            ? null
+            : (index, window) => _tableWindowChanged(run, index, window),
+        onFailure: (error, _) => _fail(run, error),
+        buildSlice: (context, snapshot, index, fragments) =>
+            _slice(context, run, snapshot, index, fragments),
+      ),
     );
     return SliverMainAxisGroup(
       slivers: [
@@ -300,12 +344,18 @@ final class _NovelReaderNativeFlowHostState
         session: session,
         demand: run.demand,
         parent: run.token,
-        onPublication: (prefix, _) {
+        onPublication: (prefix, _) async {
           if (!_current(run)) return;
+          final start = run.prefix?.length ?? 0;
           run.updatePrefix(prefix);
           if (prefix.isEmpty) {
             if (prefix.isComplete) _empty(run);
             return;
+          }
+          final reflow = run.reflow;
+          if (reflow != null && !identical(_displayed, run)) {
+            if (await _publishAtTable(run, reflow, start)) return;
+            if (!_current(run)) return;
           }
           final scroll = config.scrollController;
           // The reader can move within the retained prefix while a replacement
@@ -333,15 +383,277 @@ final class _NovelReaderNativeFlowHostState
     if (!_current(run) || !identical(_displayed, run)) return;
     run.ready = ready;
     run.demand.update(targetPending: !ready, pageIndex: 0);
+    _reportReady(run);
+  }
+
+  void _reportReady(_FlowRun run) {
+    if (!_current(run) || !identical(_displayed, run)) return;
     _reportImages(run);
-    if (ready && !run.reportedReady) {
+    if (run.ready && run.reflow == null && !run.reportedReady) {
       run.reportedReady = true;
       widget.onContentReady();
     }
   }
 
-  void _reportImages(_FlowRun run) =>
-      widget.onImagesReadyChanged(run.ready && run.imageTracker!.isReady);
+  void _reportImages(_FlowRun run) => widget.onImagesReadyChanged(
+    run.ready && run.reflow == null && run.imageTracker!.isReady,
+  );
+
+  void _outerMoved() {
+    final scroll = widget.scrollController;
+    if (!scroll.hasClients) return;
+    final offset = scroll.offset;
+    if (_lastScrollOffset == offset) return;
+    _lastScrollOffset = offset;
+    _displayed?.tablePosition = null;
+    _cancelReflow();
+  }
+
+  _FlowTablePosition? _positionForReflow() {
+    final scroll = widget.scrollController;
+    if (widget.restoreReflowOffset == null ||
+        !scroll.hasClients ||
+        scroll.position.isScrollingNotifier.value) {
+      return null;
+    }
+    final position = _displayed?.tablePosition ?? _request?.reflow?.source;
+    return position != null &&
+            identical(position.scroll, scroll.position) &&
+            position.pixels == scroll.offset
+        ? position
+        : null;
+  }
+
+  double? _bodyTop(_FlowRun run) {
+    final render = run.bodyKey.currentContext?.findRenderObject();
+    return render is RenderForumBodyFlowBoundary && render.attached
+        ? render.constraints.precedingScrollExtent
+        : null;
+  }
+
+  double _readableHeight(ScrollPosition position) =>
+      position.viewportDimension - widget.viewportInsets.vertical;
+
+  void _tableWindowChanged(
+    _FlowRun run,
+    int index,
+    ForumBodyTableVisibleWindow? window,
+  ) {
+    if (!_current(run) || widget.restoreReflowOffset == null) return;
+    final reflow = run.reflow;
+    if (reflow != null && reflow.target?.slice != index) return;
+    if (window == null) {
+      if (run.tablePosition?.slice == index) run.tablePosition = null;
+      if (run.tableProofSlice == index) run.cancelTableProof();
+      return;
+    }
+    if (run.tablePosition case final previous?
+        when reflow == null &&
+            previous.slice != index &&
+            !window.hasUserScrolled) {
+      return;
+    }
+    final scroll = widget.scrollController;
+    final top = _bodyTop(run);
+    final table = run.prefix?[index].table;
+    if (!scroll.hasClients || top == null || table == null) return;
+    final tableTop = top + run.extentBefore(index) + table.bounds.top;
+    final readableTop = scroll.offset + widget.viewportInsets.top - tableTop;
+    final readable = Rect.fromLTWH(
+      window.bounds.left,
+      readableTop,
+      window.bounds.width,
+      _readableHeight(scroll.position),
+    );
+    if (readable.isEmpty) return;
+    run.cancelTableProof();
+    run.tablePosition = null;
+    final token = run.tableProof = NovelReaderPaginationCancellationToken();
+    run.tableProofSlice = index;
+    final position = scroll.position;
+    final pixels = scroll.offset;
+    _lastScrollOffset = pixels;
+    unawaited(() async {
+      try {
+        final proof = await NovelReaderNativeTableWindowProof.prepare(
+          window: window,
+          anchors: run.scope!.chapter.anchors,
+          scheduler: const NovelReaderNativeWorkScheduler(),
+          token: token,
+          preferred: reflow?.source.anchor,
+          viewportClip: readable,
+        );
+        if (!_current(run) ||
+            token.isCancelled ||
+            !identical(run.reflow, reflow) ||
+            proof?.isCurrent != true ||
+            !scroll.hasClients ||
+            !identical(scroll.position, position) ||
+            scroll.offset != pixels) {
+          return;
+        }
+        final anchor = proof!.anchor;
+        final bounds = proof.bounds;
+        if (anchor != null && bounds != null) {
+          run.tablePosition = (
+            identity: run.scope!.chapter.identity,
+            slice: index,
+            path: table.path,
+            anchor: anchor,
+            inset: bounds.topLeft - Offset(window.bounds.left, readableTop),
+            scroll: position,
+            pixels: pixels,
+          );
+        }
+        if (reflow != null) {
+          _finishReflow(run, reflow, proof.matchesPreferred ? anchor : null);
+        }
+      } on Object {
+        if (!token.isCancelled && reflow != null) _finishReflow(run, reflow);
+      } finally {
+        if (identical(run.tableProof, token)) run.cancelTableProof();
+      }
+    }());
+    // A settled table reports after paint. Its proof still needs another frame.
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  /// Wait for a replacement prefix containing the same actual table and enough
+  /// following extent for its viewport. The mounted result must then prove it.
+  Future<bool> _publishAtTable(
+    _FlowRun run,
+    _FlowTableReflow reflow,
+    int start,
+  ) async {
+    final prefix = run.prefix!;
+    final scope = run.scope!;
+    final scroll = widget.scrollController;
+    final source = reflow.source;
+    bool current() =>
+        _current(run) &&
+        identical(run.reflow, reflow) &&
+        scroll.hasClients &&
+        identical(scroll.position, source.scroll);
+    if (!current() || scope.chapter.identity != source.identity) {
+      _finishReflow(run, reflow);
+      return false;
+    }
+    if (reflow.target == null) {
+      for (var index = start; index < prefix.length; index++) {
+        final table = prefix[index].table;
+        if (table == null || table.path != source.path) continue;
+        NovelReaderNativeTableAnchor? candidate;
+        try {
+          candidate = await probeNovelReaderNativeTableAnchor(
+            session: run.session!,
+            anchors: scope.chapter.anchors,
+            pageIndex: index,
+            target: source.anchor,
+            allowNodeCompatibility: false,
+            scheduler: const NovelReaderNativeWorkScheduler(),
+            token: reflow.token,
+          );
+        } on Object {
+          // Losing an optional reflow target leaves the ordinary restore path.
+        }
+        if (!current()) return false;
+        final previous = _displayed;
+        final top = previous == null ? null : _bodyTop(previous);
+        final focus = candidate?.bounds;
+        final height = _readableHeight(scroll.position);
+        if (top == null || focus == null || focus.height > height) {
+          _finishReflow(run, reflow);
+          return false;
+        }
+        final x =
+            focus.left -
+            source.inset.dx.clamp(0.0, table.bounds.width - focus.width);
+        final y = focus.top - source.inset.dy.clamp(0.0, height - focus.height);
+        reflow.target = (
+          slice: index,
+          outer: math.max(
+            0.0,
+            top +
+                run.extentBefore(index) +
+                table.bounds.top +
+                y -
+                widget.viewportInsets.top,
+          ),
+          horizontal: x.clamp(
+            0.0,
+            math.max(0.0, table.contentSize.width - table.bounds.width),
+          ),
+          focus: focus,
+        );
+        break;
+      }
+    }
+    final target = reflow.target;
+    if (target == null) {
+      if (!prefix.isComplete) return true;
+      _finishReflow(run, reflow);
+      return false;
+    }
+    final previous = _displayed;
+    final top = previous == null ? null : _bodyTop(previous);
+    if (top == null || scroll.position.isScrollingNotifier.value) {
+      _finishReflow(run, reflow);
+      return false;
+    }
+    if (!prefix.isComplete &&
+        top + run.extent < target.outer + scroll.position.viewportDimension) {
+      return true;
+    }
+    setState(() {
+      _retire(_displayed);
+      _displayed = run;
+      run.initialTableOffset = (slice: target.slice, offset: target.horizontal);
+    });
+    final bool applied;
+    try {
+      applied = await reflow.token.waitFor(
+        widget.restoreReflowOffset!(target.outer, current),
+      );
+    } on Object {
+      if (current()) _finishReflow(run, reflow);
+      return true;
+    }
+    if (!current()) return true;
+    _lastScrollOffset = scroll.offset;
+    final bodyTop = _bodyTop(run);
+    final tableTop =
+        run.extentBefore(target.slice) + prefix[target.slice].table!.bounds.top;
+    final y = bodyTop == null ? null : bodyTop + tableTop + target.focus.top;
+    final readableTop = scroll.offset + widget.viewportInsets.top;
+    final readableBottom = readableTop + _readableHeight(scroll.position);
+    if (!applied ||
+        y == null ||
+        y < readableTop - .5 ||
+        y + target.focus.height > readableBottom + .5) {
+      _finishReflow(run, reflow);
+    }
+    return true;
+  }
+
+  void _cancelReflow() {
+    final run = _request;
+    if (run?.reflow case final reflow?) _finishReflow(run!, reflow);
+  }
+
+  void _finishReflow(
+    _FlowRun run,
+    _FlowTableReflow reflow, [
+    NovelReaderTextAnchor? restored,
+  ]) {
+    if (!identical(run.reflow, reflow)) return;
+    run.reflow = null;
+    reflow.token.cancel();
+    if (restored != null && _current(run)) {
+      widget.onReflowRestored?.call(restored);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _reportReady(run));
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
 
   void _empty(_FlowRun run) {
     setState(() {
@@ -528,6 +840,7 @@ final class _NovelReaderNativeFlowHostState
   @override
   void dispose() {
     widget.owner.removeListener(_ownerChanged);
+    widget.scrollController.removeListener(_outerMoved);
     _request?.close();
     _displayed?.close();
     for (final run in _retiring) {
@@ -536,6 +849,24 @@ final class _NovelReaderNativeFlowHostState
     _retiring.clear();
     super.dispose();
   }
+}
+
+typedef _FlowTablePosition = ({
+  ForumBodyIdentity identity,
+  int slice,
+  String path,
+  NovelReaderTextAnchor anchor,
+  Offset inset,
+  ScrollPosition scroll,
+  double pixels,
+});
+
+final class _FlowTableReflow {
+  _FlowTableReflow(this.source);
+
+  final _FlowTablePosition source;
+  final token = NovelReaderPaginationCancellationToken();
+  ({int slice, double outer, double horizontal, Rect focus})? target;
 }
 
 /// The shared surface has already validated the display binding before it
@@ -596,6 +927,7 @@ final class _FlowRun {
 
   final token = NovelReaderPaginationCancellationToken();
   final NovelReaderPaginationDemand demand;
+  final bodyKey = GlobalKey();
   NovelReaderNativeCacheHandle? handle;
   NovelReaderNativeLayoutScope? scope;
   ForumBodyTextPageSession? session;
@@ -603,19 +935,35 @@ final class _FlowRun {
   ForumBodyTextPageSnapshot? prefix;
   NovelReadingImageTracker? imageTracker;
   ForumHtmlImageHost? imageHost;
-  double extent = 0;
+  final _ends = <double>[];
+  _FlowTablePosition? tablePosition;
+  _FlowTableReflow? reflow;
+  NovelReaderPaginationCancellationToken? tableProof;
+  int? tableProofSlice;
+  ({int slice, double offset})? initialTableOffset;
   bool ready = false;
   bool reportedReady = false;
   bool _closed = false;
 
+  double get extent => _ends.lastOrNull ?? 0;
+  double extentBefore(int slice) => slice == 0 ? 0 : _ends[slice - 1];
+
   void updatePrefix(ForumBodyTextPageSnapshot next) {
     for (var i = prefix?.length ?? 0; i < next.length; i++) {
-      extent += next[i].usedHeight;
+      _ends.add(extent + next[i].usedHeight);
     }
     prefix = next;
   }
 
+  void cancelTableProof() {
+    tableProof?.cancel();
+    tableProof = null;
+    tableProofSlice = null;
+  }
+
   void stop() {
+    cancelTableProof();
+    reflow?.token.cancel();
     token.cancel();
     source?.close();
   }

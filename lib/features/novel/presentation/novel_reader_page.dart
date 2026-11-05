@@ -1466,6 +1466,27 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                 preparationService: nativePreparation!,
                 width: width,
                 scrollController: _scrollController,
+                viewportInsets: EdgeInsets.only(
+                  top: chromeInsets.topInset,
+                  bottom: chromeInsets.persistentBottomInset,
+                ),
+                restoreReflowOffset: (offset, isCurrent) {
+                  if (!_isCurrentVerticalSession(session) || !isCurrent()) {
+                    return Future.value(false);
+                  }
+                  return _scrollController.restore(
+                    (metrics) =>
+                        _isCurrentVerticalSession(session) && isCurrent()
+                        ? offset
+                        : metrics.pixels,
+                  );
+                },
+                onReflowRestored: (_) {
+                  if (_isCurrentVerticalSession(session) &&
+                      _verticalSession.claimPosition(session)) {
+                    _verticalSession.clearThemeRestore(themeRequest);
+                  }
+                },
                 imageHost: _nativeImageHost!,
                 imagePolicy: _nativeImagePolicy!,
                 threadId: viewState.currentEpisode.sourceTid,

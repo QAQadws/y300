@@ -609,6 +609,7 @@ void main() {
                   builder: (context, value, _) => ForumBodyFlowSliver(
                     session: session,
                     prefix: value,
+                    initialTableOffset: (slice: 1, offset: 20),
                     onFailure: (error, _) => errors.add(error),
                     onReadyChanged: readiness.add,
                     buildSlice: (context, snapshot, index, fragments) =>
@@ -658,6 +659,7 @@ void main() {
     expect(session.activeIssuedTablePages, 1);
     expect(readiness.last, isTrue);
     final current = tester.widget<ForumBodyTableFlowViewport>(table);
+    expect(current.horizontalController.offset, 20);
     current.horizontalController.jumpTo(80);
     await tester.pumpAndSettle();
 

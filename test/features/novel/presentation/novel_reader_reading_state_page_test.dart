@@ -63,6 +63,110 @@ void main() {
   });
 
   testWidgets(
+    'scrolling table reflow keeps the visible source without saving',
+    (tester) async {
+      final rows = List.generate(
+        18,
+        (row) =>
+            '<tr height="88"><td width="850">左列 $row</td>'
+            '<td width="810">右列第 $row 行，继续阅读同一处文字。</td></tr>',
+      ).join();
+      final repository = _ReadingRepository(
+        '<p>表格前</p><table width="1660" cellpadding="0">$rows</table><p>表格后</p>',
+      );
+      final saved = NovelReadingProgress(
+        novelId: _work,
+        episodeId: _chapter,
+        scrollOffset: 0,
+        updatedAt: DateTime(2026, 10, 1),
+      );
+      repository.progress[_chapter] = saved;
+      repository.recent = _chapter;
+      await tester.pumpWidget(
+        _app(
+          repository,
+          nativePagination: true,
+          preferences: NovelReaderPreferences.defaults().copyWith(
+            flowMode: NovelReaderFlowMode.vertical,
+          ),
+        ),
+      );
+      final flow = find.byType(ForumBodyFlowSliver);
+      final table = find.byType(ForumBodyTableFlowViewport);
+      Future<ForumBodyFlowSliver> rendered({
+        ForumBodyTextPageSession? after,
+      }) async {
+        for (var frame = 0; frame < 250; frame++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 2)),
+          );
+          await tester.pump();
+          if (flow.evaluate().isEmpty || table.evaluate().isEmpty) continue;
+          final widget = tester.widget<ForumBodyFlowSliver>(flow);
+          if (widget.prefix.isComplete && !identical(widget.session, after)) {
+            await tester.pumpAndSettle();
+            return tester.widget<ForumBodyFlowSliver>(flow);
+          }
+        }
+        throw StateError('Flowing table did not present a complete layout');
+      }
+
+      final original = await rendered();
+      final outer = _verticalPosition(tester);
+      outer.jumpTo(450);
+      await tester.pumpAndSettle();
+      tester
+          .widget<ForumBodyTableFlowViewport>(table)
+          .horizontalController
+          .jumpTo(875);
+      await tester.pumpAndSettle();
+      expect(repository.progress[_chapter], same(saved));
+
+      _controller(
+        tester,
+      ).previewPreferences(_state(tester).preferences.copyWith(fontSize: 27));
+      final next = await rendered(after: original.session);
+      expect(original.session.isClosed, isTrue);
+      expect(next.initialTableOffset?.offset, greaterThan(800));
+      expect(
+        tester
+            .widget<ForumBodyTableFlowViewport>(table)
+            .horizontalController
+            .offset,
+        greaterThan(800),
+      );
+      expect(_verticalPosition(tester).pixels, closeTo(450, 88));
+      expect(repository.progress[_chapter], same(saved));
+      expect(repository.committed, isEmpty);
+
+      addTearDown(tester.view.resetPhysicalSize);
+      tester.view.physicalSize =
+          const Size(680, 600) * tester.view.devicePixelRatio;
+      final resized = await rendered(after: next.session);
+      expect(resized.prefix.width, lessThan(next.prefix.width));
+      expect(resized.initialTableOffset?.offset, greaterThan(800));
+      expect(_verticalPosition(tester).pixels, closeTo(450, 88));
+
+      _controller(
+        tester,
+      ).previewPreferences(_state(tester).preferences.copyWith(fontSize: 31));
+      await tester.pump();
+      expect(
+        tester.widget<ForumBodyFlowSliver>(flow).session,
+        same(resized.session),
+      );
+      _verticalPosition(tester).jumpTo(0);
+      final afterMovement = await rendered(after: resized.session);
+      expect(afterMovement.initialTableOffset, isNull);
+      expect(_verticalPosition(tester).pixels, 0);
+      expect(repository.progress[_chapter], same(saved));
+      expect(repository.committed, isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(afterMovement.session.isClosed, isTrue);
+    },
+  );
+
+  testWidgets(
     'native scrolling reader restores against the complete table extent',
     (tester) async {
       final repository = _ReadingRepository(
