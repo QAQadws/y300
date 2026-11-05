@@ -1246,13 +1246,16 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       onTextSelection: (selection) =>
           unawaited(_openNativeTextSelection(identity, selection)),
       buildTextSelection: (layout, child) => ForumContentSelectionRegion(
+        nativeFlow: true,
+        onOpenForumLink: _openSelectedNativeLink,
         clipboardTextWriter: ref.read(clipboardTextWriterProvider),
         selectionIdentity: (identity, layout),
         isCurrent: () => _isReadingVisible && _isCurrentReaderSurface(identity),
         onSelectionStarted: _cancelPendingReaderTap,
         child: child,
       ),
-      onLinkTap: (url, isCurrent) => _openNativeLink(identity, url, isCurrent),
+      onLinkTap: (url, isCurrent) =>
+          unawaited(_openNativeLink(identity, url, isCurrent)),
       onImageTap: (tap) => unawaited(_openNativeImage(identity, tap)),
       idleScheduler: widget.nativeIdleScheduler,
       navigationController: _pagedNavigationController,
@@ -1580,7 +1583,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                 onContentTerminal: onContentTerminal,
                 onInteraction: _cancelPendingReaderTap,
                 onLinkTap: (url, isCurrent) =>
-                    _openNativeLink(surfaceIdentity, url, isCurrent),
+                    unawaited(_openNativeLink(surfaceIdentity, url, isCurrent)),
                 onImageTap: (tap) =>
                     unawaited(_openNativeImage(surfaceIdentity, tap)),
                 onTextSelection: (selection) => unawaited(
@@ -1722,7 +1725,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
             if (!widget.nativePagination) return scrollView;
             return ForumContentSelectionRegion(
               nativeFlow: true,
+              onOpenForumLink: _openSelectedNativeLink,
               selectionIdentity: (surfaceIdentity, viewState.document),
+              readSelectionAuthority: () =>
+                  _nativeFlowKey.currentState?.selectionAuthority,
               isCurrent: () =>
                   _isReadingVisible &&
                   _isCurrentVerticalSession(session) &&
@@ -3309,21 +3315,33 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     _showReaderSnackBar(AppLocalizations.of(context).novelLinkOpenFailed);
   }
 
-  void _openNativeLink(String identity, String url, bool Function() isCurrent) {
+  Future<void> _openSelectedNativeLink(
+    String url,
+    bool Function() isCurrent,
+  ) async {
+    if (!isCurrent()) return;
+    final state = ref.read(novelReaderControllerProvider(_args)).asData?.value;
+    if (state == null) return;
+    await _openNativeLink(_readerSurfaceIdentity(state), url, isCurrent);
+  }
+
+  Future<void> _openNativeLink(
+    String identity,
+    String url,
+    bool Function() isCurrent,
+  ) async {
     bool current() =>
         _isReadingVisible && _isCurrentReaderSurface(identity) && isCurrent();
     if (!current()) return;
     _cancelPendingReaderTap();
-    unawaited(
-      ref
-          .read(forumLinkOpenerProvider)
-          .open(
-            context: context,
-            url: url,
-            session: _postRouteSession,
-            isCurrent: current,
-          ),
-    );
+    await ref
+        .read(forumLinkOpenerProvider)
+        .open(
+          context: context,
+          url: url,
+          session: _postRouteSession,
+          isCurrent: current,
+        );
   }
 
   Future<void> _openNativeImage(

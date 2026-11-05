@@ -305,6 +305,39 @@ void main() {
     },
   );
 
+  _testForPlatform('same source reflow retires a pending Open lease', (
+    tester,
+  ) async {
+    final completion = Completer<void>();
+    var authority = Object();
+    bool Function()? lease;
+    await tester.pumpWidget(
+      LocalizedTestApp(
+        home: Scaffold(
+          body: ForumContentSelectionRegion(
+            resolveForumLink: (text) => text,
+            onOpenForumLink: (_, isCurrent) {
+              lease = isCurrent;
+              return completion.future;
+            },
+            readSelectionAuthority: () => authority,
+            child: const Text(_forumUrl, key: _bodyKey),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _selectAll(tester);
+    _toolbar(tester).buttonItems!.last.onPressed!();
+    await tester.pumpAndSettle();
+    expect(lease!(), isTrue);
+    authority = Object();
+    expect(lease!(), isFalse);
+    completion.complete();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
   _testForPlatform('source validity gates saved Copy and Open actions', (
     tester,
   ) async {

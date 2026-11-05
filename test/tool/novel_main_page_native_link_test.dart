@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:y300/app/navigation/forum_link_routes.dart';
 import 'package:y300/core/clipboard/clipboard_providers.dart';
 import 'package:y300/core/clipboard/clipboard_text_writer.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
@@ -22,18 +23,21 @@ void main() {
     NovelReaderFlowMode.vertical,
   ]) {
     testWidgets(
-      'actual native reader opens text and table links in ${mode.name}',
+      'actual native reader opens tapped and selected links in ${mode.name}',
       (tester) async {
         SharedPreferences.setMockInitialValues({});
         final writer = _Writer();
         final data = NovelMainPageProfileData();
         const textUrl = 'https://example.invalid/text';
         const cellUrl = 'https://example.invalid/cell';
+        const forumUrl =
+            'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=456';
+        final openedThreads = <String?>[];
         final id = data.add(
           '<p>Opening paragraph</p>'
           '<p style="text-align:right">before <a href="$textUrl">LINK</a>!</p>'
           '<table width="480"><tr><td><a href="$cellUrl">CELL</a>!</td>'
-          '<td>table text</td></tr></table><p>after the table</p>',
+          '<td>$forumUrl</td></tr></table><p>after the table</p>',
         );
         final args = NovelReaderArgs(
           novelId: id.novelId,
@@ -59,6 +63,13 @@ void main() {
             overrides: [
               ...scope.overrides,
               clipboardTextWriterProvider.overrideWithValue(writer),
+              nativeForumLinkPageFactoryProvider.overrideWithValue((
+                destination, {
+                bool isActive = true,
+              }) {
+                openedThreads.add(destination.tid);
+                return const Scaffold(body: Text('Selected thread fixture'));
+              }),
             ],
             child: scope.child,
           ),
@@ -126,6 +137,28 @@ void main() {
         await tapLastGlyph('CELL');
         expect(writer.writes, [textUrl, cellUrl]);
         if (paged) expect(observe().page, 1);
+        await tester.pumpAndSettle();
+        final region = tester.state<SelectableRegionState>(
+          find.byType(SelectableRegion),
+        );
+        region.selectAll(SelectionChangedCause.toolbar);
+        await tester.pumpAndSettle();
+        final toolbar = tester.widget<AdaptiveTextSelectionToolbar>(
+          find.byType(AdaptiveTextSelectionToolbar),
+        );
+        final open = toolbar.buttonItems!
+            .singleWhere(
+              (item) =>
+                  item.label ==
+                  AppLocalizations.of(region.context).selectionOpenForumLink,
+            )
+            .onPressed!;
+        open();
+        open();
+        await tester.pumpAndSettle();
+        expect(openedThreads, ['456']);
+        expect(find.text('Selected thread fixture'), findsOneWidget);
+        expect(writer.writes, [textUrl, cellUrl]);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump();

@@ -16,13 +16,15 @@ final class ForumSelectedLinkPolicy {
   final ForumHttpTextLinkDetector _detector;
   final YamiboForumLinkResolver _resolver;
 
-  String? resolve(String selectedText) {
+  String? resolve(String selectedText) => resolveOccurrence(selectedText)?.text;
+
+  ForumHttpTextLink? resolveOccurrence(String selectedText) {
     final scan = _detector.detect(selectedText);
     // Count every occurrence before site filtering or deduplication. An
     // external link or a repeated identical URL makes the choice ambiguous.
     if (scan.isLimited || scan.links.length != 1) return null;
     final link = scan.links.single;
-    return _resolver.resolveBrowsable(link.text) == null ? null : link.text;
+    return _resolver.resolveBrowsable(link.text) == null ? null : link;
   }
 }
 

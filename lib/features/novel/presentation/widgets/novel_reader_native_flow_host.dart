@@ -163,9 +163,11 @@ final class NovelReaderNativeFlowHostState
   bool _interactive(_FlowRun run) =>
       _current(run) && identical(_displayed, run) && run.ready;
 
-  bool get isSelectionCurrent {
+  bool get isSelectionCurrent => selectionAuthority != null;
+
+  Object? get selectionAuthority {
     final run = _displayed;
-    return run != null && _current(run) && _error == null;
+    return run != null && _current(run) && _error == null ? run : null;
   }
 
   @override

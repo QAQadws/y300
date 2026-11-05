@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:y300/app/navigation/forum_selected_link_policy.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/core/clipboard/clipboard_text_writer.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart'
@@ -88,9 +89,14 @@ class ForumContentSelectionRegion extends StatefulWidget {
     this.onOpenForumLink,
     this.isCurrent,
     this.selectionIdentity,
+    this.readSelectionAuthority,
     this.onSelectionStarted,
     this.nativeFlow = false,
-  }) : assert((resolveForumLink == null) == (onOpenForumLink == null));
+  }) : assert(
+         nativeFlow
+             ? resolveForumLink == null
+             : (resolveForumLink == null) == (onOpenForumLink == null),
+       );
 
   final Widget child;
   final ClipboardTextWriter? clipboardTextWriter;
@@ -98,6 +104,9 @@ class ForumContentSelectionRegion extends StatefulWidget {
   final ForumSelectionLinkOpener? onOpenForumLink;
   final bool Function()? isCurrent;
   final Object? selectionIdentity;
+
+  /// Current delivery identity when the same source can reflow independently.
+  final Object? Function()? readSelectionAuthority;
   final VoidCallback? onSelectionStarted;
   final bool nativeFlow;
 
@@ -126,6 +135,16 @@ class _ForumContentSelectionRegionState
 
   String? get _liveText =>
       widget.nativeFlow ? _flowKey.currentState?.selectedText : _selectedText;
+
+  String? _resolveLink(String text) {
+    if (!widget.nativeFlow) return widget.resolveForumLink?.call(text);
+    if (widget.onOpenForumLink == null) return null;
+    final occurrence = const ForumSelectedLinkPolicy().resolveOccurrence(text);
+    return occurrence != null &&
+            _flowKey.currentState?.confirmsSelectedLink(occurrence) == true
+        ? occurrence.text
+        : null;
+  }
 
   @override
   void initState() {
@@ -201,9 +220,9 @@ class _ForumContentSelectionRegionState
             return const SizedBox.shrink();
           }
           final generation = _selectionGeneration;
-          final selectedUrl = selectedText == null || !_canInteract
+          final selectedUrl = selectedText == null
               ? null
-              : widget.resolveForumLink?.call(selectedText);
+              : _resolveLink(selectedText);
           final items = region.contextMenuButtonItems.map((item) {
             if (item.type != ContextMenuButtonType.copy ||
                 widget.clipboardTextWriter == null) {
@@ -278,11 +297,12 @@ class _ForumContentSelectionRegionState
     final open = widget.onOpenForumLink;
     if (!_menuCurrent(generation, region) ||
         _liveText != selectedText ||
-        widget.resolveForumLink?.call(selectedText) != url ||
+        _resolveLink(selectedText) != url ||
         open == null) {
       return;
     }
     final action = ++_actionGeneration;
+    final authority = widget.readSelectionAuthority?.call();
     // Clearing the selection is part of this committed action; only a later
     // user selection change should cancel its pending navigation.
     _closingForOpen = true;
@@ -292,7 +312,13 @@ class _ForumContentSelectionRegionState
     } finally {
       _closingForOpen = false;
     }
-    await open(url, () => _canInteract && action == _actionGeneration);
+    await open(
+      url,
+      () =>
+          _canInteract &&
+          action == _actionGeneration &&
+          widget.readSelectionAuthority?.call() == authority,
+    );
   }
 
   @override
