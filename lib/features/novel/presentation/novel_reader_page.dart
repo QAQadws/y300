@@ -29,6 +29,7 @@ import 'package:y300/features/novel/domain/models/novel_reader_spacing.dart';
 import 'package:y300/features/novel/domain/models/novel_episode_open_policy.dart';
 import 'package:y300/features/novel/domain/models/novel_source_reading_context.dart';
 import 'package:y300/features/novel/data/services/novel_reader_progress_diagnostics.dart';
+import 'package:y300/features/novel/domain/services/novel_reader_bookmark_range.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
@@ -60,6 +61,7 @@ import 'package:y300/features/novel/presentation/services/novel_reader_shared_pr
 import 'package:y300/features/novel/presentation/services/novel_reader_scroll_controller.dart';
 import 'package:y300/features/novel/presentation/services/novel_forum_html_render_theme_factory.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_display_settings_sheet.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_position_bookmarks_dialog.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_text_search_dialog.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_delayed_loading_boundary.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_html_document_view.dart';
@@ -166,10 +168,12 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   bool _nativeImageOpening = false;
   int _pageSeekSerial = 0;
   int _chapterEntrySerial = 0;
-  int _searchNavigationSerial = 0;
-  NovelReaderAnchorNavigationRequest? _pendingSearchNavigation;
-  ({NovelReaderDocument document, NovelReaderTextRange range})?
-  _searchHighlight;
+  int _textNavigationSerial = 0;
+  ({String surface, NovelReaderAnchorNavigationRequest request})?
+  _pendingTextNavigation;
+  ({NovelReaderDocument document, NovelReaderTextRange range})? _textHighlight;
+  bool _positionBookmarksOpening = false;
+  NovelReaderPaginationCancellationToken? _bookmarkCapture;
   NovelReaderChapterEntryRequest? _pendingChapterEntryRequest;
   NovelReaderPageSeekRequest? _pendingPageSeekRequest;
   NovelReaderPaginationPosition? _pagedPosition;
@@ -341,6 +345,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     _overlayController.contentObscured.removeListener(
       _overlayObstructionChanged,
     );
+    _bookmarkCapture?.cancel();
     _nativeOwner?.dispose();
     _nativeActivity.dispose();
     _paginationSessionCache.dispose();
@@ -365,7 +370,14 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     // awaiting the existing flush of the last qualified position lease.
     _syncNativeActivity();
     if (!_resumed) {
+      _bookmarkCapture?.cancel();
       _nativeFlowKey.currentState?.cancelTextNavigation();
+      if (_pendingTextNavigation != null) {
+        setState(() {
+          _pendingTextNavigation = null;
+          _textHighlight = null;
+        });
+      }
       ref
           .read(novelReaderControllerProvider(_args).notifier)
           .cancelPendingCompletion();
@@ -476,9 +488,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
             _scheduleFontReferenceRepair(viewState, controller);
             final systemPadding = MediaQuery.paddingOf(context);
             final readerSurfaceIdentity = _readerSurfaceIdentity(viewState);
-            if (!identical(_searchHighlight?.document, viewState.document)) {
-              _searchHighlight = null;
-              _pendingSearchNavigation = null;
+            if (!identical(_textHighlight?.document, viewState.document)) {
+              _textHighlight = null;
+              _pendingTextNavigation = null;
             }
             if (viewState.preferences.flowMode ==
                     NovelReaderFlowMode.vertical ||
@@ -524,9 +536,11 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
               _readingScrolling = false;
               _userScrollActive = false;
               _pendingPageSeekRequest = null;
-              if (_pendingSearchNavigation != null) {
-                _pendingSearchNavigation = null;
-                _searchHighlight = null;
+              if (_pendingTextNavigation case final pending?
+                  when pending.surface != readerSurfaceIdentity ||
+                      _readyReaderSurfaceIdentity == readerSurfaceIdentity) {
+                _pendingTextNavigation = null;
+                _textHighlight = null;
               }
               _progressSliderPreview = null;
               _isProgressSeekInFlight = false;
@@ -818,15 +832,15 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       return;
     }
     _nativeOverlayTurn = null;
-    if (_pendingPageSeekRequest != null || _pendingSearchNavigation != null) {
+    if (_pendingPageSeekRequest != null || _pendingTextNavigation != null) {
       _nativeFlowKey.currentState?.cancelTextNavigation();
       setState(() {
         _pendingPageSeekRequest = null;
         _isProgressSeekInFlight = false;
         _progressSliderPreview = null;
-        if (_pendingSearchNavigation != null) {
-          _pendingSearchNavigation = null;
-          _searchHighlight = null;
+        if (_pendingTextNavigation != null) {
+          _pendingTextNavigation = null;
+          _textHighlight = null;
         }
       });
     }
@@ -860,6 +874,13 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
               : l10n.novelBookmarkAdd,
           onPressed: () => _toggleEpisodeBookmark(viewState),
         ),
+        if (widget.nativePagination)
+          ReaderToolbarAction(
+            id: 'position-bookmarks',
+            icon: Icons.bookmarks_outlined,
+            label: l10n.novelPositionBookmarks,
+            onPressed: () => unawaited(_openPositionBookmarks(viewState)),
+          ),
         ReaderToolbarAction(
           id: 'open-thread',
           icon: Icons.open_in_new,
@@ -894,13 +915,13 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           builder: (context) => NovelReaderTextSearchDialog(
             document: viewState.document,
             service: service,
-            onClear: _searchHighlight == null
+            onClear: _textHighlight == null
                 ? null
                 : () {
                     if (sourceCurrent()) {
                       setState(() {
-                        _searchHighlight = null;
-                        _pendingSearchNavigation = null;
+                        _textHighlight = null;
+                        _pendingTextNavigation = null;
                       });
                     }
                   },
@@ -911,17 +932,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         return selection;
       });
       if (range == null || !sourceCurrent()) return;
-      setState(() {
-        _pendingPageSeekRequest = null;
-        _isProgressSeekInFlight = false;
-        _progressSliderPreview = null;
-        _searchHighlight = (document: viewState.document, range: range);
-        _pendingSearchNavigation = NovelReaderAnchorNavigationRequest(
-          requestId: ++_searchNavigationSerial,
-          anchor: range.start,
-        );
-      });
-      _overlayController.hideMenu();
+      _navigateToText(viewState, range);
     } on Object {
       if (mounted && sourceCurrent()) {
         _showReaderSnackBar(
@@ -933,19 +944,189 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     }
   }
 
-  bool _finishTextSearchNavigation(
+  Future<void> _openPositionBookmarks(NovelReaderViewState viewState) async {
+    final identity = _readerSurfaceIdentity(viewState);
+    final provider = novelReaderControllerProvider(_args);
+    bool sourceCurrent() =>
+        _resumed &&
+        _isCurrentReaderSurface(identity) &&
+        identical(
+          ref.read(provider).asData?.value.document,
+          viewState.document,
+        );
+    if (_positionBookmarksOpening || !sourceCurrent()) return;
+    _positionBookmarksOpening = true;
+    _cancelPendingReaderTap();
+    final controller = ref.read(provider.notifier);
+    try {
+      final anchor = await _captureBookmarkAnchor(viewState, identity);
+      if (!sourceCurrent()) return;
+      final bookmark = await _runWithReaderSemanticsSuspended(() async {
+        if (!sourceCurrent() || ModalRoute.of(context)?.isCurrent == false) {
+          return null;
+        }
+        final navigator = Navigator.of(context, rootNavigator: true);
+        final route = DialogRoute<NovelReaderBookmark>(
+          context: context,
+          themes: InheritedTheme.capture(from: context, to: navigator.context),
+          builder: (context) => Consumer(
+            builder: (context, ref, _) {
+              final latest = ref.watch(provider).asData?.value;
+              return NovelReaderPositionBookmarksDialog(
+                bookmarks: (latest?.bookmarks ?? viewState.bookmarks)
+                    .where((bookmark) => !bookmark.isEpisodeBookmark)
+                    .toList(growable: false),
+                isLoading: latest?.isHydratingSupplemental ?? true,
+                onSave: anchor == null || !sourceCurrent()
+                    ? null
+                    : () async {
+                        if (!sourceCurrent()) return;
+                        await controller.addBookmarkAtCurrentPosition(anchor);
+                      },
+                onRemove: (bookmark) async {
+                  if (!sourceCurrent()) return;
+                  await controller.removeBookmark(bookmark.bookmarkId);
+                },
+              );
+            },
+          ),
+        );
+        final selection = await navigator.push(route);
+        await route.completed;
+        return selection;
+      });
+      if (bookmark == null || !sourceCurrent()) return;
+      await _openPositionBookmark(controller, viewState, bookmark);
+    } on Object {
+      if (mounted) {
+        _showReaderSnackBar(
+          AppLocalizations.of(context).novelBookmarkOperationFailed,
+        );
+      }
+    } finally {
+      _positionBookmarksOpening = false;
+    }
+  }
+
+  Future<NovelReaderTextAnchor?> _captureBookmarkAnchor(
+    NovelReaderViewState viewState,
+    String identity,
+  ) async {
+    NovelReaderNativeSourceLocation? source;
+    if (viewState.preferences.flowMode == NovelReaderFlowMode.vertical) {
+      final token = _bookmarkCapture = NovelReaderPaginationCancellationToken();
+      try {
+        source = await _nativeFlowKey.currentState?.captureVisibleSource(token);
+      } on Object {
+        return null;
+      } finally {
+        token.cancel();
+        _bookmarkCapture = null;
+      }
+    } else {
+      final menu = _nativeMenuSource;
+      source =
+          _capturePagedSource(viewState) ??
+          (menu?.surface == identity ? menu!.source : null);
+    }
+    return source == null
+        ? null
+        : resolveNovelReaderBookmarkRange(
+            viewState.document,
+            source.anchor,
+          )?.start;
+  }
+
+  Future<void> _openPositionBookmark(
+    NovelReaderController controller,
+    NovelReaderViewState source,
+    NovelReaderBookmark bookmark,
+  ) async {
+    final l10n = AppLocalizations.of(context);
+    final episode = bookmark.episodeId;
+    final anchor = bookmark.anchor;
+    if (bookmark.novelId != widget.novelId ||
+        anchor.episodeId != episode ||
+        !anchor.hasCanonicalTextOffset ||
+        !source.episodes.any((item) => item.episodeId == episode)) {
+      _showReaderSnackBar(l10n.novelBookmarkPositionUnavailable);
+      return;
+    }
+    var target = source;
+    if (source.currentEpisode.episodeId != episode) {
+      final args = _args;
+      final opened = await _openDifferentEpisode(
+        () => controller.openEpisode(
+          episode,
+          openPolicy: NovelEpisodeOpenPolicy.resumeLastRead,
+        ),
+      );
+      if (!opened || !mounted || !_resumed || _args != args) return;
+      final provider = novelReaderControllerProvider(args);
+      final current = ref.read(provider).asData?.value;
+      if (current == null ||
+          current.transition != null ||
+          current.currentEpisode.episodeId != episode ||
+          current.readingSurfaceRevision != source.readingSurfaceRevision + 1 ||
+          !identical(ref.read(provider.notifier), controller)) {
+        return;
+      }
+      target = current;
+    }
+    final range = resolveNovelReaderBookmarkRange(target.document, anchor);
+    if (range == null) {
+      _showReaderSnackBar(
+        AppLocalizations.of(context).novelBookmarkPositionUnavailable,
+      );
+      return;
+    }
+    _navigateToText(target, range);
+  }
+
+  void _navigateToText(
+    NovelReaderViewState viewState,
+    NovelReaderTextRange range,
+  ) {
+    setState(() {
+      _pendingPageSeekRequest = null;
+      _isProgressSeekInFlight = false;
+      _progressSliderPreview = null;
+      _textHighlight = (document: viewState.document, range: range);
+      _pendingTextNavigation = (
+        surface: _readerSurfaceIdentity(viewState),
+        request: NovelReaderAnchorNavigationRequest(
+          requestId: ++_textNavigationSerial,
+          anchor: range.start,
+        ),
+      );
+    });
+    _overlayController.hideMenu();
+    _observeReadingSurface();
+  }
+
+  NovelReaderAnchorNavigationRequest? _textNavigationFor(String identity) {
+    final navigation = _pendingTextNavigation;
+    // A bookmark can open another chapter. Let its first layout and normal
+    // restore settle before handing that surface the explicit navigation.
+    return navigation?.surface == identity &&
+            _readyReaderSurfaceIdentity == identity
+        ? navigation!.request
+        : null;
+  }
+
+  bool _finishTextNavigation(
     String identity,
     NovelReaderAnchorNavigationRequest request,
     NovelReaderNavigationOutcome outcome,
   ) {
     if (!_isCurrentReaderSurface(identity) ||
-        !identical(_pendingSearchNavigation, request)) {
+        !identical(_pendingTextNavigation?.request, request)) {
       return false;
     }
     final arrived = outcome == NovelReaderNavigationOutcome.arrived;
     setState(() {
-      _pendingSearchNavigation = null;
-      if (!arrived) _searchHighlight = null;
+      _pendingTextNavigation = null;
+      if (!arrived) _textHighlight = null;
     });
     if (outcome == NovelReaderNavigationOutcome.unavailable) {
       _showReaderSnackBar(AppLocalizations.of(context).novelPositionChanged);
@@ -1171,8 +1352,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       _paginationSessionCache.dispose();
       _paginationSessionCache = NovelReaderPaginationSessionCache();
       _nativeOwner?.dispose();
-      _searchHighlight = null;
-      _pendingSearchNavigation = null;
+      _textHighlight = null;
+      _pendingTextNavigation = null;
       _nativeOwner = null;
       _nativeStatus = null;
       _nativeStatusSurface = null;
@@ -1373,10 +1554,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       onImageTap: (tap) => unawaited(_openNativeImage(identity, tap)),
       idleScheduler: widget.nativeIdleScheduler,
       navigationController: _pagedNavigationController,
-      textHighlight: _searchHighlight?.range,
-      navigationRequest: _pendingSearchNavigation,
+      textHighlight: _textHighlight?.range,
+      navigationRequest: _textNavigationFor(identity),
       onNavigationFinished: (request, outcome) =>
-          _finishTextSearchNavigation(identity, request, outcome),
+          _finishTextNavigation(identity, request, outcome),
       pageSeekRequest: _pendingPageSeekRequest,
       onPageSeekFinished: (request, outcome) {
         if (!_isCurrentReaderSurface(identity) ||
@@ -1686,11 +1867,11 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                         : metrics.pixels,
                   );
                 },
-                textHighlight: _searchHighlight?.range,
-                navigationRequest: _pendingSearchNavigation,
+                textHighlight: _textHighlight?.range,
+                navigationRequest: _textNavigationFor(surfaceIdentity),
                 activity: _nativeActivity,
                 onNavigationFinished: (request, outcome) {
-                  final arrived = _finishTextSearchNavigation(
+                  final arrived = _finishTextNavigation(
                     surfaceIdentity,
                     request,
                     outcome,
@@ -2158,7 +2339,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       idle:
           !_readingScrolling &&
           !_isProgressSeekInFlight &&
-          _pendingSearchNavigation == null &&
+          _pendingTextNavigation == null &&
           (!native ||
               (_nativeOverlayTurn == null &&
                   _nativeStatus?.controller?.hasPendingNavigation == false)) &&

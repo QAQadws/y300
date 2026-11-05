@@ -166,7 +166,7 @@ class NovelReaderViewState {
 
   bool get hasCurrentEpisodeBookmark {
     return currentEpisodeBookmarks.any(
-      (bookmark) => bookmark.bookmarkId.startsWith('episode-bookmark:'),
+      (bookmark) => bookmark.isEpisodeBookmark,
     );
   }
 
@@ -655,7 +655,10 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     previewPreferences(persistedEffective);
   }
 
-  Future<bool> openEpisode(String episodeId) async {
+  Future<bool> openEpisode(
+    String episodeId, {
+    NovelEpisodeOpenPolicy openPolicy = NovelEpisodeOpenPolicy.startAtBeginning,
+  }) async {
     final current = state.value;
     if (current == null) {
       return false;
@@ -666,6 +669,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     return _runEpisodeTransition(
       episodeId: episodeId,
       kind: NovelReaderTransitionKind.switchingEpisode,
+      openPolicy: openPolicy,
     );
   }
 
@@ -956,7 +960,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     }
     final repository = ref.read(novelRepositoryProvider);
     final bookmark = _findBookmark(current.bookmarks, bookmarkId);
-    if (bookmark?.bookmarkId.startsWith('episode-bookmark:') == true) {
+    if (bookmark?.isEpisodeBookmark == true) {
       await repository.toggleEpisodeBookmark(
         novelId: _args.novelId,
         episodeId: bookmark!.episodeId,

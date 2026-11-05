@@ -4128,6 +4128,36 @@ abstract class AppLocalizations {
   /// **'已移除书签'**
   String get novelBookmarkRemoved;
 
+  /// No description provided for @novelPositionBookmarks.
+  ///
+  /// In zh, this message translates to:
+  /// **'位置书签'**
+  String get novelPositionBookmarks;
+
+  /// No description provided for @novelSavePositionBookmark.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存当前位置'**
+  String get novelSavePositionBookmark;
+
+  /// No description provided for @novelNoPositionBookmarks.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无位置书签'**
+  String get novelNoPositionBookmarks;
+
+  /// No description provided for @novelBookmarkOperationFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'书签操作失败，请重试'**
+  String get novelBookmarkOperationFailed;
+
+  /// No description provided for @novelBookmarkPositionUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法在当前正文中定位此书签'**
+  String get novelBookmarkPositionUnavailable;
+
   /// No description provided for @novelOpenSourceThread.
   ///
   /// In zh, this message translates to:

@@ -115,4 +115,6 @@ class NovelReaderBookmark {
   final String? note;
   final DateTime createdAt;
   final DateTime updatedAt;
+
+  bool get isEpisodeBookmark => bookmarkId.startsWith('episode-bookmark:');
 }

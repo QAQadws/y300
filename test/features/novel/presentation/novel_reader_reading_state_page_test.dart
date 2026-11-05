@@ -46,6 +46,7 @@ import 'package:y300/features/novel/presentation/widgets/novel_reader_html_docum
 import 'package:y300/features/novel/presentation/widgets/novel_reader_native_flow_host.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_native_paged_surface.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_native_paged_viewport.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_position_bookmarks_dialog.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/identity_text_converter.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
@@ -1036,6 +1037,189 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+
+  for (final mode in [
+    NovelReaderFlowMode.vertical,
+    NovelReaderFlowMode.pagedLtr,
+  ]) {
+    testWidgets('position bookmark saves and reveals a mounted glyph ($mode)', (
+      tester,
+    ) async {
+      final vertical = mode == NovelReaderFlowMode.vertical;
+      final repository = _ReadingRepository(_nativeLongBody);
+      final stale = NovelReaderBookmark(
+        bookmarkId: 'reader-bookmark:stale',
+        novelId: _work,
+        episodeId: _chapter,
+        anchor: const NovelReaderTextAnchor(
+          episodeId: _chapter,
+          nodeId: 'node-0',
+          formatVersion: 1,
+          textIdentity: 'changed',
+        ),
+        title: '旧书签',
+        snippet: '',
+        createdAt: DateTime(2026, 10, 1),
+        updatedAt: DateTime(2026, 10, 1),
+      );
+      if (vertical) repository.bookmarks.add(stale);
+      await tester.pumpWidget(
+        _app(
+          repository,
+          nativePagination: true,
+          preferences: NovelReaderPreferences.defaults().copyWith(
+            flowMode: mode,
+          ),
+        ),
+      );
+      final flow = find.byType(ForumBodyFlowSliver);
+      Future<void> waitForFlow(bool Function() ready) async {
+        for (var frame = 0; frame < 225; frame++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 2)),
+          );
+          await tester.pump(const Duration(milliseconds: 8));
+          if (flow.evaluate().isNotEmpty && ready()) return;
+        }
+        fail('The scrolling reader did not confirm the requested position');
+      }
+
+      final dialog = find.byType(NovelReaderPositionBookmarksDialog);
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(NovelReaderPage)),
+      );
+      ReaderOverlayController overlay() => tester
+          .widget<ReaderOverlayScaffold>(find.byType(ReaderOverlayScaffold))
+          .controller!;
+      Future<void> openBookmarks() async {
+        overlay().showMenu();
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const Key('shared-reader-top-action-position-bookmarks')),
+        );
+        await tester.pumpAndSettle();
+        expect(dialog, findsOneWidget);
+      }
+
+      const destinationPage = 3;
+      if (vertical) {
+        await waitForFlow(
+          () => tester.widget<ForumBodyFlowSliver>(flow).prefix.isComplete,
+        );
+        await tester.pumpAndSettle();
+        _verticalPosition(tester).jumpTo(1300);
+        await tester.pumpAndSettle();
+        expect(_verticalPosition(tester).pixels, 1300);
+      } else {
+        await _pumpNativeReady(tester);
+        expect(_nativeController(tester).requestPage(destinationPage), isTrue);
+        await _pumpNativeReady(
+          tester,
+          page: destinationPage,
+          advanceTime: true,
+        );
+      }
+      await openBookmarks();
+      await tester.tap(find.text(l10n.novelSavePositionBookmark));
+      await tester.pumpAndSettle();
+      final saved = repository.bookmarks.last;
+      expect(saved.anchor.hasCanonicalTextOffset, isTrue);
+      expect(saved.anchor.nodeId, isNot('node-0'));
+      expect(saved.snippet, contains('小说正文'));
+      await tester.tap(find.text(l10n.commonClose));
+      await tester.pumpAndSettle();
+
+      if (vertical) {
+        overlay().showMenu();
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const Key('shared-reader-bottom-action-catalog')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.descendant(
+            of: find.byType(NovelReaderChapterListSheet),
+            matching: find.text('下一章'),
+          ),
+        );
+        await waitForFlow(
+          () => _state(tester).currentEpisode.episodeId == _next,
+        );
+        await tester.pumpAndSettle();
+        repository.progress[_chapter] = NovelReadingProgress(
+          novelId: _work,
+          episodeId: _chapter,
+          scrollOffset: 140,
+          updatedAt: DateTime(2026, 10, 1),
+        );
+      } else {
+        overlay().hideMenu();
+        await _pumpNativeReady(tester, advanceTime: true);
+        expect(_nativeController(tester).requestPage(0), isTrue);
+        await _pumpNativeReady(tester, page: 0, advanceTime: true);
+      }
+
+      await openBookmarks();
+      await tester.tap(find.byKey(ValueKey(saved.bookmarkId)));
+      if (vertical) {
+        await waitForFlow(
+          () =>
+              _state(tester).currentEpisode.episodeId == _chapter &&
+              _state(tester).progressSnapshot.scrollOffset > 1000,
+        );
+      } else {
+        await _pumpNativeReady(
+          tester,
+          page: destinationPage,
+          advanceTime: true,
+        );
+        expect(
+          _nativeController(tester).visibleView!.coverage.locate(saved.anchor),
+          isNotNull,
+        );
+      }
+      final highlight = tester.widget<ForumBodyTextHighlight>(
+        find.byType(ForumBodyTextHighlight),
+      );
+      expect(highlight.ranges, isNotEmpty);
+      expect(
+        tester
+            .widgetList<ForumBodyTextPageSurface>(
+              find.byType(ForumBodyTextPageSurface),
+            )
+            .any(
+              (surface) =>
+                  surface.locateSourceRanges(highlight.ranges).isNotEmpty,
+            ),
+        isTrue,
+      );
+
+      await openBookmarks();
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(ValueKey(saved.bookmarkId)),
+          matching: find.byTooltip(l10n.commonRemove),
+        ),
+      );
+      await tester.pumpAndSettle();
+      if (vertical) {
+        final before = _verticalPosition(tester).pixels;
+        await tester.tap(find.byKey(ValueKey(stale.bookmarkId)));
+        await tester.pumpAndSettle();
+        expect(
+          find.text(l10n.novelBookmarkPositionUnavailable),
+          findsOneWidget,
+        );
+        expect(_verticalPosition(tester).pixels, before);
+        expect(repository.bookmarks, [same(stale)]);
+      } else {
+        expect(repository.bookmarks, isEmpty);
+        expect(find.text(l10n.novelNoPositionBookmarks), findsOneWidget);
+      }
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
 
   for (final destination in ['paragraph', 'table', 'floated table']) {
     testWidgets('vertical search proves an offscreen hit in $destination', (
@@ -2566,6 +2750,7 @@ class _ReadingRepository
   _ReadingRepository(this.html);
   final String html;
   final progress = <String, NovelReadingProgress>{};
+  final bookmarks = <NovelReaderBookmark>[];
   final states = <String, LibraryEpisodeState>{};
   final committed = <NovelReadingProgress>[];
   final commitCompletionFlags = <bool>[];
@@ -2617,7 +2802,19 @@ class _ReadingRepository
   @override
   Future<List<NovelReaderBookmark>> listReaderBookmarks({
     required String novelId,
-  }) async => [];
+  }) async => List.of(bookmarks);
+  @override
+  Future<void> addReaderBookmark({
+    required NovelReaderBookmark bookmark,
+  }) async {
+    bookmarks.add(bookmark);
+  }
+
+  @override
+  Future<void> removeReaderBookmark({required String bookmarkId}) async {
+    bookmarks.removeWhere((bookmark) => bookmark.bookmarkId == bookmarkId);
+  }
+
   @override
   Future<NovelReadingStateSnapshot> loadWorkState({
     required String novelId,

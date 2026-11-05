@@ -2467,6 +2467,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get novelBookmarkRemoved => '已移除书签';
 
   @override
+  String get novelPositionBookmarks => '位置书签';
+
+  @override
+  String get novelSavePositionBookmark => '保存当前位置';
+
+  @override
+  String get novelNoPositionBookmarks => '暂无位置书签';
+
+  @override
+  String get novelBookmarkOperationFailed => '书签操作失败，请重试';
+
+  @override
+  String get novelBookmarkPositionUnavailable => '无法在当前正文中定位此书签';
+
+  @override
   String get novelOpenSourceThread => '打开原帖';
 
   @override
@@ -8427,6 +8442,21 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get novelBookmarkRemoved => '已移除書籤';
+
+  @override
+  String get novelPositionBookmarks => '位置書籤';
+
+  @override
+  String get novelSavePositionBookmark => '儲存目前位置';
+
+  @override
+  String get novelNoPositionBookmarks => '目前沒有位置書籤';
+
+  @override
+  String get novelBookmarkOperationFailed => '書籤操作失敗，請重試';
+
+  @override
+  String get novelBookmarkPositionUnavailable => '無法在目前正文中定位此書籤';
 
   @override
   String get novelOpenSourceThread => '開啟原帖';
