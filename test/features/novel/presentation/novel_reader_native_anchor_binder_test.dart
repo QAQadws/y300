@@ -4,9 +4,11 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_anchor_format.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_source_provenance.dart';
 import 'package:y300/features/novel/domain/models/novel_rich_block_text.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
+import 'package:y300/features/novel/domain/services/novel_reader_search_service.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_native_anchor_map.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_anchor_binder.dart';
 
@@ -90,6 +92,41 @@ Matcher _failure(NovelReaderNativeAnchorBindingFailure failure) => throwsA(
 );
 
 void main() {
+  test(
+    'search intervals keep source gaps and require the exact node identity',
+    () {
+      final fixture = _Fixture('<p><b>a</b>   <i>b</i></p><p>ab</p>');
+      final map = fixture.bind();
+      final hits = const NovelReaderSearchService().search(
+        document: fixture.semantic,
+        keyword: 'ab',
+      );
+      expect(hits, hasLength(2));
+      expect(map.sourceRanges(hits[0].range), [
+        ForumBodySourceRange(map.identity, 0, 1),
+        ForumBodySourceRange(map.identity, 4, 5),
+      ]);
+      expect(map.sourceRanges(hits[1].range), [
+        ForumBodySourceRange(map.identity, 5, 7),
+      ]);
+      expect(
+        map.sourceRanges(
+          NovelReaderTextRange(
+            hits[0].anchor.copyWith(
+              textIdentity: '${hits[0].anchor.textIdentity}old',
+            ),
+            2,
+          ),
+        ),
+        isEmpty,
+      );
+      expect(
+        map.sourceRanges(NovelReaderTextRange(hits[0].anchor, 3)),
+        isEmpty,
+      );
+    },
+  );
+
   test('real origin paths disambiguate repeated and nested semantic text', () {
     final fixture = _Fixture('<div>重<b>重</b><p>重</p></div><p>重</p>');
     final map = fixture.bind();

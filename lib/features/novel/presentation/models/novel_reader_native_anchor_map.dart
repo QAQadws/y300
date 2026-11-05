@@ -130,6 +130,43 @@ final class NovelReaderNativeAnchorMap {
             anchor.textIdentity,
           )));
 
+  /// Inverts a complete semantic interval against this document's verified
+  /// origins. No raw source interval crosses a missing semantic segment.
+  List<ForumBodySourceRange> sourceRanges(NovelReaderTextRange range) {
+    final anchor = range.start;
+    final end = range.endTextOffset;
+    if (anchor.episodeId != episodeId ||
+        !anchor.hasCanonicalTextOffset ||
+        anchor.textOffset < 0 ||
+        anchor.textOffset >= end) {
+      return const [];
+    }
+    final matching =
+        _byAnchor[(anchor.nodeId, anchor.formatVersion, anchor.textIdentity)];
+    if (matching == null) return const [];
+    final ranges = <ForumBodySourceRange>[];
+    var offset = anchor.textOffset;
+    for (final segment in matching) {
+      final boundaries = segment.projection.semanticOffsetsBySourceRuneBoundary;
+      if (boundaries.last <= offset) continue;
+      if (boundaries.first > offset) return const [];
+      final stop = end < boundaries.last ? end : boundaries.last;
+      final from = _semanticBoundary(boundaries, offset, after: true) - 1;
+      final to = _semanticBoundary(boundaries, stop, after: false);
+      if (boundaries[from] != offset || boundaries[to] != stop) return const [];
+      var rawStart = segment.sourceStart + from;
+      if (ranges.lastOrNull?.endRune == rawStart) {
+        rawStart = ranges.removeLast().startRune;
+      }
+      ranges.add(
+        ForumBodySourceRange(identity, rawStart, segment.sourceStart + to),
+      );
+      offset = stop;
+      if (offset == end) return List.unmodifiable(ranges);
+    }
+    return const [];
+  }
+
   NovelReaderNativeImageAnchor? imageAtPath(String path) => _imagesByPath[path];
 
   /// Resource hints always use exact recorded paths. No zero-length numeric

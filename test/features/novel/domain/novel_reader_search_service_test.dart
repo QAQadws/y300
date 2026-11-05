@@ -60,6 +60,7 @@ void main() {
       expect(result.matchEnd, 7);
       expect(text.substring(result.matchStart, result.matchEnd), '关键词');
       expect(result.anchor.textOffset, 3);
+      expect(result.range.endTextOffset, 6);
       expect(
         result.anchor.formatVersion,
         NovelReaderAnchorFormat.semanticCodePoints,
@@ -159,7 +160,13 @@ void main() {
           .single;
       expect((flag.matchStart, flag.matchEnd), (1, 3));
       expect(flag.anchor.textOffset, 1);
+      expect(flag.range.endTextOffset, 3);
       expect(flag.snippet, '...🇨🇳...');
+      final mark = service
+          .search(document: _textDocument('xe\u0301y'), keyword: '\u0301')
+          .single;
+      expect((mark.matchStart, mark.matchEnd), (2, 3));
+      expect((mark.anchor.textOffset, mark.range.endTextOffset), (1, 3));
     },
   );
 }

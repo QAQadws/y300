@@ -60,11 +60,19 @@ class NovelReaderTextAnchor {
   }
 }
 
+/// A half-open range in the semantic node identified by its start anchor.
+class NovelReaderTextRange {
+  const NovelReaderTextRange(this.start, this.endTextOffset);
+
+  final NovelReaderTextAnchor start;
+  final int endTextOffset;
+}
+
 class NovelReaderSearchResult {
   const NovelReaderSearchResult({
     required this.resultId,
     required this.keyword,
-    required this.anchor,
+    required this.range,
     required this.snippet,
     required this.matchStart,
     required this.matchEnd,
@@ -73,7 +81,8 @@ class NovelReaderSearchResult {
 
   final String resultId;
   final String keyword;
-  final NovelReaderTextAnchor anchor;
+  final NovelReaderTextRange range;
+  NovelReaderTextAnchor get anchor => range.start;
   final String snippet;
 
   /// Inclusive UTF-16 start in the original node text, before display trimming.
