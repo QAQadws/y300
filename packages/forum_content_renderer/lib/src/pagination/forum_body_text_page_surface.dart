@@ -18,6 +18,7 @@ import '../services/forum_html_image_anchor_controller.dart';
 import 'forum_body_prepared_text_fragment.dart';
 import 'forum_body_text_page_composer.dart';
 import 'forum_body_text_page_binding.dart';
+import 'forum_body_text_glyph_hit.dart';
 import 'forum_body_text_selection_snapshot.dart';
 
 export 'forum_body_text_page_binding.dart'
@@ -43,6 +44,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
       HtmlProjectedSourcePosition position,
     )?
     onSourceTap,
+    ValueChanged<String>? onLinkTap,
     void Function(ForumBodyTextPageFragment, ForumBodyTextSelectionSnapshot)?
     onSourceLongPress,
   }) {
@@ -66,6 +68,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
           ),
       ],
       onSourceTap: onSourceTap,
+      onLinkTap: onLinkTap,
       onSourceLongPress: onSourceLongPress,
     );
   }
@@ -106,6 +109,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     onInlineImageTap,
     void Function(ForumBodyTextPageFragment, HtmlProjectedSourcePosition)?
     onSourceTap,
+    ValueChanged<String>? onLinkTap,
     void Function(ForumBodyTextPageFragment, ForumBodyTextSelectionSnapshot)?
     onSourceLongPress,
   }) {
@@ -154,6 +158,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
       compactHeight ? page.usedHeight : snapshot.height,
       List.unmodifiable(fragments),
       onSourceTap,
+      onLinkTap,
       onSourceLongPress,
       imageHost,
       imageAnchorController,
@@ -177,6 +182,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     this._height,
     this._bindings,
     this._onSourceTap,
+    this._onLinkTap,
     this._onSourceLongPress,
     this._imageHost,
     this._imageAnchorController,
@@ -197,6 +203,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
   final List<ForumBodyPreparedTextFragment> _bindings;
   final void Function(ForumBodyTextPageFragment, HtmlProjectedSourcePosition)?
   _onSourceTap;
+  final ValueChanged<String>? _onLinkTap;
   final void Function(
     ForumBodyTextPageFragment,
     ForumBodyTextSelectionSnapshot,
@@ -339,7 +346,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     final surface = _fragmentSurface(fragment, binding);
     final body = fragment.kind == ForumBodyTextPageFragmentKind.image
         ? surface
-        : _TextLongPressSurface(
+        : _TextInteractionSurface(
             identity: (
               _layoutId,
               _page.index,
@@ -351,6 +358,15 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
               fragment.width,
               fragment.height,
             ),
+            onLinkTap: _onLinkTap,
+            linkAt: _onLinkTap == null
+                ? null
+                : (point) => ForumBodyTextGlyphHit.at(
+                    binding: binding,
+                    fragment: fragment,
+                    pageSize: Size(_width, _height),
+                    point: point,
+                  )?.linkTarget,
             onLongPress: _onSourceLongPress == null
                 ? null
                 : (point) {
@@ -581,26 +597,65 @@ final class _ImageFragmentSurfaceState extends State<_ImageFragmentSurface> {
 }
 
 /// Retire gesture geometry without remounting/releasing the borrowed body.
-final class _TextLongPressSurface extends StatefulWidget {
-  const _TextLongPressSurface({
+final class _TextInteractionSurface extends StatefulWidget {
+  const _TextInteractionSurface({
     required this.identity,
     required this.onLongPress,
+    required this.linkAt,
+    required this.onLinkTap,
     required this.child,
   });
   final Object identity;
   final ValueChanged<Offset>? onLongPress;
+  final String? Function(Offset)? linkAt;
+  final ValueChanged<String>? onLinkTap;
   final Widget child;
   @override
-  State<_TextLongPressSurface> createState() => _TextLongPressSurfaceState();
+  State<_TextInteractionSurface> createState() =>
+      _TextInteractionSurfaceState();
 }
 
-final class _TextLongPressSurfaceState extends State<_TextLongPressSurface> {
-  late LongPressGestureRecognizer _press;
+final class _TextInteractionSurfaceState
+    extends State<_TextInteractionSurface> {
+  LongPressGestureRecognizer? _press;
+  TapGestureRecognizer? _tap;
+
   void _bind() {
-    _press = LongPressGestureRecognizer()
-      ..onLongPressStart = (details) {
-        if (mounted) widget.onLongPress?.call(details.localPosition);
-      };
+    if (widget.onLongPress != null) {
+      _press = LongPressGestureRecognizer()
+        ..onLongPressStart = (details) {
+          if (mounted) widget.onLongPress?.call(details.localPosition);
+        };
+    }
+    if (widget.onLinkTap != null) {
+      String? downTarget;
+      _tap = TapGestureRecognizer()
+        ..onTapDown = (details) {
+          downTarget = widget.linkAt?.call(details.localPosition);
+        }
+        ..onTapUp = (details) {
+          final target = widget.linkAt?.call(details.localPosition);
+          if (mounted && target != null && target == downTarget) {
+            widget.onLinkTap?.call(target);
+          }
+        };
+    }
+  }
+
+  void _unbind() {
+    _press?.dispose();
+    _tap?.dispose();
+    _press = null;
+    _tap = null;
+  }
+
+  void _pointerDown(PointerDownEvent event) {
+    // Join the arena only on a link, so a neighboring text tap still belongs
+    // to the reader. Drags and long presses can win the same pointer as usual.
+    if (_tap != null && widget.linkAt?.call(event.localPosition) != null) {
+      _tap!.addPointer(event);
+    }
+    _press?.addPointer(event);
   }
 
   @override
@@ -610,11 +665,12 @@ final class _TextLongPressSurfaceState extends State<_TextLongPressSurface> {
   }
 
   @override
-  void didUpdateWidget(covariant _TextLongPressSurface oldWidget) {
+  void didUpdateWidget(covariant _TextInteractionSurface oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.identity != widget.identity ||
-        (oldWidget.onLongPress == null) != (widget.onLongPress == null)) {
-      _press.dispose();
+        (oldWidget.onLongPress == null) != (widget.onLongPress == null) ||
+        (oldWidget.onLinkTap == null) != (widget.onLinkTap == null)) {
+      _unbind();
       _bind();
     }
   }
@@ -622,12 +678,12 @@ final class _TextLongPressSurfaceState extends State<_TextLongPressSurface> {
   @override
   Widget build(BuildContext context) => Listener(
     behavior: HitTestBehavior.translucent,
-    onPointerDown: widget.onLongPress == null ? null : _press.addPointer,
+    onPointerDown: _press == null && _tap == null ? null : _pointerDown,
     child: widget.child,
   );
   @override
   void dispose() {
-    _press.dispose();
+    _unbind();
     super.dispose();
   }
 }

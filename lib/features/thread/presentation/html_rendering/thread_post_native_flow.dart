@@ -434,21 +434,11 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
           );
         }
       },
-      onSourceTap: (fragment, position) {
-        if (!_current(run) || !position.isExact) return;
-        final binding = fragments[snapshot[index].fragments.indexOf(fragment)];
-        for (final part in binding.projection.parts) {
-          if (part.utf16Start > position.displayUtf16) return;
-          if (position.displayUtf16 >= part.utf16Start + part.text.length) {
-            continue;
-          }
-          final url = binding.runs[part.runIndex].style.linkTarget;
-          if (url != null && url.isNotEmpty) {
-            widget.callbacks.onTapUrl?.call(url);
-          }
-          return;
-        }
-      },
+      onLinkTap: widget.callbacks.onTapUrl == null
+          ? null
+          : (url) {
+              if (_current(run)) widget.callbacks.onTapUrl?.call(url);
+            },
     );
   }
 

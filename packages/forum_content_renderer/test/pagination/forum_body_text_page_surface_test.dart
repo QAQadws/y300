@@ -120,6 +120,69 @@ Future<List<int>> _pagePixels(RenderRepaintBoundary boundary) async {
 }
 
 void main() {
+  testWidgets('links use their painted glyphs and retire with the page', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      html:
+          '<p>ab<a href="/first">cd</a>ef'
+          '<a href="/hidden" style="visibility:hidden">gh</a></p>',
+    );
+    final first = fixture.plan(befores: [0]);
+    final second = fixture.plan(id: 'generation-2', befores: [0]);
+    final lease = fixture.lease(0);
+    Offset glyph(int index, double fraction) {
+      final box = lease.layout.selectionBoxes(index, index + 1).single;
+      return Offset(
+        box.left + (box.right - box.left) * fraction,
+        (box.top + box.bottom) / 2,
+      );
+    }
+
+    final links = <String>[];
+    var outerTaps = 0, longPresses = 0, drags = 0;
+    Widget host(ForumBodyTextPageSnapshot snapshot) => _host(
+      GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => outerTaps++,
+        onHorizontalDragEnd: (_) => drags++,
+        child: ForumBodyTextPageSurface(
+          snapshot: snapshot,
+          pageIndex: 0,
+          layoutId: snapshot.layoutId,
+          leases: [lease],
+          onLinkTap: links.add,
+          onSourceLongPress: (_, _) => longPresses++,
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(host(first));
+    await tester.tapAt(glyph(1, .9)); // Just before the link.
+    await tester.tapAt(glyph(3, .9)); // Caret is already at the link's end.
+    await tester.tapAt(glyph(4, .1));
+    await tester.tapAt(glyph(6, .5));
+    await tester.tapAt(const Offset(90, 5));
+    expect(links, ['/first']);
+    expect(outerTaps, 4);
+
+    await tester.longPressAt(glyph(2, .5));
+    await tester.dragFrom(glyph(2, .5), const Offset(50, 0));
+    expect(longPresses, 1);
+    expect(drags, 1);
+    expect(links, ['/first']);
+
+    final stale = await tester.startGesture(glyph(2, .5));
+    await tester.pumpWidget(host(second));
+    await stale.up();
+    await tester.pump();
+    expect(links, ['/first']);
+    await tester.tapAt(glyph(2, .5));
+    expect(links, ['/first', '/first']);
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(fixture.cache.activeLeases, 0);
+  });
+
   testWidgets(
     'a padding-only page paints without a paragraph lease or synthetic text',
     (tester) async {

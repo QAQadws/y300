@@ -1,10 +1,10 @@
 import 'dart:math' as math;
 import 'package:flutter/painting.dart';
-import 'package:flutter/foundation.dart' show precisionErrorTolerance;
 import 'package:html_pagination_core/html_pagination_core.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../style/forum_body_style_options.dart';
 import 'forum_body_prepared_text_fragment.dart';
+import 'forum_body_text_glyph_hit.dart';
 import 'forum_body_text_page_composer.dart';
 
 /// One visible local text context captured from a real prepared glyph hit.
@@ -33,92 +33,27 @@ ForumBodyTextSelectionSnapshot? forumBodyTextSelectionAt({
   if (maxCodeUnits <= 0 || maxParts <= 0) {
     throw ArgumentError('Invalid selection limits');
   }
-  if (!binding.isActive ||
-      !point.dx.isFinite ||
-      !point.dy.isFinite ||
-      !Rect.fromLTWH(0, 0, fragment.width, fragment.height).contains(point) ||
-      !(Offset.zero & pageSize).contains(
-        point + Offset(fragment.left, fragment.top),
-      )) {
+  final hit = ForumBodyTextGlyphHit.at(
+    binding: binding,
+    fragment: fragment,
+    pageSize: pageSize,
+    point: point,
+  );
+  if (hit == null) return null;
+  final projection = hit.body.projection;
+  final ranges = _visibleRanges(
+    projection,
+    hit.body.runs,
+    hit.start,
+    hit.end,
+    maxParts,
+  );
+  if (ranges == null || ranges.isEmpty) return null;
+  if (!hit.paintedRanges.any(
+    (glyph) => ranges.any((r) => r.start <= glyph.start && r.end >= glyph.end),
+  )) {
     return null;
   }
-  final body = binding is ForumBodyPreparedListItemFragment
-      ? binding.body
-      : binding;
-  HtmlProjectedSourcePosition? hit;
-  var start = fragment.coverageStartUtf16;
-  var end = fragment.coverageEndUtf16;
-  ForumBodyTextRole role;
-  switch (body) {
-    case ForumBodyPreparedImageFragment():
-      return null;
-    case ForumBodyPreparedListItemFragment():
-      return null;
-    case ForumBodyPreparedParagraphFragment():
-      hit = body.view?.sourceAt(point);
-      role = body.lease.content.style.role;
-    case ForumBodyPreparedInlineFragment():
-      final actual = body.view.sourceHitAt(point);
-      final window = actual.window;
-      if (window == null) return null;
-      hit = actual.position;
-      start = math.max(start, window.startUtf16);
-      end = math.min(end, window.endUtf16);
-      role = window.content.style.role;
-    case ForumBodyPreparedEmphasisFragment():
-      hit = body.view.sourceAt(point);
-      role = body.view.input.paragraph.content.style.role;
-    case ForumBodyPreparedFittedEmphasisFragment():
-      hit = body.view.sourceAt(point);
-      role = body.plan.content.style.role;
-  }
-  if (hit == null || !hit.isExact || start >= end) return null;
-  final projection = body.projection;
-  final ranges = _visibleRanges(projection, body.runs, start, end, maxParts);
-  if (ranges == null || ranges.isEmpty) return null;
-  final caret = hit.displayUtf16;
-  if (caret < start || caret > end) return null;
-  final candidates = <({int start, int end})>[
-    if (caret < end)
-      (start: caret, end: projection.sourceAtUtf16(caret + 1).displayUtf16),
-    if (caret > start)
-      (
-        start: projection
-            .sourceAtUtf16(caret - 1, affinity: HtmlProjectionAffinity.upstream)
-            .displayUtf16,
-        end: caret,
-      ),
-  ];
-  var glyphHit = false;
-  for (final candidate in candidates) {
-    if (!ranges.any(
-      (r) => r.start <= candidate.start && r.end >= candidate.end,
-    )) {
-      continue;
-    }
-    for (final box in body.glyphBoxes(candidate.start, candidate.end)) {
-      final rect = Rect.fromLTRB(box.left, box.top, box.right, box.bottom);
-      final clip = Rect.fromLTWH(0, 0, fragment.width, fragment.height)
-          .intersect(
-            Rect.fromLTWH(
-              -fragment.left,
-              -fragment.top,
-              pageSize.width,
-              pageSize.height,
-            ),
-          );
-      if (rect.contains(point) &&
-          rect.left >= clip.left - precisionErrorTolerance &&
-          rect.right <= clip.right + precisionErrorTolerance &&
-          rect.top >= clip.top - precisionErrorTolerance &&
-          rect.bottom <= clip.bottom + precisionErrorTolerance) {
-        glyphHit = true;
-        break;
-      }
-    }
-    if (glyphHit) break;
-  }
-  if (!glyphHit) return null;
   var length = 0;
   for (final r in ranges) {
     length += r.end - r.start;
@@ -130,9 +65,9 @@ ForumBodyTextSelectionSnapshot? forumBodyTextSelectionAt({
   }
   return ForumBodyTextSelectionSnapshot._(
     text.toString(),
-    hit,
-    role == ForumBodyTextRole.ruby,
-    role == ForumBodyTextRole.code,
+    hit.position,
+    hit.role == ForumBodyTextRole.ruby,
+    hit.role == ForumBodyTextRole.code,
   );
 }
 
