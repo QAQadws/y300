@@ -81,6 +81,59 @@ final class _Fixture {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  testWidgets('source highlight only paints complete visible graphemes', (
+    tester,
+  ) async {
+    final f = _Fixture(
+      '<p>A<ruby>字<rt>note</rt></ruby>'
+      '<span style="visibility:hidden">secret</span>🦊e\u0301Z</p>',
+    );
+    final snapshot = f.session.snapshot;
+    final fragments = f.prepare(0);
+    final surface = ForumBodyTextPageSurface.prepared(
+      snapshot: snapshot,
+      pageIndex: 0,
+      layoutId: snapshot.layoutId,
+      fragments: fragments,
+    );
+    ForumBodySourceRange range(int start, int end) =>
+        ForumBodySourceRange(snapshot.identity, start, end);
+    const color = Color(0x5437aa00);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Align(
+          alignment: Alignment.topLeft,
+          child: ForumBodyTextHighlight(
+            ranges: [range(1, 2)],
+            color: color,
+            child: surface,
+          ),
+        ),
+      ),
+    );
+    expect(surface.locateSourceRanges([range(1, 2)]), hasLength(1));
+    expect(surface.locateSourceRanges([range(2, 12)]), isEmpty);
+    expect(surface.locateSourceRanges([range(12, 13)]), hasLength(1));
+    expect(surface.locateSourceRanges([range(13, 14)]), isEmpty);
+    expect(surface.locateSourceRanges([range(13, 15)]), hasLength(1));
+    final wrong = ForumBodySourceRange(
+      ForumBodyIdentity(
+        sourceId: snapshot.identity.sourceId,
+        inputHash: snapshot.identity.inputHash,
+        conversionIdentity: 'different',
+        parserRevision: snapshot.identity.parserRevision,
+      ),
+      1,
+      2,
+    );
+    expect(surface.locateSourceRanges([wrong]), isEmpty);
+    expect(find.byWidget(surface), paints..rect(color: color));
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(surface.locateSourceRanges([range(1, 2)]), isEmpty);
+    expect(f.cache.activeLeases, 0);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Flutter selection copies only the current visible base text', (
     tester,
   ) async {

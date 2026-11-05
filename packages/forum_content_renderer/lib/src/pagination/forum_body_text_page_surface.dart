@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:html_pagination_core/html_pagination_core.dart';
 
+import '../document/forum_body_document.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../style/forum_body_quote_decoration.dart';
 import '../contracts/forum_html_display_image.dart';
@@ -17,10 +19,12 @@ import '../inline/forum_body_emphasis_fragment_surface.dart';
 import '../services/forum_html_image_anchor_controller.dart';
 import 'forum_body_prepared_text_fragment.dart';
 import 'forum_body_selectable_fragment.dart';
+import 'forum_body_selectable_text.dart';
 import '../style/forum_body_style_options.dart' show ForumBodyTextRole;
 import 'forum_body_text_page_composer.dart';
 import 'forum_body_text_page_binding.dart';
 import 'forum_body_text_glyph_hit.dart';
+import 'forum_body_text_highlight.dart';
 import 'forum_body_text_page_semantics.dart';
 import 'forum_body_text_selection_snapshot.dart';
 
@@ -159,6 +163,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     return ForumBodyTextPageSurface._(
       key,
       page,
+      snapshot.identity,
       layoutId,
       snapshot.width,
       compactHeight ? page.usedHeight : snapshot.height,
@@ -184,6 +189,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
   const ForumBodyTextPageSurface._(
     Key? key,
     this._page,
+    this._sourceIdentity,
     this._layoutId,
     this._width,
     this._height,
@@ -205,6 +211,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     this._onCollapseToggle,
   ) : super(key: key);
   final ForumBodyTextPage _page;
+  final ForumBodyIdentity _sourceIdentity;
   final String _layoutId;
   final double _width;
   final double _height;
@@ -517,15 +524,92 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     child: _buildBody(
       canSelect:
           _selectionEnabled && SelectionContainer.maybeOf(context) != null,
+      highlight: ForumBodyTextHighlight.maybeOf(context),
     ),
   );
 
-  Widget _buildBody({required bool canSelect}) => LayoutBuilder(
+  /// Resolves source intervals against the current delivery's painted text.
+  /// Coordinates are local to this page or cell slice and borrow its leases.
+  List<Rect> locateSourceRanges(List<ForumBodySourceRange> ranges) {
+    final matching = ranges.where((range) => range.identity == _sourceIdentity);
+    if (matching.isEmpty) return const [];
+    final pageClip = Rect.fromLTWH(0, 0, _width, _height);
+    final result = <Rect>[];
+    for (final (index, fragment) in _page.fragments.indexed) {
+      final hint = fragment.sourceHint;
+      final binding = _bindings[index];
+      if (hint == null || !binding.isActive) continue;
+      final candidates = matching
+          .where(
+            (range) =>
+                range.startRune < hint.runeEnd &&
+                range.endRune > hint.runeStart,
+          )
+          .toList(growable: false);
+      if (candidates.isEmpty) continue;
+      final offset = Offset(fragment.left, fragment.top);
+      final clip = (offset & Size(fragment.width, fragment.height)).intersect(
+        pageClip,
+      );
+      if (clip.isEmpty) continue;
+      final projection = binding.projection;
+      final visible = forumBodyVisibleTextRanges(
+        projection,
+        binding.runs,
+        fragment.coverageStartUtf16,
+        fragment.coverageEndUtf16,
+        includeAnnotations: false,
+      )!;
+      for (final span in visible) {
+        int? start;
+        var end = span.start;
+        void appendBoxes() {
+          if (start == null) return;
+          for (final box in binding.glyphBoxes(start!, end)) {
+            final rect = box.toRect().shift(offset).intersect(clip);
+            if (!rect.isEmpty) result.add(rect);
+          }
+          start = null;
+        }
+
+        for (final glyph in projection.graphemeRanges(
+          startUtf16: span.start,
+          endUtf16: span.end,
+        )) {
+          final source = projection.sourceEnvelope(
+            startUtf16: glyph.startUtf16,
+            endUtf16: glyph.endUtf16,
+          );
+          if (source != null &&
+              candidates.any(
+                (range) =>
+                    range.startRune <= source.runeStart &&
+                    source.runeEnd <= range.endRune,
+              )) {
+            start ??= glyph.startUtf16;
+            end = glyph.endUtf16;
+          } else {
+            appendBoxes();
+          }
+        }
+        appendBoxes();
+      }
+    }
+    return List.unmodifiable(result);
+  }
+
+  Widget _buildBody({
+    required bool canSelect,
+    required ForumBodyTextHighlight? highlight,
+  }) => LayoutBuilder(
     builder: (context, constraints) {
       if (constraints.constrain(Size(_width, _height)) !=
           Size(_width, _height)) {
         _fail(ForumBodyTextPageSurfaceFailure.geometry);
       }
+      final marks = highlight == null || highlight.ranges.isEmpty
+          ? const <Rect>[]
+          : locateSourceRanges(highlight.ranges);
       return SizedBox(
         width: _width,
         height: _height,
@@ -556,11 +640,38 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
               ),
             for (final (index, fragment) in _page.fragments.indexed)
               _placedFragment(context, fragment, _bindings[index], canSelect),
+            if (marks.isNotEmpty)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    painter: _TextHighlightPainter(marks, highlight!.color),
+                  ),
+                ),
+              ),
           ],
         ),
       );
     },
   );
+}
+
+final class _TextHighlightPainter extends CustomPainter {
+  const _TextHighlightPainter(this.rects, this.color);
+
+  final List<Rect> rects;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color;
+    for (final rect in rects) {
+      canvas.drawRect(rect, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_TextHighlightPainter oldDelegate) =>
+      oldDelegate.color != color || !listEquals(oldDelegate.rects, rects);
 }
 
 /// Resource pixels may change, but published placement is fixed. The Host

@@ -158,6 +158,7 @@ export 'src/pagination/forum_body_text_page_preparation.dart'
         ForumBodyTextPagePreparationFailure,
         ForumBodyTextPagePreparationException;
 export 'src/pagination/forum_body_text_page_surface.dart';
+export 'src/pagination/forum_body_text_highlight.dart';
 export 'src/pagination/forum_body_selectable_fragment.dart'
     show ForumBodyFlowSelectionScope, ForumBodyFlowSelectionScopeState;
 export 'src/pagination/forum_body_text_selection_snapshot.dart';
