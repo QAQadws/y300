@@ -30,10 +30,13 @@ import 'forum_body_emphasis_page_admission.dart';
 import 'forum_body_list_marker_plan.dart';
 import 'forum_body_image_frame.dart';
 import 'forum_body_float_body_preparation.dart';
+import 'forum_body_selectable_text.dart';
+import 'forum_body_text_highlight.dart';
 
 part 'forum_body_float_session.dart';
 part 'forum_body_float_text.dart';
 part 'forum_body_float_inline.dart';
+part 'forum_body_selection_copy.dart';
 
 typedef _TableAdmission = ({
   ForumBodyElement element,
@@ -515,6 +518,32 @@ final class ForumBodyTextPageSession {
       !isClosed &&
       !isLayoutOwnerRetired &&
       fragments.every((item) => _issued.contains(item) && item.isActive);
+
+  /// Reads a logical text range from the currently published prefix. The
+  /// caller advances the copy in work slices and closes it on cancellation.
+  /// No page preparation, native lease or mounted widget is required.
+  ForumBodySelectionCopyCursor openSelectionCopy(
+    ForumBodySourceRange range, {
+    int maxCodeUnits = 65536,
+    int maxWork = 32768,
+  }) {
+    _ensureUsable();
+    final prefix = snapshot;
+    if (range.identity != prefix.identity ||
+        range.startRune < 0 ||
+        range.endRune <= range.startRune ||
+        maxCodeUnits <= 0 ||
+        maxWork <= 0) {
+      throw ArgumentError('Invalid selection range or copy budget');
+    }
+    return ForumBodySelectionCopyCursor._(
+      this,
+      range,
+      selectionChunks(prefix, range).iterator,
+      maxCodeUnits,
+      maxWork,
+    );
+  }
 
   /// Each call handles at most one paragraph/padding input and publishes at
   /// most one page. Pinned-cache pressure retains the exact pending input; retry

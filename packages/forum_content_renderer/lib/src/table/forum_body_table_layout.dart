@@ -26,6 +26,12 @@ final class ForumBodyTableAreaLayout {
       _body.session.ownsPreparedFragments(fragments);
 }
 
+extension ForumBodyTableSelectionChunkSource on ForumBodyTableAreaLayout {
+  Iterable<ForumBodySelectionChunk?> selectionChunks(
+    ForumBodySourceRange range,
+  ) => _body.session.selectionChunks(snapshot, range);
+}
+
 /// One frozen layout with source-bound, lazily materialized bodies. The table
 /// owns those sessions and the Host still owns the shared paragraph cache.
 final class ForumBodyTableLayout {

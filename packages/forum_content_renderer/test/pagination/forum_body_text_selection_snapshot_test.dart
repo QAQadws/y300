@@ -7,15 +7,22 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
 final class _Fixture {
-  _Fixture(String html, {double height = 60}) {
-    final doc = const ForumBodyParser().parse(
+  _Fixture(
+    String html, {
+    double height = 60,
+    int? initialPages,
+    bool dedicatedTables = false,
+    bool captureFloats = false,
+    ForumBodyTableExtent tableExtent = ForumBodyTableExtent.bookPage,
+  }) {
+    document = const ForumBodyParser().parse(
       html: html,
       sourceId: 'selection',
       conversionIdentity: 'none',
     );
     cache = ForumBodyParagraphCache(maxEntries: 64, maxEstimatedBytes: 1 << 24);
     session = ForumBodyTextPageSession(
-      document: doc,
+      document: document,
       reader: ForumBodyReaderStyle(
         textStyle: const TextStyle(fontFamily: 'Ahem', fontSize: 10, height: 1),
         fontRevision: 'ahem',
@@ -33,18 +40,45 @@ final class _Fixture {
       layoutId: 'selection',
       width: 200,
       height: height,
+      collapses: ForumBodyCollapseLayout(document),
+      dedicatedTables: dedicatedTables,
+      captureFloats: captureFloats,
+      tableExtent: tableExtent,
     );
     addTearDown(() {
       session.close();
       cache.close();
     });
-    for (var i = 0; !session.isComplete; i++) {
+    publish(through: initialPages);
+  }
+  late final ForumBodyDocument document;
+  late final ForumBodyParagraphCache cache;
+  late final ForumBodyTextPageSession session;
+
+  void publish({int? through}) {
+    for (
+      var i = 0;
+      !session.isComplete &&
+          (through == null || session.snapshot.length < through);
+      i++
+    ) {
       if (i > 10000) fail('selection source stalled');
       session.advance(maxEvents: 2, maxLines: 2);
     }
   }
-  late final ForumBodyParagraphCache cache;
-  late final ForumBodyTextPageSession session;
+
+  ForumBodySourceRange get entireSource =>
+      ForumBodySourceRange(document.identity, 0, document.sourceMap.runeLength);
+
+  String? copy(ForumBodySelectionCopyCursor cursor) {
+    for (var i = 0; !cursor.isDone; i++) {
+      if (i > 10000) fail('logical copy stalled');
+      expect(cursor.text, isNull);
+      cursor.advance(maxWork: 2);
+    }
+    return cursor.text;
+  }
+
   List<ForumBodyPreparedTextFragment> prepare(int page) {
     final job = session.openPagePreparation(page);
     try {
@@ -81,6 +115,78 @@ final class _Fixture {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  for (final extent in ForumBodyTableExtent.values) {
+    test('logical copy reads cold slices and ${extent.name} table cells', () {
+      final long = List.filled(30, '长 行').join(' ');
+      final table = '<table><tr><td>甲格</td><td>乙格</td></tr></table>';
+      final f = _Fixture(
+        '<p>$long</p>'
+        '<ol><li>编号文字</li></ol>'
+        '<div class="showcollapse_box"><div class="showcollapse_title">标题</div>'
+        '<div class="showcollapse_content"><p>折叠正文</p></div></div>'
+        '<p>甲<ruby>基<rt>音</rt></ruby><span style="visibility:hidden">隐</span>'
+        '🦊e\u0301乙</p>'
+        '${extent == ForumBodyTableExtent.natural ? '<span style="float:right;width:120px">$table</span>' : table}'
+        '<p>终</p>',
+        height: 50,
+        dedicatedTables: true,
+        captureFloats: true,
+        tableExtent: extent,
+      );
+      expect(f.session.snapshot.length, greaterThan(2));
+      expect(
+        f.session.snapshot.expand((page) => page.tableFrames),
+        hasLength(1),
+      );
+      final builds = f.cache.layoutBuildCount;
+      final pictures = f.cache.pictureBuildCount;
+      expect(f.cache.activeLeases, 0);
+
+      final cursor = f.session.openSelectionCopy(f.entireSource);
+      expect(f.copy(cursor), '$long\n编号文字\n标题\n甲基🦊e\u0301乙\n甲格\n乙格\n终');
+      expect(f.cache.activeLeases, 0);
+      expect(f.cache.layoutBuildCount, builds);
+      expect(f.cache.pictureBuildCount, pictures);
+      expect(f.session.pendingPreparationCount, 0);
+    });
+  }
+
+  test('logical copy retires partial, over-budget and invisible endpoints', () {
+    final f = _Fixture(
+      '<p>start</p><p>middle</p>'
+      '<p><span style="visibility:hidden">x</span>end</p>',
+      height: 12,
+      initialPages: 1,
+    );
+    expect(f.session.snapshot.isComplete, isFalse);
+    final early = f.session.openSelectionCopy(f.entireSource);
+    early.advance(maxWork: 1);
+    f.publish();
+    expect(f.copy(early), isNull);
+
+    final range = f.entireSource;
+    expect(f.copy(f.session.openSelectionCopy(range)), 'start\nmiddle\nend');
+    expect(
+      f.copy(f.session.openSelectionCopy(range, maxCodeUnits: 14)),
+      isNull,
+    );
+    expect(f.copy(f.session.openSelectionCopy(range, maxWork: 1)), isNull);
+    expect(
+      f.copy(
+        f.session.openSelectionCopy(
+          ForumBodySourceRange(range.identity, 11, range.endRune),
+        ),
+      ),
+      isNull,
+    );
+    final retired = f.session.openSelectionCopy(range);
+    retired.advance(maxWork: 2);
+    f.session.close();
+    expect(f.copy(retired), isNull);
+    expect(f.cache.activeLeases, 0);
+  });
+
   testWidgets('source highlight only paints complete visible graphemes', (
     tester,
   ) async {

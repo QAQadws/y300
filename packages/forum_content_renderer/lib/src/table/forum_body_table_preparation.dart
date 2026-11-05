@@ -10,6 +10,7 @@ import '../inline/forum_body_inline_image_input.dart';
 import '../pagination/forum_body_frozen_images.dart';
 import '../pagination/forum_body_image_frame.dart';
 import '../pagination/forum_body_prepared_text_fragment.dart';
+import '../pagination/forum_body_text_highlight.dart';
 import '../pagination/forum_body_text_page_composer.dart';
 import '../pagination/forum_body_text_page_preparation.dart';
 import '../pagination/forum_body_text_page_session.dart';

@@ -9,7 +9,8 @@ export 'src/document/forum_body_collapse_layout.dart';
 export 'src/document/forum_body_parser.dart';
 export 'src/table/forum_body_table_grid.dart';
 export 'src/table/forum_body_table_geometry.dart';
-export 'src/table/forum_body_table_preparation.dart';
+export 'src/table/forum_body_table_preparation.dart'
+    hide ForumBodyTableSelectionChunkSource;
 export 'src/table/forum_body_table_viewport.dart';
 export 'src/flow/forum_body_flow_sliver.dart';
 export 'src/flow/forum_body_flow_image_anchor.dart';
@@ -149,7 +150,8 @@ export 'src/pagination/forum_body_text_page_binding.dart'
     show
         validateForumBodyTextPageBinding,
         validateForumBodyPreparedTextPageBinding;
-export 'src/pagination/forum_body_text_page_session.dart';
+export 'src/pagination/forum_body_text_page_session.dart'
+    hide ForumBodySelectionChunk, ForumBodySelectionChunkSource;
 export 'src/pagination/forum_body_text_page_preparation.dart'
     show
         ForumBodyTextPagePreparation,
