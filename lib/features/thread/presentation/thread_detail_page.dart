@@ -23,6 +23,7 @@ import 'package:y300/features/reply/presentation/reply_composer_page.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
+import 'package:y300/features/reader_shared/presentation/services/reader_layout_scroll_controller.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_ui_feedback.dart';
@@ -110,7 +111,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage>
   @override
   void initState() {
     super.initState();
-    _scrollController = ScrollController();
+    _scrollController = ReaderLayoutScrollController();
     _imageReaderReturnCoordinator = ThreadImageReaderReturnCoordinator(
       scrollController: _scrollController,
     );

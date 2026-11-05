@@ -324,6 +324,120 @@ void main() {
       );
     }
 
+    for (final (insideImage, reverse) in [
+      (false, false),
+      (true, false),
+      (false, true),
+      (true, true),
+    ]) {
+      testWidgets(
+        'native block resize preserves the visible position '
+        '(image=$insideImage, reverse=$reverse)',
+        (tester) async {
+          tester.view.physicalSize = const Size(370, 650);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          final dimensions = _DelayedForumImageDimensions(path: '/images/late.jpg');
+          final tail = List.filled(45, '<p>Following text.</p>').join();
+          await tester.pumpWidget(
+            _buildTestApp(
+              _imageReturnRepository(
+                '<p>Before the picture.</p><img src="/images/late.jpg">'
+                '<p>First paragraph after it.</p><p>Observed paragraph.</p>'
+                '<img src="/images/unknown.jpg">$tail',
+              ),
+              imageCacheService: _FailedThreadInlineImageCacheService(),
+              additionalOverrides: [
+                forumImageDimensionIndexProvider.overrideWithValue(dimensions),
+              ],
+              home: ThreadDetailPage(
+                tid: '100',
+                initialPage: 1,
+                nativeBody: true,
+                targetPid: reverse ? 'p1' : null,
+                landing: reverse
+                    ? ThreadPostLanding.bodyEnd
+                    : ThreadPostLanding.top,
+              ),
+            ),
+          );
+          final body = find.byType(ForumBodyFlowBox);
+          final image = find.byKey(
+            const ValueKey(('native-readable-image', 'p1', 0)),
+          );
+          for (var frame = 0; frame < 250; frame++) {
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 2)),
+            );
+            await tester.pump();
+            if (body.evaluate().isNotEmpty &&
+                tester.widget<ForumBodyFlowBox>(body).prefix.isComplete) {
+              break;
+            }
+          }
+          final flow = tester.widget<ForumBodyFlowBox>(body);
+          final initial = flow.session;
+          expect(flow.prefix.isComplete, isTrue);
+          final position = _imageReturnScrollable(tester).position;
+          final viewportTop = tester
+              .getTopLeft(find.byKey(const Key('thread-detail-list')))
+              .dy;
+          final oldImage = _nativePostGeometry(tester, body, flow.prefix).image;
+          position.jumpTo(
+            position.pixels +
+                (insideImage ? oldImage.center.dy : oldImage.bottom + 8) -
+                viewportTop,
+          );
+          for (var frame = 0; frame < 100; frame++) {
+            await tester.pump(const Duration(milliseconds: 16));
+            if (image.evaluate().isNotEmpty) break;
+          }
+          expect(image, findsOneWidget);
+          expect(dimensions.queriedSpecs, isNotEmpty);
+          final offset = position.pixels;
+          final before = _nativePostGeometry(tester, body, flow.prefix);
+          final expectedInset =
+              (insideImage ? before.image.center.dy : before.paragraph) -
+              viewportTop;
+          dimensions.pending.complete(
+            const ForumImageDimensions(
+              width: 140,
+              height: 286,
+              source: ForumImageDimensionSource.cacheMetadata,
+            ),
+          );
+          for (var frame = 0; frame < 160; frame++) {
+            await tester.pump(const Duration(milliseconds: 16));
+            final replacement = tester.widget<ForumBodyFlowBox>(body);
+            if (identical(replacement.session, initial)) continue;
+            final after = _nativePostGeometry(tester, body, replacement.prefix);
+            expect(
+              (insideImage ? after.image.center.dy : after.paragraph) -
+                  viewportTop,
+              closeTo(expectedInset, 1),
+              reason: 'The new geometry must be aligned in its first frame.',
+            );
+            final growth = after.image.height - before.image.height;
+            expect(growth, greaterThan(200));
+            expect(after.otherImageHeight, closeTo(before.otherImageHeight, 1));
+            expect(
+              position.pixels - offset,
+              closeTo((insideImage ? growth / 2 : growth) - (reverse ? growth : 0), 1),
+            );
+            break;
+          }
+          final replacement = tester.widget<ForumBodyFlowBox>(body).session;
+          expect(replacement, isNot(same(initial)));
+          expect(initial.isClosed, isTrue);
+          expect(position.isScrollingNotifier.value, isFalse);
+          await tester.pumpWidget(const SizedBox.shrink());
+          expect(replacement.isClosed, isTrue);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+
     testWidgets('late reading close cannot pop a rebound thread owner', (
       tester,
     ) async {
@@ -7068,13 +7182,18 @@ class _FakeForumHtmlReaderPreferencesRepository
 }
 
 class _DelayedForumImageDimensions implements ForumImageDimensionIndex {
+  _DelayedForumImageDimensions({this.path});
+
+  final String? path;
   final pending = Completer<ForumImageDimensions?>();
   final queriedSpecs = <ForumImageLoadSpec>[];
 
   @override
   Future<ForumImageDimensions?> getBySpec(ForumImageLoadSpec spec) {
     queriedSpecs.add(spec);
-    return pending.future;
+    return path == null || Uri.parse(spec.sourceUrl).path == path
+        ? pending.future
+        : Future.value(null);
   }
 
   @override
@@ -7265,6 +7384,33 @@ Finder _richTextContaining(String text) {
   return find.byWidgetPredicate((widget) {
     return widget is RichText && widget.text.toPlainText().contains(text);
   });
+}
+
+({Rect image, double paragraph, double otherImageHeight}) _nativePostGeometry(
+  WidgetTester tester,
+  Finder body,
+  ForumBodyTextPageSnapshot prefix,
+) {
+  var y = tester.getTopLeft(body).dy;
+  Rect? image;
+  double? paragraph;
+  for (final page in prefix) {
+    for (final fragment in page.fragments) {
+      if (fragment.imageFrame case final frame?) {
+        if (image != null && paragraph != null) {
+          return (
+            image: image,
+            paragraph: paragraph,
+            otherImageHeight: frame.imageRect.height,
+          );
+        }
+        image = frame.imageRect.shift(Offset(0, y + fragment.top));
+      }
+      if (fragment.path == '3') paragraph = y + fragment.top;
+    }
+    y += page.usedHeight;
+  }
+  throw StateError('The original image or paragraph has no layout.');
 }
 
 ThreadPost _imageReturnPost(String message) => ThreadPost(

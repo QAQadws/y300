@@ -3,6 +3,57 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_scroll_controller.dart';
 
 void main() {
+  testWidgets('layout displacements combine and yield to newer navigation', (
+    tester,
+  ) async {
+    final controller = NovelReaderScrollController();
+    final height = ValueNotifier(3000.0);
+    addTearDown(controller.dispose);
+    addTearDown(height.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ValueListenableBuilder(
+          valueListenable: height,
+          builder: (context, extent, _) => ListView(
+            controller: controller,
+            children: [SizedBox(height: extent)],
+          ),
+        ),
+      ),
+    );
+    controller.jumpTo(200);
+    await tester.pump();
+    controller.preserveWhileIdle(
+      controller.position,
+      delta: 60,
+      isCurrent: () => true,
+    );
+    controller.preserveWhileIdle(
+      controller.position,
+      delta: -25,
+      isCurrent: () => true,
+    );
+    controller.preserveWhileIdle(
+      controller.position,
+      delta: 80,
+      isCurrent: () => false,
+    );
+    height.value += 100;
+    await tester.pump();
+    expect(controller.offset, 235);
+    expect(controller.position.isScrollingNotifier.value, isFalse);
+
+    controller.preserveWhileIdle(
+      controller.position,
+      delta: 80,
+      isCurrent: () => true,
+    );
+    height.value += 100;
+    controller.jumpTo(400);
+    await tester.pump();
+    expect(controller.offset, 400);
+  });
+
   testWidgets('restoration corrects layout without ballistic scrolling', (
     tester,
   ) async {

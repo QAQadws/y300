@@ -2,10 +2,15 @@ import 'dart:async';
 import 'dart:isolate';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart'
+    show GrowthDirection, RenderAbstractViewport, RenderSliver;
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
+import 'package:y300/features/reader_shared/presentation/services/reader_layout_scroll_controller.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 import 'thread_native_body_images.dart';
+
+part 'thread_native_block_reflow.dart';
 
 /// Thread adapter for the same natural flow used by the novel reader. The
 /// outer floor list owns scroll and reading authority.
@@ -58,12 +63,14 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
   );
   final _preparation = ForumPreparationScheduler.shared.createScope();
   final _resolvedImages = <String, ForumHtmlImageLayout>{};
+  final _changedImages = <String, bool>{};
   ForumPreparationLease<ForumBodyDocument>? _work;
   ForumBodyDocument? _document;
   _ThreadFlowRun? _pending, _shown;
   Object? _layoutKey;
   Object? _error;
   var _revision = 0;
+  var _foldRevision = 0;
 
   @override
   void initState() {
@@ -85,6 +92,7 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
     _work = null;
     _document = null;
     _resolvedImages.clear();
+    _changedImages.clear();
     _retireLayouts();
     _error = null;
     WidgetsBinding.instance.addPostFrameCallback((_) => _prepare());
@@ -134,7 +142,7 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
       final style = widget.textStyle.copyWith(
         locale: Localizations.maybeLocaleOf(context),
       );
-      final key = (
+      final inputs = (
         document,
         width,
         scaler,
@@ -144,8 +152,9 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
         widget.preferences.typography.paragraphSpacing,
         widget.theme.signature,
         widget.imageHost,
-        _revision,
+        _foldRevision,
       );
+      final key = (inputs, _revision);
       if (document != null &&
           width.isFinite &&
           width > 0 &&
@@ -153,7 +162,13 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
           _error == null) {
         _layoutKey = key;
         if (!identical(_pending, _shown)) _pending?.close();
-        final run = _pending = _ThreadFlowRun();
+        final blockChanges =
+            _shown?.inputs == inputs &&
+                _changedImages.values.every((main) => main)
+            ? _changedImages.keys.toSet()
+            : const <String>{};
+        _changedImages.clear();
+        final run = _pending = _ThreadFlowRun(inputs, blockChanges);
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!_current(run)) return;
           widget.onGeometry(false, false);
@@ -167,7 +182,7 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
         children: [
           if (run != null)
             ForumBodyFlowBox(
-              key: ObjectKey(run),
+              key: run.boundsKey,
               session: run.session!,
               prefix: run.prefix!,
               isCurrentLayout: identical(run, _pending),
@@ -218,6 +233,9 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
         expansionOverrides: config.expansion,
       );
       final learned = Map<String, ForumHtmlImageLayout>.of(_resolvedImages);
+      final previousImages = _shown?.host == config.imageHost
+          ? _shown?.images
+          : null;
       final images = ThreadNativeBodyImages(document);
       final clock = Stopwatch()..start();
       for (final (index, element) in document.imageElements.indexed) {
@@ -232,7 +250,10 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
           element: element,
           sequence: config.prepared.sequence,
           host: config.imageHost,
-          learnedLayout: learned[element.path],
+          // Host estimates can learn from other images in the thread. Keep
+          // already laid-out occurrences stable until their own size arrives.
+          learnedLayout:
+              learned[element.path] ?? previousImages?.layoutFor(element),
         );
       }
       run.images = images;
@@ -281,11 +302,18 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
       if (snapshot.length != run.prefix?.length ||
           snapshot.isComplete != run.prefix?.isComplete) {
         for (var i = run.prefix?.length ?? 0; i < snapshot.length; i++) {
-          run.height += snapshot[i].usedHeight;
+          run.append(snapshot[i]);
         }
         run.prefix = snapshot;
+        final previous = _shown;
         if (snapshot.isNotEmpty &&
-            (snapshot.isComplete || run.height >= (_shown?.height ?? 0))) {
+            (snapshot.isComplete ||
+                run.height >= (previous?.height ?? 0) &&
+                    run.blockChanges.every(run.blockImages.containsKey)) &&
+            (previous == null ||
+                identical(previous, run) ||
+                run.blockChanges.isEmpty ||
+                _preserveBlockImageReflow(previous, run))) {
           setState(() {
             if (!identical(_shown, run)) _shown?.close();
             _shown = run;
@@ -297,7 +325,7 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
               widget.onGeometry(run.ready, snapshot.isComplete);
             }
           });
-        } else if (snapshot.isComplete) {
+        } else if (snapshot.isEmpty && snapshot.isComplete) {
           setState(() {
             _shown?.close();
             _shown = null;
@@ -339,6 +367,7 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
         widget.callbacks.onInteraction?.call();
         setState(() {
           widget.expansion[header.id] = !header.expanded;
+          _foldRevision++;
           _revision++;
         });
       },
@@ -346,8 +375,29 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
       onInlineImageTap: (_, binding) {
         if (binding.input.entry case final entry?) _imageTap(run, entry);
       },
-      onImageLayoutResolved: (fragment, layout) =>
-          _imageResolved(run, fragment.content.input.element, layout),
+      onImageLayoutResolved: (fragment, layout) {
+        final input = fragment.content.input;
+        if (snapshot.layoutId != run.prefix!.layoutId) {
+          _imageResolved(run, input.element, layout);
+          return;
+        }
+        final ratio = layout.aspectRatio ?? layout.displaySize?.aspectRatio;
+        if ((input.entry.htmlWidth != null && input.entry.htmlHeight != null) ||
+            ratio == null ||
+            !ratio.isFinite ||
+            ratio <= 0 ||
+            ratio ==
+                (_resolvedImages[input.element.path]?.aspectRatio ??
+                    input.aspectRatio)) {
+          return;
+        }
+        _imageResolved(
+          run,
+          input.element,
+          ForumHtmlImageLayout(aspectRatio: ratio),
+          mainBlock: true,
+        );
+      },
       onInlineImageLayoutResolved: (_, binding, layout) {
         if (binding.input.usesIntrinsicSize) {
           _imageResolved(run, binding.input.element, layout);
@@ -390,8 +440,9 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
   void _imageResolved(
     _ThreadFlowRun run,
     ForumBodyElement element,
-    ForumHtmlImageLayout layout,
-  ) {
+    ForumHtmlImageLayout layout, {
+    bool mainBlock = false,
+  }) {
     if (!_current(run) || _error != null) return;
     final original =
         _resolvedImages[element.path] ?? run.images!.layoutFor(element);
@@ -400,6 +451,7 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
       return;
     }
     _resolvedImages[element.path] = layout;
+    _changedImages[element.path] = mainBlock;
     if (run.reflowScheduled) return;
     run.reflowScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -453,6 +505,13 @@ Future<ForumBodyDocument> _parseThreadNativeBody(String source, String html) =>
     );
 
 final class _ThreadFlowRun {
+  _ThreadFlowRun(this.inputs, this.blockChanges);
+
+  final Object inputs;
+  final Set<String> blockChanges;
+  final boundsKey = GlobalKey();
+  final blockImages = <String, ({double top, double height})>{};
+
   ForumBodyTextPageSession? session;
   ForumBodyTextPageSnapshot? prefix;
   ForumHtmlImageHost? host;
@@ -462,6 +521,18 @@ final class _ThreadFlowRun {
   double height = 0;
   bool ready = false, waiting = false;
   bool reflowScheduled = false;
+
+  void append(ForumBodyTextPage page) {
+    for (final fragment in page.fragments) {
+      if (fragment.imageFrame case final frame?) {
+        blockImages[fragment.path!] = (
+          top: height + fragment.top + frame.imageRect.top,
+          height: frame.imageRect.height,
+        );
+      }
+    }
+    height += page.usedHeight;
+  }
 
   void close() {
     _ThreadFlowQueue.remove(step);
