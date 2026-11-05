@@ -171,6 +171,8 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
               session: run.session!,
               prefix: run.prefix!,
               isCurrentLayout: identical(run, _pending),
+              imageAnchorController: widget.imageAnchorController,
+              imagePathForIndex: run.images!.pathForIndex,
               onReadyChanged: (ready) {
                 if (!_current(run)) return;
                 run.ready = ready;

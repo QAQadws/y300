@@ -11,7 +11,10 @@ import '../pagination/forum_body_text_page_composer.dart';
 import '../pagination/forum_body_text_page_preparation.dart';
 import '../pagination/forum_body_text_page_session.dart';
 import '../services/forum_body_scroll_geometry.dart';
+import '../services/forum_html_image_anchor_controller.dart';
 import '../table/forum_body_table_viewport.dart';
+
+part 'forum_body_flow_image_reveal.dart';
 
 typedef ForumBodyFlowSliceBuilder =
     Widget Function(
@@ -76,7 +79,12 @@ final class ForumBodyFlowBox extends _ForumBodyFlow {
     super.isCurrentLayout,
     super.onReadyChanged,
     super.onTableWindowChanged,
+    this.imageAnchorController,
+    this.imagePathForIndex,
   });
+
+  final ForumHtmlImageAnchorController? imageAnchorController;
+  final String? Function(int index)? imagePathForIndex;
 }
 
 abstract class _ForumBodyFlow extends StatefulWidget {
@@ -126,6 +134,8 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
   bool _fits = true;
   GlobalKey? _boxKey;
   ScrollPosition? _outerPosition;
+  VoidCallback? _detachImageLocator;
+  ({int slice, Object request})? _imageReveal;
 
   double get _extent => _ends.lastOrNull ?? 0;
   double _top(int index) => index == 0 ? 0 : _ends[index - 1];
@@ -135,6 +145,7 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
     super.initState();
     _updatePrefix();
     _listen();
+    _bindImageLocator();
   }
 
   @override
@@ -152,11 +163,18 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
   @override
   void didUpdateWidget(covariant _ForumBodyFlow oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget is ForumBodyFlowBox &&
+        (!identical(oldWidget.session, widget.session) ||
+            (oldWidget as ForumBodyFlowBox).imageAnchorController !=
+                (widget as ForumBodyFlowBox).imageAnchorController)) {
+      _bindImageLocator();
+    }
     if (!identical(oldWidget.session, widget.session)) {
       _unlisten();
       _clear();
       _ends.clear();
       _tableOffsets.clear();
+      _imageReveal = null;
       _visible = (start: 0, end: 0);
       _listen();
     } else if (oldWidget.prefix.isNotEmpty &&
@@ -231,6 +249,13 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
     }
     if (widget is ForumBodyFlowBox) _updateBoxVisible();
     if (_working case final index? when !_intersects(index)) _stopWork();
+    final target = _imageReveal?.slice;
+    final targetPending =
+        target != null &&
+        _intersects(target) &&
+        !_ready.containsKey(target) &&
+        !_failed.contains(target);
+    if (targetPending && _working != null && _working != target) _stopWork();
     final offscreen = _ready.keys
         .where((index) => !_intersects(index))
         .toList();
@@ -260,7 +285,7 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
       }
     }
     _reportReady(ready && _fits && widget.isCurrentLayout);
-    final index = _working ?? missing;
+    final index = _working ?? (targetPending ? target : missing);
     if (!mounted || _waiting || index == null) return;
     _working = index;
     try {
@@ -283,10 +308,16 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
         _deliver(index, _FlowDelivery(const [], table, controller));
       } else {
         final work = _preparation ??= session.openPagePreparation(index);
-        final step = work.advance(maxFragments: 1, maxParts: 8);
-        _waiting = step.waitingForLayoutBudget;
-        if (step.isReady) {
-          _deliver(index, _FlowDelivery(work.takeFragments()));
+        final steps = index == target ? 6 : 1;
+        final clock = steps > 1 ? (Stopwatch()..start()) : null;
+        for (var step = 0; step < steps; step++) {
+          final progress = work.advance(maxFragments: 1, maxParts: 8);
+          _waiting = progress.waitingForLayoutBudget;
+          if (progress.isReady) {
+            _deliver(index, _FlowDelivery(work.takeFragments()));
+            break;
+          }
+          if (_waiting || (clock?.elapsedMicroseconds ?? 0) >= 2000) break;
         }
       }
     } catch (error, stackTrace) {
@@ -527,6 +558,7 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
 
   @override
   void dispose() {
+    _detachImageLocator?.call();
     _outerPosition?.removeListener(_schedule);
     _unlisten();
     _clear();

@@ -6,6 +6,63 @@ import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'render_test_support.dart';
 
 void main() {
+  testWidgets('retiring a provisional offscreen reveal restores the origin', (
+    tester,
+  ) async {
+    final anchors = ForumHtmlImageAnchorController();
+    final scroll = ScrollController(initialScrollOffset: 35);
+    addTearDown(anchors.dispose);
+    addTearDown(scroll.dispose);
+    final entry = prepareRenderTestDocument(
+      _images(['target']),
+      sourceId: 'post',
+    ).sequence;
+    anchors.bindSequence(entry);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SingleChildScrollView(
+          controller: scroll,
+          child: const SizedBox(height: 2000),
+        ),
+      ),
+    );
+    var searches = 0;
+    final detach = anchors.attachOffscreenReveal((
+      index,
+      position,
+      isCurrent,
+      revealAt,
+    ) {
+      searches++;
+      expect(index, entry.entries.single.index);
+      expect(position, same(scroll.position));
+      expect(isCurrent(), isTrue);
+      return revealAt(700, () => true);
+    }, isCurrent: () => true);
+    final image = entry.entries.single;
+    expect(
+      await anchors.revealImage(
+        index: image.index,
+        cacheKey: 'wrong',
+        url: image.url,
+        scrollController: scroll,
+        isCurrent: () => true,
+      ),
+      isFalse,
+    );
+    expect(searches, 0);
+
+    final result = _reveal(anchors, scroll, image);
+    await tester.pump();
+    expect(scroll.offset, 700);
+    detach();
+    await _frames(tester);
+    expect(await result, isFalse);
+    expect(scroll.offset, 35);
+    expect(searches, 1);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('readable index distinguishes repeated image URLs', (
     tester,
   ) async {

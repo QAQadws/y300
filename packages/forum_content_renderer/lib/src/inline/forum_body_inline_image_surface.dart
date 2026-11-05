@@ -181,6 +181,11 @@ final class _InlineSurfaceState extends State<ForumBodyInlineImageSurface> {
     final entry = binding.input.entry;
     if (controller == null || entry == null) return surface;
     return ForumHtmlImageAnchor(
+      key: ValueKey((
+        'native-readable-image',
+        binding.input.identity.sourceId,
+        entry.index,
+      )),
       controller: controller,
       sourceId: binding.input.identity.sourceId,
       index: entry.index,

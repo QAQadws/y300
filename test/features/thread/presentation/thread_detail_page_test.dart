@@ -226,6 +226,104 @@ void main() {
       },
     );
 
+    for (final inTable in [false, true]) {
+      testWidgets(
+        'native image reader returns to an offscreen duplicate (table=$inTable)',
+        (tester) async {
+          SharedPreferences.setMockInitialValues(<String, Object>{
+            'reader_pref_mode': 'ltr',
+          });
+          const image =
+              '<img src="/images/same.png" width="800" height="48">';
+          final distant = inTable
+              ? '<table width="1600"><tr><td width="1200">Left</td>'
+                    '<td width="400">$image</td></tr></table>'
+              : image;
+          final gap = List.filled(45, '<p>Text between pictures.</p>').join();
+          const hidden =
+              '<div class="showcollapse_box">'
+              '<div class="showcollapse_title">Hidden</div>'
+              '<div class="showcollapse_content">$image</div></div>';
+          await tester.pumpWidget(
+            _buildTestApp(
+              _imageReturnRepository('$image$hidden$gap$distant$gap'),
+              imageCacheService: _NoopImageCacheService(),
+              home: const ThreadDetailPage(tid: '100', nativeBody: true),
+            ),
+          );
+          final flow = find.byType(ForumBodyFlowBox);
+          final images = find.byType(ForumHtmlImageView);
+          for (var frame = 0; frame < 250; frame++) {
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 2)),
+            );
+            await tester.pump();
+            if (flow.evaluate().isNotEmpty &&
+                tester.widget<ForumBodyFlowBox>(flow).prefix.isComplete &&
+                images.evaluate().isNotEmpty) {
+              break;
+            }
+          }
+          final session = tester.widget<ForumBodyFlowBox>(flow).session;
+          expect(session.snapshot.isComplete, isTrue);
+          expect(images, findsOneWidget);
+          final scroll = tester
+              .widget<ThreadDetailContent>(find.byType(ThreadDetailContent))
+              .scrollController!;
+          final origin = scroll.offset;
+          await tester.tap(images.first);
+          await _pumpThreadUiTransition(tester);
+          final readerPage = find.byType(ThreadImageReaderPage);
+          final reader = tester.widget<ThreadImageReaderPage>(readerPage);
+          expect(reader.request.group.entries, hasLength(3));
+          expect(reader.request.initialEntry?.indexInPost, 0);
+          await _prepareImageReturn(
+            tester,
+            reader,
+            _imageReturnResult(reader, 1),
+          );
+          expect(scroll.offset, origin);
+
+          Finder anchor(int index) => find.byKey(
+            ValueKey(('native-readable-image', 'p1', index)),
+            skipOffstage: false,
+          );
+          expect(anchor(2), findsNothing);
+          await _readImageReturnPages(tester, 2);
+          await tester.binding.handlePopRoute();
+          for (
+            var frame = 0;
+            frame < 100 && readerPage.evaluate().isNotEmpty;
+            frame++
+          ) {
+            await tester.pump(const Duration(milliseconds: 16));
+          }
+          expect(readerPage, findsNothing);
+          expect(scroll.offset, greaterThan(origin + 1000));
+          expect(anchor(0), findsNothing);
+          expect(anchor(1), findsNothing);
+          expect(anchor(2), findsOneWidget);
+          final clip = tester.getRect(
+            find.byKey(const Key('thread-detail-list')),
+          );
+          final imageRect = tester.getRect(anchor(2));
+          expect(imageRect.top, closeTo(clip.top, 1));
+          expect(imageRect.overlaps(clip), isTrue);
+          if (inTable) {
+            final table = tester.widget<ForumBodyTableFlowViewport>(
+              find.byType(ForumBodyTableFlowViewport),
+            );
+            expect(table.horizontalController.offset, greaterThan(500));
+            expect(table.verticalController, isNull);
+          }
+          await tester.pumpWidget(const SizedBox.shrink());
+          expect(session.isClosed, isTrue);
+          expect(session.activeIssuedFragments, 0);
+          expect(session.activeIssuedTablePages, 0);
+        },
+      );
+    }
+
     testWidgets('late reading close cannot pop a rebound thread owner', (
       tester,
     ) async {

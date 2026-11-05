@@ -6,7 +6,20 @@ import 'forum_body_scroll_geometry.dart';
 
 typedef _ImageIdentity = ({int index, String cacheKey, String url});
 
-/// Reveals an already mounted readable image without preparing other images.
+typedef ForumHtmlOffscreenImageReveal =
+    Future<bool> Function(
+      int index,
+      ScrollPosition position,
+      bool Function() isCurrent,
+      Future<bool> Function(double offset, bool Function() layoutIsCurrent)
+      revealAt,
+    );
+typedef _OffscreenLayout = ({
+  ForumHtmlOffscreenImageReveal reveal,
+  bool Function() isCurrent,
+});
+
+/// Reveals a readable image after verifying its mounted source and slot.
 ///
 /// One controller belongs to one root HTML body. Nested folds share its root
 /// sequence; missing or closed-fold anchors leave the existing position alone.
@@ -18,6 +31,7 @@ final class ForumHtmlImageAnchorController {
   Object _bindingIdentity = Object();
   int _revealGeneration = 0;
   bool _disposed = false;
+  _OffscreenLayout? _offscreenLayout;
 
   /// A renderer binding marker, changed when the readable sequence changes.
   Object get bindingIdentity => _bindingIdentity;
@@ -38,11 +52,23 @@ final class ForumHtmlImageAnchorController {
     _anchors.clear();
   }
 
+  /// Installs the current layout's bounded offscreen locator. Its offset is
+  /// a hint to mount the target. Only the real image anchor can confirm it.
+  VoidCallback attachOffscreenReveal(
+    ForumHtmlOffscreenImageReveal reveal, {
+    required bool Function() isCurrent,
+  }) {
+    if (_disposed) return () {};
+    final layout = _offscreenLayout = (reveal: reveal, isCurrent: isCurrent);
+    return () {
+      if (_offscreenLayout == layout) _offscreenLayout = null;
+    };
+  }
+
   /// Aligns the image's leading edge within the supplied scroll viewport.
   ///
   /// The caller should keep its covering reader route visible until this
-  /// completes. Corrections are bounded to three layout frames. No dimensions,
-  /// downloads, persistent positions, or image providers are retained here.
+  /// completes. Exact corrections are bounded to three layout frames.
   Future<bool> revealImage({
     required int index,
     required String cacheKey,
@@ -58,7 +84,11 @@ final class ForumHtmlImageAnchorController {
         identical(binding, _bindingIdentity) &&
         isCurrent();
     final key = (index: index, cacheKey: cacheKey, url: url);
-    if (!current() || scrollController.positions.length != 1) return false;
+    if (!current() ||
+        !_entrySet.contains(key) ||
+        scrollController.positions.length != 1) {
+      return false;
+    }
     final position = scrollController.position;
     final originalPixels = position.pixels;
     var moved = false;
@@ -68,38 +98,107 @@ final class ForumHtmlImageAnchorController {
         scrollController.positions.length == 1 &&
         identical(scrollController.position, position);
 
-    void rollback() {
-      if (!moved || !available() || !position.hasContentDimensions) return;
-      scrollController.jumpTo(
-        originalPixels
-            .clamp(position.minScrollExtent, position.maxScrollExtent)
-            .toDouble(),
-      );
+    void move(double target) {
+      final pixels = target
+          .clamp(position.minScrollExtent, position.maxScrollExtent)
+          .toDouble();
+      if ((position.pixels - pixels).abs() <= 0.5) return;
+      moved = true;
+      scrollController.jumpTo(pixels);
     }
 
-    for (var frame = 0; frame < 3; frame++) {
-      if (!available()) return false;
-      final target = _targetPixels(key, position);
-      if (target == null) {
-        rollback();
-        return false;
+    Future<bool> align(bool Function() valid, {bool inFlow = false}) async {
+      for (var frame = 0; frame < 3; frame++) {
+        if (!valid()) return false;
+        final target = _targetPixels(key, position);
+        if (target == null) return false;
+        if (inFlow) _showInTable(key, move: true);
+        move(target);
+        // Check again after layout and any queued image-height compensation.
+        await _nextFrame();
+        if (!valid()) return false;
+        final corrected = _targetPixels(key, position);
+        if (corrected == null) return false;
+        if ((position.pixels - corrected).abs() <= 0.5 &&
+            (!inFlow || _showInTable(key, move: false))) {
+          return true;
+        }
       }
-      if ((position.pixels - target).abs() > 0.5) {
-        moved = true;
-        scrollController.jumpTo(target);
-      }
-      // Layout and previously queued image-height compensation can both run
-      // after the first jump. Recheck the real anchor before uncovering it.
-      await WidgetsBinding.instance.endOfFrame;
-      if (!available()) return false;
-      final corrected = _targetPixels(key, position);
-      if (corrected == null) {
-        rollback();
-        return false;
-      }
-      if ((position.pixels - corrected).abs() <= 0.5) return true;
+      return false;
     }
-    rollback();
+
+    var aligned = false;
+    try {
+      final layout = _offscreenLayout;
+      bool locating() =>
+          available() &&
+          _offscreenLayout == layout &&
+          (layout?.isCurrent() ?? true);
+      if (!locating()) return false;
+      if (_targetPixels(key, position) != null &&
+          (layout == null || _showInTable(key, move: false))) {
+        return aligned = await align(locating);
+      }
+      if (layout == null) return false;
+      await layout.reveal(index, position, locating, (
+        offset,
+        layoutIsCurrent,
+      ) async {
+        bool valid() => locating() && layoutIsCurrent();
+        if (!offset.isFinite || !valid() || !position.hasContentDimensions) {
+          return false;
+        }
+        move(offset);
+        for (var frame = 0; frame < 40 && valid(); frame++) {
+          if (_targetPixels(key, position) != null) {
+            return aligned = await align(valid, inFlow: true);
+          }
+          await _nextFrame();
+        }
+        return false;
+      });
+      return aligned;
+    } finally {
+      if (!aligned && moved && available() && position.hasContentDimensions) {
+        move(originalPixels);
+      }
+    }
+  }
+
+  Future<void> _nextFrame() {
+    WidgetsBinding.instance.ensureVisualUpdate();
+    return WidgetsBinding.instance.endOfFrame;
+  }
+
+  bool _showInTable(_ImageIdentity key, {required bool move}) {
+    final anchor = _anchors[key];
+    if (anchor == null || !anchor.mounted) return false;
+    final position = Scrollable.maybeOf(
+      anchor.context,
+      axis: Axis.horizontal,
+    )?.position;
+    if (position == null) return true;
+    final box = anchor.context.findRenderObject();
+    if (box is! RenderBox || !box.hasSize || !position.hasContentDimensions) {
+      return false;
+    }
+    final viewport = forumBodyViewportForPosition(box, position);
+    if (viewport == null) return false;
+    final clip = MatrixUtils.transformRect(
+      viewport.getTransformTo(box),
+      viewport.paintBounds,
+    );
+    if (clip.isFinite && clip.left < box.size.width && clip.right > 0) {
+      return true;
+    }
+    if (move) {
+      final offset = viewport.getOffsetToReveal(box, 0).offset;
+      if (offset.isFinite) {
+        position.jumpTo(
+          offset.clamp(position.minScrollExtent, position.maxScrollExtent),
+        );
+      }
+    }
     return false;
   }
 
@@ -146,6 +245,7 @@ final class ForumHtmlImageAnchorController {
     _entries = const [];
     _entrySet = const {};
     _sourceId = null;
+    _offscreenLayout = null;
   }
 }
 

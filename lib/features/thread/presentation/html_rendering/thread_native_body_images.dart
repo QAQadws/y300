@@ -11,7 +11,9 @@ final class ThreadNativeBodyImages {
   final ForumBodyDocument document;
   final _sources = <String, ForumBodyInlineImageSource>{};
   final _layouts = <String, ForumHtmlImageLayout>{};
-  final _indexes = <int>{};
+  final _pathsByIndex = <int, String>{};
+
+  String? pathForIndex(int index) => _pathsByIndex[index];
 
   void add({
     required ForumBodyElement element,
@@ -33,7 +35,7 @@ final class ThreadNativeBodyImages {
         ? index != null
         : original == null ||
               original.url != uri.toString() ||
-              !_indexes.add(index!)) {
+              _pathsByIndex.containsKey(index)) {
       return;
     }
     final size = reference.width != null && reference.height != null
@@ -73,6 +75,7 @@ final class ThreadNativeBodyImages {
       entry: entry,
     );
     _layouts[element.path] = learnedLayout ?? display.initialLayout;
+    if (index != null) _pathsByIndex[index] = element.path;
   }
 
   ForumBodyInlineImageSource? _source(

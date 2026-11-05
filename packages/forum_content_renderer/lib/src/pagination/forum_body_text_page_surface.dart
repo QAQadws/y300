@@ -548,6 +548,11 @@ final class _ImageFragmentSurfaceState extends State<_ImageFragmentSurface> {
           child: controller == null
               ? image
               : ForumHtmlImageAnchor(
+                  key: ValueKey((
+                    'native-readable-image',
+                    input.identity.sourceId,
+                    entry.index,
+                  )),
                   controller: controller,
                   sourceId: input.identity.sourceId,
                   index: entry.index,
