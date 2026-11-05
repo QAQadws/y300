@@ -68,7 +68,7 @@ final class NovelReaderNativeAnchorBinder {
     if (provenance.inputHash != bodyDocument.identity.inputHash) {
       _fail(NovelReaderNativeAnchorBindingFailure.identity);
     }
-    budget.admitOrigins(provenance.origins);
+    budget.admitOrigins(provenance);
     final segments = <NovelReaderNativeAnchorSegment>[];
     final unmapped = <String>[];
     _SemanticTarget? target;
@@ -152,8 +152,67 @@ final class NovelReaderNativeAnchorBinder {
       sourceRuneLength: bodyDocument.sourceMap.runeLength,
       segments: segments,
       unmappedPaths: unmapped,
+      images: _bindImages(provenance, semanticDocument, bodyDocument, budget),
     );
   }
+}
+
+Iterable<NovelReaderNativeImageAnchor> _bindImages(
+  NovelReaderSourceProvenance provenance,
+  NovelReaderDocument semantic,
+  ForumBodyDocument body,
+  _BindingBudget budget,
+) sync* {
+  final paths = <String>{}, nodeIds = <String>{};
+  var previousImageIndex = -1;
+  for (final origin in provenance.images) {
+    final node = body.nodeAtPath(origin.path);
+    final index = _semanticIndex(semantic, origin.nodeId);
+    final block = semantic.blocks[index];
+    if (node is! ForumBodyElement ||
+        node.kind != ForumBodyElementKind.image ||
+        node.source.runeLength != 0 ||
+        node.resource?.rawSource != origin.rawSource ||
+        block is! RichImageBlock ||
+        block.rawUrl != origin.rawSource ||
+        block.index <= previousImageIndex ||
+        !paths.add(origin.path) ||
+        !nodeIds.add(origin.nodeId)) {
+      _fail(NovelReaderNativeAnchorBindingFailure.origin);
+    }
+    previousImageIndex = block.index;
+    budget.admitSemantic(block.url.length);
+    yield NovelReaderNativeImageAnchor(
+      path: origin.path,
+      rawSource: origin.rawSource,
+      url: block.url,
+      imageIndex: block.index,
+      anchor: NovelReaderTextAnchor(
+        episodeId: semantic.episodeId,
+        nodeId: origin.nodeId,
+        formatVersion: NovelReaderAnchorFormat.semanticCodePoints,
+        textIdentity: NovelReaderAnchorFormat.layoutTextIdentity(
+          '',
+          provenance.inputHash,
+        ),
+        isProgressPercentValid: false,
+      ),
+    );
+  }
+}
+
+int _semanticIndex(NovelReaderDocument document, String nodeId) {
+  final index = nodeId.startsWith('node-')
+      ? int.tryParse(nodeId.substring(5))
+      : null;
+  if (index == null ||
+      index < 0 ||
+      nodeId != 'node-$index' ||
+      index >= document.blocks.length ||
+      document.blocks[index].anchorId != nodeId) {
+    _fail(NovelReaderNativeAnchorBindingFailure.origin);
+  }
+  return index;
 }
 
 /// The semantic parser's element.text omits BR. Walk the same known IR subtree
@@ -232,16 +291,7 @@ final class _SemanticTarget {
   ) {
     // Revision1 records historical root-block ordinals. Verify both the ID
     // spelling and actual block before using it; do not scan for equal text.
-    final index = nodeId.startsWith('node-')
-        ? int.tryParse(nodeId.substring(5))
-        : null;
-    if (index == null ||
-        index < 0 ||
-        nodeId != 'node-$index' ||
-        index >= document.blocks.length ||
-        document.blocks[index].anchorId != nodeId) {
-      _fail(NovelReaderNativeAnchorBindingFailure.origin);
-    }
+    final index = _semanticIndex(document, nodeId);
     final text = document.blocks[index].novelPlainText;
     budget.admitSemantic(text.length);
     return _SemanticTarget(
@@ -267,15 +317,24 @@ final class _BindingBudget {
   var _boundaries = 0;
   var _semantic = 0;
 
-  void admitOrigins(List<NovelReaderTextSourceOrigin> origins) {
-    if (origins.length > limits.origins.maxEntries) {
+  void admitOrigins(NovelReaderSourceProvenance provenance) {
+    if (provenance.origins.length + provenance.images.length >
+        limits.origins.maxEntries) {
       _fail(NovelReaderNativeAnchorBindingFailure.budget);
     }
     var source = 0;
     var paths = 0;
-    for (final origin in origins) {
+    for (final origin in provenance.origins) {
       source += origin.sourceText.length;
       paths += origin.path.length;
+      if (source > limits.origins.maxSourceCodeUnits ||
+          paths > limits.origins.maxPathCodeUnits) {
+        _fail(NovelReaderNativeAnchorBindingFailure.budget);
+      }
+    }
+    for (final image in provenance.images) {
+      source += image.rawSource.length;
+      paths += image.path.length;
       if (source > limits.origins.maxSourceCodeUnits ||
           paths > limits.origins.maxPathCodeUnits) {
         _fail(NovelReaderNativeAnchorBindingFailure.budget);

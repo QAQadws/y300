@@ -23,6 +23,21 @@ final class NovelReaderNativeAnchorSegment {
   int get sourceEnd => sourceStart + projection.sourceRuneLength;
 }
 
+/// Qualified resource slot, separate from every text coordinate system.
+/// The empty layout-only anchor binds the exact whole converted input.
+final class NovelReaderNativeImageAnchor {
+  const NovelReaderNativeImageAnchor({
+    required this.path,
+    required this.anchor,
+    required this.rawSource,
+    required this.url,
+    required this.imageIndex,
+  });
+  final String path, rawSource, url;
+  final int imageIndex;
+  final NovelReaderTextAnchor anchor;
+}
+
 final class NovelReaderNativeAnchorPosition {
   const NovelReaderNativeAnchorPosition({
     required this.anchor,
@@ -48,7 +63,9 @@ final class NovelReaderNativeAnchorMap {
     required this.sourceRuneLength,
     required Iterable<NovelReaderNativeAnchorSegment> segments,
     required Iterable<String> unmappedPaths,
+    Iterable<NovelReaderNativeImageAnchor> images = const [],
   }) : segments = List.unmodifiable(segments),
+       images = List.unmodifiable(images),
        unmappedPaths = List.unmodifiable(unmappedPaths) {
     if (sourceRuneLength < 0) throw ArgumentError.value(sourceRuneLength);
     var end = 0;
@@ -66,6 +83,24 @@ final class NovelReaderNativeAnchorMap {
               [])
           .add(segment);
     }
+    for (final image in this.images) {
+      final anchor = image.anchor;
+      final key = (anchor.nodeId, anchor.formatVersion, anchor.textIdentity);
+      if (image.path.isEmpty ||
+          image.rawSource.isEmpty ||
+          image.url.isEmpty ||
+          image.imageIndex < 0 ||
+          anchor.episodeId != episodeId ||
+          !anchor.hasCanonicalTextOffset ||
+          anchor.textOffset != 0 ||
+          _imagesByPath.containsKey(image.path) ||
+          _imagesByAnchor.containsKey(key) ||
+          _byAnchor.containsKey(key)) {
+        throw ArgumentError('Invalid native image anchors');
+      }
+      _imagesByPath[image.path] = image;
+      _imagesByAnchor[key] = image;
+    }
   }
 
   final ForumBodyIdentity identity;
@@ -73,6 +108,10 @@ final class NovelReaderNativeAnchorMap {
   final int sourceRuneLength;
   final List<NovelReaderNativeAnchorSegment> segments;
   final List<String> unmappedPaths;
+  final List<NovelReaderNativeImageAnchor> images;
+  final _imagesByPath = <String, NovelReaderNativeImageAnchor>{};
+  final _imagesByAnchor =
+      <(String?, int, String?), NovelReaderNativeImageAnchor>{};
   final _byAnchor =
       <(String?, int, String?), List<NovelReaderNativeAnchorSegment>>{};
 
@@ -80,11 +119,42 @@ final class NovelReaderNativeAnchorMap {
       anchor.hasCanonicalTextOffset &&
       anchor.nodeId != null &&
       anchor.episodeId == episodeId &&
-      _byAnchor.containsKey((
-        anchor.nodeId,
-        anchor.formatVersion,
-        anchor.textIdentity,
-      ));
+      (_byAnchor.containsKey((
+            anchor.nodeId,
+            anchor.formatVersion,
+            anchor.textIdentity,
+          )) ||
+          _imagesByAnchor.containsKey((
+            anchor.nodeId,
+            anchor.formatVersion,
+            anchor.textIdentity,
+          )));
+
+  NovelReaderNativeImageAnchor? imageAtPath(String path) => _imagesByPath[path];
+
+  /// Resource hints always use exact recorded paths. No zero-length numeric
+  /// interval, equal URL or neighboring text can identify an image.
+  Iterable<String> imageCandidatePaths(
+    NovelReaderTextAnchor anchor, {
+    bool allowNodeCompatibility = false,
+  }) sync* {
+    if (anchor.episodeId != episodeId || anchor.nodeId == null) return;
+    final image =
+        _imagesByAnchor[(
+          anchor.nodeId,
+          anchor.formatVersion,
+          anchor.textIdentity,
+        )];
+    if (image != null) {
+      if (anchor.hasCanonicalTextOffset && anchor.textOffset == 0) {
+        yield image.path;
+      }
+    } else if (allowNodeCompatibility) {
+      for (final image in images) {
+        if (image.anchor.nodeId == anchor.nodeId) yield image.path;
+      }
+    }
+  }
 
   /// Inverts only proven origin projections. Binary lookup retains whole
   /// matching plateaus; equal shared endpoints merge, raw source gaps do not.

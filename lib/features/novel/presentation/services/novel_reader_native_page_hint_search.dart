@@ -72,6 +72,12 @@ final class NovelReaderNativePageHintSearch {
     return NovelReaderNativePageHintSearch._(
       snapshot,
       ranges,
+      anchors
+          .imageCandidatePaths(
+            anchor,
+            allowNodeCompatibility: allowNodeCompatibility,
+          )
+          .toSet(),
       affinity,
       startPageIndex,
       maxBufferedCandidates,
@@ -81,6 +87,7 @@ final class NovelReaderNativePageHintSearch {
   NovelReaderNativePageHintSearch._(
     ForumBodyTextPageSnapshot snapshot,
     this._ranges,
+    this._imagePaths,
     this.affinity,
     this._pageIndex,
     this.maxBufferedCandidates,
@@ -88,11 +95,12 @@ final class NovelReaderNativePageHintSearch {
       identity = snapshot.identity,
       layoutId = snapshot.layoutId,
       _snapshot = snapshot {
-    if (_ranges.isEmpty) _pageIndex = pageCount;
+    if (_ranges.isEmpty && _imagePaths.isEmpty) _pageIndex = pageCount;
     _dropIfComplete();
   }
   ForumBodyTextPageSnapshot? _snapshot;
   List<NovelReaderNativeSourceCandidate> _ranges;
+  Set<String> _imagePaths;
   final HtmlProjectionAffinity affinity;
   final int maxBufferedCandidates;
   final int pageCount;
@@ -124,8 +132,14 @@ final class NovelReaderNativePageHintSearch {
         fragments < maxFragments) {
       final page = _snapshot![_pageIndex];
       if (_fragmentIndex < page.fragments.length) {
-        final hint = page.fragments[_fragmentIndex++].sourceHint;
+        final fragment = page.fragments[_fragmentIndex++];
+        final hint = fragment.sourceHint;
         fragments++;
+        if (fragment.kind == ForumBodyTextPageFragmentKind.image &&
+            _imagePaths.contains(fragment.path)) {
+          _rank = 2;
+          _fragmentIndex = page.fragments.length;
+        }
         if (hint != null) {
           final rank = _hintRank(hint.runeStart, hint.runeEnd);
           if (rank > _rank) _rank = rank;
@@ -198,6 +212,7 @@ final class NovelReaderNativePageHintSearch {
     if (!isComplete) return;
     _snapshot = null;
     _ranges = const [];
+    _imagePaths = const {};
   }
 
   void close() {
@@ -205,6 +220,7 @@ final class NovelReaderNativePageHintSearch {
     _closed = true;
     _snapshot = null;
     _ranges = const [];
+    _imagePaths = const {};
     _buffer.clear();
   }
 }

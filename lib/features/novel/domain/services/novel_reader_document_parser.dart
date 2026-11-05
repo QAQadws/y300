@@ -147,6 +147,16 @@ class DiscuzNovelReaderDocumentParser implements NovelReaderDocumentParser {
   RichImageBlock? _imageBlock(html_dom.Element element, int index, String id) {
     final raw = DefaultForumImageSourcePipeline.firstDomImageSourceFromElement(
       element,
+      // Match the renderer/preparation original-source policy; src may be a
+      // thumbnail while zoomfile/file names the actual protected attachment.
+      domAttributes: const [
+        'zoomfile',
+        'file',
+        'data-original',
+        'data-src',
+        'src',
+        'data',
+      ],
     );
     if (raw == null || raw.isEmpty) {
       return null;
@@ -292,7 +302,7 @@ class _BlockBuilder {
       return;
     }
     if (tag == 'img') {
-      _emitImage(node);
+      _emitImage(node, path);
       return;
     }
     if (tag == 'a') {
@@ -304,6 +314,7 @@ class _BlockBuilder {
           path == null ? '' : node.text,
           NovelReaderSourceTextPolicy.trimmedElementText,
         );
+        _emitLinkedImages(node, path);
         return;
       }
       final text = _parser._normalizeText(node.text);
@@ -315,6 +326,7 @@ class _BlockBuilder {
           NovelReaderSourceTextPolicy.trimmedElementText,
         );
       }
+      _emitLinkedImages(node, path);
       return;
     }
 
@@ -365,10 +377,6 @@ class _BlockBuilder {
     final imageElements = collector.imageElements;
 
     if (runs.isEmpty && imageElements.isEmpty) {
-      // Block held only nested block images (e.g. <div><img></div>).
-      for (final image in element.querySelectorAll('img')) {
-        _emitImage(image);
-      }
       return;
     }
 
@@ -392,7 +400,7 @@ class _BlockBuilder {
       }
     }
     for (final image in imageElements) {
-      _emitImage(image);
+      _emitImage(image.element, image.path);
     }
   }
 
@@ -420,7 +428,13 @@ class _BlockBuilder {
     }
   }
 
-  void _emitImage(html_dom.Element element) {
+  void _emitLinkedImages(html_dom.Element element, String? path) {
+    for (final image in _imageSources(element, path, _origins)) {
+      _emitImage(image.element, image.path);
+    }
+  }
+
+  void _emitImage(html_dom.Element element, String? path) {
     final image = _parser._imageBlock(
       element,
       _imageIndex,
@@ -432,6 +446,13 @@ class _BlockBuilder {
     _nextId += 1;
     _imageIndex += 1;
     blocks.add(image);
+    if (path != null) {
+      _origins?.recordImage(
+        path: path,
+        nodeId: image.anchorId,
+        rawSource: image.rawUrl,
+      );
+    }
   }
 
   List<RichRun> _mergeRuns(List<RichRun> runs) {
@@ -451,7 +472,7 @@ class _InlineCollector {
   final String _nodeId;
   int _semanticStart = 0;
   final List<RichRun> _runs = <RichRun>[];
-  final List<html_dom.Element> imageElements = <html_dom.Element>[];
+  final imageElements = <({html_dom.Element element, String? path})>[];
 
   void visit(html_dom.Node node, _InlineStyle style, String? path) {
     if (node is html_dom.Text) {
@@ -483,10 +504,11 @@ class _InlineCollector {
       return;
     }
     if (tag == 'img') {
-      imageElements.add(node);
+      imageElements.add((element: node, path: path));
       return;
     }
     if (tag == 'a') {
+      imageElements.addAll(_imageSources(node, path, _origins));
       final link = _parser._linkFromElement(node);
       if (link != null) {
         _append(
@@ -561,6 +583,29 @@ class _InlineCollector {
 
 enum _StructuredKind { paragraph, heading, quote }
 
+Iterable<({html_dom.Element element, String? path})> _imageSources(
+  html_dom.Element element,
+  String? path,
+  _SourceOriginRecorder? recorder,
+) sync* {
+  final tag = element.localName?.toLowerCase() ?? '';
+  if (DiscuzNovelReaderDocumentParser._skipTags.contains(tag)) return;
+  if (tag == 'img') {
+    yield (element: element, path: path);
+    return;
+  }
+  for (var i = 0; i < element.nodes.length; i++) {
+    final child = element.nodes[i];
+    if (child is html_dom.Element) {
+      yield* _imageSources(
+        child,
+        _childSourcePath(recorder, path, i),
+        recorder,
+      );
+    }
+  }
+}
+
 String? _childSourcePath(
   _SourceOriginRecorder? recorder,
   String? path,
@@ -580,9 +625,42 @@ final class _SourceOriginRecorder {
   }
   final NovelReaderSourceProvenanceLimits limits;
   final _origins = <NovelReaderTextSourceOrigin>[];
+  final _images = <NovelReaderImageSourceOrigin>[];
   int _sourceCodeUnits = 0;
   int _pathCodeUnits = 0;
   bool isRecording = true;
+
+  bool _admit(String path, String source) {
+    if (!isRecording) return false;
+    if (_origins.length + _images.length >= limits.maxEntries ||
+        source.length > limits.maxSourceCodeUnits - _sourceCodeUnits ||
+        path.length > limits.maxPathCodeUnits - _pathCodeUnits) {
+      isRecording = false;
+      _origins.clear();
+      _images.clear();
+      _sourceCodeUnits = _pathCodeUnits = 0;
+      return false;
+    }
+    _sourceCodeUnits += source.length;
+    _pathCodeUnits += path.length;
+    return true;
+  }
+
+  void recordImage({
+    required String path,
+    required String nodeId,
+    required String rawSource,
+  }) {
+    if (_admit(path, rawSource)) {
+      _images.add(
+        NovelReaderImageSourceOrigin(
+          path: path,
+          nodeId: nodeId,
+          rawSource: rawSource,
+        ),
+      );
+    }
+  }
 
   void record({
     required String path,
@@ -592,18 +670,7 @@ final class _SourceOriginRecorder {
     required int semanticStart,
     required NovelReaderSourceTextPolicy policy,
   }) {
-    if (!isRecording) return;
-    if (_origins.length >= limits.maxEntries ||
-        sourceText.length > limits.maxSourceCodeUnits - _sourceCodeUnits ||
-        path.length > limits.maxPathCodeUnits - _pathCodeUnits) {
-      isRecording = false;
-      _origins.clear();
-      _sourceCodeUnits = 0;
-      _pathCodeUnits = 0;
-      return;
-    }
-    _sourceCodeUnits += sourceText.length;
-    _pathCodeUnits += path.length;
+    if (!_admit(path, sourceText)) return;
     _origins.add(
       NovelReaderTextSourceOrigin(
         path: path,
@@ -620,6 +687,7 @@ final class _SourceOriginRecorder {
       ? NovelReaderSourceProvenance(
           inputHash: sha256.convert(utf8.encode(input)).toString(),
           origins: _origins,
+          images: _images,
         )
       : null;
 }

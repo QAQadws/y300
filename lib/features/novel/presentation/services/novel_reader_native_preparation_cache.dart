@@ -232,6 +232,16 @@ int _estimate(_Key key, NovelReaderNativeChapterPreparation value) {
       bytes +=
           8 * segment.projection.semanticOffsetsBySourceRuneBoundary.length;
     }
+    for (final image in value.anchors.images) {
+      bytes +=
+          256 +
+          2 *
+              (image.path.length +
+                  image.url.length +
+                  image.rawSource.length +
+                  (image.anchor.nodeId?.length ?? 0) +
+                  (image.anchor.textIdentity?.length ?? 0));
+    }
   }
   return bytes;
 }

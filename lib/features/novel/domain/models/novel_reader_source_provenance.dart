@@ -24,6 +24,17 @@ final class NovelReaderTextSourceOrigin {
   final NovelReaderSourceTextPolicy policy;
 }
 
+/// An actually emitted image block and its exact repaired DOM path. Images
+/// have no textual source interval; an equal URL cannot identify another slot.
+final class NovelReaderImageSourceOrigin {
+  const NovelReaderImageSourceOrigin({
+    required this.path,
+    required this.nodeId,
+    required this.rawSource,
+  });
+  final String path, nodeId, rawSource;
+}
+
 final class NovelReaderSourceProvenanceLimits {
   const NovelReaderSourceProvenanceLimits({
     this.maxEntries = 8192,
@@ -43,8 +54,11 @@ final class NovelReaderSourceProvenance {
   NovelReaderSourceProvenance({
     required this.inputHash,
     required Iterable<NovelReaderTextSourceOrigin> origins,
-  }) : origins = List.unmodifiable(origins);
-  static const revision = 1;
+    Iterable<NovelReaderImageSourceOrigin> images = const [],
+  }) : origins = List.unmodifiable(origins),
+       images = List.unmodifiable(images);
+  static const revision = 2;
   final String inputHash;
   final List<NovelReaderTextSourceOrigin> origins;
+  final List<NovelReaderImageSourceOrigin> images;
 }
