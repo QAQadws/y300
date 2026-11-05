@@ -1,5 +1,11 @@
 part of 'forum_body_text_page_session.dart';
 
+typedef _HeldFloatText = ({
+  ForumBodyParagraphContent content,
+  ForumBodyParagraphWindow window,
+  ForumBodyPendingFloatLine line,
+});
+
 /// One source paragraph consuming native line groups across physical bands.
 /// A band uses the full unconsumed projection so its last visible row has
 /// the same native wrapping and justification as the rest of that layout.
@@ -10,16 +16,19 @@ final class _FloatTextAdmission {
     this._window, {
     required this.left,
     required this.width,
+    this.holdLastLine = false,
   });
 
   final ForumBodyTextPageSession _session;
   ForumBodyParagraphContent _content;
   ForumBodyParagraphWindow _window;
   final double left, width;
+  final bool holdLastLine;
   ForumBodyFloatLineBand? _band;
   ForumBodyEmphasisPageAdmission? _plan;
   int? _inputIndex;
   bool isComplete = false;
+  _HeldFloatText? held;
 
   ({bool waiting, int lines}) advance({
     required int maxLines,
@@ -67,14 +76,15 @@ final class _FloatTextAdmission {
     final step = composer.advance(
       maxLines: maxLines,
       floatBandBottom: reduced ? band.bottom : null,
+      holdFloatLineInset: holdLastLine ? _content.horizontalInset : null,
     );
     if (step.paragraphCompleted) {
       isComplete = true;
-    } else if (reduced) {
+    } else if (reduced || holdLastLine) {
       final pageSealed = step.pagesPublished != 0;
       final end = composer.retireFloatTextBand(
         bottom: band.bottom,
-        pageSealed: pageSealed,
+        pageSealed: reduced && pageSealed,
       );
       if (end != null) {
         final cut = end.endUtf16;
@@ -93,6 +103,11 @@ final class _FloatTextAdmission {
         }
         _inputIndex = null;
         _band = null;
+        if (end.heldLine case final line?) {
+          _session._margin = line.spaceBefore;
+          held = (content: _content, window: _window, line: line);
+          isComplete = true;
+        }
         if (end.blocked && !pageSealed) _skipBand(band);
       }
     }

@@ -346,11 +346,141 @@ void main() {
     expect(parts.last.left, 30);
   });
 
+  testWidgets(
+    'an inline float shares the actual line and preserves both text sources',
+    (tester) async {
+      final session = _open(
+        '<b>AB </b><span style="float:right;width:30px;height:20px;margin-left:5px">F</span>'
+        '<span style="color:red"> CD</span>',
+      );
+      _advance(session);
+      final snapshot = session.snapshot;
+      final page = snapshot.single;
+      expect(page.fragments.map((part) => (part.left, part.top, part.width)), [
+        (70.0, 0.0, 30.0),
+        (0.0, 0.0, 65.0),
+      ]);
+      final deliveries = _prepare(session, 0);
+      expect(deliveries.last.projection.text, 'AB CD');
+      expect(
+        deliveries.last.runs.last.style.textStyle.color,
+        const Color(0xffff0000),
+      );
+      final taps = <int>[];
+      final selections = <String>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Align(
+            alignment: Alignment.topLeft,
+            child: ForumBodyTextPageSurface.prepared(
+              snapshot: snapshot,
+              pageIndex: 0,
+              layoutId: snapshot.layoutId,
+              fragments: deliveries,
+              onSourceTap: (_, position) => taps.add(position.sourceRune),
+              onSourceLongPress: (_, selection) =>
+                  selections.add(selection.text),
+            ),
+          ),
+        ),
+      );
+      await tester.tapAt(const Offset(3, 5));
+      await tester.tapAt(const Offset(33, 5));
+      await tester.tapAt(const Offset(73, 5));
+      expect(taps, [0, 5, 3]);
+      await tester.longPressAt(const Offset(37, 5));
+      expect(selections, ['AB CD']);
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(session.activeIssuedLeases, 0);
+    },
+  );
+
+  test('only the final prefix row is reflowed when a float is encountered', () {
+    final session = _open(
+      '${'A' * 24}<span style="float:left;width:35px;margin-right:5px">F</span>BC',
+    );
+    _advance(session);
+    final page = session.snapshot.single;
+    expect(page.fragments.map((part) => (part.left, part.top, part.width)), [
+      (0.0, 0.0, 100.0),
+      (0.0, 20.0, 35.0),
+      (40.0, 20.0, 60.0),
+    ]);
+    expect(page.fragments[0].sourceHint, (runeStart: 0, runeEnd: 20));
+    expect(page.fragments[1].sourceHint, (runeStart: 24, runeEnd: 25));
+    final deliveries = _prepare(session, 0);
+    expect(deliveries.last.projection.text, 'AAAABC');
+    expect(deliveries.last.projection.sourceAtUtf16(5).sourceRune, 26);
+    for (final delivery in deliveries) {
+      delivery.close();
+    }
+  });
+
+  test('a float moves below a preceding line that occupies its space', () {
+    final session = _open(
+      'AAAAAAAA<span style="float:left;width:35px;margin-right:5px">F</span>BC',
+    );
+    _advance(session);
+    final page = session.snapshot.single;
+    expect(page.fragments.map((part) => (part.left, part.top, part.width)), [
+      (0.0, 0.0, 100.0),
+      (0.0, 10.0, 35.0),
+      (40.0, 10.0, 60.0),
+    ]);
+    expect(page.fragments.map((part) => part.sourceHint), [
+      (runeStart: 0, runeEnd: 8),
+      (runeStart: 8, runeEnd: 9),
+      (runeStart: 9, runeEnd: 11),
+    ]);
+  });
+
+  test('multiple floats can encounter the same still-pending line', () {
+    final session = _open(
+      'AB<span style="float:left;width:20px">L</span>'
+      'C<span style="float:right;width:25px">R</span>D',
+    );
+    _advance(session);
+    final page = session.snapshot.single;
+    expect(page.fragments.map((part) => (part.left, part.top, part.width)), [
+      (0.0, 0.0, 20.0),
+      (75.0, 0.0, 25.0),
+      (20.0, 0.0, 55.0),
+    ]);
+    final deliveries = _prepare(session, 0);
+    expect(deliveries.last.projection.text, 'ABCD');
+    for (final delivery in deliveries) {
+      delivery.close();
+    }
+  });
+
+  test(
+    'a too-tall inline float moves without replaying the published prefix',
+    () {
+      final session = _open(
+        '<p>lead</p>AB<span style="float:left;width:20px;height:30px">F</span>CD',
+        height: 35,
+      );
+      _advance(session, untilPages: 1);
+      final prefix = session.snapshot;
+      expect(prefix.single.fragments.map((part) => part.sourceHint), [
+        (runeStart: 0, runeEnd: 4),
+        (runeStart: 4, runeEnd: 6),
+      ]);
+      _advance(session);
+      expect(session.snapshot, hasLength(2));
+      expect(session.snapshot.first, same(prefix.first));
+      expect(session.snapshot.last.fragments.map((part) => part.sourceHint), [
+        (runeStart: 6, runeEnd: 7),
+        (runeStart: 7, runeEnd: 9),
+      ]);
+    },
+  );
+
   test(
     'a failure in unresolved float lines leaves the stable prefix readable',
     () {
       final session = _open(
-        '<p>lead</p>preceding<span style="float:left">AA</span>alongside',
+        '<p>lead</p>preceding<ruby>甲<rt>a</rt></ruby><span style="float:left">AA</span>alongside',
         height: 10,
       );
       _advance(session, untilPages: 1);

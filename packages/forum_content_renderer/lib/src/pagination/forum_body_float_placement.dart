@@ -7,6 +7,15 @@ typedef ForumBodyFloatLineBand = ({
   double bottom,
 });
 
+typedef ForumBodyPendingFloatLine = ({
+  double top,
+  double spaceBefore,
+  double width,
+  int handles,
+  int entries,
+  int bytes,
+});
+
 extension ForumBodyFloatPlacement on ForumBodyTextPageComposer {
   /// Place a whole measured float in the current draft without consuming its
   /// height in normal flow. A full draft seals before the caller retries the
@@ -17,6 +26,7 @@ extension ForumBodyFloatPlacement on ForumBodyTextPageComposer {
     required double left,
     required double containingWidth,
     required double spaceBefore,
+    ForumBodyPendingFloatLine? precedingLine,
   }) {
     _ensureFloatBoundary();
     final child = layout.snapshot;
@@ -51,11 +61,28 @@ extension ForumBodyFloatPlacement on ForumBodyTextPageComposer {
       side: side,
       left: left,
       right: left + containingWidth,
-      top: _clearFloatTop(style.clear, top),
+      top: _clearFloatTop(
+        style.clear,
+        math.max(top, precedingLine?.top ?? top),
+      ),
       size: occupied,
     );
+    bool retry(ForumBodyTextPageFailure failure) =>
+        precedingLine == null && _retryFloat(atStart, failure);
+    if (precedingLine != null) {
+      final band = nextFloatTextBand(
+        left: left,
+        width: containingWidth,
+        spaceBefore: precedingLine.top - _flowHeight,
+      );
+      final remaining = band.width - (position.height > 0 ? position.width : 0);
+      if (position.top != precedingLine.top ||
+          precedingLine.width > remaining + precisionErrorTolerance) {
+        return false;
+      }
+    }
     if (position.bottom > height && !(_flowing && atStart)) {
-      return _retryFloat(atStart, ForumBodyTextPageFailure.oversizedGroup);
+      return retry(ForumBodyTextPageFailure.oversizedGroup);
     }
 
     final background = layout.background;
@@ -78,23 +105,30 @@ extension ForumBodyFloatPlacement on ForumBodyTextPageComposer {
       _fail(ForumBodyTextPageFailure.fragmentLimit);
     }
     if (maxDeliveriesPerPage case final limit?
-        when _draft.length + fragments > limit) {
-      return _retryFloat(atStart, ForumBodyTextPageFailure.fragmentLimit);
+        when _draft.length + fragments + (precedingLine == null ? 0 : 1) >
+            limit) {
+      return retry(ForumBodyTextPageFailure.fragmentLimit);
     }
     if (maxNativeHandlesPerPage case final limit?
-        when _usedNativeHandles + handles > limit) {
-      return _retryFloat(atStart, ForumBodyTextPageFailure.nativeHandleLimit);
+        when _usedNativeHandles + handles + (precedingLine?.handles ?? 0) >
+            limit) {
+      return retry(ForumBodyTextPageFailure.nativeHandleLimit);
     }
     if (maxNativeEntriesPerPage case final limit?
-        when _nativeEntries.length + _sceneEntries + entries > limit) {
-      return _retryFloat(atStart, ForumBodyTextPageFailure.nativeEntryLimit);
+        when _nativeEntries.length +
+                _sceneEntries +
+                entries +
+                (precedingLine?.entries ?? 0) >
+            limit) {
+      return retry(ForumBodyTextPageFailure.nativeEntryLimit);
     }
     if (maxNativeEstimatedBytesPerPage case final limit?
-        when _nativeBytes + _sceneBytes + bytes > limit) {
-      return _retryFloat(atStart, ForumBodyTextPageFailure.nativeByteLimit);
+        when _nativeBytes + _sceneBytes + bytes + (precedingLine?.bytes ?? 0) >
+            limit) {
+      return retry(ForumBodyTextPageFailure.nativeByteLimit);
     }
     if (maxImagesPerPage case final limit? when _usedImages + images > limit) {
-      return _retryFloat(atStart, ForumBodyTextPageFailure.imageLimit);
+      return retry(ForumBodyTextPageFailure.imageLimit);
     }
 
     _touchBackgrounds(position.top);
@@ -235,13 +269,14 @@ extension ForumBodyFloatPlacement on ForumBodyTextPageComposer {
   /// Retire the old native width only when its physical band or page is over.
   /// If no legal row was consumed, leave the rendered ordinal available for
   /// the next width. The source caller can then discard the tentative input.
-  ({int? endUtf16, bool blocked})? retireFloatTextBand({
-    required double bottom,
-    required bool pageSealed,
-  }) {
+  ({int? endUtf16, bool blocked, ForumBodyPendingFloatLine? heldLine})?
+  retireFloatTextBand({required double bottom, required bool pageSealed}) {
     final active = _active;
     if (active == null ||
-        (!pageSealed && !active.outsideFloatBand && _flowHeight < bottom)) {
+        (!pageSealed &&
+            !active.outsideFloatBand &&
+            active.heldFloatLine == null &&
+            _flowHeight < bottom)) {
       return null;
     }
     final consumed = active.nextLine > active.firstLine;
@@ -250,6 +285,7 @@ extension ForumBodyFloatPlacement on ForumBodyTextPageComposer {
           ? active.input.lines[active.nextLine - 1].coverageEndUtf16
           : null,
       blocked: active.outsideFloatBand,
+      heldLine: active.heldFloatLine,
     );
     active.input.lease?.release();
     _active = null;

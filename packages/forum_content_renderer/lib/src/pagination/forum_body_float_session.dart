@@ -27,8 +27,15 @@ final class _FloatFlowAdmission {
   ForumBodyFloatBodyPreparation? _preparation;
   ForumBodyFloatBodyLayout? _layout;
   List<ForumBodyTextPageContent>? _inputs;
+  _HeldFloatText? _held;
 
-  bool get isComplete => _next == _unit.paragraph.content.parts.length;
+  bool get isComplete =>
+      _next == _unit.paragraph.content.parts.length && _held == null;
+
+  void hold(_HeldFloatText text) {
+    if (_held != null) throw StateError('Float line is already held');
+    _held = text;
+  }
 
   /// Returns whether this work is waiting for shared native cache capacity.
   bool advance({
@@ -37,10 +44,28 @@ final class _FloatFlowAdmission {
     required int maxFormatParts,
   }) {
     final content = _unit.paragraph.content;
+    if (_held != null &&
+        (_next == content.parts.length ||
+            content.parts[_next] is ForumBodyInlineFlowClear)) {
+      _flushHeld();
+      return false;
+    }
     final part = content.parts[_next];
     if (_unit.listMarkers.isNotEmpty) _session._requiresFloatLineLayout();
+    final following = _next + 1 < content.parts.length
+        ? content.parts[_next + 1]
+        : null;
+    final beforeFloat = following is ForumBodyInlineFlowFloat;
+    final prefix = part is ForumBodyInlineFlowText ? _heldPrefix() : null;
     final text = part is ForumBodyInlineFlowText
-        ? trimForumBodyInlineText(part.content, leading: true, trailing: true)
+        ? trimForumBodyInlineText(
+            part.content,
+            leading:
+                prefix == null ||
+                prefix.projection.text.isEmpty ||
+                forumBodyInlineHasCollapsibleEdge(prefix, leading: false),
+            trailing: !beforeFloat,
+          )
         : null;
     switch (part) {
       case ForumBodyInlineFlowClear():
@@ -77,7 +102,9 @@ final class _FloatFlowAdmission {
           left: _unit.contentLeft,
           containingWidth: _unit.contentWidth,
           spaceBefore: _session._margin,
+          precedingLine: _held?.line,
         )) {
+          if (_held != null) _flushHeld();
           return false;
         }
         for (final input in inputs) {
@@ -87,31 +114,40 @@ final class _FloatFlowAdmission {
         layout.close();
         _layout = null;
         _inputs = null;
-      case ForumBodyInlineFlowText() when text!.projection.text.isEmpty:
+      case ForumBodyInlineFlowText()
+          when text!.projection.text.isEmpty && prefix == null:
         break;
       case ForumBodyInlineFlowText()
-          when _next + 1 == content.parts.length ||
-              content.parts[_next + 1] is ForumBodyInlineFlowClear:
-        final suffix = _next + 1 == content.parts.length;
+          when beforeFloat ||
+              following == null ||
+              following is ForumBodyInlineFlowClear:
         final terminalRow =
             _unit.paragraph.window ==
             ForumBodyParagraphWindow.terminalEmptyLine;
-        final paragraph = text!.withFirstLineIndent(
-          content.appliesFirstLineIndent &&
-              !_startedText &&
-              !_cleared &&
-              !terminalRow,
+        final suffix = text!;
+        final paragraph =
+            prefix?.followedBy(suffix) ??
+            suffix.withFirstLineIndent(
+              content.appliesFirstLineIndent &&
+                  !_startedText &&
+                  !_cleared &&
+                  !terminalRow,
+            );
+        _held = null;
+        _startText(
+          trimForumBodyInlineText(
+            paragraph,
+            leading: false,
+            trailing: !beforeFloat,
+          ),
+          following == null
+              ? _unit.paragraph.window
+              : ForumBodyParagraphWindow.full,
+          holdLastLine: beforeFloat,
         );
-        _session._floatText = _FloatTextAdmission(
-          _session,
-          paragraph,
-          suffix ? _unit.paragraph.window : ForumBodyParagraphWindow.full,
-          left: _unit.contentLeft,
-          width: _unit.contentWidth,
-        );
-        _startedText = true;
       default:
-        if (!_cleared ||
+        if (_held != null ||
+            !_cleared ||
             content.parts
                 .skip(_next)
                 .any((part) => part is ForumBodyInlineFlowExclusion)) {
@@ -137,6 +173,45 @@ final class _FloatFlowAdmission {
     }
     _next++;
     return false;
+  }
+
+  ForumBodyParagraphContent? _heldPrefix() {
+    final held = _held;
+    if (held == null) return null;
+    if (held.window != ForumBodyParagraphWindow.terminalEmptyLine) {
+      return held.content;
+    }
+    final end = held.content.projection.text.length;
+    return held.content.displayWindow(
+      startUtf16: end,
+      endUtf16: end,
+      appliesFirstLineIndent: false,
+    );
+  }
+
+  void _flushHeld() {
+    final held = _held!;
+    _held = null;
+    _startText(
+      trimForumBodyInlineText(held.content, leading: false, trailing: true),
+      held.window,
+    );
+  }
+
+  void _startText(
+    ForumBodyParagraphContent content,
+    ForumBodyParagraphWindow window, {
+    bool holdLastLine = false,
+  }) {
+    _session._floatText = _FloatTextAdmission(
+      _session,
+      content,
+      window,
+      left: _unit.contentLeft,
+      width: _unit.contentWidth,
+      holdLastLine: holdLastLine,
+    );
+    _startedText = true;
   }
 
   void close() {

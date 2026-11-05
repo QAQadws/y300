@@ -219,6 +219,47 @@ final class ForumBodyParagraphContent {
     appliesFirstLineIndent,
   );
 
+  /// Rejoin ordinary text separated by a formatting control without deriving
+  /// source coordinates from the new displayed string. Each input already
+  /// owns its whitespace decisions and immutable source run table.
+  ForumBodyParagraphContent followedBy(ForumBodyParagraphContent other) {
+    if (identity != other.identity ||
+        path != other.path ||
+        fontRevision != other.fontRevision ||
+        styleRevision != other.styleRevision ||
+        !identical(style, other.style) ||
+        layoutMode != other.layoutMode ||
+        paintLayer != other.paintLayer ||
+        isSourceFree ||
+        other.isSourceFree) {
+      throw ForumBodyParagraphInputException(
+        ForumBodyParagraphInputFailure.identity,
+        path,
+      );
+    }
+    if (other.projection.text.isEmpty) return this;
+    return ForumBodyParagraphContent._(
+      identity: identity,
+      path: path,
+      fontRevision: fontRevision,
+      styleRevision: styleRevision,
+      style: style,
+      layoutMode: layoutMode,
+      projection: HtmlDisplayTextProjection.concatenate(
+        [
+          HtmlDisplayTextSegment(projection),
+          HtmlDisplayTextSegment(other.projection, runIndexOffset: runs.length),
+        ],
+        maxOutputCodeUnits:
+            projection.text.length + other.projection.text.length,
+      ),
+      runs: [...runs, ...other.runs],
+      issues: {...issues, ...other.issues}.toList(),
+      appliesFirstLineIndent: appliesFirstLineIndent,
+      paintLayer: paintLayer,
+    );
+  }
+
   /// An actual source/display window shaped as one inline child. Its root font
   /// is the resolved child, not the containing block's larger native strut.
   ForumBodyParagraphContent intrinsicDisplayWindow({

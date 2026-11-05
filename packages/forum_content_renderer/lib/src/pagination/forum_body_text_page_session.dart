@@ -510,6 +510,7 @@ final class ForumBodyTextPageSession {
           _waiting = step.waiting;
           if (!_waiting) formatUnits++;
           if (admission.isComplete) {
+            if (admission.held case final held?) _floatFlow!.hold(held);
             admission.close();
             _floatText = null;
           }

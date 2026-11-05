@@ -271,7 +271,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 30;
+  static const revision = 31;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;
@@ -971,6 +971,7 @@ final class ForumBodyTextPageComposer {
   ({int linesInspected, int pagesPublished, bool paragraphCompleted}) advance({
     required int maxLines,
     double? floatBandBottom,
+    double? holdFloatLineInset,
   }) {
     _ensureOpen();
     if (maxLines <= 0) throw ArgumentError.value(maxLines, 'maxLines');
@@ -1249,6 +1250,25 @@ final class ForumBodyTextPageComposer {
             _seal();
             return _result(inspected, pagesBefore, false);
           }
+        }
+        if (holdFloatLineInset != null && end == active.endLine) {
+          final lineTop = continuation ? _flowHeight : top;
+          final width = end == active.nextLine + 1
+              ? layout.lines[active.nextLine].width + 2 * holdFloatLineInset
+              : double.infinity;
+          active.heldFloatLine = (
+            top: lineTop,
+            spaceBefore: lineTop - _flowHeight,
+            width: width,
+            handles: handles,
+            entries:
+                (addedEntries?.length ?? 0) +
+                (sceneAddition == null || sceneAddition.commands == 0 ? 0 : 1),
+            bytes:
+                (addedEntries?.values.fold(0, (sum, cost) => sum + cost) ?? 0) +
+                (sceneAddition?.estimatedBytes ?? 0),
+          );
+          return _result(inspected, pagesBefore, false);
         }
         // Only inspect newly consumed display text. Reordered source windows
         // need actual range envelopes; rescanning a growing fragment for every
@@ -1827,4 +1847,5 @@ final class _ActiveParagraph {
   int scanLine;
   int? groupEnd;
   bool outsideFloatBand = false;
+  ForumBodyPendingFloatLine? heldFloatLine;
 }
