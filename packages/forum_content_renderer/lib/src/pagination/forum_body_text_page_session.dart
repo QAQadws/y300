@@ -201,6 +201,8 @@ final class ForumBodyTextPageSession {
     ForumBodyCollapseLayout? collapses,
     // Scope a measured body to its actual descendants, with inherited style.
     ForumBodyElement? contentRoot,
+    // A replaced root has no descendants for the flow cursor to emit.
+    ({ForumBodyImageInput input, ForumBodyImageFrame frame})? scopedImage,
     double? intrinsicAvailableWidth,
     int? maxImagesPerPage,
     bool dedicatedTables = false,
@@ -249,7 +251,7 @@ final class ForumBodyTextPageSession {
     final composeTables =
         dedicatedTables || tableExtent == ForumBodyTableExtent.natural;
     try {
-      return ForumBodyTextPageSession._(
+      final session = ForumBodyTextPageSession._(
         ForumBodyBlockFlowCursor(
           document: document,
           reader: reader,
@@ -288,29 +290,53 @@ final class ForumBodyTextPageSession {
               )
             : null,
         captureFloats
-            ? (source, containingWidth, remaining) =>
-                  ForumBodyFloatBodyPreparation(
-                    document: document,
-                    source: source,
-                    reader: reader,
-                    cache: cache,
-                    containingWidth: containingWidth,
-                    layoutId: '$layoutId/float',
-                    limits: remaining,
-                    textScaler: textScaler,
-                    collapses: collapses,
-                    imageResolver: imageResolver,
-                    inlineImageResolver: inlineImageResolver,
-                    paragraphBuilder: paragraphBuilder,
-                    rubyLimits: rubyLimits,
-                    maxNativeHandlesPerPage: maxNativeHandlesPerPage,
-                    maxNativeEntriesPerPage: maxNativeEntriesPerPage,
-                    maxNativeEstimatedBytesPerPage:
-                        maxNativeEstimatedBytesPerPage,
-                    maxImagesPerPage: maxImagesPerPage,
-                  )
+            ? (
+                source,
+                containingWidth,
+                remaining,
+              ) => ForumBodyFloatBodyPreparation(
+                document: document,
+                source: source,
+                reader: reader,
+                cache: cache,
+                containingWidth: containingWidth,
+                layoutId: '$layoutId/float',
+                limits: remaining,
+                textScaler: textScaler,
+                collapses: collapses,
+                imageResolver: imageResolver,
+                inlineImageResolver: inlineImageResolver,
+                paragraphBuilder: paragraphBuilder,
+                rubyLimits: rubyLimits,
+                maxNativeHandlesPerPage: maxNativeHandlesPerPage,
+                maxNativeEntriesPerPage: maxNativeEntriesPerPage,
+                maxNativeEstimatedBytesPerPage: maxNativeEstimatedBytesPerPage,
+                maxImagesPerPage: maxImagesPerPage,
+                rootImageMaxHeight: tableExtent == ForumBodyTableExtent.natural
+                    ? null
+                    : height,
+              )
             : null,
       );
+      if (scopedImage != null) {
+        try {
+          if (!identical(scopedImage.input.element, contentRoot) ||
+              scopedImage.input.identity != document.identity ||
+              scopedImage.frame.width != width ||
+              scopedImage.input.isSticker ||
+              intrinsicAvailableWidth != null ||
+              session.contentRootStyle.hidden ||
+              session.contentRootStyle.visibilityHidden ||
+              collapses?.hidesPath(contentRoot!.path) == true) {
+            throw ArgumentError('Scoped image does not match its content root');
+          }
+          session._appendImage(scopedImage.input, scopedImage.frame, left: 0);
+        } catch (_) {
+          session.close();
+          rethrow;
+        }
+      }
+      return session;
     } catch (_) {
       composer.close();
       rethrow;
@@ -1243,6 +1269,14 @@ final class ForumBodyTextPageSession {
       final minimum = usesNaturalWidth && htmlWidth != null ? htmlWidth : 0.0;
       _intrinsic.add(minimum, preferred);
     }
+    _appendImage(input, frame, left: unit.contentLeft);
+  }
+
+  void _appendImage(
+    ForumBodyImageInput input,
+    ForumBodyImageFrame frame, {
+    required double left,
+  }) {
     final content = _decorate(
       ForumBodyImagePageContent(
         input: input,
@@ -1257,7 +1291,7 @@ final class ForumBodyTextPageSession {
       inputIndex: _content.items.length,
       fontRevision: _flow.fontRevision,
       styleRevision: _flow.styleRevision,
-      left: unit.contentLeft,
+      left: left,
       spaceBefore: _margin,
       listMarkers: _listPlan,
     );

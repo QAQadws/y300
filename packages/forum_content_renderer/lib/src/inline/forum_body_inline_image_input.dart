@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
@@ -8,6 +7,7 @@ import '../document/forum_body_document.dart';
 import '../html_rendering/forum_html_prepared_render_document.dart';
 import '../style/forum_body_box_style.dart';
 import '../style/forum_body_length.dart';
+import '../style/forum_body_replaced_image_size.dart';
 import '../style/forum_body_style_options.dart';
 
 /// Synchronous frozen-resource classification. Null retains block-image flow;
@@ -166,23 +166,19 @@ final class ForumBodyInlineImageInput {
         throw ArgumentError.value(reference, 'containingWidth');
       }
       final intrinsic = dimensions.size;
-      final width = _usedPixels(sizing.width, reference);
-      final height = _usedPixels(sizing.height, reference);
-      final naturalWidth =
-          width ??
-          (height == null ? intrinsic.width : height * intrinsic.aspectRatio);
-      final maxWidth =
-          _usedPixels(sizing.maxWidth, reference) ?? double.infinity;
-      final minWidth = _usedPixels(sizing.minWidth, reference)!;
-      final usedWidth = math.max(minWidth, math.min(naturalWidth, maxWidth));
-      final usedHeight = height ?? usedWidth / intrinsic.aspectRatio;
-      final scale = math.min(
-        1.0,
-        math.min(availableWidth / usedWidth, sizing.maxHeight / usedHeight),
+      final size = fitForumBodyReplacedImage(
+        intrinsicWidth: intrinsic.width,
+        aspectRatio: intrinsic.aspectRatio,
+        width: _usedPixels(sizing.width, reference),
+        height: _usedPixels(sizing.height, reference),
+        minWidth: _usedPixels(sizing.minWidth, reference)!,
+        maxWidth: _usedPixels(sizing.maxWidth, reference),
+        availableWidth: availableWidth,
+        availableHeight: sizing.maxHeight,
       );
       return ForumBodyInlineImageInput._(
         source,
-        _baselineSize(Size(usedWidth * scale, usedHeight * scale)),
+        _baselineSize(size),
         usesIntrinsicSize,
         null,
       );

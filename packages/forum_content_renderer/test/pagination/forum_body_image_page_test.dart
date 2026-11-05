@@ -37,6 +37,7 @@ final class _Fixture {
     ForumBodyIdentity identity,
     ForumBodyElement element, {
     double ratio = 2,
+    Size? displaySize,
     bool sticker = false,
   }) {
     final resource = element.resource!;
@@ -46,7 +47,10 @@ final class _Fixture {
       identity: identity,
       element: element,
       isSticker: sticker,
-      layout: ForumHtmlImageLayout(aspectRatio: ratio),
+      layout: ForumHtmlImageLayout(
+        aspectRatio: ratio,
+        displaySize: displaySize,
+      ),
       entry: ForumHtmlReadableImageEntry(
         index: index,
         url: resource.rawSource!,
@@ -68,6 +72,7 @@ final class _Fixture {
     int? maxNativeEntriesPerPage,
     int? maxNativeEstimatedBytesPerPage,
     ForumBodyTableExtent extent = ForumBodyTableExtent.bookPage,
+    bool captureFloats = false,
   }) {
     final result = ForumBodyTextPageSession(
       document: document,
@@ -86,6 +91,7 @@ final class _Fixture {
       maxNativeEntriesPerPage: maxNativeEntriesPerPage,
       maxNativeEstimatedBytesPerPage: maxNativeEstimatedBytesPerPage,
       tableExtent: extent,
+      captureFloats: captureFloats,
     );
     addTearDown(result.close);
     return result;
@@ -680,6 +686,123 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets(
+    'a floated image uses its fitted box for wrapping and only its image for taps',
+    (tester) async {
+      final f = _Fixture(
+        '<img src="https://x/tall" style="float:right;width:50%;height:24px;'
+        'box-sizing:border-box;padding:2px 4px;margin-left:6px">'
+        'aa aa aa aa aa aa aa aa aa aa aa aa',
+      );
+      final s = f.session(captureFloats: true, height: 140);
+      _finish(s);
+      expect(f.resolved, hasLength(1));
+      final page = s.snapshot.single;
+      final placed = page.fragments.first;
+      expect(placed.kind, ForumBodyTextPageFragmentKind.image);
+      expect(
+        (placed.left, placed.top, placed.width, placed.height),
+        (54.0, 2.0, 42.0, 20.0),
+      );
+      expect(placed.sourceHint, isNull);
+      expect(page.fragments.skip(1).map((part) => part.width), [44, 100]);
+      final delivered = _prepare(s, 0);
+      final image = delivered.first as ForumBodyPreparedImageFragment;
+      expect(image.content.input.element, same(f.resolved.single));
+      expect(image.nativeLeases, isEmpty);
+      final taps = <ForumBodyPreparedImageFragment>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Align(
+            alignment: Alignment.topLeft,
+            child: ForumBodyTextPageSurface.prepared(
+              snapshot: s.snapshot,
+              pageIndex: 0,
+              layoutId: s.snapshot.layoutId,
+              fragments: delivered,
+              imageHost: _Host(),
+              onImageTap: taps.add,
+            ),
+          ),
+        ),
+      );
+      final finder = find.byType(ForumHtmlImageView);
+      final origin = tester.getTopLeft(find.byType(ForumBodyTextPageSurface));
+      expect(tester.getTopLeft(finder), origin + const Offset(54, 2));
+      expect(tester.getSize(finder), const Size(42, 20));
+      await tester.tapAt(origin + const Offset(47, 6));
+      expect(taps, isEmpty);
+      await tester.tap(finder);
+      expect(taps.single, same(image));
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(s.activeIssuedFragments, 0);
+    },
+  );
+
+  test(
+    'an oversized floated image fits a fresh page and preserves the prefix',
+    () {
+      final f = _Fixture(
+        '<p style="margin:0">lead</p>'
+        '<img src="https://x/tall" style="float:left;width:60px;height:120px;'
+        'padding:2px;margin:3px">AB',
+      );
+      final s = f.session(captureFloats: true, height: 60);
+      _finish(s, pages: 1);
+      final prefix = s.snapshot;
+      expect(
+        prefix.single.fragments.single.kind,
+        ForumBodyTextPageFragmentKind.paragraph,
+      );
+      _finish(s);
+      expect(f.resolved, hasLength(1));
+      expect(s.snapshot, hasLength(2));
+      expect(s.snapshot.first, same(prefix.single));
+      final page = s.snapshot.last;
+      expect(page.usedHeight, 60);
+      final image = page.fragments.first;
+      expect(
+        (image.left, image.top, image.width, image.height),
+        (5.0, 5.0, 25.0, 50.0),
+      );
+      expect(page.fragments.last.left, 35);
+      expect(page.fragments.last.top, 0);
+      final fragments = _prepare(s, 1);
+      expect(fragments.last.projection.text, 'AB');
+      expect(
+        (fragments.first as ForumBodyPreparedImageFragment)
+            .content
+            .input
+            .element,
+        same(f.resolved.single),
+      );
+      for (final fragment in fragments) {
+        fragment.close();
+      }
+    },
+  );
+
+  test('a floated image uses its natural size in a flowing slice', () {
+    final f = _Fixture(
+      '<img src="https://x/tall" style="float:left;margin:2px">',
+    );
+    final s = f.session(
+      captureFloats: true,
+      height: 20,
+      extent: ForumBodyTableExtent.natural,
+      resolver: (identity, node) =>
+          f.resolve(identity, node, displaySize: const Size(64, 32)),
+    );
+    _finish(s);
+    final page = s.snapshot.single;
+    final image = page.fragments.single;
+    expect(page.usedHeight, 36);
+    expect(image.imageFrame!.imageRect, const Rect.fromLTWH(0, 0, 64, 32));
+    expect((image.left, image.top), (2.0, 2.0));
+    expect(f.resolved, hasLength(1));
+    expect(f.cache.layoutBuildCount, 0);
+  });
 
   test('resource Host cannot substitute another URL or cache binding', () {
     final f = _Fixture('<img src="https://x/tall">');

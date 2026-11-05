@@ -11,6 +11,7 @@ import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../style/forum_body_box_style.dart';
 import '../style/forum_body_length.dart';
+import '../style/forum_body_replaced_image_size.dart';
 import '../style/forum_body_style_options.dart';
 import 'forum_body_frozen_images.dart';
 import 'forum_body_image_frame.dart';
@@ -89,6 +90,7 @@ final class ForumBodyFloatBodyPreparation {
     this.maxNativeEntriesPerPage,
     this.maxNativeEstimatedBytesPerPage,
     this.maxImagesPerPage,
+    this.rootImageMaxHeight,
   }) : _document = document,
        _reader = reader,
        _cache = cache,
@@ -109,13 +111,14 @@ final class ForumBodyFloatBodyPreparation {
           ForumBodyElementKind.container,
           ForumBodyElementKind.paragraph,
           ForumBodyElementKind.heading,
+          ForumBodyElementKind.image,
         }.contains(element.kind)) {
       _fail(ForumBodyFloatBodyFailure.structure);
     }
     _margin = _insets(_style.margin);
     _padding = _insets(_style.padding);
     final specified = _contentLength(_style.box.width);
-    if (specified != null) _setWidth(specified);
+    if (specified != null && !_isRootImage) _setWidth(specified);
   }
 
   static const _maxWidth = 16384.0;
@@ -131,6 +134,7 @@ final class ForumBodyFloatBodyPreparation {
   final int? maxNativeEntriesPerPage;
   final int? maxNativeEstimatedBytesPerPage;
   final int? maxImagesPerPage;
+  final double? rootImageMaxHeight;
   final ForumBodyDocument _document;
   final ForumBodyReaderStyle _reader;
   final ForumBodyParagraphCache _cache;
@@ -146,6 +150,7 @@ final class ForumBodyFloatBodyPreparation {
   bool _advancing = false;
 
   ForumBodyResolvedStyle get _style => source.event.style;
+  bool get _isRootImage => source.element.kind == ForumBodyElementKind.image;
   bool get isReady => _ready != null;
   bool get isClosed => _closed;
 
@@ -164,8 +169,11 @@ final class ForumBodyFloatBodyPreparation {
       if (isReady) {
         return (isReady: true, waitingForLayoutBudget: false, layoutsBuilt: 0);
       }
+      final rootImage = _active == null && _isRootImage
+          ? _measureRootImage()
+          : null;
       final probe = _width == null;
-      final session = _active ??= _openBody(probe: probe);
+      final session = _active ??= _openBody(probe: probe, rootImage: rootImage);
       final step = session.advance(
         maxEvents: maxEvents,
         maxLines: maxLines,
@@ -208,32 +216,89 @@ final class ForumBodyFloatBodyPreparation {
     }
   }
 
-  ForumBodyTextPageSession _openBody({required bool probe}) =>
-      ForumBodyTextPageSession(
-        document: _document,
-        reader: _reader,
-        cache: _cache,
-        limits: limits,
-        layoutId: '$layoutId/${source.element.path}',
-        width: probe ? _maxWidth : (_width == 0 ? 1 : _width!),
-        height: _maxHeight,
-        textScaler: textScaler,
-        paragraphBuilder: paragraphBuilder,
-        rubyLimits: rubyLimits,
-        collapses: _collapses,
-        contentRoot: source.element,
-        intrinsicAvailableWidth: probe ? containingWidth : null,
-        captureNativeUsage: !probe,
-        maxNativeHandlesPerPage: probe ? null : maxNativeHandlesPerPage,
-        maxNativeEntriesPerPage: probe ? null : maxNativeEntriesPerPage,
-        maxNativeEstimatedBytesPerPage: probe
-            ? null
-            : maxNativeEstimatedBytesPerPage,
-        maxImagesPerPage: maxImagesPerPage,
-        imageResolver: _images.block,
-        inlineImageResolver: _images.inline,
-        tableExtent: ForumBodyTableExtent.natural,
+  ForumBodyTextPageSession _openBody({
+    required bool probe,
+    required ({ForumBodyImageInput input, ForumBodyImageFrame frame})?
+    rootImage,
+  }) => ForumBodyTextPageSession(
+    document: _document,
+    reader: _reader,
+    cache: _cache,
+    limits: limits,
+    layoutId: '$layoutId/${source.element.path}',
+    width: probe ? _maxWidth : (_width == 0 ? 1 : _width!),
+    height: _maxHeight,
+    textScaler: textScaler,
+    paragraphBuilder: paragraphBuilder,
+    rubyLimits: rubyLimits,
+    collapses: _collapses,
+    contentRoot: source.element,
+    scopedImage: rootImage,
+    intrinsicAvailableWidth: probe ? containingWidth : null,
+    captureNativeUsage: !probe,
+    maxNativeHandlesPerPage: probe ? null : maxNativeHandlesPerPage,
+    maxNativeEntriesPerPage: probe ? null : maxNativeEntriesPerPage,
+    maxNativeEstimatedBytesPerPage: probe
+        ? null
+        : maxNativeEstimatedBytesPerPage,
+    maxImagesPerPage: maxImagesPerPage,
+    imageResolver: _images.block,
+    inlineImageResolver: _images.inline,
+    tableExtent: ForumBodyTableExtent.natural,
+  );
+
+  ({ForumBodyImageInput input, ForumBodyImageFrame frame}) _measureRootImage() {
+    final element = source.element;
+    final input = _images.block(_document.identity, element);
+    _guard();
+    if (input == null ||
+        input.identity != _document.identity ||
+        !identical(input.element, element)) {
+      throw const ForumBodyTextPageSessionException(
+        ForumBodyTextPageSessionFailure.imageResource,
       );
+    }
+    if (input.isSticker || _style.visibilityHidden) {
+      throw const ForumBodyTextPageSessionException(
+        ForumBodyTextPageSessionFailure.imageStructure,
+      );
+    }
+    final availableWidth =
+        math.min(containingWidth, _maxWidth) -
+        _margin.horizontal -
+        _padding.horizontal;
+    final availableHeight =
+        math.min(rootImageMaxHeight ?? _maxHeight, _maxHeight) -
+        _margin.vertical -
+        _padding.vertical;
+    if (!availableHeight.isFinite ||
+        availableHeight <= 0 ||
+        availableWidth <= 0) {
+      _fail(ForumBodyFloatBodyFailure.extentLimit);
+    }
+    final box = _style.box;
+    final htmlWidth = input.entry.htmlWidth ?? element.resource?.width;
+    final htmlHeight = input.entry.htmlHeight ?? element.resource?.height;
+    final authorHeight = box.height;
+    final specifiedHeight = authorHeight?.unit == ForumBodyLengthUnit.percent
+        ? null
+        : _contentLength(authorHeight, vertical: true);
+    final size = fitForumBodyReplacedImage(
+      intrinsicWidth: input.layout.displaySize?.width ?? availableWidth,
+      aspectRatio: input.aspectRatio,
+      width: box.width == null ? htmlWidth : _contentLength(box.width),
+      height: authorHeight == null ? htmlHeight : specifiedHeight,
+      minWidth: _contentLength(box.minWidth) ?? 0,
+      maxWidth: _contentLength(box.maxWidth),
+      availableWidth: availableWidth,
+      availableHeight: availableHeight,
+    );
+    if (!size.isFinite || size.isEmpty) {
+      _fail(ForumBodyFloatBodyFailure.geometry);
+    }
+    _width = size.width;
+    return (input: input, frame: ForumBodyImageFrame.replaced(size));
+  }
 
   void _setWidth(double width) {
     final box = _style.box;
@@ -251,7 +316,7 @@ final class ForumBodyFloatBodyPreparation {
   void _finish(ForumBodyTextPageSession session) {
     final width = _width!;
     if (width == 0 && _height != 0) _fail(ForumBodyFloatBodyFailure.geometry);
-    final authorHeight = _style.box.height;
+    final authorHeight = _isRootImage ? null : _style.box.height;
     // A float in this flow has no definite containing height. Keep overflow
     // inside the exclusion even when a fixed author height is smaller.
     final resolvedHeight = authorHeight?.unit == ForumBodyLengthUnit.percent
@@ -289,11 +354,14 @@ final class ForumBodyFloatBodyPreparation {
           reference: containingWidth,
         );
 
-  double? _contentLength(ForumBodyLength? length) {
+  double? _contentLength(ForumBodyLength? length, {bool vertical = false}) {
     final pixels = _length(length);
     if (pixels == null) return null;
     return _style.box.sizing == ForumBodyBoxSizing.borderBox
-        ? math.max(0, pixels - _padding.horizontal)
+        ? math.max(
+            0,
+            pixels - (vertical ? _padding.vertical : _padding.horizontal),
+          )
         : pixels;
   }
 

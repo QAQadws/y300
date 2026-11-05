@@ -58,6 +58,15 @@ final class ForumBodyImageInput {
 /// Host hint and reflow in a new generation when it changes.
 final class ForumBodyImageFrame {
   ForumBodyImageFrame._(this.width, this.height, this.imageRect);
+
+  /// A replaced image that already occupies its complete content box.
+  factory ForumBodyImageFrame.replaced(Size size) {
+    if (!size.isFinite || size.isEmpty) {
+      throw ArgumentError.value(size, 'size', 'Invalid image frame geometry');
+    }
+    return ForumBodyImageFrame._(size.width, size.height, Offset.zero & size);
+  }
+
   factory ForumBodyImageFrame.resolve({
     required ForumBodyImageInput input,
     required double width,
