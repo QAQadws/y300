@@ -250,6 +250,90 @@ void main() {
     expect(cache.activeLeases, 0);
   });
 
+  testWidgets('book viewport keeps edge drags and releases offscreen slices', (
+    tester,
+  ) async {
+    final cache = _cache();
+    final session = _book(
+      _parse(
+        '<table width="180" cellpadding="2"><tr height="120">'
+        '<td rowspan="2" width="100"><ruby>A<rt>aa</rt></ruby></td>'
+        '<td>right</td></tr><tr><td>tail</td></tr></table>',
+      ),
+      cache,
+    );
+    _advanceBook(session, 1);
+    final layout = session.tableLayoutForPage(0)!;
+    final h = ScrollController();
+    final v = ScrollController();
+    final outer = PageController();
+    addTearDown(h.dispose);
+    addTearDown(v.dispose);
+    addTearDown(outer.dispose);
+    final mounted = <ForumBodyTableAreaLayout, ForumBodyPreparedTextFragment>{};
+    final ready = <bool>[];
+    final errors = <Object>[];
+    const tableKey = ValueKey('table-book-viewport');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Align(
+          child: SizedBox(
+            width: 80,
+            height: 48,
+            child: PageView(
+              controller: outer,
+              children: [
+                ForumBodyTableBookViewport(
+                  key: tableKey,
+                  layout: layout,
+                  horizontalController: h,
+                  verticalController: v,
+                  onReadyChanged: ready.add,
+                  onFailure: (error, _) => errors.add(error),
+                  buildSlice: (context, area, index, fragments) {
+                    mounted[area] = fragments.single;
+                    return ForumBodyTextPageSurface.prepared(
+                      snapshot: area.snapshot,
+                      pageIndex: index,
+                      layoutId: area.snapshot.layoutId,
+                      fragments: fragments,
+                      compactHeight: true,
+                    );
+                  },
+                ),
+                const Text('next'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final first = mounted[layout.cells.first]!;
+    expect(first.projection.text, 'Aaa');
+    expect(first.isActive, isTrue);
+    expect(mounted, hasLength(1));
+    expect(ready, [true]);
+
+    h.jumpTo(h.position.maxScrollExtent);
+    v.jumpTo(v.position.maxScrollExtent);
+    await tester.pumpAndSettle();
+    expect(first.isActive, isFalse);
+    expect(mounted[layout.cells.last]!.projection.text, 'tail');
+    expect(ready, [true, false, true]);
+    expect(errors, isEmpty);
+
+    await tester.drag(find.byKey(tableKey), const Offset(-160, 0));
+    await tester.pumpAndSettle();
+    expect(h.offset, h.position.maxScrollExtent);
+    expect(outer.page, 0);
+    outer.jumpToPage(1);
+    await tester.pumpAndSettle();
+    expect(find.text('next'), findsOneWidget);
+    expect(cache.activeLeases, 0);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   test('real width probes feed columns and wrapping feeds height', () {
     final document = _parse(
       '<table cellspacing="0" cellpadding="3" style="max-width:300px">'

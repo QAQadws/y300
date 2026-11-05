@@ -494,6 +494,7 @@ final class ForumBodyTablePreparation {
       cells: cells,
       captions: captions,
       rowBackgrounds: _rowBackgrounds,
+      cache: _cache,
       fingerprint: _fingerprint.finish([
         top,
         end,

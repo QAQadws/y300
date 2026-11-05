@@ -36,9 +36,11 @@ final class ForumBodyTableLayout {
     required List<Color?> rowBackgrounds,
     required this.fingerprint,
     required this.usage,
+    required ForumBodyParagraphCache cache,
   }) : cells = List.unmodifiable(cells),
        captions = List.unmodifiable(captions),
-       rowBackgrounds = List.unmodifiable(rowBackgrounds);
+       rowBackgrounds = List.unmodifiable(rowBackgrounds),
+       _cache = cache;
 
   final ForumBodyTableGeometry geometry;
   final Size size;
@@ -49,8 +51,10 @@ final class ForumBodyTableLayout {
   final String fingerprint;
   final ({int pages, int items, int paragraphs, int textCodeUnits, int runs})
   usage;
+  final ForumBodyParagraphCache _cache;
   bool _closed = false;
-  bool get isClosed => _closed;
+  bool get isClosed => _closed || _cache.isClosed;
+  Stream<int> get layoutBudgetChanges => _cache.budgetChanges;
 
   void close() {
     if (_closed) return;
