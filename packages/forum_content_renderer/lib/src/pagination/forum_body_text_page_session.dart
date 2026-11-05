@@ -33,6 +33,7 @@ import 'forum_body_float_body_preparation.dart';
 
 part 'forum_body_float_session.dart';
 part 'forum_body_float_text.dart';
+part 'forum_body_float_inline.dart';
 
 enum ForumBodyTextPageSessionState { active, complete, failed, closed }
 
@@ -370,13 +371,13 @@ final class ForumBodyTextPageSession {
   ForumBodyBlockFlowListItemStart? _pendingListItem;
   ForumBodyEmphasisPageAdmission? _paragraphAdmission;
   ForumBodyBlockFlowInline? _pendingInline;
-  ForumBodyInlineFlowContent? _inlineContinuation;
   ForumBodyInlinePageAdmission? _inlinePreparation;
   ({ForumBodyInlinePageContent content, ForumBodyInlineParagraphLease lease})?
   _readyInline;
   ForumBodyInlineNativeEntriesPreparation? _entryPreparation;
   _FloatFlowAdmission? _floatFlow;
   _FloatTextAdmission? _floatText;
+  _FloatInlineAdmission? _floatInline;
   int _nextFlowIndex = 0;
   double _margin = 0;
   int _publishedPageCount = 0;
@@ -502,6 +503,19 @@ final class ForumBodyTextPageSession {
 
     try {
       while (true) {
+        if (_floatInline case final admission?) {
+          final step = admission.advance(
+            maxLines: maxLines,
+            maxFormatParts: maxFormatParts,
+          );
+          _waiting = step.waiting;
+          if (!_waiting) formatUnits++;
+          if (admission.isComplete) {
+            admission.close();
+            _floatInline = null;
+          }
+          return result(lines: step.lines, completed: admission.isComplete);
+        }
         if (_floatText case final admission?) {
           final step = admission.advance(
             maxLines: maxLines,
@@ -652,34 +666,15 @@ final class ForumBodyTextPageSession {
             _entryPreparation = null;
           }
           final ready = _readyInline!;
-          final input = _decorate(ready.content);
-          try {
-            if (_intrinsic != null) {
-              final widths = ready.lease.layout.intrinsicWidths;
-              _intrinsic.add(widths.minimum, widths.preferred);
-            }
-            _composer.appendInline(
-              lease: ready.lease,
-              paragraphIndex: _content.items.length,
-              left: mixed.contentLeft,
-              spaceBefore: _margin,
-              spaceAtPageStart: 0,
-              window: mixed.paragraph.window,
-              listMarkers: _listPlan,
-              nativeHandleCountInRange:
-                  ready.content.nativePreparationHandleCountInRange,
-              fontFrames: ready.content.fontFrames,
-              nativeEntriesInRange: entries?.inRange,
-              nativeCostsInRange: entries?.costsInRange,
-            );
-          } catch (_) {
-            ready.lease.release();
-            rethrow;
-          }
           _readyInline = null;
-          _content.add(input);
+          _appendInlinePlan(
+            ready,
+            entries,
+            left: mixed.contentLeft,
+            spaceBefore: _margin,
+            window: mixed.paragraph.window,
+          );
           _pendingInline = null;
-          _inlineContinuation = null;
           _listPlan = null;
           _markersReady = false;
           _margin = 0;
@@ -794,7 +789,17 @@ final class ForumBodyTextPageSession {
               _floatFlow = _FloatFlowAdmission(this, unit);
               return result();
             } else {
-              _ensureFloatLineAvailable();
+              if (_openFloat != null && _composer.hasFloatExclusion(_margin)) {
+                if (unit.listMarkers.isNotEmpty) _requiresFloatLineLayout();
+                _floatInline = _FloatInlineAdmission(
+                  this,
+                  unit.paragraph.content,
+                  unit.paragraph.window,
+                  left: unit.contentLeft,
+                  width: unit.contentWidth,
+                );
+                return result();
+              }
               _pendingInline = unit;
             }
           case ForumBodyBlockFlowRule():
@@ -1062,13 +1067,48 @@ final class ForumBodyTextPageSession {
 
   ForumBodyInlinePageAdmission _openInlinePlan(ForumBodyBlockFlowInline mixed) {
     return ForumBodyInlinePageAdmission(
-      input: _inlineContinuation ?? mixed.paragraph.content,
+      input: mixed.paragraph.content,
       width: mixed.contentWidth,
       cache: _cache,
       textScaler: _textScaler,
       ensureOwner: _ensureActivePlan,
       validateCounts: _content.checkCounts,
     );
+  }
+
+  void _appendInlinePlan(
+    ({ForumBodyInlinePageContent content, ForumBodyInlineParagraphLease lease})
+    ready,
+    ForumBodyInlineNativeEntries? entries, {
+    required double left,
+    required double spaceBefore,
+    required ForumBodyParagraphWindow window,
+  }) {
+    try {
+      final input = _decorate(ready.content);
+      if (_intrinsic != null) {
+        final widths = ready.lease.layout.intrinsicWidths;
+        _intrinsic.add(widths.minimum, widths.preferred);
+      }
+      _composer.appendInline(
+        lease: ready.lease,
+        paragraphIndex: _content.items.length,
+        left: left,
+        spaceBefore: spaceBefore,
+        spaceAtPageStart: 0,
+        window: window,
+        listMarkers: _listPlan,
+        nativeHandleCountInRange:
+            ready.content.nativePreparationHandleCountInRange,
+        fontFrames: ready.content.fontFrames,
+        nativeEntriesInRange: entries?.inRange,
+        nativeCostsInRange: entries?.costsInRange,
+      );
+      _content.add(input);
+    } catch (_) {
+      ready.lease.release();
+      rethrow;
+    }
   }
 
   ForumBodyEmphasisPageAdmission _openParagraphPlan(
@@ -1327,6 +1367,8 @@ final class ForumBodyTextPageSession {
     _floatFlow = null;
     _floatText?.close();
     _floatText = null;
+    _floatInline?.close();
+    _floatInline = null;
     _listPreparation?.close();
     _listPreparation = null;
     _listPlan = null;
@@ -1339,7 +1381,6 @@ final class ForumBodyTextPageSession {
     _inlinePreparation?.close();
     _inlinePreparation = null;
     _pendingInline = null;
-    _inlineContinuation = null;
     _margin = 0;
     _waiting = false;
     _content.retain(_publishedParagraphCount);
@@ -1357,6 +1398,8 @@ final class ForumBodyTextPageSession {
     _floatFlow = null;
     _floatText?.close();
     _floatText = null;
+    _floatInline?.close();
+    _floatInline = null;
     for (final lease in _issuedTables.toList()) {
       lease.close();
     }
@@ -1389,7 +1432,6 @@ final class ForumBodyTextPageSession {
     _inlinePreparation?.close();
     _inlinePreparation = null;
     _pendingInline = null;
-    _inlineContinuation = null;
     _margin = 0;
     _waiting = false;
     _issues.clear();

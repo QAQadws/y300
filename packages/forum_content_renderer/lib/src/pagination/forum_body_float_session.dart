@@ -146,29 +146,46 @@ final class _FloatFlowAdmission {
           holdLastLine: beforeFloat,
         );
       default:
-        if (_held != null ||
-            !_cleared ||
-            content.parts
-                .skip(_next)
-                .any((part) => part is ForumBodyInlineFlowExclusion)) {
+        var end = _next + 1;
+        while (end < content.parts.length &&
+            content.parts[end] is! ForumBodyInlineFlowExclusion) {
+          end++;
+        }
+        if (end < content.parts.length &&
+            content.parts[end] is ForumBodyInlineFlowFloat) {
           _session._requiresFloatLineLayout();
         }
-        _session._ensureFloatLineAvailable();
-        _session._pendingInline = _unit;
-        _session._inlineContinuation = ForumBodyInlineFlowContent(
-          identity: content.identity,
-          path: content.path,
-          fontRevision: content.fontRevision,
-          styleRevision: content.styleRevision,
-          style: content.style,
-          layoutMode: content.layoutMode,
-          appliesFirstLineIndent: false,
-          trimCollapsibleEdges: content.trimCollapsibleEdges,
-          parts: content.parts.sublist(_next),
-          ignored: content.ignored,
-          issues: content.issues,
+        final pending = _heldPrefix();
+        _held = null;
+        _session._floatInline = _FloatInlineAdmission(
+          _session,
+          ForumBodyInlineFlowContent(
+            identity: content.identity,
+            path: content.path,
+            fontRevision: content.fontRevision,
+            styleRevision: content.styleRevision,
+            style: content.style,
+            layoutMode: content.layoutMode,
+            appliesFirstLineIndent:
+                pending?.appliesFirstLineIndent ??
+                (content.appliesFirstLineIndent && !_startedText && !_cleared),
+            trimCollapsibleEdges: content.trimCollapsibleEdges,
+            parts: [
+              if (pending != null && pending.projection.text.isNotEmpty)
+                ForumBodyInlineFlowText(pending),
+              ...content.parts.getRange(_next, end),
+            ],
+            ignored: content.ignored,
+            issues: content.issues,
+          ),
+          end == content.parts.length
+              ? _unit.paragraph.window
+              : ForumBodyParagraphWindow.full,
+          left: _unit.contentLeft,
+          width: _unit.contentWidth,
         );
-        _next = content.parts.length;
+        _startedText = true;
+        _next = end;
         return false;
     }
     _next++;

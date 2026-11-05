@@ -269,7 +269,12 @@ extension ForumBodyFloatPlacement on ForumBodyTextPageComposer {
   /// Retire the old native width only when its physical band or page is over.
   /// If no legal row was consumed, leave the rendered ordinal available for
   /// the next width. The source caller can then discard the tentative input.
-  ({int? endUtf16, bool blocked, ForumBodyPendingFloatLine? heldLine})?
+  ({
+    int? endUtf16,
+    int? engineEndUtf16,
+    bool blocked,
+    ForumBodyPendingFloatLine? heldLine,
+  })?
   retireFloatTextBand({required double bottom, required bool pageSealed}) {
     final active = _active;
     if (active == null ||
@@ -283,6 +288,9 @@ extension ForumBodyFloatPlacement on ForumBodyTextPageComposer {
     final result = (
       endUtf16: consumed
           ? active.input.lines[active.nextLine - 1].coverageEndUtf16
+          : null,
+      engineEndUtf16: consumed
+          ? active.input.lines[active.nextLine - 1].engineCoverageEndUtf16
           : null,
       blocked: active.outsideFloatBand,
       heldLine: active.heldFloatLine,

@@ -148,8 +148,9 @@ final class ForumBodyRubySegmentRequest {
   int get nativeHandleCount => nativeRequests.length;
 
   ForumBodyRubySegmentRequest mapRequests(
-    ForumBodyTextRequest Function(ForumBodyTextRequest) map,
-  ) => ForumBodyRubySegmentRequest(
+    ForumBodyTextRequest Function(ForumBodyTextRequest) map, {
+    double? availableWidth,
+  }) => ForumBodyRubySegmentRequest(
     background: background,
     rootBox: rootBox,
     bases: [for (final base in bases) map(base)],
@@ -177,7 +178,7 @@ final class ForumBodyRubySegmentRequest {
         ),
     ],
     direction: direction,
-    maxWidth: maxWidth,
+    maxWidth: availableWidth ?? maxWidth,
   );
   static Never _invalid(ForumBodyRubyGroupFailure failure) =>
       throw ForumBodyRubyGroupException(failure);

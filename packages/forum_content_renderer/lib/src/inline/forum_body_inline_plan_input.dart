@@ -24,6 +24,7 @@ import 'forum_body_emphasis_mark.dart';
 import 'forum_body_inline_image_input.dart';
 
 part 'forum_body_intrinsic_text_input.dart';
+part 'forum_body_inline_plan_window.dart';
 
 /// Pure source-bound parent input and child requests for the session's pending
 /// format. No native resource, owner or scheduler is retained here.
@@ -36,14 +37,15 @@ final class ForumBodyInlinePlanInput {
     this.layoutMode,
     this.sourceContexts,
     this.retainedTextCodeUnits,
-    this.retainedRuns,
-  ) : rubyLevelIds = List.unmodifiable(levelIds),
-      atomEngineOffsets = List.unmodifiable(
-        content
-            .projectionForLayout(layoutMode)
-            .atoms
-            .map((atom) => atom.engineUtf16),
-      );
+    this.retainedRuns, [
+    this.sourceImages = const {},
+  ]) : rubyLevelIds = List.unmodifiable(levelIds),
+       atomEngineOffsets = List.unmodifiable(
+         content
+             .projectionForLayout(layoutMode)
+             .atoms
+             .map((atom) => atom.engineUtf16),
+       );
   static const revision = 31;
 
   factory ForumBodyInlinePlanInput(
@@ -885,6 +887,13 @@ final class ForumBodyInlinePlanInput {
           ),
       content.runs.length +
           requestsByAtom.fold<int>(0, (sum, atom) => sum + atom.extraRuns),
+      images == null
+          ? const {}
+          : Map.unmodifiable({
+              for (final part in input.parts)
+                if (part is ForumBodyInlineFlowImage)
+                  part.input.element.path: part.input,
+            }),
     );
   }
 
@@ -894,6 +903,7 @@ final class ForumBodyInlinePlanInput {
 
   /// Explicit original order, independent of column display order.
   final List<ForumBodyParagraphContent> sourceContexts;
+  final Map<String, ForumBodyInlineImageInput> sourceImages;
 
   /// A full native mixed word may exceed the viewport. Restore its original
   /// child atoms so the parent can use its existing emergency wrap behavior.

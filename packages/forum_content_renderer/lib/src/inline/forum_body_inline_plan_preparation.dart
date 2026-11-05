@@ -978,6 +978,12 @@ final class ForumBodyInlinePlanPreparation {
     return _take();
   }
 
+  ForumBodyInlinePlanInput get readySource {
+    _guard();
+    if (!isReady) throw StateError('Inline plan is not ready');
+    return _input!;
+  }
+
   /// Consume the current intrinsic parent into a source-bound numeric box.
   /// This retains the existing plan, but no lease/cache/owner. A future visible
   /// consumer must reacquire and qualify the same plan through page preparation.

@@ -86,5 +86,6 @@ ForumBodyInlinePlanInput _flattenIntrinsicTextAtom(
         requests.fold<int>(0, (sum, atom) => sum + atom.extraTextCodeUnits),
     parent.runs.length +
         requests.fold<int>(0, (sum, atom) => sum + atom.extraRuns),
+    input.sourceImages,
   );
 }

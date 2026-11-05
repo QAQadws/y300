@@ -24,7 +24,8 @@ enum _InlineAdmissionPhase {
 /// numeric workers and transfers only a qualified natural alias to composition.
 final class ForumBodyInlinePageAdmission {
   ForumBodyInlinePageAdmission({
-    required ForumBodyInlineFlowContent input,
+    ForumBodyInlineFlowContent? input,
+    ForumBodyInlinePlanInput? continuation,
     required double width,
     required ForumBodyParagraphCache cache,
     required TextScaler textScaler,
@@ -36,18 +37,30 @@ final class ForumBodyInlinePageAdmission {
        _validateCounts = validateCounts {
     try {
       _guard();
-      _initial = ForumBodyInlinePlanPreparation.fromFlow(
-        input: input,
-        width: width,
-        cache: cache,
-        textScaler: textScaler,
-        ensureOwner: _guard,
-        validateInput: (source) {
-          _validateCounts!(source.retainedTextCodeUnits, source.retainedRuns);
-          _guard();
-          _source = source;
-        },
-      );
+      if (continuation != null) {
+        if (input != null || continuation.width != width) {
+          throw ArgumentError(
+            'Inline continuation belongs to a different input',
+          );
+        }
+        _retainSource(continuation);
+        _initial = ForumBodyInlinePlanPreparation(
+          input: continuation,
+          cache: cache,
+          textScaler: textScaler,
+          ensureOwner: _guard,
+        );
+      } else {
+        if (input == null) throw ArgumentError.notNull('input');
+        _initial = ForumBodyInlinePlanPreparation.fromFlow(
+          input: input,
+          width: width,
+          cache: cache,
+          textScaler: textScaler,
+          ensureOwner: _guard,
+          validateInput: _retainSource,
+        );
+      }
     } catch (_) {
       close();
       rethrow;
@@ -58,6 +71,7 @@ final class ForumBodyInlinePageAdmission {
   void Function()? _ensureOwner;
   void Function(int, int)? _validateCounts;
   ForumBodyInlinePlanInput? _source;
+  ForumBodyInlinePlanInput? _readySource;
   ForumBodyInlinePlanPreparation? _initial;
   ForumBodyInlineFontOverflowPreparation? _probe;
   ForumBodyInlineFontFramePreparation? _frames;
@@ -67,6 +81,18 @@ final class ForumBodyInlinePageAdmission {
   var _phase = _InlineAdmissionPhase.initial;
   bool _operating = false;
   bool get isReady => _phase == _InlineAdmissionPhase.ready;
+  ForumBodyInlinePlanInput get readySource {
+    _guard();
+    if (!isReady) throw StateError('Inline admission is incomplete');
+    return _content!.fontFrames?.source ?? _readySource!;
+  }
+
+  void _retainSource(ForumBodyInlinePlanInput source) {
+    _validateCounts!(source.retainedTextCodeUnits, source.retainedRuns);
+    _guard();
+    _source = source;
+  }
+
   Iterable<ForumBodyNativeParagraphLease> get nativeLeases sync* {
     if (_initial != null) yield* _initial!.nativeLeases;
     if (_frames != null) yield* _frames!.nativeLeases;
@@ -97,6 +123,7 @@ final class ForumBodyInlinePageAdmission {
               );
             }
             if (!_initial!.isReady) break;
+            _readySource = _initial!.readySource;
             final ready = _initial!.take();
             _initial = null;
             _lease = ready.lease;
@@ -247,6 +274,7 @@ final class ForumBodyInlinePageAdmission {
     _ensureOwner = null;
     _validateCounts = null;
     _source = null;
+    _readySource = null;
     _initial = null;
     _probe = null;
     _frames = null;

@@ -3,12 +3,17 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
+import '../inline/test_support/inline_image_fixture.dart';
+
 ForumBodyTextPageSession _open(
   String html, {
   double width = 100,
   double height = 60,
   int? handles,
   ForumBodyLength indent = ForumBodyLength.zero,
+  List<ForumBodyInlineImageInput>? imageInputs,
+  int issuedLeases = 8,
+  int? pageImages,
 }) {
   final document = const ForumBodyParser().parse(
     html: html,
@@ -30,13 +35,13 @@ ForumBodyTextPageSession _open(
       firstLineIndent: indent,
     ),
     cache: cache,
-    limits: const ForumBodyTextPageSessionLimits(
+    limits: ForumBodyTextPageSessionLimits(
       maxPages: 16,
       maxFragments: 48,
       maxParagraphs: 48,
       maxTextCodeUnits: 2048,
       maxRuns: 128,
-      maxIssuedLeases: 8,
+      maxIssuedLeases: issuedLeases,
     ),
     layoutId: 'discuz-float-page',
     width: width,
@@ -45,6 +50,23 @@ ForumBodyTextPageSession _open(
     maxNativeHandlesPerPage: handles,
     maxNativeEntriesPerPage: handles,
     maxNativeEstimatedBytesPerPage: 1 << 20,
+    maxImagesPerPage: pageImages,
+    inlineImageResolver: imageInputs == null
+        ? null
+        : (_, element, style) {
+            final input = ForumBodyInlineImageInput.replaced(
+              source: ForumBodyInlineImageSource(
+                document: document,
+                element: element,
+                image: const InlineImageDescription(),
+              ),
+              box: style.box,
+              intrinsicSize: const Size(40, 10),
+              maxHeight: 100,
+            );
+            imageInputs.add(input);
+            return input;
+          },
   );
   addTearDown(session.close);
   return session;
@@ -473,6 +495,121 @@ void main() {
         (runeStart: 6, runeEnd: 7),
         (runeStart: 7, runeEnd: 9),
       ]);
+    },
+  );
+
+  test('a line-band change continues inside a single-layer ruby group', () {
+    final session = _open(
+      '<span style="float:left;width:60px;height:12px">F</span>'
+      '<ruby><rb>A</rb><rb>B</rb><rb>C</rb><rb>D</rb><rb>E</rb>'
+      '<rt>a</rt><rt>b</rt><rt>c</rt><rt>d</rt><rt>e</rt></ruby>tail',
+      height: 100,
+      issuedLeases: 24,
+    );
+    _advance(session);
+    final page = session.snapshot.single;
+    expect(page.fragments.map((part) => part.width), [60.0, 40.0, 100.0]);
+    final delivered = _prepare(session, 0);
+    final pieces = [
+      for (final (index, part) in page.fragments.indexed.skip(1))
+        delivered[index].projection.text.substring(
+          part.coverageStartUtf16,
+          part.coverageEndUtf16,
+        ),
+    ];
+    expect(pieces, ['AaBbCcDd', 'Eetail']);
+    expect(delivered[1].projection.sourceAtUtf16(7).sourceRune, 9);
+    expect(delivered[2].projection.sourceAtUtf16(0).sourceRune, 5);
+    for (final fragment in delivered) {
+      fragment.close();
+    }
+  });
+
+  test('identical image URLs at one text fence continue by native slot', () {
+    final images = <ForumBodyInlineImageInput>[];
+    final session = _open(
+      '<span style="float:left;width:40px;height:10px">F</span>'
+      '${'<img src="same.png" style="display:inline;width:70%">' * 3}',
+      imageInputs: images,
+      height: 100,
+    );
+    _advance(session);
+    final page = session.snapshot.single;
+    expect(page.fragments.map((part) => part.width), [40.0, 60.0, 100.0]);
+    expect(images, hasLength(3));
+    expect(page.fragments[1].imagePaths, [images[0].element.path]);
+    expect(page.fragments[2].imagePaths, [
+      images[1].element.path,
+      images[2].element.path,
+    ]);
+    final delivered = _prepare(session, 0);
+    final before =
+        (delivered[1] as ForumBodyPreparedInlineFragment).view.images.values;
+    final after =
+        (delivered[2] as ForumBodyPreparedInlineFragment).view.images.values;
+    expect(before.single.input.source, same(images[0].source));
+    expect(before.single.input.dimensions.size.width, closeTo(42, 1e-6));
+    expect(after.map((image) => image.input.source), [
+      images[1].source,
+      images[2].source,
+    ]);
+    expect(after.map((image) => image.input.dimensions.size.width), [
+      70.0,
+      70.0,
+    ]);
+    for (final fragment in delivered) {
+      fragment.close();
+    }
+  });
+
+  test('a sealed mixed page retains the next zero-length image occurrence', () {
+    final images = <ForumBodyInlineImageInput>[];
+    final session = _open(
+      '<span style="float:left;width:40px;height:30px">F</span>'
+      '${'<img src="same.png" style="display:inline;width:70%">' * 2}',
+      imageInputs: images,
+      pageImages: 1,
+    );
+    _advance(session, untilPages: 1);
+    final prefix = session.snapshot;
+    expect(prefix.single.fragments.last.imagePaths, [
+      images.first.element.path,
+    ]);
+    _advance(session);
+    expect(session.snapshot, hasLength(2));
+    expect(session.snapshot.first, same(prefix.first));
+    expect(session.snapshot.last.fragments.single.imagePaths, [
+      images.last.element.path,
+    ]);
+    final delivery =
+        _prepare(session, 1).single as ForumBodyPreparedInlineFragment;
+    expect(
+      delivery.view.images.values.single.input.source,
+      same(images.last.source),
+    );
+    expect(delivery.view.images.values.single.rect.width, 70);
+    delivery.close();
+  });
+
+  test(
+    'the text before a float can join a following ruby on the same line',
+    () {
+      final session = _open(
+        '<b>AB</b><span style="float:right;width:30px;height:20px">F</span>'
+        '<ruby>C<rt>c</rt></ruby>D',
+      );
+      _advance(session);
+      final page = session.snapshot.single;
+      expect(page.fragments.map((part) => (part.left, part.top, part.width)), [
+        (70.0, 0.0, 30.0),
+        (0.0, 0.0, 70.0),
+      ]);
+      final delivered = _prepare(session, 0);
+      expect(delivered.last.projection.text, 'ABCcD');
+      expect(delivered.last.projection.sourceAtUtf16(2).sourceRune, 3);
+      for (final fragment in delivered) {
+        fragment.close();
+      }
     },
   );
 
