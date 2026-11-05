@@ -275,9 +275,10 @@ class ThreadDetailHtmlParser {
       pid: pid,
       author: _cleanText(authorAnchor?.text ?? ''),
       authorId: _extractUid(_resolve(authorAnchor?.attributes['href'])) ?? '',
-      message: _cleanMobilePostMessageHtml(
+      message: _cleanPostMessageHtml(
         messageNode,
         postContainer: container,
+        removeMobilePoll: true,
       ),
       number: number > 0 ? number : index + 1,
       isFirst: isFirst,
@@ -429,25 +430,6 @@ class ThreadDetailHtmlParser {
 
   bool _isPositiveInteger(String? value) {
     return value != null && _positiveIntegerPattern.hasMatch(value);
-  }
-
-  String _cleanMobilePostMessageHtml(
-    html_dom.Element? messageNode, {
-    required html_dom.Element postContainer,
-  }) {
-    return _cleanPostMessageHtml(
-      _cloneWithoutMobilePoll(messageNode),
-      postContainer: postContainer,
-    );
-  }
-
-  html_dom.Element? _cloneWithoutMobilePoll(html_dom.Element? messageNode) {
-    if (messageNode == null) {
-      return null;
-    }
-    final clone = messageNode.clone(true);
-    clone.querySelectorAll('.poll').forEach((node) => node.remove());
-    return clone;
   }
 
   String _parseMobileDateline(html_dom.Element container) {
@@ -1000,28 +982,29 @@ class ThreadDetailHtmlParser {
   String _cleanPostMessageHtml(
     html_dom.Element? messageNode, {
     html_dom.Element? postContainer,
+    bool removeMobilePoll = false,
   }) {
+    final clone = _cloneAndSanitizeThreadHtml(
+      messageNode,
+      selectorsToRemove: [
+        ..._postChromeSelectors,
+        if (removeMobilePoll) '.poll',
+      ],
+      normalizeImageSources: true,
+    );
     final parts = <String>[
-      _cleanPostMessageBodyHtml(messageNode),
-      ..._cleanPostAttachmentImageHtml(
+      clone?.innerHtml.trim() ?? '',
+      ..._cleanPostAttachmentHtml(
         postContainer: postContainer,
         messageNode: messageNode,
       ),
-    ].where((part) => part.trim().isNotEmpty);
-    return parts.join('\n').trim();
+    ];
+    return parts.where((part) => part.isNotEmpty).join('\n');
   }
 
-  String _cleanPostMessageBodyHtml(html_dom.Element? messageNode) {
-    final clone = _cloneAndSanitizeThreadHtml(
-      messageNode,
-      selectorsToRemove: const <String>['script', 'style', '.aimg_tip'],
-      normalizeImageSources: true,
-    );
-    if (clone == null) {
-      return '';
-    }
-    return clone.innerHtml.trim();
-  }
+  static const _postChromeSelectors = ['script', 'style', '.aimg_tip'];
+  static const _attachmentImageSelector =
+      'img[zoomfile], img[file], img[id^="aimg_"]';
 
   String _cleanPlainTextHtml(
     html_dom.Element? source, {
@@ -1046,16 +1029,23 @@ class ThreadDetailHtmlParser {
       return null;
     }
     final clone = source.clone(true);
-    if (selectorsToRemove.isNotEmpty) {
-      clone
-          .querySelectorAll(selectorsToRemove.join(', '))
-          .forEach((node) => node.remove());
-    }
-    _removeObfuscatedThreadNodes(clone);
+    _sanitizeThreadHtml(clone, selectorsToRemove);
     if (normalizeImageSources) {
       _normalizeThreadImageSources(clone);
     }
     return clone;
+  }
+
+  void _sanitizeThreadHtml(
+    html_dom.Element root,
+    List<String> selectorsToRemove,
+  ) {
+    if (selectorsToRemove.isNotEmpty) {
+      root
+          .querySelectorAll(selectorsToRemove.join(', '))
+          .forEach((node) => node.remove());
+    }
+    _removeObfuscatedThreadNodes(root);
   }
 
   void _normalizeThreadImageSources(html_dom.Element root) {
@@ -1080,33 +1070,24 @@ class ThreadDetailHtmlParser {
       node.remove();
     });
     for (final element in root.querySelectorAll('[style]')) {
-      final style = element.attributes['style']?.trim() ?? '';
-      if (style.isEmpty) {
-        continue;
-      }
-      for (final declaration in style.split(';')) {
-        final separatorIndex = declaration.indexOf(':');
-        if (separatorIndex <= 0) {
-          continue;
-        }
-        final key = declaration
-            .substring(0, separatorIndex)
-            .trim()
-            .toLowerCase();
-        final value = declaration
-            .substring(separatorIndex + 1)
-            .trim()
-            .toLowerCase()
-            .replaceAll(RegExp(r'\s+'), '');
-        if (key == 'display' && value.startsWith('none')) {
-          element.remove();
-          break;
-        }
-      }
+      if (_hasDisplayNone(element)) element.remove();
     }
   }
 
-  List<String> _cleanPostAttachmentImageHtml({
+  bool _hasDisplayNone(html_dom.Element element) {
+    final style = element.attributes['style'];
+    if (style == null) return false;
+    for (final declaration in style.split(';')) {
+      final separator = declaration.indexOf(':');
+      if (separator <= 0) continue;
+      final key = declaration.substring(0, separator).trim().toLowerCase();
+      final value = declaration.substring(separator + 1).trim().toLowerCase();
+      if (key == 'display' && value.startsWith('none')) return true;
+    }
+    return false;
+  }
+
+  List<String> _cleanPostAttachmentHtml({
     required html_dom.Element? postContainer,
     required html_dom.Element? messageNode,
   }) {
@@ -1115,28 +1096,83 @@ class ThreadDetailHtmlParser {
     }
     final output = <String>[];
     final seenSources = _collectMessageImageSourceKeys(messageNode);
-    for (final image in postContainer.querySelectorAll(
-      'img[zoomfile], img[file], img[id^="aimg_"]',
+    final inlineLists = messageNode?.querySelectorAll('.pattl').toSet();
+    for (final node in postContainer.querySelectorAll(
+      '.pattl, $_attachmentImageSelector',
     )) {
-      if (!_looksLikeDiscuzAttachmentImage(image)) {
-        continue;
+      if (_hasAncestorClass(node, 'pattl')) continue;
+      if (node.classes.contains('pattl') && node.localName != 'img') {
+        if (inlineLists?.contains(node) == true) continue;
+        final html = _cleanPostAttachmentList(node, postContainer, seenSources);
+        if (html.isNotEmpty) output.add(html);
+      } else {
+        final image = _cleanUniqueAttachmentImage(node, seenSources);
+        if (image != null) output.add(image.outerHtml);
       }
-      final realSource = _firstPresentAttribute(image, const <String>[
-        'zoomfile',
-        'file',
-        'data-original',
-        'data-src',
-        'src',
-      ]);
-      final sourceKey = _imageSourceKey(realSource);
-      if (realSource == null ||
-          sourceKey == null ||
-          !seenSources.add(sourceKey)) {
-        continue;
-      }
-      output.add(_cleanAttachmentImageTag(image, realSource));
     }
     return output;
+  }
+
+  String _cleanPostAttachmentList(
+    html_dom.Element list,
+    html_dom.Element post,
+    Set<String> seenSources,
+  ) {
+    for (
+      html_dom.Element? parent = list;
+      parent != null;
+      parent = parent.parent
+    ) {
+      if (parent.attributes.containsKey('hidden') ||
+          parent.classes.contains('jammer') ||
+          _hasDisplayNone(parent)) {
+        return '';
+      }
+      if (identical(parent, post)) break;
+    }
+
+    // Discuz can emit the attachment list next to the message table. Keep
+    // the names and notices even when their image was already shown inline.
+    final wrapper = html_dom.Element.tag('div')..append(list.clone(true));
+    _sanitizeThreadHtml(wrapper, [..._postChromeSelectors, '[hidden]']);
+    final images = wrapper.querySelectorAll(_attachmentImageSelector).toSet();
+    for (final image in wrapper.querySelectorAll('img')) {
+      final clean = images.contains(image)
+          ? _cleanUniqueAttachmentImage(image, seenSources)
+          : null;
+      if (clean == null) {
+        image.remove();
+      } else {
+        image.replaceWith(clean);
+      }
+    }
+    for (final element in wrapper.querySelectorAll('*')) {
+      element.attributes.removeWhere(
+        (name, _) => name.toString().toLowerCase().startsWith('on'),
+      );
+    }
+    return wrapper.innerHtml.trim();
+  }
+
+  html_dom.Element? _cleanUniqueAttachmentImage(
+    html_dom.Element image,
+    Set<String> seenSources,
+  ) {
+    if (!_looksLikeDiscuzAttachmentImage(image)) return null;
+    final realSource = _firstPresentAttribute(image, const [
+      'zoomfile',
+      'file',
+      'data-original',
+      'data-src',
+      'src',
+    ]);
+    final sourceKey = _imageSourceKey(realSource);
+    if (realSource == null ||
+        sourceKey == null ||
+        !seenSources.add(sourceKey)) {
+      return null;
+    }
+    return _cleanAttachmentImageTag(image, realSource);
   }
 
   Set<String> _collectMessageImageSourceKeys(html_dom.Element? messageNode) {
@@ -1182,7 +1218,10 @@ class ThreadDetailHtmlParser {
         _hasAncestorClass(image, 'savephotop');
   }
 
-  String _cleanAttachmentImageTag(html_dom.Element image, String realSource) {
+  html_dom.Element _cleanAttachmentImageTag(
+    html_dom.Element image,
+    String realSource,
+  ) {
     final attributes = <String, String>{
       'src': realSource,
       'file': image.attributes['file']?.trim() ?? realSource,
@@ -1203,18 +1242,7 @@ class ThreadDetailHtmlParser {
         attributes[name] = value;
       }
     }
-    final serialized = attributes.entries
-        .map((entry) => '${entry.key}="${_escapeAttribute(entry.value)}"')
-        .join(' ');
-    return '<img $serialized />';
-  }
-
-  String _escapeAttribute(String value) {
-    return value
-        .replaceAll('&', '&amp;')
-        .replaceAll('"', '&quot;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;');
+    return html_dom.Element.tag('img')..attributes.addAll(attributes);
   }
 
   bool _hasAncestorClass(html_dom.Node node, String className) {
