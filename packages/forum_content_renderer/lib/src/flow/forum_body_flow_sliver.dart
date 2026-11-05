@@ -10,6 +10,7 @@ import '../pagination/forum_body_prepared_text_fragment.dart';
 import '../pagination/forum_body_text_page_composer.dart';
 import '../pagination/forum_body_text_page_preparation.dart';
 import '../pagination/forum_body_text_page_session.dart';
+import '../services/forum_body_scroll_geometry.dart';
 import '../table/forum_body_table_viewport.dart';
 
 typedef ForumBodyFlowSliceBuilder =
@@ -49,8 +50,37 @@ final class ForumBodyFlowTextWindow {
 /// scrolling document. The host drives and owns the source session. The sliver
 /// reserves the measured prefix extent and materializes only intersecting
 /// slices. Use compact-height native surfaces in [buildSlice].
-final class ForumBodyFlowSliver extends StatefulWidget {
+final class ForumBodyFlowSliver extends _ForumBodyFlow {
   const ForumBodyFlowSliver({
+    super.key,
+    required super.session,
+    required super.prefix,
+    required super.buildSlice,
+    required super.onFailure,
+    super.isCurrentLayout,
+    super.onReadyChanged,
+    super.onTableWindowChanged,
+    super.initialTableOffset,
+  });
+}
+
+/// The same flowing body as a lazy list child. Its measured extent belongs to
+/// the outer list, and only physically visible slices acquire paint leases.
+final class ForumBodyFlowBox extends _ForumBodyFlow {
+  const ForumBodyFlowBox({
+    super.key,
+    required super.session,
+    required super.prefix,
+    required super.buildSlice,
+    required super.onFailure,
+    super.isCurrentLayout,
+    super.onReadyChanged,
+    super.onTableWindowChanged,
+  });
+}
+
+abstract class _ForumBodyFlow extends StatefulWidget {
+  const _ForumBodyFlow({
     super.key,
     required this.session,
     required this.prefix,
@@ -76,10 +106,10 @@ final class ForumBodyFlowSliver extends StatefulWidget {
   final ({int slice, double offset})? initialTableOffset;
 
   @override
-  State<ForumBodyFlowSliver> createState() => _ForumBodyFlowSliverState();
+  State<StatefulWidget> createState() => _ForumBodyFlowState();
 }
 
-final class _ForumBodyFlowSliverState extends State<ForumBodyFlowSliver> {
+final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
   final _ends = <double>[];
   final _ready = <int, _FlowDelivery>{};
   final _readyTables = <int>{};
@@ -94,6 +124,8 @@ final class _ForumBodyFlowSliverState extends State<ForumBodyFlowSliver> {
   bool _scheduled = false;
   bool _reportedReady = false;
   bool _fits = true;
+  GlobalKey? _boxKey;
+  ScrollPosition? _outerPosition;
 
   double get _extent => _ends.lastOrNull ?? 0;
   double _top(int index) => index == 0 ? 0 : _ends[index - 1];
@@ -106,7 +138,19 @@ final class _ForumBodyFlowSliverState extends State<ForumBodyFlowSliver> {
   }
 
   @override
-  void didUpdateWidget(covariant ForumBodyFlowSliver oldWidget) {
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (widget is! ForumBodyFlowBox) return;
+    final position = Scrollable.maybeOf(context, axis: Axis.vertical)?.position;
+    if (identical(position, _outerPosition)) return;
+    _outerPosition?.removeListener(_schedule);
+    _outerPosition = position;
+    position?.addListener(_schedule);
+    _schedule();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ForumBodyFlow oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.session, widget.session)) {
       _unlisten();
@@ -185,6 +229,7 @@ final class _ForumBodyFlowSliverState extends State<ForumBodyFlowSliver> {
       _reportReady(false);
       return;
     }
+    if (widget is ForumBodyFlowBox) _updateBoxVisible();
     if (_working case final index? when !_intersects(index)) _stopWork();
     final offscreen = _ready.keys
         .where((index) => !_intersects(index))
@@ -214,7 +259,7 @@ final class _ForumBodyFlowSliverState extends State<ForumBodyFlowSliver> {
         ready = false;
       }
     }
-    _reportReady(ready && _fits);
+    _reportReady(ready && _fits && widget.isCurrentLayout);
     final index = _working ?? missing;
     if (!mounted || _waiting || index == null) return;
     _working = index;
@@ -282,20 +327,36 @@ final class _ForumBodyFlowSliverState extends State<ForumBodyFlowSliver> {
     _failed.clear();
   }
 
-  void _updateVisible(SliverConstraints constraints) {
+  void _updateSliverVisible(SliverConstraints constraints) {
     if (constraints.axisDirection != AxisDirection.down ||
         constraints.growthDirection != GrowthDirection.forward) {
       throw StateError('Flowing body requires a downward viewport');
     }
-    final fits =
-        (constraints.crossAxisExtent - widget.prefix.width).abs() <=
-        precisionErrorTolerance;
+    final start = constraints.scrollOffset;
+    _updateVisible(
+      constraints.crossAxisExtent,
+      start,
+      start + constraints.remainingPaintExtent,
+    );
+  }
+
+  void _updateBoxVisible() {
+    final box = _boxKey?.currentContext?.findRenderObject();
+    if (box is RenderBox && box.attached && box.hasSize) {
+      final clip = forumBodyVisibleBoxClip(box, _outerPosition) ?? Rect.zero;
+      _updateVisible(box.size.width, clip.top, clip.bottom);
+    } else {
+      _updateVisible(0, 0, 0);
+    }
+  }
+
+  void _updateVisible(double width, double start, double viewportEnd) {
+    final fits = (width - widget.prefix.width).abs() <= precisionErrorTolerance;
     if (_fits != fits) {
       _fits = fits;
       _schedule();
     }
-    final start = constraints.scrollOffset;
-    final end = math.min(_extent, start + constraints.remainingPaintExtent);
+    final end = math.min(_extent, viewportEnd);
     final next = start >= end
         ? (start: 0, end: 0)
         : (
@@ -322,14 +383,37 @@ final class _ForumBodyFlowSliverState extends State<ForumBodyFlowSliver> {
   }
 
   @override
-  Widget build(BuildContext context) => _FlowExtentBoundary(
-    width: widget.prefix.width,
-    complete: widget.prefix.isComplete && widget.isCurrentLayout,
-    borrowTextWindow: _borrowTextWindow,
-    child: SliverLayoutBuilder(
-      builder: (context, constraints) {
-        _updateVisible(constraints);
-        final body = Stack(
+  Widget build(BuildContext context) {
+    if (widget is ForumBodyFlowBox) {
+      _schedule();
+      return ForumBodyCompositionObserver(
+        key: _boxKey ??= GlobalKey(),
+        onComposited: _updateBoxVisible,
+        child: _buildBody(context),
+      );
+    }
+    return _FlowExtentBoundary(
+      width: widget.prefix.width,
+      complete: widget.prefix.isComplete && widget.isCurrentLayout,
+      borrowTextWindow: _borrowTextWindow,
+      child: SliverLayoutBuilder(
+        builder: (context, constraints) {
+          _updateSliverVisible(constraints);
+          return SliverToBoxAdapter(child: _buildBody(context));
+        },
+      ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context) => SizedBox(
+    height: _extent,
+    child: ClipRect(
+      // A resize can temporarily retain an older measured prefix.
+      child: OverflowBox(
+        alignment: Alignment.topLeft,
+        minWidth: widget.prefix.width,
+        maxWidth: widget.prefix.width,
+        child: Stack(
           children: [
             for (final entry in _ready.entries)
               Positioned(
@@ -341,22 +425,8 @@ final class _ForumBodyFlowSliverState extends State<ForumBodyFlowSliver> {
                 child: _slice(context, entry.key, entry.value),
               ),
           ],
-        );
-        return SliverToBoxAdapter(
-          child: SizedBox(
-            height: _extent,
-            child: ClipRect(
-              // A resize can temporarily retain an older measured prefix.
-              child: OverflowBox(
-                alignment: Alignment.topLeft,
-                minWidth: widget.prefix.width,
-                maxWidth: widget.prefix.width,
-                child: body,
-              ),
-            ),
-          ),
-        );
-      },
+        ),
+      ),
     ),
   );
 
@@ -457,6 +527,7 @@ final class _ForumBodyFlowSliverState extends State<ForumBodyFlowSliver> {
 
   @override
   void dispose() {
+    _outerPosition?.removeListener(_schedule);
     _unlisten();
     _clear();
     super.dispose();

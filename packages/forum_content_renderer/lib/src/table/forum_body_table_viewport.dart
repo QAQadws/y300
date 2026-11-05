@@ -2,14 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show precisionErrorTolerance;
-import 'package:flutter/rendering.dart'
-    show
-        MatrixUtils,
-        PaintingContext,
-        RenderBox,
-        RenderObject,
-        RenderProxyBox,
-        ScrollDirection;
+import 'package:flutter/rendering.dart' show RenderBox, ScrollDirection;
 import 'package:flutter/widgets.dart';
 
 import '../pagination/forum_body_prepared_text_fragment.dart';
@@ -285,24 +278,9 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
 
   Rect? _flowBounds() {
     final box = _flowBoxKey?.currentContext?.findRenderObject();
-    if (box is! RenderBox || !box.attached || !box.hasSize) return null;
-    final position = _outerPosition;
-    RenderObject? viewport;
-    if (position == null) {
-      viewport = box;
-      while (viewport?.parent != null) {
-        viewport = viewport!.parent;
-      }
-    } else {
-      viewport = forumBodyViewportForPosition(box, position);
-    }
-    if (viewport == null || !viewport.attached) return null;
-    final outerClip = MatrixUtils.transformRect(
-      viewport.getTransformTo(box),
-      viewport.paintBounds,
-    );
-    final clip = outerClip.intersect(Offset.zero & box.size);
-    if (!clip.isFinite || clip.isEmpty) return Rect.zero;
+    if (box is! RenderBox) return null;
+    final clip = forumBodyVisibleBoxClip(box, _outerPosition);
+    if (clip == null || clip.isEmpty) return clip;
     final horizontal = widget.horizontalController;
     return horizontal.hasClients && horizontal.position.hasPixels
         ? clip.shift(Offset(horizontal.offset, 0))
@@ -459,7 +437,7 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
             height: layout.size.height,
             child: _tableSurface(),
           );
-          return _FlowTableCompositionObserver(
+          return ForumBodyCompositionObserver(
             key: _flowBoxKey ??= GlobalKey(),
             onComposited: () {
               if (mounted && (_flowBounds() ?? Rect.zero) != _window) {
@@ -543,50 +521,6 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
     _unlisten(widget);
     _clear();
     super.dispose();
-  }
-}
-
-/// Preceding content can move a retained table without moving scroll pixels.
-/// Observe its current composed placement without forcing it to repaint.
-final class _FlowTableCompositionObserver
-    extends SingleChildRenderObjectWidget {
-  const _FlowTableCompositionObserver({
-    super.key,
-    required this.onComposited,
-    required super.child,
-  });
-
-  final VoidCallback onComposited;
-
-  @override
-  RenderObject createRenderObject(BuildContext context) =>
-      _RenderFlowTableCompositionObserver(onComposited);
-
-  @override
-  void updateRenderObject(
-    BuildContext context,
-    covariant _RenderFlowTableCompositionObserver renderObject,
-  ) => renderObject.onComposited = onComposited;
-}
-
-final class _RenderFlowTableCompositionObserver extends RenderProxyBox {
-  _RenderFlowTableCompositionObserver(this.onComposited);
-
-  VoidCallback onComposited;
-  VoidCallback? _removeCallback;
-
-  @override
-  void paint(PaintingContext context, Offset offset) {
-    _removeCallback?.call();
-    _removeCallback = context.addCompositionCallback((_) => onComposited());
-    super.paint(context, offset);
-  }
-
-  @override
-  void detach() {
-    _removeCallback?.call();
-    _removeCallback = null;
-    super.detach();
   }
 }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
@@ -705,6 +706,131 @@ void main() {
     expect(session.activeIssuedFragments, 0);
     expect(cache.activeLeases, 0);
   });
+
+  for (final reverse in [false, true]) {
+    testWidgets(
+      'flowing box clips to a lazy list in either growth direction ($reverse)',
+      (tester) async {
+        final cache = _cache();
+        final session = _book(
+          _parse(
+            '<p>before</p><table width="240" cellspacing="0" cellpadding="0">'
+            '<tr height="240"><td width="140">left</td><td width="100">right</td></tr>'
+            '</table><p>after</p>',
+          ),
+          cache,
+          extent: ForumBodyTableExtent.natural,
+        );
+        _advanceBook(session, 1);
+        final prefix = ValueNotifier(session.snapshot);
+        addTearDown(prefix.dispose);
+        final outer = ScrollController();
+        final errors = <Object>[];
+        addTearDown(outer.dispose);
+        const center = ValueKey('center');
+        const surroundingHeight = 120.0;
+        final leadingHeight = ValueNotifier(surroundingHeight);
+        addTearDown(leadingHeight.dispose);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Align(
+              child: SizedBox(
+                width: 100,
+                height: 55,
+                child: CustomScrollView(
+                  controller: outer,
+                  center: reverse ? center : null,
+                  scrollCacheExtent: const ScrollCacheExtent.pixels(1000),
+                  slivers: [
+                    SliverList.list(
+                      children: [
+                        ValueListenableBuilder(
+                          valueListenable: leadingHeight,
+                          builder: (_, value, _) => SizedBox(height: value),
+                        ),
+                        ValueListenableBuilder(
+                          valueListenable: prefix,
+                          builder: (context, value, _) => ForumBodyFlowBox(
+                            session: session,
+                            prefix: value,
+                            onFailure: (error, _) => errors.add(error),
+                            buildSlice: (context, snapshot, index, fragments) =>
+                                ForumBodyTextPageSurface.prepared(
+                                  snapshot: snapshot,
+                                  pageIndex: index,
+                                  layoutId: snapshot.layoutId,
+                                  fragments: fragments,
+                                  compactHeight: true,
+                                ),
+                          ),
+                        ),
+                        const SizedBox(height: surroundingHeight),
+                      ],
+                    ),
+                    if (reverse)
+                      const SliverToBoxAdapter(
+                        key: center,
+                        child: SizedBox(height: 55),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final body = find.byType(ForumBodyFlowBox, skipOffstage: false);
+        final table = find.byType(
+          ForumBodyTableFlowViewport,
+          skipOffstage: false,
+        );
+        expect(tester.getSize(body).height, prefix.value.single.usedHeight);
+        _advanceBook(session, 3);
+        prefix.value = session.snapshot;
+        await tester.pumpAndSettle();
+        final height = prefix.value.fold<double>(
+          0,
+          (total, slice) => total + slice.usedHeight,
+        );
+        expect(tester.getSize(body).height, height);
+        expect(session.activeIssuedFragments, 0);
+        expect(session.activeIssuedTablePages, 0);
+        outer.jumpTo((surroundingHeight + height / 2) * (reverse ? -1 : 1));
+        await tester.pumpAndSettle();
+        expect(table, findsOneWidget);
+        expect(session.activeIssuedTablePages, 1);
+        final tableViewport = tester.widget<ForumBodyTableFlowViewport>(table);
+        expect(tableViewport.verticalController, isNull);
+        final outerOffset = outer.offset;
+        tableViewport.horizontalController.jumpTo(55);
+        await tester.pumpAndSettle();
+        expect(outer.offset, outerOffset);
+        expect(tableViewport.horizontalController.offset, 55);
+
+        leadingHeight.value += height + 55;
+        await tester.pumpAndSettle();
+        expect(outer.offset, outerOffset);
+        expect(table, findsNothing);
+        expect(body, findsOneWidget);
+        expect(session.activeIssuedTablePages, 0);
+        expect(session.activeIssuedFragments, 0);
+        leadingHeight.value = surroundingHeight;
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<ForumBodyTableFlowViewport>(table)
+              .horizontalController
+              .offset,
+          55,
+        );
+        expect(errors, isEmpty);
+        await tester.pumpWidget(const SizedBox.shrink());
+        expect(session.activeIssuedFragments, 0);
+        expect(session.activeIssuedTablePages, 0);
+        expect(cache.activeLeases, 0);
+      },
+    );
+  }
 
   test('real width probes feed columns and wrapping feeds height', () {
     final document = _parse(
