@@ -86,11 +86,13 @@ class ThreadDetailContent extends ConsumerStatefulWidget {
     this.onLoadMoreComments,
     this.displayExtraCommentsByPostId = const {},
     this.enableBodyChunking = true,
+    this.nativeBody = false,
   });
 
   final ThreadDetailPageState state;
   final ThreadDetailContentProjection? projection;
   final bool enableBodyChunking;
+  final bool nativeBody;
   final ScrollController? scrollController;
   final ThreadImageReaderReturnCoordinator? imageReaderReturnCoordinator;
   final ThreadBodyReadingCoordinator? bodyReadingCoordinator;
@@ -143,7 +145,9 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
   // pages keep their existing whole-body renderer and reading observer.
   @override
   bool get _canChunkBodies =>
-      widget.enableBodyChunking && widget.bodyReadingCoordinator == null;
+      !widget.nativeBody &&
+      widget.enableBodyChunking &&
+      widget.bodyReadingCoordinator == null;
   int _bodyGeneration = 0;
   @override
   Object? _renderLayoutIdentity;
@@ -372,7 +376,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
       posts: _postProjections,
       targetPid: _endpointTarget == null ? widget.targetPid : null,
       landing: _endpointTarget == null ? widget.landing : ThreadPostLanding.top,
-      bodyManifests: _preparedBodies.manifests,
+      bodyManifests: _canChunkBodies ? _preparedBodies.manifests : const {},
     );
     _projectionAnchorCoordinator.prune(
       _postProjections.map((post) => post.sourcePost.pid),
@@ -856,6 +860,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
         return KeyedSubtree(
           key: _projectionAnchorCoordinator.keyForPid(entry.sourcePost!.pid),
           child: _ThreadPostCardEntry(
+            nativeBody: widget.nativeBody,
             keepAlive: widget.bodyReadingCoordinator != null,
             wholeBodyPresentation: _wholeBodyPresentationFor(
               entry.sourcePost!.pid,
@@ -943,6 +948,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
                       entry.bodyManifest!.chunks[entry.chunkOrdinal!].endUnit,
                 ),
           child: _ThreadPostCardBodyEntry(
+            nativeBody: widget.nativeBody,
             wholeBodyPresentation: entry.bodyManifest == null
                 ? _wholeBodyPresentationFor(
                     entry.sourcePost!.pid,

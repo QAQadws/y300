@@ -100,6 +100,132 @@ void main() {
   });
 
   group('ThreadDetailPage', () {
+    testWidgets(
+      'native body renders a flowing table and opens the second repeated image',
+      (tester) async {
+        final observer = _ReadingLifecycleObserver();
+        const image =
+            '<img src="/images/fixture.png" width="800" height="48">';
+        final tail = List.filled(24, '<p>Following text.</p>').join();
+        final repository = _FakeThreadRepository(
+          (String tid, int page) async => ApiSuccess(
+            ThreadDetailData(
+              tid: tid,
+              fid: '33',
+              subject: 'Flow body fixture',
+              author: 'Author',
+              replies: 0,
+              views: 1,
+              currentPage: page,
+              perPage: 20,
+              posts: [
+                ThreadPost(
+                  pid: '200',
+                  author: 'Author',
+                  authorId: '10',
+                  message:
+                      '<p>Opening paragraph.</p><table width="1600" cellpadding="0"><tr height="180">'
+                      '<td width="900">Left</td><td width="700"><ruby>書<rt>しょ</rt></ruby></td>'
+                      '</tr></table>$image$image$tail',
+                  number: 1,
+                  isFirst: true,
+                  dateline: '',
+                ),
+              ],
+            ),
+          ),
+        );
+        await tester.pumpWidget(
+          _buildTestApp(
+            repository,
+            imageCacheService: _NoopImageCacheService(),
+            home: ThreadDetailPage(
+              tid: '100',
+              nativeBody: true,
+              bodyReadingObserver: observer,
+            ),
+          ),
+        );
+        final body = find.byType(ForumBodyFlowBox);
+        final table = find.byType(ForumBodyTableFlowViewport);
+        final images = find.byType(ForumHtmlImageView);
+        for (var frame = 0; frame < 250; frame++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 2)),
+          );
+          await tester.pump();
+          if (body.evaluate().isNotEmpty &&
+              table.evaluate().isNotEmpty &&
+              images.evaluate().length == 2 &&
+              tester.widget<ForumBodyFlowBox>(body).prefix.isComplete) {
+            break;
+          }
+        }
+        expect(body, findsOneWidget);
+        expect(table, findsOneWidget);
+        expect(images, findsNWidgets(2));
+        expect(find.byType(ForumHtmlWidgetPostRenderer), findsNothing);
+        expect(tester.widget<ForumBodyFlowBox>(body).prefix.isComplete, isTrue);
+        for (
+          var frame = 0;
+          frame < 150 &&
+              observer.lastViewport?.samples.any(
+                    (sample) => sample.bodyReady && sample.finalBoundaryKnown,
+                  ) !=
+                  true;
+          frame++
+        ) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 2)),
+          );
+          await tester.pump();
+        }
+        final sample = observer.lastViewport!.samples.single;
+        expect(sample.bodyReady, isTrue);
+        expect(sample.finalBoundaryKnown, isTrue);
+        expect(sample.bodyHeight, greaterThan(180));
+        final viewport = tester.widget<ForumBodyTableFlowViewport>(table);
+        expect(viewport.verticalController, isNull);
+        expect(
+          viewport.horizontalController.position.maxScrollExtent,
+          greaterThan(0),
+        );
+        await tester.drag(table, const Offset(-180, 0));
+        await tester.pumpAndSettle();
+        expect(viewport.horizontalController.offset, greaterThan(0));
+
+        await tester.tap(images.last);
+        await tester.pumpAndSettle();
+        final reader = tester.widget<ThreadImageReaderPage>(
+          find.byType(ThreadImageReaderPage),
+        );
+        expect(reader.request.initialEntry?.indexInPost, 1);
+        expect(reader.request.group.entries, hasLength(2));
+        expect(
+          reader.request.group.entries.map((entry) => entry.url).toSet(),
+          hasLength(1),
+        );
+        final first = _imageReturnResult(reader, 0);
+        await _prepareImageReturn(tester, reader, first);
+        await tester.binding.handlePopRoute();
+        await _pumpImageReturnTransition(tester);
+        expect(find.byType(ThreadImageReaderPage), findsNothing);
+        expect(body, findsOneWidget);
+        final viewportTop = tester
+            .getTopLeft(find.byKey(const Key('thread-detail-list')))
+            .dy;
+        expect(
+          tester.getTopLeft(images.first).dy,
+          closeTo(viewportTop, 1),
+        );
+        final session = tester.widget<ForumBodyFlowBox>(body).session;
+        await tester.pumpWidget(const SizedBox.shrink());
+        expect(session.isClosed, isTrue);
+        expect(session.activeIssuedFragments, 0);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
     testWidgets('late reading close cannot pop a rebound thread owner', (
       tester,
     ) async {
@@ -7728,6 +7854,7 @@ class _ReadingLifecycleObserver implements ThreadBodyReadingObserver {
   Completer<void>? flushGate;
   int flushCalls = 0;
   bool retired = false;
+  ThreadBodyReadingViewport? lastViewport;
   @override
   bool tracks(String tid, String pid) => pid == '200';
   @override
@@ -7739,7 +7866,8 @@ class _ReadingLifecycleObserver implements ThreadBodyReadingObserver {
   @override
   void onContentChanged(Object contentIdentity) {}
   @override
-  void onViewport(ThreadBodyReadingViewport viewport) {}
+  void onViewport(ThreadBodyReadingViewport viewport) =>
+      lastViewport = viewport;
   @override
   void onVisibility({required bool frontmost, required bool resumed}) {}
   @override

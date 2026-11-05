@@ -61,6 +61,7 @@ class ThreadDetailPage extends ConsumerStatefulWidget {
     this.landing = ThreadPostLanding.top,
     this.initialForumName,
     this.bodyReadingObserver,
+    this.nativeBody = const bool.fromEnvironment('Y300_NATIVE_THREAD_BODY'),
   }) : assert(
          landing == ThreadPostLanding.top ||
              (targetPid != null && targetPid != ''),
@@ -75,6 +76,7 @@ class ThreadDetailPage extends ConsumerStatefulWidget {
   final ThreadPostLanding landing;
   final String? initialForumName;
   final ThreadBodyReadingObserver? bodyReadingObserver;
+  final bool nativeBody;
 
   @override
   ConsumerState<ThreadDetailPage> createState() => _ThreadDetailPageState();
@@ -502,6 +504,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage>
                           () => controller.refresh(forceNetwork: true),
                         ),
                         child: ThreadDetailContent(
+                          nativeBody: widget.nativeBody,
                           quickScrollCoordinator: _quickScrollCoordinator,
                           imageReaderReturnCoordinator:
                               _imageReaderReturnCoordinator,

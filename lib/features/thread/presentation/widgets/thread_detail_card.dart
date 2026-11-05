@@ -121,6 +121,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
     this.layoutIdentity,
     this.chunkOrdinal,
     this.enableSafeDisplayPlanning = false,
+    this.nativeBody = false,
   });
 
   final ThreadPost sourcePost;
@@ -161,6 +162,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
   final Object? layoutIdentity;
   final int? chunkOrdinal;
   final bool enableSafeDisplayPlanning;
+  final bool nativeBody;
   final ValueChanged<ThreadPost> onOpenPostActions;
 
   @override
@@ -214,6 +216,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
                   ),
                 )
               : ThreadPostHtmlBody(
+                  nativeBody: nativeBody,
                   post: post,
                   sourcePost: sourcePost,
                   renderPreparer: enableSafeDisplayPlanning
@@ -491,6 +494,7 @@ class _ThreadPostCardEntry extends StatefulWidget {
     this.onPreparedBody,
     this.preparerSelector,
     this.enableSafeDisplayPlanning = false,
+    this.nativeBody = false,
   });
 
   final ThreadPost sourcePost;
@@ -542,6 +546,7 @@ class _ThreadPostCardEntry extends StatefulWidget {
   final ThreadPreparedBodyHandoff? onPreparedBody;
   final ThreadPreparedBodyPreparerSelector? preparerSelector;
   final bool enableSafeDisplayPlanning;
+  final bool nativeBody;
 
   @override
   State<_ThreadPostCardEntry> createState() => _ThreadPostCardEntryState();
@@ -585,6 +590,7 @@ class _ThreadPostCardEntryState extends State<_ThreadPostCardEntry>
           onOpenPostActions: widget.onOpenPostActions,
         ),
         _ThreadPostCardBodyEntry(
+          nativeBody: widget.nativeBody,
           key: Key('thread-post-body-${widget.sourcePost.pid}'),
           sourcePost: widget.sourcePost,
           displayPost: widget.displayPost,
