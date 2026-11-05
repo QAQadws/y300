@@ -67,6 +67,36 @@ final class ForumBodyFlowSliver extends _ForumBodyFlow {
     super.onFloatedTableWindowChanged,
     super.initialTableOffset,
   });
+
+  /// Applies a measured offset to a table in the current sliver delivery.
+  /// An offscreen table uses the same offset when its viewport mounts.
+  static bool setTableOffset(
+    GlobalKey key, {
+    required ForumBodyTextPageSession session,
+    required int slice,
+    required String path,
+    required double offset,
+  }) {
+    final state = key.currentState;
+    if (state is! _ForumBodyFlowState || state.widget is! ForumBodyFlowSliver) {
+      return false;
+    }
+    final flow = state.widget;
+    if (!flow.isCurrentLayout ||
+        !state._fits ||
+        !identical(session, flow.session) ||
+        session.isClosed ||
+        session.isLayoutOwnerRetired ||
+        !offset.isFinite ||
+        offset < 0 ||
+        slice < 0 ||
+        slice >= flow.prefix.length ||
+        !flow.prefix[slice].tableFrames.any((frame) => frame.path == path)) {
+      return false;
+    }
+    state._setTableOffset((slice, path), offset);
+    return true;
+  }
 }
 
 /// The same flowing body as a lazy list child. Its measured extent belongs to
