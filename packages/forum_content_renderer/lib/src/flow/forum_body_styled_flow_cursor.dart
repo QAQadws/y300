@@ -37,10 +37,12 @@ final class ForumBodyStyledFlowCursor {
     required ForumBodyDocument document,
     required ForumBodyReaderStyle reader,
     ForumBodyCollapseLayout? collapses,
+    ForumBodyElement? contentRoot,
   }) : _styles = const ForumBodyStyleResolver().open(
          document,
          reader,
          collapses: collapses,
+         contentRoot: contentRoot,
        );
 
   final ForumBodyStyleCursor _styles;
@@ -60,6 +62,7 @@ final class ForumBodyStyledFlowCursor {
   String get fontRevision => _styles.fontRevision;
   int get styleRevision => ForumBodyStyleResolver.revision;
   ForumBodyResolvedStyle get rootStyle => _styles.root;
+  ForumBodyElement? get contentRoot => _styles.contentRoot;
   ForumBodyStyledFlowEvent? get current => _current;
   int get resolvedNodeCount => _styles.resolvedNodeCount;
   bool get isComplete => _complete;

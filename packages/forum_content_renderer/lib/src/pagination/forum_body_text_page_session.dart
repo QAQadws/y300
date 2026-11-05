@@ -165,6 +165,8 @@ final class ForumBodyTextPageSession {
     ForumBodyImageResolver? imageResolver,
     ForumBodyInlineImageResolver? inlineImageResolver,
     ForumBodyCollapseLayout? collapses,
+    // Scope a cell or caption to its actual descendants, with inherited style.
+    ForumBodyElement? contentRoot,
     int? maxImagesPerPage,
   }) {
     limits._validate();
@@ -205,6 +207,7 @@ final class ForumBodyTextPageSession {
           rubyLimits: rubyLimits,
           inlineImageResolver: inlineImageResolver,
           collapses: collapses,
+          contentRoot: contentRoot,
         ),
         composer,
         cache,

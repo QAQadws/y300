@@ -4,6 +4,12 @@ import 'forum_body_style_builder.dart';
 import 'forum_body_style_inheritance.dart';
 import 'forum_body_style_options.dart';
 
+typedef _StyleContext = ({
+  ForumBodyResolvedStyle effective,
+  ForumBodyResolvedStyle author,
+  ForumBodyElementKind? kind,
+});
+
 /// Forward-only style traversal over existing IR. Consumers choose safe block
 /// boundaries and yield/cancel using their reader session; this cursor owns no
 /// timers, widgets, layout resources, full style map or reparsed HTML.
@@ -12,17 +18,11 @@ final class ForumBodyStyleCursor {
     required ForumBodyDocument document,
     required ForumBodyReaderStyle reader,
     ForumBodyCollapseLayout? collapses,
+    ForumBodyElement? contentRoot,
   }) : identity = document.identity,
        fontRevision = reader.fontRevision,
        _collapses = collapses,
-       root = ForumBodyResolvedStyle(
-         textStyle: reader.textStyle,
-         role: ForumBodyTextRole.body,
-         textAlign: reader.textAlign,
-         textDirection: reader.textDirection,
-         indent: forumBodyReaderIndent(reader, reader.textStyle.fontSize!),
-         lineHeight: forumBodyReaderHeight(reader),
-       ),
+       _contentRoot = contentRoot,
        _builder = ForumBodyStyleBuilder(reader),
        _authorBuilder =
            reader.policy.values.values.contains(ForumBodyStyleScope.forceBody)
@@ -32,29 +32,43 @@ final class ForumBodyStyleCursor {
     if (collapses != null && !identical(collapses.document, document)) {
       throw ArgumentError('Collapse layout belongs to another document');
     }
-    _frames.add((
-      nodes: document.nodes.iterator,
-      parent: root,
-      author: root,
-      parentKind: null,
-    ));
+    final initial = ForumBodyResolvedStyle(
+      textStyle: reader.textStyle,
+      role: ForumBodyTextRole.body,
+      textAlign: reader.textAlign,
+      textDirection: reader.textDirection,
+      indent: forumBodyReaderIndent(reader, reader.textStyle.fontSize!),
+      lineHeight: forumBodyReaderHeight(reader),
+    );
+    _StyleContext context = (effective: initial, author: initial, kind: null);
+    var nodes = document.nodes;
+    if (contentRoot != null) {
+      final ancestors = document.ancestryOf(contentRoot);
+      if (ancestors == null) {
+        throw ArgumentError('Content root belongs to another document');
+      }
+      var omitted = false;
+      for (final ancestor in ancestors) {
+        omitted |= collapses?.omitsBody(ancestor) ?? false;
+        context = _resolve(ancestor, context);
+      }
+      _collectIssues();
+      nodes = omitted || context.effective.hidden
+          ? const []
+          : contentRoot.children;
+    }
+    _root = context.effective;
+    _frames.add((nodes: nodes.iterator, context: context));
   }
   final ForumBodyIdentity identity;
   final String fontRevision;
-  final ForumBodyResolvedStyle root;
+  late final ForumBodyResolvedStyle _root;
   final ForumBodyStyleBuilder _builder;
   final ForumBodyStyleBuilder? _authorBuilder;
   final ForumBodyStyleInheritance _inheritance;
   ForumBodyCollapseLayout? _collapses;
-  final _frames =
-      <
-        ({
-          Iterator<ForumBodyNode> nodes,
-          ForumBodyResolvedStyle parent,
-          ForumBodyResolvedStyle author,
-          ForumBodyElementKind? parentKind,
-        })
-      >[];
+  ForumBodyElement? _contentRoot;
+  final _frames = <({Iterator<ForumBodyNode> nodes, _StyleContext context})>[];
   final _pendingIssues = <ForumBodyStyleIssue>[];
   ForumBodyNode? _currentNode;
   ForumBodyResolvedStyle? _currentStyle;
@@ -62,6 +76,8 @@ final class ForumBodyStyleCursor {
   bool _complete = false;
   bool _closed = false;
 
+  ForumBodyResolvedStyle get root => _root;
+  ForumBodyElement? get contentRoot => _contentRoot;
   ForumBodyNode? get currentNode => _currentNode;
   ForumBodyResolvedStyle? get currentStyle => _currentStyle;
   int get resolvedNodeCount => _resolvedNodeCount;
@@ -89,37 +105,14 @@ final class ForumBodyStyleCursor {
       final node = frame.nodes.current;
       if (node is ForumBodyElement) {
         if (_collapses?.omitsBody(node) ?? false) continue;
-        final author =
-            _authorBuilder?.resolve(
-              node,
-              frame.author,
-              parentKind: frame.parentKind,
-            ) ??
-            frame.author;
-        final parent = _authorBuilder == null
-            ? frame.parent
-            : _inheritance.parentFor(
-                role: author.role,
-                author: frame.author,
-                effective: frame.parent,
-              );
-        final style = _builder.resolve(
-          node,
-          parent,
-          parentKind: frame.parentKind,
-        );
+        final context = _resolve(node, frame.context);
         _currentNode = node;
-        _currentStyle = style;
-        _frames.add((
-          nodes: node.children.iterator,
-          parent: style,
-          author: author,
-          parentKind: node.kind,
-        ));
+        _currentStyle = context.effective;
+        _frames.add((nodes: node.children.iterator, context: context));
         _collectIssues();
       } else {
         _currentNode = node;
-        _currentStyle = frame.parent;
+        _currentStyle = frame.context.effective;
       }
       _resolvedNodeCount++;
       return true;
@@ -128,6 +121,28 @@ final class ForumBodyStyleCursor {
     _currentNode = null;
     _currentStyle = null;
     return false;
+  }
+
+  _StyleContext _resolve(ForumBodyElement node, _StyleContext context) {
+    final author =
+        _authorBuilder?.resolve(
+          node,
+          context.author,
+          parentKind: context.kind,
+        ) ??
+        context.author;
+    final parent = _authorBuilder == null
+        ? context.effective
+        : _inheritance.parentFor(
+            role: author.role,
+            author: context.author,
+            effective: context.effective,
+          );
+    return (
+      effective: _builder.resolve(node, parent, parentKind: context.kind),
+      author: author,
+      kind: node.kind,
+    );
   }
 
   void _collectIssues() {
@@ -161,6 +176,7 @@ final class ForumBodyStyleCursor {
     _closed = true;
     _frames.clear();
     _collapses = null;
+    _contentRoot = null;
     _currentNode = null;
     _currentStyle = null;
     _pendingIssues.clear();

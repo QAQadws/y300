@@ -13,10 +13,12 @@ final class ForumBodyStyleResolver {
     ForumBodyDocument document,
     ForumBodyReaderStyle reader, {
     ForumBodyCollapseLayout? collapses,
+    ForumBodyElement? contentRoot,
   }) => ForumBodyStyleCursor(
     document: document,
     reader: reader,
     collapses: collapses,
+    contentRoot: contentRoot,
   );
 
   ForumBodyStyleResult resolve(

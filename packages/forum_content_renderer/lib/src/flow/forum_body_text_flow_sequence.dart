@@ -37,6 +37,7 @@ final class ForumBodyTextFlowSequence {
        identity = flow.identity,
        fontRevision = flow.fontRevision,
        styleRevision = flow.styleRevision,
+       path = block?.node.path ?? flow.contentRoot?.path,
        style = block?.style ?? flow.rootStyle {
     _plain = _openPlain();
   }
@@ -63,7 +64,7 @@ final class ForumBodyTextFlowSequence {
   bool _visible = false;
   bool _closed = false;
 
-  String? get path => block?.node.path;
+  final String? path;
   bool get hasContent => _visible || (_plain?.hasDisplayText ?? false);
 
   ForumBodyParagraphSequence _openPlain() =>

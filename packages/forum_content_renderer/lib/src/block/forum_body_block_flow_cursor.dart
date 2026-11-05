@@ -176,6 +176,7 @@ final class ForumBodyBlockFlowCursor {
     ForumBodyRubyContentLimits rubyLimits = const ForumBodyRubyContentLimits(),
     ForumBodyInlineImageResolver? inlineImageResolver,
     ForumBodyCollapseLayout? collapses,
+    ForumBodyElement? contentRoot,
   }) : _flow = ForumBodyTextFlowCursor(
          document: document,
          reader: reader,
@@ -183,10 +184,10 @@ final class ForumBodyBlockFlowCursor {
          rubyLimits: rubyLimits,
          inlineImageResolver: inlineImageResolver,
          collapses: collapses,
+         contentRoot: contentRoot,
        ),
        _collapses = collapses,
-       _rootFontSize = reader.textStyle.fontSize!,
-       _rootDirection = reader.textDirection {
+       _rootFontSize = reader.textStyle.fontSize! {
     if (!width.isFinite || width <= 0) {
       _flow.close();
       throw ArgumentError.value(width, 'width');
@@ -196,7 +197,7 @@ final class ForumBodyBlockFlowCursor {
   final double width;
   final ForumBodyBlockEdgeMargins edgeMargins;
   final double _rootFontSize;
-  final TextDirection _rootDirection;
+  TextDirection get _rootDirection => _flow.rootStyle.textDirection;
   final ForumBodyTextFlowCursor _flow;
   ForumBodyCollapseLayout? _collapses;
   final _frames = <_Frame>[];

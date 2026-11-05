@@ -76,10 +76,12 @@ final class ForumBodyTextFlowCursor {
     this.rubyLimits = const ForumBodyRubyContentLimits(),
     this.inlineImageResolver,
     ForumBodyCollapseLayout? collapses,
+    ForumBodyElement? contentRoot,
   }) : _flow = ForumBodyStyledFlowCursor(
          document: document,
          reader: reader,
          collapses: collapses,
+         contentRoot: contentRoot,
        );
   static const revision = 10;
   final ForumBodyInlineImageResolver? inlineImageResolver;
@@ -117,6 +119,7 @@ final class ForumBodyTextFlowCursor {
   ForumBodyIdentity get identity => _flow.identity;
   String get fontRevision => _flow.fontRevision;
   int get styleRevision => _flow.styleRevision;
+  ForumBodyResolvedStyle get rootStyle => _flow.rootStyle;
   int get resolvedNodeCount => _flow.resolvedNodeCount;
   ForumBodyTextFlowUnit? get current => _current;
   bool get isComplete => _complete;

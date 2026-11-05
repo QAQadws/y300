@@ -434,7 +434,7 @@ final class ForumBodyParagraphContentBuilder {
       flow,
       _ParagraphCollector(
         identity: flow.identity,
-        path: block?.node.path,
+        path: block?.node.path ?? flow.contentRoot?.path,
         fontRevision: flow.fontRevision,
         styleRevision: flow.styleRevision,
         style: block?.style ?? flow.rootStyle,
@@ -447,6 +447,7 @@ final class ForumBodyParagraphContentBuilder {
         emptySourceRune:
             block?.node.source.runeStart ??
             flow.current?.node.source.runeStart ??
+            flow.contentRoot?.source.runeStart ??
             0,
       ),
     );

@@ -211,7 +211,16 @@ final class ForumBodyDocument {
   /// document. Parser output retains increasing source child indices, including
   /// gaps for removed comments/active content, so each level supports binary
   /// search. This lets prefix consumers avoid a second full-tree first lookup.
-  ForumBodyNode? nodeAtPath(String path) {
+  ForumBodyNode? nodeAtPath(String path) => _nodeAtPath(path);
+
+  /// Actual ancestors including [element], or null for a foreign element.
+  List<ForumBodyElement>? ancestryOf(ForumBodyElement element) {
+    final ancestors = <ForumBodyElement>[];
+    if (!identical(_nodeAtPath(element.path, ancestors), element)) return null;
+    return ancestors..add(element);
+  }
+
+  ForumBodyNode? _nodeAtPath(String path, [List<ForumBodyElement>? ancestors]) {
     if (path.isEmpty) return null;
     var children = nodes;
     var prefix = '';
@@ -246,6 +255,7 @@ final class ForumBodyDocument {
       if (found == null) return null;
       if (depth == segments.length - 1) return found;
       if (found is! ForumBodyElement) return null;
+      ancestors?.add(found);
       children = found.children;
     }
     return null;
