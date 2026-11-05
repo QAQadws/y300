@@ -8,6 +8,76 @@ import 'forum_body_selectable_text.dart';
 import 'forum_body_text_glyph_hit.dart';
 import 'forum_body_text_page_composer.dart';
 
+/// Collects selection across the mounted slices of one native flow. Flutter
+/// still dispatches gestures through each scrollable and page container.
+final class ForumBodyFlowSelectionScope extends StatefulWidget {
+  const ForumBodyFlowSelectionScope({required this.child, super.key});
+
+  final Widget child;
+
+  @override
+  ForumBodyFlowSelectionScopeState createState() =>
+      ForumBodyFlowSelectionScopeState();
+}
+
+final class ForumBodyFlowSelectionScopeState
+    extends State<ForumBodyFlowSelectionScope> {
+  final _delegate = _FlowSelectionDelegate();
+
+  /// Live copy payload. Retired or unmounted deliveries contribute nothing.
+  String? get selectedText => _delegate.getSelectedContent()?.plainText;
+
+  static _FlowSelectionDelegate? _of(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<_FlowSelectionRegistry>()
+      ?.delegate;
+
+  @override
+  Widget build(BuildContext context) => SelectionContainer(
+    delegate: _delegate,
+    child: _FlowSelectionRegistry(delegate: _delegate, child: widget.child),
+  );
+
+  @override
+  void dispose() {
+    _delegate.dispose();
+    super.dispose();
+  }
+}
+
+final class _FlowSelectionRegistry extends InheritedWidget {
+  const _FlowSelectionRegistry({required this.delegate, required super.child});
+
+  final _FlowSelectionDelegate delegate;
+
+  @override
+  bool updateShouldNotify(_FlowSelectionRegistry oldWidget) =>
+      delegate != oldWidget.delegate;
+}
+
+final class _FlowSelectionDelegate extends StaticSelectionContainerDelegate {
+  final fragments = <_RenderSelectableFragment>{};
+
+  @override
+  SelectedContent? getSelectedContent() {
+    final selected =
+        fragments
+            .where(
+              (fragment) =>
+                  fragment.value.status == SelectionStatus.uncollapsed,
+            )
+            .toList()
+          ..sort((a, b) {
+            final first = a._input.fragment;
+            final second = b._input.fragment;
+            final order = (first.sourceHint?.runeStart ?? -1).compareTo(
+              second.sourceHint?.runeStart ?? -1,
+            );
+            return order != 0 ? order : compareOrder(a, b);
+          });
+    return _joinSelected(selected);
+  }
+}
+
 /// Keeps paragraph separators local to the active page's selected fragments.
 final class ForumBodyPageSelectionScope extends StatefulWidget {
   const ForumBodyPageSelectionScope({required this.child, super.key});
@@ -36,32 +106,29 @@ final class _PageSelectionScopeState
 
 final class _PageSelectionDelegate extends StaticSelectionContainerDelegate {
   @override
-  SelectedContent? getSelectedContent() {
-    final output = StringBuffer();
-    _RenderSelectableFragment? previous;
-    var endsWithBreak = false;
-    for (final selectable in selectables) {
-      final selected = selectable.getSelectedContent();
-      if (selected == null || selected.plainText.isEmpty) continue;
-      final current = selectable is _RenderSelectableFragment
-          ? selectable
-          : null;
-      final text = selected.plainText;
-      if (previous != null &&
-          current != null &&
-          previous._input.fragment.path != current._input.fragment.path &&
-          !endsWithBreak &&
-          !text.startsWith('\n')) {
-        output.write('\n');
-      }
-      output.write(text);
-      previous = current;
-      endsWithBreak = text.endsWith('\n');
+  SelectedContent? getSelectedContent() =>
+      _joinSelected(selectables.whereType<_RenderSelectableFragment>());
+}
+
+SelectedContent? _joinSelected(Iterable<_RenderSelectableFragment> selected) {
+  final output = StringBuffer();
+  ForumBodyTextPageFragment? previous;
+  var endsWithBreak = false;
+  for (final selectable in selected) {
+    final text = selectable.getSelectedContent()?.plainText;
+    if (text == null || text.isEmpty) continue;
+    final current = selectable._input.fragment;
+    if (previous != null &&
+        previous.path != current.path &&
+        !endsWithBreak &&
+        !text.startsWith('\n')) {
+      output.write('\n');
     }
-    return output.isEmpty
-        ? null
-        : SelectedContent(plainText: output.toString());
+    output.write(text);
+    previous = current;
+    endsWithBreak = text.endsWith('\n');
   }
+  return output.isEmpty ? null : SelectedContent(plainText: output.toString());
 }
 
 /// Registers the exact mounted native fragment with Flutter's selection area.
@@ -85,12 +152,19 @@ final class ForumBodySelectableFragment extends SingleChildRenderObjectWidget {
 
   @override
   RenderObject createRenderObject(BuildContext context) =>
-      _RenderSelectableFragment(this, _color(context));
+      _RenderSelectableFragment(this, _color(context), _flowSelection(context));
 
   @override
   void updateRenderObject(BuildContext context, RenderObject renderObject) {
-    (renderObject as _RenderSelectableFragment).update(this, _color(context));
+    (renderObject as _RenderSelectableFragment).update(
+      this,
+      _color(context),
+      _flowSelection(context),
+    );
   }
+
+  _FlowSelectionDelegate? _flowSelection(BuildContext context) =>
+      registrar == null ? null : ForumBodyFlowSelectionScopeState._of(context);
 
   Color _color(BuildContext context) => registrar == null
       ? const Color(0x00000000)
@@ -100,10 +174,11 @@ final class ForumBodySelectableFragment extends SingleChildRenderObjectWidget {
 
 final class _RenderSelectableFragment extends RenderProxyBox
     with Selectable, SelectionRegistrant {
-  _RenderSelectableFragment(this._input, this._color);
+  _RenderSelectableFragment(this._input, this._color, this._flow);
 
   ForumBodySelectableFragment _input;
   Color _color;
+  _FlowSelectionDelegate? _flow;
   ForumBodySelectableText? _text;
   List<Rect> _bounds = const [];
   Rect _hitBounds = Rect.zero;
@@ -116,20 +191,24 @@ final class _RenderSelectableFragment extends RenderProxyBox
     hasContent: false,
   );
 
-  void update(ForumBodySelectableFragment input, Color color) {
+  void update(
+    ForumBodySelectableFragment input,
+    Color color,
+    _FlowSelectionDelegate? flow,
+  ) {
     final changed =
         input.identity != _input.identity ||
         input.pageSize != _input.pageSize ||
-        input.registrar != _input.registrar;
+        input.registrar != _input.registrar ||
+        flow != _flow;
+    if (changed) _retire();
     _input = input;
+    _flow = flow;
     if (_color != color) {
       _color = color;
       markNeedsPaint();
     }
-    if (changed) {
-      _retire();
-      markNeedsLayout();
-    }
+    if (changed) markNeedsLayout();
   }
 
   @override
@@ -163,6 +242,7 @@ final class _RenderSelectableFragment extends RenderProxyBox
     if (_bounds.isEmpty) return;
     _hitBounds = _bounds.reduce((a, b) => a.expandToInclude(b));
     _updateGeometry();
+    _flow?.fragments.add(this);
     registrar = _input.registrar;
   }
 
@@ -173,6 +253,7 @@ final class _RenderSelectableFragment extends RenderProxyBox
   }
 
   void _retire() {
+    _flow?.fragments.remove(this);
     registrar = null;
     _text = null;
     _bounds = const [];

@@ -122,6 +122,61 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('flow copy joins source paragraphs across scrolling slices', (
+    tester,
+  ) async {
+    final text = '甲' * 40;
+    final fixture = _Fixture('<p>$text</p><p>Second</p>', height: 10);
+    final snapshot = fixture.session.snapshot;
+    expect(snapshot.length, greaterThan(2));
+    final fragments = [
+      for (var i = 0; i < snapshot.length; i++) fixture.prepare(i),
+    ];
+    final flow = GlobalKey<ForumBodyFlowSelectionScopeState>();
+    String? selected;
+    Widget build({required bool enabled}) => MaterialApp(
+      home: Scaffold(
+        body: SelectionArea(
+          onSelectionChanged: (content) => selected = content?.plainText,
+          child: ForumBodyFlowSelectionScope(
+            key: flow,
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  for (var i = 0; i < fragments.length; i++)
+                    ForumBodyTextPageSurface.prepared(
+                      snapshot: snapshot,
+                      pageIndex: i,
+                      layoutId: 'selection',
+                      fragments: fragments[i],
+                      selectionEnabled: enabled,
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpWidget(build(enabled: true));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    final region = tester.state<SelectableRegionState>(
+      find.byType(SelectableRegion),
+    );
+    region.selectAll(SelectionChangedCause.toolbar);
+    await tester.pump();
+    expect(selected, '$text\nSecond');
+    expect(flow.currentState!.selectedText, '$text\nSecond');
+
+    await tester.pumpWidget(build(enabled: false));
+    expect(flow.currentState!.selectedText, isNull);
+    expect(fragments.expand((page) => page).every((f) => f.isActive), isTrue);
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(fixture.cache.activeLeases, 0);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('mouse drag selects the actual native glyph range in reverse', (
     tester,
   ) async {
