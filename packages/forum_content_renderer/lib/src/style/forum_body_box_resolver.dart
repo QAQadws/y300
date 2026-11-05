@@ -1,6 +1,7 @@
 import '../document/forum_body_document.dart';
 import 'forum_body_length.dart';
 import 'forum_body_box_style.dart';
+import 'forum_body_table_hints.dart';
 
 /// Non-inherited box values have their own shorthand/longhand cascade.
 final class ForumBodyBoxResolver {
@@ -13,11 +14,30 @@ final class ForumBodyBoxResolver {
     required double rootFontSize,
     required void Function(String property, String value) onUnsupported,
   }) {
-    var width = const ForumBodyBoxStyle().width;
-    ForumBodyLength? height;
+    var width = switch (node.kind) {
+      ForumBodyElementKind.table || ForumBodyElementKind.tableCell =>
+        forumBodyTableDimension(node.attributes['width'], ignoreZero: true),
+      ForumBodyElementKind.tableColumn ||
+      ForumBodyElementKind.tableColumnGroup => forumBodyTableDimension(
+        node.attributes['width'],
+      ),
+      _ => null,
+    };
+    var height = switch (node.kind) {
+      ForumBodyElementKind.table ||
+      ForumBodyElementKind.tableRow ||
+      ForumBodyElementKind.tableSection ||
+      ForumBodyElementKind.tableCell => forumBodyTableDimension(
+        node.attributes['height'],
+        ignoreZero: node.kind == ForumBodyElementKind.tableCell,
+      ),
+      _ => null,
+    };
     var minimum = ForumBodyLength.zero;
     ForumBodyLength? maximum;
-    var sizing = ForumBodyBoxSizing.contentBox;
+    var sizing = node.kind == ForumBodyElementKind.table
+        ? ForumBodyBoxSizing.borderBox
+        : ForumBodyBoxSizing.contentBox;
     final important = <String>{};
     for (final declaration in node.style.declarations) {
       final name = declaration.property;

@@ -10,7 +10,7 @@ import 'forum_body_style_options.dart';
 import 'forum_body_text_emphasis_resolver.dart';
 import 'forum_body_list_style_resolver.dart';
 
-const forumBodyStyleRevision = 22;
+const forumBodyStyleRevision = 23;
 ForumBodyLength forumBodyReaderIndent(
   ForumBodyReaderStyle reader,
   double size,
@@ -96,6 +96,7 @@ final class ForumBodyStyleBuilder {
     ForumBodyElement node,
     ForumBodyResolvedStyle parent, {
     ForumBodyElementKind? parentKind,
+    required ForumBodyLength cellPadding,
   }) {
     final role = _role(node.kind, parent.role);
     final quoteClass =
@@ -156,9 +157,10 @@ final class ForumBodyStyleBuilder {
         parent.strong ||
         node.tag == 'b' ||
         node.tag == 'strong' ||
+        node.tag == 'th' ||
         role == ForumBodyTextRole.heading;
     final parentWeight = style.fontWeight ?? FontWeight.w400;
-    var weight = heading != null
+    var weight = heading != null || node.tag == 'th'
         ? FontWeight.w700
         : node.tag == 'b' || node.tag == 'strong'
         ? _weight('bolder', parentWeight)!
@@ -280,8 +282,18 @@ final class ForumBodyStyleBuilder {
       foreground = reader.textStyle.color;
     }
     final semanticBackground = quoteSurface ? reader.theme?.quoteSurface : null;
-    Color? boxBackground = semanticBackground;
-    Color? ownBackground = semanticBackground;
+    final legacyBackground = switch (node.kind) {
+      ForumBodyElementKind.table ||
+      ForumBodyElementKind.tableSection ||
+      ForumBodyElementKind.tableRow ||
+      ForumBodyElementKind.tableCell => node.attributes['bgcolor'],
+      _ => null,
+    };
+    final tableBackground = legacyBackground == null
+        ? null
+        : _color(node, 'bgcolor', legacyBackground, null);
+    Color? boxBackground = tableBackground ?? semanticBackground;
+    Color? ownBackground = boxBackground;
     var inlineBackground = style.backgroundColor;
     final rawBackground = declarations
         .effectiveDeclaration({'background-color', 'background'})
@@ -296,7 +308,7 @@ final class ForumBodyStyleBuilder {
           node,
           'background-color',
           rawBackground,
-          const Color(0x00000000),
+          tableBackground ?? const Color(0x00000000),
         ),
       };
       ownBackground = color;
@@ -567,6 +579,7 @@ final class ForumBodyStyleBuilder {
         parent.padding,
         quoteSurface: quoteSurface,
         direction: direction,
+        cellPadding: cellPadding,
       ),
       box: const ForumBodyBoxResolver().resolveBoxStyle(
         node: node,
@@ -791,6 +804,7 @@ final class ForumBodyStyleBuilder {
     ForumBodyInsets parent, {
     required bool quoteSurface,
     required TextDirection direction,
+    ForumBodyLength cellPadding = const ForumBodyLength(1),
   }) {
     final isParagraph =
         node.kind == ForumBodyElementKind.paragraph ||
@@ -835,6 +849,13 @@ final class ForumBodyStyleBuilder {
           )
         : property == 'padding' && node.kind == ForumBodyElementKind.editStatus
         ? const ForumBodyInsets(bottom: ForumBodyLength(8))
+        : property == 'padding' && node.kind == ForumBodyElementKind.tableCell
+        ? ForumBodyInsets(
+            top: cellPadding,
+            right: cellPadding,
+            bottom: cellPadding,
+            left: cellPadding,
+          )
         : const ForumBodyInsets();
     final resolved = const ForumBodyBoxResolver().resolve(
       node: node,

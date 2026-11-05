@@ -1,13 +1,16 @@
 import '../document/forum_body_collapse_layout.dart';
 import '../document/forum_body_document.dart';
+import 'forum_body_length.dart';
 import 'forum_body_style_builder.dart';
 import 'forum_body_style_inheritance.dart';
 import 'forum_body_style_options.dart';
+import 'forum_body_table_hints.dart';
 
 typedef _StyleContext = ({
   ForumBodyResolvedStyle effective,
   ForumBodyResolvedStyle author,
   ForumBodyElementKind? kind,
+  ForumBodyLength cellPadding,
 });
 
 /// Forward-only style traversal over existing IR. Consumers choose safe block
@@ -40,7 +43,12 @@ final class ForumBodyStyleCursor {
       indent: forumBodyReaderIndent(reader, reader.textStyle.fontSize!),
       lineHeight: forumBodyReaderHeight(reader),
     );
-    _StyleContext context = (effective: initial, author: initial, kind: null);
+    _StyleContext context = (
+      effective: initial,
+      author: initial,
+      kind: null,
+      cellPadding: const ForumBodyLength(1),
+    );
     var nodes = document.nodes;
     if (contentRoot != null) {
       final ancestors = document.ancestryOf(contentRoot);
@@ -129,6 +137,7 @@ final class ForumBodyStyleCursor {
           node,
           context.author,
           parentKind: context.kind,
+          cellPadding: context.cellPadding,
         ) ??
         context.author;
     final parent = _authorBuilder == null
@@ -139,9 +148,17 @@ final class ForumBodyStyleCursor {
             effective: context.effective,
           );
     return (
-      effective: _builder.resolve(node, parent, parentKind: context.kind),
+      effective: _builder.resolve(
+        node,
+        parent,
+        parentKind: context.kind,
+        cellPadding: context.cellPadding,
+      ),
       author: author,
       kind: node.kind,
+      cellPadding: node.kind == ForumBodyElementKind.table
+          ? forumBodyTableCellPadding(node.attributes['cellpadding'])
+          : context.cellPadding,
     );
   }
 
