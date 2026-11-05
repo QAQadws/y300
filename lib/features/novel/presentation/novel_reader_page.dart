@@ -41,6 +41,8 @@ import 'package:y300/features/novel/presentation/models/novel_reader_pagination_
 import 'package:y300/features/novel/presentation/models/novel_reader_conversion_position.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_anchor_navigation_request.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_native_host_status.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_native_page_coverage.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_native_source_location.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
 import 'package:y300/features/novel/presentation/services/novel_source_thread_route_launcher.dart';
 
@@ -132,6 +134,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   final _nativeFlowKey = GlobalKey<NovelReaderNativeFlowHostState>();
   ({NovelReaderDocument document, NovelReaderTextAnchor anchor})?
   _nativePagedEntry;
+  ({NovelReaderDocument document, NovelReaderNativeSourceLocation source})?
+  _nativeFlowEntry;
+  ({String surface, NovelReaderNativeSourceLocation source})? _nativeMenuSource;
   Object? _nativeImageBindingKey;
   ForumHtmlImageHost? _nativeImageHost;
   ForumHtmlPreparationImagePolicy? _nativeImagePolicy;
@@ -282,6 +287,16 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
 
   void _overlayObstructionChanged() {
     if (!mounted || !_elementActive || !widget.nativePagination) return;
+    if (_overlayController.contentObscured.value) {
+      final current = ref
+          .read(novelReaderControllerProvider(_args))
+          .asData
+          ?.value;
+      final source = current == null ? null : _capturePagedSource(current);
+      _nativeMenuSource = source == null
+          ? null
+          : (surface: _readerSurfaceIdentity(current!), source: source);
+    }
     _syncNativeActivity();
     if (_overlayController.contentObscured.value) {
       ref
@@ -368,6 +383,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         // hint from before that handoff must not override its restore target.
         _conversionPosition = null;
         _nativePagedEntry = null;
+        _nativeFlowEntry = null;
+        _nativeMenuSource = null;
       }
       if (next.isLoading) {
         _retireDisplayPreferencesCoordinator();
@@ -1037,6 +1054,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     } else if (!identical(_paginationSessionController, controller)) {
       _conversionPosition = null;
       _nativePagedEntry = null;
+      _nativeFlowEntry = null;
+      _nativeMenuSource = null;
       _paginationSessionCache.dispose();
       _paginationSessionCache = NovelReaderPaginationSessionCache();
       _nativeOwner?.dispose();
@@ -1069,6 +1088,30 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         position.episodeId == viewState.currentEpisode.episodeId &&
         position.paginationKey == controller.paginationKey &&
         position.pageIndex == status.visiblePageIndex;
+  }
+
+  NovelReaderNativeSourceLocation? _capturePagedSource(
+    NovelReaderViewState viewState,
+  ) {
+    if (_readingScrolling || !_nativePositionIsCurrent(viewState)) return null;
+    final position = _pagedPosition!;
+    final view = _nativeStatus!.controller!.visibleView;
+    if (!position.anchor.hasCanonicalTextOffset ||
+        view == null ||
+        view.pageIndex != position.pageIndex) {
+      return null;
+    }
+    final tablePath = view.snapshot[view.pageIndex].table?.path;
+    if (tablePath == null &&
+        view.coverage.locate(position.anchor)
+            is! NovelReaderNativeCoveragePoint) {
+      return null;
+    }
+    return (
+      identity: view.snapshot.identity,
+      anchor: position.anchor,
+      tablePath: tablePath,
+    );
   }
 
   ({int count, bool isFinal}) _pagedControlMetrics(
@@ -1417,6 +1460,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         _verticalSession.markSuspendedContent(session);
         return;
       }
+      if (_isCurrentVerticalSession(session)) _nativeFlowEntry = null;
       _restoreVerticalOffsetAfterThemeUpdate(request: themeRequest);
       _restoreVerticalOffsetAfterContentReady(session: session);
     }
@@ -1487,14 +1531,18 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                   top: chromeInsets.topInset,
                   bottom: chromeInsets.persistentBottomInset,
                 ),
-                restoreReflowOffset: (offset, isCurrent) {
+                initialSource:
+                    identical(_nativeFlowEntry?.document, viewState.document)
+                    ? _nativeFlowEntry?.source
+                    : null,
+                restoreReflowOffset: (resolveOffset, isCurrent) {
                   if (!_isCurrentVerticalSession(session) || !isCurrent()) {
                     return Future.value(false);
                   }
                   return _scrollController.restore(
                     (metrics) =>
                         _isCurrentVerticalSession(session) && isCurrent()
-                        ? offset
+                        ? resolveOffset() ?? metrics.pixels
                         : metrics.pixels,
                   );
                 },
@@ -1582,6 +1630,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           if (notification is ScrollStartNotification) {
             _readingScrolling = true;
             _userScrollActive = notification.dragDetails != null;
+            if (_userScrollActive) {
+              _nativeFlowKey.currentState?.cancelSourceRestore();
+            }
             _observeReadingSurface();
           }
           if (notification is ScrollEndNotification) {
@@ -2540,6 +2591,13 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     final next = current.persistedPreferences.copyWith(
       flowMode: NovelReaderFlowMode.vertical,
     );
+    final source = _capturePagedSource(current);
+    _nativeFlowEntry = source == null
+        ? null
+        : (document: current.document, source: source);
+    if (widget.nativePagination) {
+      controller.preserveProgressOnEnteringVerticalMode();
+    }
     final coordinator = _displayPreferencesCoordinatorFor(controller);
     coordinator.begin(
       preferences: current.preferences,
@@ -2828,6 +2886,13 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     NovelReaderController controller,
   ) async {
     if (ref.read(novelReaderControllerProvider(_args)).isLoading) return;
+    final menuSource = _nativeMenuSource;
+    final pagedSource =
+        _capturePagedSource(viewState) ??
+        (menuSource?.surface == _readerSurfaceIdentity(viewState)
+            ? menuSource?.source
+            : null);
+    _nativeMenuSource = null;
     _overlayController.hideMenu();
     final maxSheetHeight = MediaQuery.sizeOf(context).height * 0.5;
     final coordinator = _displayPreferencesCoordinatorFor(controller);
@@ -2846,6 +2911,23 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           ?.value;
       if (next.flowMode == NovelReaderFlowMode.vertical) {
         _nativePagedEntry = null;
+        if (current != null &&
+            current.preferences.flowMode != NovelReaderFlowMode.vertical) {
+          if (widget.nativePagination) {
+            controller.preserveProgressOnEnteringVerticalMode();
+          }
+          _nativeFlowEntry =
+              pagedSource != null &&
+                  identical(current.document, viewState.document) &&
+                  current.readingAuthorityRevision ==
+                      viewState.readingAuthorityRevision &&
+                  current.readingSurfaceRevision ==
+                      viewState.readingSurfaceRevision
+              ? (document: current.document, source: pagedSource)
+              : null;
+        }
+      } else {
+        _nativeFlowEntry = null;
       }
       if (flow == null ||
           current == null ||

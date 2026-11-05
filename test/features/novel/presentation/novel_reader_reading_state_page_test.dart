@@ -62,9 +62,14 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  for (final table in [false, true]) {
+  for (final (table, roundTrip) in const [
+    (false, false),
+    (false, true),
+    (true, false),
+    (true, true),
+  ]) {
     testWidgets(
-      'scroll to paged uses the visible source without saving it (table: $table)',
+      'mode change uses the visible source (table: $table, round trip: $roundTrip)',
       (tester) async {
         final rows = List.generate(
           18,
@@ -137,29 +142,10 @@ void main() {
         expect(expected?.hasCanonicalTextOffset, isTrue);
         expect(repository.progress[_chapter], same(saved));
 
-        final overlay = tester
-            .widget<ReaderOverlayScaffold>(find.byType(ReaderOverlayScaffold))
-            .controller!;
-        overlay.showMenu();
-        await tester.pumpAndSettle();
-        await tester.tap(
-          find.byKey(const Key('shared-reader-bottom-action-display')),
+        await _changeModeViaDisplaySettings(
+          tester,
+          NovelReaderFlowMode.pagedLtr,
         );
-        await tester.pumpAndSettle();
-        final mode = find.byKey(const Key('novel-reader-flow-mode-control'));
-        final control = tester
-            .widget<ReaderSegmentControl<NovelReaderFlowMode>>(mode);
-        final paged = find.descendant(
-          of: mode,
-          matching: find.text(
-            control.labelBuilder(NovelReaderFlowMode.pagedLtr),
-          ),
-        );
-        await tester.ensureVisible(paged);
-        await tester.pumpAndSettle();
-        await tester.tap(paged);
-        await tester.pumpAndSettle();
-        Navigator.of(tester.element(mode)).pop();
         await _pumpNativeReady(tester, advanceTime: true);
 
         final surface = tester.widget<NovelReaderNativePagedSurface>(
@@ -193,17 +179,64 @@ void main() {
         expect(repository.committed, isEmpty);
         expect(repository.completed, isEmpty);
 
-        final page = controller.visiblePageIndex!;
-        if (table) {
-          surface.navigationController!.turnNext();
+        if (roundTrip) {
+          await _changeModeViaDisplaySettings(
+            tester,
+            NovelReaderFlowMode.vertical,
+          );
+          final flowHost = find.byType(NovelReaderNativeFlowHost);
+          for (var frame = 0; frame < 250; frame++) {
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 2)),
+            );
+            await tester.pump(const Duration(milliseconds: 16));
+            if (flow.evaluate().isNotEmpty &&
+                tester.widget<ForumBodyFlowSliver>(flow).prefix.isComplete &&
+                _verticalPosition(tester).pixels > 0) {
+              break;
+            }
+          }
+          await tester.pumpAndSettle();
+          final returned = tester.widget<NovelReaderNativeFlowHost>(flowHost);
+          final returnedState =
+              (returned.key! as GlobalKey<NovelReaderNativeFlowHostState>)
+                  .currentState!;
+          NovelReaderTextAnchor? actual;
+          unawaited(
+            returnedState
+                .captureVisibleAnchor(token)
+                .then((anchor) => actual = anchor),
+          );
+          for (var frame = 0; frame < 50 && actual == null; frame++) {
+            await tester.pump();
+          }
+          expect(returned.owner, same(host.owner));
+          expect(controller.isClosed, isTrue);
+          expect(actual?.nodeId, expected!.nodeId);
+          expect(actual?.textOffset, expected!.textOffset);
+          if (table) {
+            final viewport = tester.widget<ForumBodyTableFlowViewport>(
+              find.byType(ForumBodyTableFlowViewport),
+            );
+            expect(viewport.horizontalController.offset, greaterThan(800));
+            expect(_verticalPosition(tester).pixels, closeTo(450, 88));
+          }
+          expect(repository.progress[_chapter], same(saved));
+          expect(repository.committed, isEmpty);
+          expect(repository.completed, isEmpty);
         } else {
-          await tester.tapAt(const Offset(744, 300));
+          final page = controller.visiblePageIndex!;
+          if (table) {
+            surface.navigationController!.turnNext();
+          } else {
+            await tester.tapAt(const Offset(744, 300));
+          }
+          await _pumpNativeReady(tester, page: page + 1, advanceTime: true);
+          await tester.pump(const Duration(milliseconds: 350));
+          expect(repository.progress[_chapter]!.pageIndex, page + 1);
+          expect(repository.progress[_chapter]!.anchorFormatVersion, 1);
+          expect(controller.isClosed, isFalse);
         }
-        await _pumpNativeReady(tester, page: page + 1, advanceTime: true);
-        await tester.pump(const Duration(milliseconds: 350));
-        expect(repository.progress[_chapter]!.pageIndex, page + 1);
-        expect(repository.progress[_chapter]!.anchorFormatVersion, 1);
-        expect(controller.isClosed, isFalse);
         await tester.pumpWidget(const SizedBox.shrink());
         expect(host.owner.isClosed, isTrue);
         expect(host.owner.activeCacheHandles, 0);
@@ -888,6 +921,105 @@ void main() {
       28,
     );
     await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+    'flushing after a mode change preserves the last real page turn',
+    (tester) async {
+      final repository = _ReadingRepository(_nativeLongBody);
+      await tester.pumpWidget(_app(repository, nativePagination: true));
+      await _pumpNativeReady(tester, page: 0, advanceTime: true);
+      await tester.tapAt(const Offset(744, 300));
+      await _pumpNativeReady(tester, page: 1, advanceTime: true);
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(repository.progress[_chapter]?.pageIndex, 1);
+
+      await _changeModeViaDisplaySettings(tester, NovelReaderFlowMode.vertical);
+      final flow = find.byType(ForumBodyFlowSliver);
+      for (var frame = 0; frame < 250; frame++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 2)),
+        );
+        await tester.pump(const Duration(milliseconds: 16));
+        if (flow.evaluate().isNotEmpty &&
+            tester.widget<ForumBodyFlowSliver>(flow).prefix.isComplete &&
+            _verticalPosition(tester).pixels > 0) {
+          break;
+        }
+      }
+      await tester.pumpAndSettle();
+      expect(_verticalPosition(tester).pixels, greaterThan(0));
+      final saved = repository.progress[_chapter]!;
+      final writes = repository.committed.length;
+      expect(saved.flowMode, NovelReaderFlowMode.pagedLtr);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pumpAndSettle();
+      expect(repository.progress[_chapter], same(saved));
+      expect(repository.committed, hasLength(writes));
+      expect(repository.completed, isEmpty);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      await tester.drag(
+        find.byKey(const Key('novel-reader-paragraph-list')),
+        const Offset(0, -120),
+      );
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(
+        repository.progress[_chapter]?.flowMode,
+        NovelReaderFlowMode.vertical,
+      );
+      expect(repository.committed.length, greaterThan(writes));
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets('explicit scroll choice carries the paused visible page source', (
+    tester,
+  ) async {
+    final repository = _ReadingRepository(
+      '$_nativeLongBody<div style="position:absolute">unsupported</div>',
+    );
+    await tester.pumpWidget(_app(repository, nativePagination: true));
+    final fallback = find.byKey(const Key('novel-reader-pagination-fallback'));
+    for (var frame = 0; frame < 250 && fallback.evaluate().isEmpty; frame++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 2)),
+      );
+      await tester.pump();
+    }
+    expect(fallback, findsOneWidget);
+    final controller = _nativeController(tester);
+    expect(controller.visiblePageIndex, 0);
+    expect(controller.requestPage(2), isTrue);
+    for (
+      var frame = 0;
+      frame < 250 && controller.visiblePageIndex != 2;
+      frame++
+    ) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(controller.visiblePageIndex, 2);
+    expect(controller.error, isNotNull);
+    final expected = controller.visibleView!.coverage.locations.first.anchor;
+    final saved = repository.progress[_chapter];
+    final writes = repository.committed.length;
+
+    await tester.tap(fallback);
+    await tester.pump();
+    final flow = tester.widget<NovelReaderNativeFlowHost>(
+      find.byType(NovelReaderNativeFlowHost),
+    );
+    expect(flow.initialSource?.anchor.nodeId, expected.nodeId);
+    expect(flow.initialSource?.anchor.textOffset, expected.textOffset);
+    expect(controller.isClosed, isTrue);
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(repository.progress[_chapter], same(saved));
+    expect(repository.committed, hasLength(writes));
+    expect(flow.owner.activeCacheHandles, 0);
   });
 
   testWidgets(
@@ -1710,6 +1842,34 @@ void main() {
     expect(repository.recent, _chapter);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+}
+
+Future<void> _changeModeViaDisplaySettings(
+  WidgetTester tester,
+  NovelReaderFlowMode target,
+) async {
+  final overlay = tester
+      .widget<ReaderOverlayScaffold>(find.byType(ReaderOverlayScaffold))
+      .controller!;
+  overlay.showMenu();
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find.byKey(const Key('shared-reader-bottom-action-display')),
+  );
+  await tester.pumpAndSettle();
+  final mode = find.byKey(const Key('novel-reader-flow-mode-control'));
+  final control = tester.widget<ReaderSegmentControl<NovelReaderFlowMode>>(
+    mode,
+  );
+  final choice = find.descendant(
+    of: mode,
+    matching: find.text(control.labelBuilder(target)),
+  );
+  await tester.ensureVisible(choice);
+  await tester.pumpAndSettle();
+  await tester.tap(choice);
+  await tester.pumpAndSettle();
+  Navigator.of(tester.element(mode)).pop();
 }
 
 Future<void> _pumpBodyWithoutAdvancingTime(

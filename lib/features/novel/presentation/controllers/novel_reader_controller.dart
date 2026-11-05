@@ -265,6 +265,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       const DefaultNovelReaderPreferenceImpactAnalyzer();
   String? _pendingBeginningCommitEpisodeId;
   bool _isPagedRestoreReadOnly = false;
+  NovelReadingSessionToken? _passiveVerticalMode;
   NovelReaderSourceHandoff? _activeSourceHandoff;
   int _activeSessionToken = 0;
   final _readingSession = NovelReadingSessionCoordinator();
@@ -723,6 +724,10 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     if (current == null) {
       return;
     }
+    if (_isPassiveVerticalMode) {
+      if (!userNavigation) return;
+      _passiveVerticalMode = null;
+    }
     final snapshot =
         bodySnapshot ??
         _progressPolicy.verticalSnapshot(
@@ -742,7 +747,8 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     NovelReaderProgressSnapshot? bodySnapshot,
   }) async {
     final current = state.value;
-    if (current == null ||
+    if (_isPassiveVerticalMode ||
+        current == null ||
         current.currentEpisode.episodeId != episodeId ||
         current.preferences.flowMode != NovelReaderFlowMode.vertical) {
       return;
@@ -839,8 +845,9 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     }
     // Exit also flushes the view state's snapshot. A passive compatibility
     // restore must keep the original row, even before its first position report.
-    if (current.preferences.flowMode != NovelReaderFlowMode.vertical &&
-        _isPagedRestoreReadOnly) {
+    if (current.preferences.flowMode == NovelReaderFlowMode.vertical
+        ? _isPassiveVerticalMode
+        : _isPagedRestoreReadOnly) {
       return;
     }
     final sessionToken = _activeSessionToken;
@@ -1450,6 +1457,16 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     if (token != null) _readingSession.cancelPendingCompletion(token);
   }
 
+  /// A mode preference can move the viewport without creating a new visit.
+  void preserveProgressOnEnteringVerticalMode() {
+    _passiveVerticalMode = _readingSession.session;
+    cancelPendingCompletion();
+  }
+
+  bool get _isPassiveVerticalMode =>
+      _passiveVerticalMode != null &&
+      identical(_passiveVerticalMode, _readingSession.session);
+
   void _prepareReadingAuthority({
     required bool userNavigation,
     bool readOnly = false,
@@ -1766,6 +1783,11 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     // Bind layout before reporting position and starting chapter-end proof.
     // A body built behind another route has no content-ready flush on return.
     _readingSession.updateGeometry(token, geometryIdentity);
+    if (current.preferences.flowMode == NovelReaderFlowMode.vertical &&
+        _isPassiveVerticalMode) {
+      _readingSession.cancelPendingCompletion(token);
+      return;
+    }
     if (bodySnapshot != null &&
         bodyReady &&
         restoreSettled &&

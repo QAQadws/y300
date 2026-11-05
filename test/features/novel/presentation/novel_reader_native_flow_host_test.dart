@@ -72,9 +72,11 @@ void main() {
                       onInteraction: () {},
                       onImageTap: (_) {},
                       onTextSelection: (_) {},
-                      restoreReflowOffset: (offset, isCurrent) =>
+                      restoreReflowOffset: (resolveOffset, isCurrent) =>
                           scroll.restore(
-                            (metrics) => isCurrent() ? offset : metrics.pixels,
+                            (metrics) => isCurrent()
+                                ? resolveOffset() ?? metrics.pixels
+                                : metrics.pixels,
                           ),
                       onReflowRestored: restored.add,
                     ),

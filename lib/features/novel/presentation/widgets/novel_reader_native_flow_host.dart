@@ -14,6 +14,7 @@ import '../../domain/models/novel_reader_marks.dart';
 import '../../domain/models/novel_reader_preferences.dart';
 import '../models/novel_reader_native_image_tap.dart';
 import '../models/novel_reader_native_prepared_chapter.dart';
+import '../models/novel_reader_native_source_location.dart';
 import '../models/novel_reader_native_text_selection.dart';
 import '../services/novel_reader_native_image_resources.dart';
 import '../services/novel_reader_native_flow_text_position.dart';
@@ -30,7 +31,7 @@ import '../services/novel_reader_pagination_demand.dart';
 import '../services/novel_reading_image_host.dart';
 
 typedef NovelReaderFlowOffsetRestore = Future<bool> Function(
-  double offset,
+  double? Function() resolveOffset,
   bool Function() isCurrent,
 );
 
@@ -61,6 +62,7 @@ final class NovelReaderNativeFlowHost extends StatefulWidget {
     required this.onTextSelection,
     this.idleScheduler,
     this.viewportInsets = EdgeInsets.zero,
+    this.initialSource,
     this.restoreReflowOffset,
     this.onReflowRestored,
   });
@@ -87,6 +89,7 @@ final class NovelReaderNativeFlowHost extends StatefulWidget {
   final ValueChanged<NovelReaderNativeTextSelection> onTextSelection;
   final NovelReaderPaginationIdleScheduler? idleScheduler;
   final EdgeInsets viewportInsets;
+  final NovelReaderNativeSourceLocation? initialSource;
   final NovelReaderFlowOffsetRestore? restoreReflowOffset;
   final ValueChanged<NovelReaderTextAnchor>? onReflowRestored;
 
@@ -117,6 +120,7 @@ final class NovelReaderNativeFlowHostState
   final _retiring = <_FlowRun>{};
   Object? _error;
   bool _emptyBody = false;
+  bool _initialSourceTaken = false;
   int _revision = 0;
   double? _lastScrollOffset;
 
@@ -216,6 +220,7 @@ final class NovelReaderNativeFlowHostState
         if (captureError != null) {
           _fail(run, captureError);
         } else {
+          _takeInitialSource(run);
           unawaited(_prepare(config, environment!, run));
         }
       });
@@ -457,6 +462,34 @@ final class NovelReaderNativeFlowHostState
   double _readableHeight(ScrollPosition position) =>
       position.viewportDimension - widget.viewportInsets.vertical;
 
+  void _takeInitialSource(_FlowRun run) {
+    final source = widget.initialSource;
+    final scroll = widget.scrollController;
+    if (_initialSourceTaken || source == null) return;
+    _initialSourceTaken = true;
+    if (widget.restoreReflowOffset == null ||
+        !scroll.hasClients ||
+        scroll.position.isScrollingNotifier.value) {
+      return;
+    }
+    final position = scroll.position;
+    _lastScrollOffset = position.pixels;
+    run.reflow = _FlowReflow((
+      identity: source.identity,
+      slice: null,
+      tablePath: source.tablePath,
+      anchor: source.anchor,
+      inset: Offset.zero,
+      scroll: position,
+      pixels: position.pixels,
+    ));
+  }
+
+  void cancelSourceRestore() {
+    _initialSourceTaken = true;
+    _cancelReflow();
+  }
+
   /// Capture the settled source before replacing the scrolling surface.
   Future<NovelReaderTextAnchor?> captureVisibleAnchor(
     NovelReaderPaginationCancellationToken token,
@@ -614,11 +647,9 @@ final class NovelReaderNativeFlowHostState
       if (candidate != null) {
         final index = candidate.slice;
         final table = prefix[index].table;
-        final previous = _displayed;
-        final top = previous == null ? null : _bodyTop(previous);
         final bounds = candidate.bounds;
         final height = _readableHeight(scroll.position);
-        if (top == null || bounds.height > height) {
+        if (bounds.height > height) {
           _finishReflow(run, reflow);
           return false;
         }
@@ -628,10 +659,7 @@ final class NovelReaderNativeFlowHostState
         final y = focus.top - source.inset.dy.clamp(0.0, height - focus.height);
         reflow.target = (
           slice: index,
-          outer: math.max(
-            0.0,
-            top + run.extentBefore(index) + y - widget.viewportInsets.top,
-          ),
+          bodyOffset: run.extentBefore(index) + y - widget.viewportInsets.top,
           horizontal: table == null
               ? null
               : (bounds.left -
@@ -656,14 +684,12 @@ final class NovelReaderNativeFlowHostState
       _finishReflow(run, reflow);
       return false;
     }
-    final previous = _displayed;
-    final top = previous == null ? null : _bodyTop(previous);
-    if (top == null || scroll.position.isScrollingNotifier.value) {
+    if (scroll.position.isScrollingNotifier.value) {
       _finishReflow(run, reflow);
       return false;
     }
     if (!prefix.isComplete &&
-        top + run.extent < target.outer + scroll.position.viewportDimension) {
+        run.extent < target.bodyOffset + scroll.position.viewportDimension) {
       return true;
     }
     setState(() {
@@ -676,7 +702,10 @@ final class NovelReaderNativeFlowHostState
     final bool applied;
     try {
       applied = await reflow.token.waitFor(
-        widget.restoreReflowOffset!(target.outer, current),
+        widget.restoreReflowOffset!(() {
+          final top = _bodyTop(run);
+          return top == null ? null : top + target.bodyOffset;
+        }, current),
       );
     } on Object {
       if (current()) _finishReflow(run, reflow);
@@ -1068,7 +1097,7 @@ final class NovelReaderNativeFlowHostState
 
 typedef _FlowSourcePosition = ({
   ForumBodyIdentity identity,
-  int slice,
+  int? slice,
   String? tablePath,
   NovelReaderTextAnchor anchor,
   Offset inset,
@@ -1081,7 +1110,7 @@ final class _FlowReflow {
 
   final _FlowSourcePosition source;
   final token = NovelReaderPaginationCancellationToken();
-  ({int slice, double outer, double? horizontal, Rect focus})? target;
+  ({int slice, double bodyOffset, double? horizontal, Rect focus})? target;
   bool offsetApplied = false;
   bool verifying = false;
 }
