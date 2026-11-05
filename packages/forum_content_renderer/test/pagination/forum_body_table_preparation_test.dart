@@ -632,6 +632,10 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(readiness, [true]);
+    final boundary = tester.renderObject<RenderForumBodyFlowBoundary>(
+      find.byType(ForumBodyFlowSliver),
+    );
+    expect(boundary.finalBoundaryKnown, isFalse);
     expect(session.activeIssuedFragments, 1);
     final table = find.byType(ForumBodyTableFlowViewport);
     expect(table, findsNothing);
@@ -640,6 +644,7 @@ void main() {
     _advanceBook(session, 3);
     prefix.value = session.snapshot;
     await tester.pumpAndSettle();
+    expect(boundary.finalBoundaryKnown, isTrue);
     final height = prefix.value.fold<double>(
       0,
       (sum, page) => sum + page.usedHeight,
@@ -673,10 +678,12 @@ void main() {
     width.value = 90;
     await tester.pumpAndSettle();
     expect(readiness.last, isFalse);
+    expect(boundary.finalBoundaryKnown, isFalse);
     expect(tester.getSize(table).width, 100);
     width.value = 100;
     await tester.pumpAndSettle();
     expect(readiness.last, isTrue);
+    expect(boundary.finalBoundaryKnown, isTrue);
     expect(returned.horizontalController.offset, 80);
     expect(errors, isEmpty);
     await tester.pumpWidget(const SizedBox.shrink());

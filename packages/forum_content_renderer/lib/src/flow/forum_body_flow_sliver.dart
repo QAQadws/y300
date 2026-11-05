@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show precisionErrorTolerance;
-import 'package:flutter/rendering.dart' show GrowthDirection, SliverConstraints;
+import 'package:flutter/rendering.dart'
+    show GrowthDirection, RenderProxySliver, SliverConstraints;
 import 'package:flutter/widgets.dart';
 
 import '../pagination/forum_body_prepared_text_fragment.dart';
@@ -30,6 +31,7 @@ final class ForumBodyFlowSliver extends StatefulWidget {
     required this.prefix,
     required this.buildSlice,
     required this.onFailure,
+    this.isCurrentLayout = true,
     this.onReadyChanged,
     this.onTableWindowChanged,
   });
@@ -38,6 +40,7 @@ final class ForumBodyFlowSliver extends StatefulWidget {
   final ForumBodyTextPageSnapshot prefix;
   final ForumBodyFlowSliceBuilder buildSlice;
   final void Function(Object error, StackTrace stackTrace) onFailure;
+  final bool isCurrentLayout;
   final ValueChanged<bool>? onReadyChanged;
   final void Function(int slice, ForumBodyTableVisibleWindow? window)?
   onTableWindowChanged;
@@ -278,37 +281,41 @@ final class _ForumBodyFlowSliverState extends State<ForumBodyFlowSliver> {
   }
 
   @override
-  Widget build(BuildContext context) => SliverLayoutBuilder(
-    builder: (context, constraints) {
-      _updateVisible(constraints);
-      final body = Stack(
-        children: [
-          for (final entry in _ready.entries)
-            Positioned(
-              key: ObjectKey(entry.value),
-              top: _top(entry.key),
-              left: 0,
-              right: 0,
-              height: widget.prefix[entry.key].usedHeight,
-              child: _slice(context, entry.key, entry.value),
-            ),
-        ],
-      );
-      return SliverToBoxAdapter(
-        child: SizedBox(
-          height: _extent,
-          child: ClipRect(
-            // A resize can temporarily retain an older measured prefix.
-            child: OverflowBox(
-              alignment: Alignment.topLeft,
-              minWidth: widget.prefix.width,
-              maxWidth: widget.prefix.width,
-              child: body,
+  Widget build(BuildContext context) => _FlowExtentBoundary(
+    width: widget.prefix.width,
+    complete: widget.prefix.isComplete && widget.isCurrentLayout,
+    child: SliverLayoutBuilder(
+      builder: (context, constraints) {
+        _updateVisible(constraints);
+        final body = Stack(
+          children: [
+            for (final entry in _ready.entries)
+              Positioned(
+                key: ObjectKey(entry.value),
+                top: _top(entry.key),
+                left: 0,
+                right: 0,
+                height: widget.prefix[entry.key].usedHeight,
+                child: _slice(context, entry.key, entry.value),
+              ),
+          ],
+        );
+        return SliverToBoxAdapter(
+          child: SizedBox(
+            height: _extent,
+            child: ClipRect(
+              // A resize can temporarily retain an older measured prefix.
+              child: OverflowBox(
+                alignment: Alignment.topLeft,
+                minWidth: widget.prefix.width,
+                maxWidth: widget.prefix.width,
+                child: body,
+              ),
             ),
           ),
-        ),
-      );
-    },
+        );
+      },
+    ),
   );
 
   Widget _slice(BuildContext context, int index, _FlowDelivery delivery) {
@@ -364,6 +371,57 @@ final class _ForumBodyFlowSliverState extends State<ForumBodyFlowSliver> {
     _unlisten();
     _clear();
     super.dispose();
+  }
+}
+
+final class _FlowExtentBoundary extends SingleChildRenderObjectWidget {
+  const _FlowExtentBoundary({
+    required this.width,
+    required this.complete,
+    required super.child,
+  });
+
+  final double width;
+  final bool complete;
+
+  @override
+  RenderForumBodyFlowBoundary createRenderObject(BuildContext context) =>
+      RenderForumBodyFlowBoundary._(width, complete);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    RenderForumBodyFlowBoundary renderObject,
+  ) => renderObject._update(width, complete);
+}
+
+/// Exposes the terminal extent laid out by [ForumBodyFlowSliver]. An append-only
+/// prefix has an exact extent of its own but is not necessarily the whole body.
+final class RenderForumBodyFlowBoundary extends RenderProxySliver {
+  RenderForumBodyFlowBoundary._(this._width, this._complete);
+
+  double _width;
+  bool _complete;
+  bool _finalBoundaryKnown = false;
+
+  bool get finalBoundaryKnown => _finalBoundaryKnown;
+
+  void _update(double width, bool complete) {
+    if (_width == width && _complete == complete) return;
+    _width = width;
+    _complete = complete;
+    _finalBoundaryKnown = false;
+    markNeedsLayout();
+  }
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    _finalBoundaryKnown =
+        _complete &&
+        (constraints.crossAxisExtent - _width).abs() <=
+            precisionErrorTolerance &&
+        geometry?.scrollExtent.isFinite == true;
   }
 }
 

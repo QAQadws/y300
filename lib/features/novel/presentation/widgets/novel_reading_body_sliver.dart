@@ -3,9 +3,10 @@ import 'dart:math' as math;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/novel/domain/models/novel_reading_body_geometry.dart';
 
-/// Observes the already laid-out HTML sliver without building distant content.
+/// Observes the already laid-out body sliver without building distant content.
 class NovelReadingBodySliver extends SingleChildRenderObjectWidget {
   const NovelReadingBodySliver({
     super.key,
@@ -157,6 +158,9 @@ bool _finalBoundaryLaidOut(RenderSliver sliver) {
   }
   if (sliver is RenderSliverToBoxAdapter) {
     return sliver.child?.hasSize == true;
+  }
+  if (sliver is RenderForumBodyFlowBoundary) {
+    return sliver.finalBoundaryKnown;
   }
   if (sliver is RenderProxySliver) {
     final child = sliver.child;
