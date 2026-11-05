@@ -2,6 +2,77 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test(
+    'source intervals project whole glyphs in a restricted display window',
+    () {
+      final projection = HtmlDisplayTextProjection.build(const [
+        HtmlDisplayTextRun(text: 'A\t  🦊e', sourceRuneStart: 3),
+        HtmlDisplayTextRun(text: '\u0301', sourceRuneStart: 9),
+        HtmlDisplayTextRun(text: 'B', sourceRuneStart: 14),
+      ]);
+      expect(projection.text, 'A 🦊e\u0301B');
+      final windows = projection
+          .graphemeRanges(startUtf16: 0, endUtf16: projection.text.length)
+          .toList();
+      final boundaries = [0, ...windows.map((glyph) => glyph.endUtf16)];
+      for (final start in boundaries) {
+        for (final end in boundaries.where((offset) => offset >= start)) {
+          for (var from = 0; from <= 15; from++) {
+            for (var to = from; to <= 15; to++) {
+              final actual = projection.displayRangesInSource(
+                sourceStart: from,
+                sourceEnd: to,
+                startUtf16: start,
+                endUtf16: end,
+              );
+              final expected = windows.where((glyph) {
+                final source = projection.sourceEnvelope(
+                  startUtf16: glyph.startUtf16,
+                  endUtf16: glyph.endUtf16,
+                )!;
+                return glyph.startUtf16 >= start &&
+                    glyph.endUtf16 <= end &&
+                    source.runeStart >= from &&
+                    source.runeEnd <= to;
+              });
+              expect(
+                actual.expand(
+                  (span) => projection.graphemeRanges(
+                    startUtf16: span.startUtf16,
+                    endUtf16: span.endUtf16,
+                  ),
+                ),
+                expected,
+              );
+            }
+          }
+        }
+      }
+    },
+  );
+
+  test('source lookup preserves the display order of rearranged contexts', () {
+    HtmlDisplayTextSegment segment(String text, int start) =>
+        HtmlDisplayTextSegment(
+          HtmlDisplayTextProjection.build([
+            HtmlDisplayTextRun(text: text, sourceRuneStart: start),
+          ]),
+        );
+    final projection = HtmlDisplayTextProjection.concatenate(
+      [segment('後', 3), segment('外', 0), segment('前', 2)],
+      sourceOrder: const [1, 2, 0],
+    );
+    expect(
+      projection.displayRangesInSource(
+        sourceStart: 2,
+        sourceEnd: 4,
+        startUtf16: 0,
+        endUtf16: 3,
+      ),
+      [(startUtf16: 0, endUtf16: 1), (startUtf16: 2, endUtf16: 3)],
+    );
+  });
+
   for (final mode in HtmlDisplayWhiteSpace.values) {
     test('forced-break suppression preserves source and styles ($mode)', () {
       final runs = [

@@ -521,6 +521,78 @@ final class HtmlDisplayTextProjection {
     }
   }
 
+  /// Contiguous display spans made of whole graphemes contained in the
+  /// half-open source interval. Offsets in a collapsed space or grapheme
+  /// never select part of it. Reordered contexts retain their display order.
+  Iterable<({int startUtf16, int endUtf16})> displayRangesInSource({
+    required int sourceStart,
+    required int sourceEnd,
+    required int startUtf16,
+    required int endUtf16,
+  }) sync* {
+    if (sourceStart < 0 || sourceEnd < sourceStart) {
+      throw ArgumentError('Invalid source range');
+    }
+    RangeError.checkValidRange(startUtf16, endUtf16, text.length);
+    final first = _lowerBound(_graphemeBoundaries, startUtf16);
+    final last = _lowerBound(_graphemeBoundaries, endUtf16);
+    if (_graphemeBoundaries[first] != startUtf16 ||
+        _graphemeBoundaries[last] != endUtf16) {
+      throw ArgumentError(
+        'Display range endpoints must be grapheme boundaries',
+      );
+    }
+    if (sourceStart == sourceEnd || first == last) return;
+
+    if (_sourceIsOrdered) {
+      final from =
+          _utf16Starts[_findRuneBoundary((rune) => rune.start < sourceStart)];
+      final to =
+          _utf16Starts[_findRuneBoundary((rune) => rune.end <= sourceEnd)];
+      if (to <= startUtf16 || from >= endUtf16 || to <= from) return;
+      final start = from <= startUtf16
+          ? startUtf16
+          : _graphemeBoundaries[_lowerBound(_graphemeBoundaries, from)];
+      final end = to >= endUtf16
+          ? endUtf16
+          : sourceAtUtf16(
+              to,
+              affinity: HtmlProjectionAffinity.upstream,
+            ).displayUtf16;
+      if (start < end) yield (startUtf16: start, endUtf16: end);
+      return;
+    }
+
+    int? start;
+    for (var index = first; index < last; index++) {
+      final from = _graphemeBoundaries[index];
+      final bounds = sourceEnvelope(
+        startUtf16: from,
+        endUtf16: _graphemeBoundaries[index + 1],
+      )!;
+      if (sourceStart <= bounds.runeStart && bounds.runeEnd <= sourceEnd) {
+        start ??= from;
+      } else if (start != null) {
+        yield (startUtf16: start, endUtf16: from);
+        start = null;
+      }
+    }
+    if (start != null) yield (startUtf16: start, endUtf16: endUtf16);
+  }
+
+  int _findRuneBoundary(bool Function(_ProjectedRune) before) {
+    var low = 0, high = _runes.length;
+    while (low < high) {
+      final middle = (low + high) >> 1;
+      if (before(_runes[middle])) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    return low;
+  }
+
   HtmlProjectedSourcePosition sourceAtUtf16(
     int offset, {
     HtmlProjectionAffinity affinity = HtmlProjectionAffinity.downstream,
