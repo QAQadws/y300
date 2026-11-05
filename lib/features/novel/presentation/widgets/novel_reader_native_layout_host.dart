@@ -1094,9 +1094,13 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         header.expanded != fold.expanded) {
       return;
     }
-    final fragments = view.snapshot[view.pageIndex].fragments;
-    final index = fragments.indexOf(fragment);
-    if (index < 0) return;
+    final page = view.snapshot[view.pageIndex];
+    final index = page.fragments.indexOf(fragment);
+    final tablePath = page.table?.path;
+    if (index < 0 &&
+        (tablePath == null || !header.titlePath.startsWith('$tablePath/'))) {
+      return;
+    }
 
     final anchor = request.confirmed?.anchor;
     final location = anchor == null ? null : view.coverage.locate(anchor);
@@ -1649,7 +1653,8 @@ class _LayoutRequest {
     if (session.activeIssuedLeases != 0 ||
         session.reservedViewLeases != 0 ||
         session.activeIssuedFragments != 0 ||
-        session.reservedViewFragments != 0) {
+        session.reservedViewFragments != 0 ||
+        session.activeIssuedTablePages != 0) {
       return false;
     }
     close();

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show precisionErrorTolerance;
 import 'package:flutter/widgets.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
+import 'package:y300/features/library_shared/presentation/reader/reader_tap_zones.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_paged_turn_motion.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
@@ -34,6 +35,15 @@ typedef NovelReaderNativeCollapseToggle = void Function(
   NovelReaderNativePageView,
   ForumBodyTextPageFragment,
 );
+
+typedef _DisplayedLayout = ({
+  NovelReaderNativePagedController controller,
+  double width,
+  double height,
+  int page,
+  Color? background,
+  ForumHtmlImageHost? imageHost,
+});
 
 /// Native page mounting and gesture boundary. The Host owns controllers,
 /// sessions and the paragraph cache, and supplies loading/recovery chrome.
@@ -104,15 +114,8 @@ class NovelReaderNativePagedViewport extends StatefulWidget {
 class _NovelReaderNativePagedViewportState
     extends State<NovelReaderNativePagedViewport> {
   StreamSubscription<void>? _changes;
-  ({
-    NovelReaderNativePagedController controller,
-    double width,
-    double height,
-    int page,
-    Color? background,
-    ForumHtmlImageHost? imageHost,
-  })?
-  _displayed;
+  _DisplayedLayout? _displayed;
+  _DisplayedLayout? _stagedTable;
   int _binding = 0;
   int _hintRevision = 0;
   NovelReaderChapterTurnHint? _hint;
@@ -144,6 +147,7 @@ class _NovelReaderNativePagedViewportState
     if (ownerChanged) _displayed = null;
     if (controllerChanged) {
       _binding++;
+      _stagedTable = null;
       _unbind();
       _bind();
     }
@@ -205,18 +209,27 @@ class _NovelReaderNativePagedViewportState
 
   void _selectDisplay() {
     final controller = widget.controller;
-    if (!controller.isClosed &&
-        controller.readyTarget?.view.isReady == true &&
+    final target = controller.readyTarget;
+    if (_stagedTable != null && (controller.isClosed || target == null)) {
+      _stagedTable = null;
+    }
+    if (target?.view.isReady == true &&
         !identical(_displayed?.controller, controller)) {
       final snapshot = controller.snapshot!;
-      _displayed = (
+      final replacement = (
         controller: controller,
         width: snapshot.width,
         height: snapshot.height,
-        page: controller.readyTarget!.pageIndex,
+        page: target!.pageIndex,
         background: widget.backgroundColor,
         imageHost: widget.imageHost,
       );
+      if (_displayed != null && snapshot[target.pageIndex].table != null) {
+        _stagedTable = replacement;
+      } else {
+        _stagedTable = null;
+        _displayed = replacement;
+      }
     }
   }
 
@@ -224,94 +237,128 @@ class _NovelReaderNativePagedViewportState
   Widget build(BuildContext context) {
     final displayed = _displayed;
     if (displayed == null) return widget.placeholder;
+    final staged = _stagedTable;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        _layout(displayed, staged: false),
+        if (staged != null) _layout(staged, staged: true),
+      ],
+    );
+  }
+
+  Widget _layout(_DisplayedLayout displayed, {required bool staged}) {
     // Capture the box and initial page when offered: source failure/retirement
     // can remove the proposal or snapshot before the next Widget build.
     final frozen =
+        staged ||
         !widget.active ||
         widget.controller.isSuspended ||
         !identical(displayed.controller, widget.controller);
-    return _NativeLayoutViewport(
+    return Offstage(
       key: ObjectKey(displayed.controller),
-      controller: displayed.controller,
-      width: displayed.width,
-      height: displayed.height,
-      initialPage: displayed.page,
-      backgroundColor: displayed.background,
-      imageHost: displayed.imageHost,
-      onPageUnmounted: widget.onPageUnmounted,
-      onImageLayoutResolved: widget.onImageLayoutResolved,
-      onInlineImageLayoutResolved: widget.onInlineImageLayoutResolved,
-      onImageTap: widget.onImageTap == null
-          ? null
-          : (fragment, binding, isCurrent) {
-              if (frozen ||
-                  !widget.active ||
-                  !identical(displayed.controller, widget.controller)) {
-                return;
-              }
-              final displayRevision = _binding;
-              widget.onImageTap!(
-                fragment,
-                binding,
-                () =>
-                    mounted &&
-                    displayRevision == _binding &&
-                    identical(displayed.controller, widget.controller) &&
-                    identical(displayed.imageHost, widget.imageHost) &&
-                    isCurrent(),
-              );
-            },
-      frozen: frozen,
-      onCollapseToggle: frozen || widget.onCollapseToggle == null
-          ? null
-          : (view, fragment) {
-              if (mounted &&
-                  widget.active &&
-                  identical(displayed.controller, widget.controller)) {
-                widget.onCollapseToggle?.call(view, fragment);
-              }
-            },
-      reverse: widget.reverse,
-      navigationController: widget.navigationController,
-      onTurnToAdjacentChapter: widget.onTurnToAdjacentChapter,
-      chapterTurnIsInFlight: widget.chapterTurnIsInFlight,
-      previousChapterTitle: widget.previousChapterTitle,
-      nextChapterTitle: widget.nextChapterTitle,
-      chapterTurnPolicy: widget.chapterTurnPolicy,
-      onChapterTurnHintChanged: (hint) {
-        if (identical(displayed.controller, widget.controller) &&
-            (hint == null || !frozen)) {
-          _publishHint(hint);
-        }
-      },
-      placeholder: widget.placeholder,
-      onScrollActivityChanged: (scrolling) {
-        if (identical(displayed.controller, widget.controller)) {
-          widget.onScrollActivityChanged?.call(widget.active && scrolling);
-        }
-      },
-      onPositionChanged: (position) {
-        if (identical(displayed.controller, widget.controller) && !frozen) {
-          widget.onPositionChanged?.call(position);
-        }
-      },
-      onTextSelection: widget.onTextSelection == null
-          ? null
-          : (selection) {
-              if (frozen ||
-                  !identical(displayed.controller, widget.controller)) {
-                return;
-              }
-              widget.onTextSelection!(
-                NovelReaderNativeTextSelection(
-                  selection.snapshot,
+      offstage: staged,
+      child: _NativeLayoutViewport(
+        controller: displayed.controller,
+        width: displayed.width,
+        height: displayed.height,
+        initialPage: displayed.page,
+        backgroundColor: displayed.background,
+        imageHost: displayed.imageHost,
+        onPageUnmounted: widget.onPageUnmounted,
+        onImageLayoutResolved: widget.onImageLayoutResolved,
+        onInlineImageLayoutResolved: widget.onInlineImageLayoutResolved,
+        onImageTap: widget.onImageTap == null
+            ? null
+            : (fragment, binding, isCurrent) {
+                if (frozen ||
+                    !widget.active ||
+                    !identical(displayed.controller, widget.controller)) {
+                  return;
+                }
+                final displayRevision = _binding;
+                widget.onImageTap!(
+                  fragment,
+                  binding,
                   () =>
                       mounted &&
+                      displayRevision == _binding &&
                       identical(displayed.controller, widget.controller) &&
-                      selection.isCurrent,
-                ),
-              );
-            },
+                      identical(displayed.imageHost, widget.imageHost) &&
+                      isCurrent(),
+                );
+              },
+        frozen: frozen,
+        onCollapseToggle: frozen || widget.onCollapseToggle == null
+            ? null
+            : (view, fragment) {
+                if (mounted &&
+                    widget.active &&
+                    identical(displayed.controller, widget.controller)) {
+                  widget.onCollapseToggle?.call(view, fragment);
+                }
+              },
+        reverse: widget.reverse,
+        navigationController: staged ? null : widget.navigationController,
+        onTablePresented: staged
+            ? (view) {
+                if (!mounted ||
+                    !widget.active ||
+                    displayed.controller.isSuspended ||
+                    !identical(
+                      _stagedTable?.controller,
+                      displayed.controller,
+                    ) ||
+                    !identical(displayed.controller, widget.controller) ||
+                    !identical(displayed.controller.readyTarget?.view, view)) {
+                  return;
+                }
+                setState(() {
+                  _displayed = _stagedTable;
+                  _stagedTable = null;
+                });
+              }
+            : null,
+        onTurnToAdjacentChapter: widget.onTurnToAdjacentChapter,
+        chapterTurnIsInFlight: widget.chapterTurnIsInFlight,
+        previousChapterTitle: widget.previousChapterTitle,
+        nextChapterTitle: widget.nextChapterTitle,
+        chapterTurnPolicy: widget.chapterTurnPolicy,
+        onChapterTurnHintChanged: (hint) {
+          if (identical(displayed.controller, widget.controller) &&
+              (hint == null || !frozen)) {
+            _publishHint(hint);
+          }
+        },
+        placeholder: widget.placeholder,
+        onScrollActivityChanged: (scrolling) {
+          if (identical(displayed.controller, widget.controller)) {
+            widget.onScrollActivityChanged?.call(widget.active && scrolling);
+          }
+        },
+        onPositionChanged: (position) {
+          if (identical(displayed.controller, widget.controller) && !frozen) {
+            widget.onPositionChanged?.call(position);
+          }
+        },
+        onTextSelection: widget.onTextSelection == null
+            ? null
+            : (selection) {
+                if (frozen ||
+                    !identical(displayed.controller, widget.controller)) {
+                  return;
+                }
+                widget.onTextSelection!(
+                  NovelReaderNativeTextSelection(
+                    selection.snapshot,
+                    () =>
+                        mounted &&
+                        identical(displayed.controller, widget.controller) &&
+                        selection.isCurrent,
+                  ),
+                );
+              },
+      ),
     );
   }
 
@@ -331,7 +378,6 @@ class _NovelReaderNativePagedViewportState
 
 class _NativeLayoutViewport extends StatefulWidget {
   const _NativeLayoutViewport({
-    super.key,
     required this.controller,
     required this.width,
     required this.height,
@@ -356,6 +402,7 @@ class _NativeLayoutViewport extends StatefulWidget {
     required this.onInlineImageLayoutResolved,
     required this.onImageTap,
     required this.onCollapseToggle,
+    required this.onTablePresented,
   });
   final NovelReaderNativePagedController controller;
   final ForumHtmlImageHost? imageHost;
@@ -364,6 +411,7 @@ class _NativeLayoutViewport extends StatefulWidget {
   final NovelReaderNativeInlineImageLayoutResolved? onInlineImageLayoutResolved;
   final NovelReaderNativeImageTapHandler? onImageTap;
   final NovelReaderNativeCollapseToggle? onCollapseToggle;
+  final ValueChanged<NovelReaderNativePageView>? onTablePresented;
   final double width;
   final double height;
   final int initialPage;
@@ -394,6 +442,9 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
   StreamSubscription<void>? _changes;
   final _mountedPages =
       <NovelReaderNativePageView, List<ForumBodyPreparedTextFragment>>{};
+  final _tableMounts = <NovelReaderNativePageView, ForumBodyTablePageLease>{};
+  final _readyTables = <NovelReaderNativePageView>{};
+  final _tableOffsets = <int, Offset>{};
   int _page = 0;
   int _frame = 0;
   bool _scrolling = false;
@@ -481,7 +532,7 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
         hold?.cancel();
       }
     }
-    if (!widget.frozen) _afterFrame();
+    if (!widget.frozen || widget.onTablePresented != null) _afterFrame();
   }
 
   int? get _settledCommandPage {
@@ -751,7 +802,20 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
   void _afterFrame() {
     final frame = ++_frame;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || frame != _frame || widget.frozen) return;
+      if (!mounted || frame != _frame) return;
+      final presented = widget.onTablePresented;
+      if (presented != null) {
+        final target = widget.controller.readyTarget;
+        if (target == null || !_fits || !_pages.hasClients) return;
+        if (_pages.page != target.pageIndex) {
+          _pages.jumpToPage(target.pageIndex);
+          _afterFrame();
+        } else if (_readyTables.contains(target.view)) {
+          presented(target.view);
+        }
+        return;
+      }
+      if (widget.frozen) return;
       _reconcileTapTurn();
       _reconcileChapterDrag();
       _resetTapPosition();
@@ -788,8 +852,16 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
         return;
       }
       final fragments = _mountedPages[target.view];
-      if (fragments == null) return;
-      final position = controller.confirmPreparedVisible(target, fragments);
+      final table = _tableMounts[target.view];
+      if (fragments == null ||
+          (table != null && !_readyTables.contains(target.view))) {
+        return;
+      }
+      final position = controller.confirmPreparedVisible(
+        target,
+        fragments,
+        table: table,
+      );
       if (position != null) {
         _tapTurn = null;
         widget.onPositionChanged(position);
@@ -888,13 +960,37 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
   void _mounted(
     NovelReaderNativePageView view,
     List<ForumBodyPreparedTextFragment> fragments,
+    ForumBodyTablePageLease? table,
   ) {
     _mountedPages[view] = fragments;
-    _afterFrame();
+    if (table == null) {
+      _afterFrame();
+    } else {
+      _tableMounts[view] = table;
+    }
+  }
+
+  void _tableReady(NovelReaderNativePageView view, bool ready) {
+    if (!_tableMounts.containsKey(view)) return;
+    if (ready) {
+      _readyTables.add(view);
+      _afterFrame();
+    } else {
+      _readyTables.remove(view);
+    }
+  }
+
+  void _tableFailed(NovelReaderNativePageView view, Object error) {
+    final table = _tableMounts[view];
+    if (table != null) {
+      widget.controller.reportTablePresentationFailure(view, table, error);
+    }
   }
 
   void _unmounted(NovelReaderNativePageView view) {
     _mountedPages.remove(view);
+    _tableMounts.remove(view);
+    _readyTables.remove(view);
     widget.controller.forgetPage(view.pageIndex, view);
     widget.onPageUnmounted?.call();
   }
@@ -934,12 +1030,13 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
     if (tap == null ||
         widget.frozen ||
         fragments == null ||
-        !fragments.any(
-          (mounted) =>
-              identical(mounted, fragment) ||
-              (mounted is ForumBodyPreparedListItemFragment &&
-                  identical(mounted.body, fragment)),
-        )) {
+        (!_tableMounts.containsKey(view) &&
+            !fragments.any(
+              (mounted) =>
+                  identical(mounted, fragment) ||
+                  (mounted is ForumBodyPreparedListItemFragment &&
+                      identical(mounted.body, fragment)),
+            ))) {
       return;
     }
     bool current() =>
@@ -1029,10 +1126,17 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
                               page == _tapTurn?.to,
                           onMounted: _mounted,
                           onUnmounted: _unmounted,
+                          onTableReadyChanged: (ready) =>
+                              _tableReady(view, ready),
+                          onTableFailure: (error) => _tableFailed(view, error),
+                          initialTableOffset:
+                              _tableOffsets[page] ?? Offset.zero,
+                          onTableOffsetChanged: (offset) =>
+                              _tableOffsets[page] = offset,
                           onTextSelection:
                               widget.frozen || widget.onTextSelection == null
                               ? null
-                              : (snapshot) {
+                              : (snapshot, isCurrent) {
                                   if (widget.frozen ||
                                       _scrolling ||
                                       _page != page ||
@@ -1049,6 +1153,7 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
                                           !controller.isClosed &&
                                           _page == page &&
                                           _mountedPages.containsKey(view) &&
+                                          isCurrent() &&
                                           fragments.every(
                                             (fragment) => fragment.isActive,
                                           ),
@@ -1109,6 +1214,10 @@ class _NativeMountedPage extends StatefulWidget {
     required this.onInlineImageLayoutResolved,
     required this.onImageTap,
     required this.onCollapseToggle,
+    required this.onTableReadyChanged,
+    required this.onTableFailure,
+    required this.initialTableOffset,
+    required this.onTableOffsetChanged,
   });
   final NovelReaderNativePageView view;
   final ForumHtmlImageHost? imageHost;
@@ -1125,10 +1234,16 @@ class _NativeMountedPage extends StatefulWidget {
   final void Function(
     NovelReaderNativePageView,
     List<ForumBodyPreparedTextFragment>,
+    ForumBodyTablePageLease?,
   )
   onMounted;
   final ValueChanged<NovelReaderNativePageView> onUnmounted;
-  final ValueChanged<ForumBodyTextSelectionSnapshot>? onTextSelection;
+  final void Function(ForumBodyTextSelectionSnapshot, bool Function())?
+  onTextSelection;
+  final ValueChanged<bool> onTableReadyChanged;
+  final ValueChanged<Object> onTableFailure;
+  final Offset initialTableOffset;
+  final ValueChanged<Offset> onTableOffsetChanged;
 
   @override
   State<_NativeMountedPage> createState() => _NativeMountedPageState();
@@ -1137,12 +1252,34 @@ class _NativeMountedPage extends StatefulWidget {
 class _NativeMountedPageState extends State<_NativeMountedPage>
     with AutomaticKeepAliveClientMixin {
   late final List<ForumBodyPreparedTextFragment> _fragments;
+  ForumBodyTablePageLease? _table;
+  ScrollController? _tableHorizontal, _tableVertical;
 
   @override
   void initState() {
     super.initState();
-    _fragments = widget.view.takeFragments();
-    widget.onMounted(widget.view, _fragments);
+    final mount = widget.view.takeMount();
+    _fragments = mount.fragments;
+    _table = mount.table;
+    if (_table != null) {
+      final offset = widget.initialTableOffset;
+      _tableHorizontal = ScrollController(
+        initialScrollOffset: offset.dx,
+        keepScrollOffset: false,
+      )..addListener(_tableScrolled);
+      _tableVertical = ScrollController(
+        initialScrollOffset: offset.dy,
+        keepScrollOffset: false,
+      )..addListener(_tableScrolled);
+    }
+    widget.onMounted(widget.view, _fragments, _table);
+  }
+
+  void _tableScrolled() {
+    final horizontal = _tableHorizontal!, vertical = _tableVertical!;
+    if (horizontal.hasClients && vertical.hasClients) {
+      widget.onTableOffsetChanged(Offset(horizontal.offset, vertical.offset));
+    }
   }
 
   @override
@@ -1161,14 +1298,51 @@ class _NativeMountedPageState extends State<_NativeMountedPage>
       return const SizedBox.shrink();
     }
     final view = widget.view;
+    final table = _table;
+    final surface = _buildSurface(view.snapshot, view.pageIndex, _fragments);
+    if (table == null) return surface;
+    if (!table.isActive) return const SizedBox.shrink();
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        surface,
+        Positioned.fromRect(
+          rect: view.snapshot[view.pageIndex].table!.bounds,
+          child: ReaderOwnedTapRegion(
+            child: ForumBodyTableBookViewport(
+              layout: table.layout,
+              horizontalController: _tableHorizontal!,
+              verticalController: _tableVertical!,
+              onReadyChanged: widget.onTableReadyChanged,
+              onFailure: (error, _) => widget.onTableFailure(error),
+              buildSlice: (context, area, page, fragments) => _buildSurface(
+                area.snapshot,
+                page,
+                fragments,
+                compactHeight: true,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSurface(
+    ForumBodyTextPageSnapshot snapshot,
+    int page,
+    List<ForumBodyPreparedTextFragment> fragments, {
+    bool compactHeight = false,
+  }) {
     final l10n = widget.onCollapseToggle == null
         ? null
         : Localizations.of<AppLocalizations>(context, AppLocalizations);
     return ForumBodyTextPageSurface.prepared(
-      snapshot: view.snapshot,
-      pageIndex: view.pageIndex,
-      layoutId: view.snapshot.layoutId,
-      fragments: _fragments,
+      snapshot: snapshot,
+      pageIndex: page,
+      layoutId: snapshot.layoutId,
+      fragments: fragments,
+      compactHeight: compactHeight,
       imageHost: widget.imageHost,
       collapseLabels: l10n == null
           ? null
@@ -1194,12 +1368,18 @@ class _NativeMountedPageState extends State<_NativeMountedPage>
                 ?.call(widget.view, fragment, binding, layout),
       onSourceLongPress: widget.onTextSelection == null
           ? null
-          : (_, selection) => widget.onTextSelection!(selection),
+          : (_, selection) => widget.onTextSelection!(
+              selection,
+              () => mounted && fragments.every((fragment) => fragment.isActive),
+            ),
     );
   }
 
   @override
   void dispose() {
+    _tableHorizontal?.dispose();
+    _tableVertical?.dispose();
+    _table?.close();
     widget.onUnmounted(widget.view);
     // Surface normally releases these; also handle an abandoned/unpainted cell.
     for (final fragment in _fragments) {

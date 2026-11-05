@@ -4360,6 +4360,18 @@ abstract class AppLocalizations {
   /// **'上一页，第 {page} 页'**
   String novelPreviousPageSemantics(int page);
 
+  /// No description provided for @novelTablePreviousPage.
+  ///
+  /// In zh, this message translates to:
+  /// **'上一页'**
+  String get novelTablePreviousPage;
+
+  /// No description provided for @novelTableNextPage.
+  ///
+  /// In zh, this message translates to:
+  /// **'下一页'**
+  String get novelTableNextPage;
+
   /// No description provided for @novelPageIndicator.
   ///
   /// In zh, this message translates to:

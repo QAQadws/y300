@@ -1060,6 +1060,8 @@
   "@novelPageValue": {"placeholders": {"currentPage": {"type": "int"}, "totalPages": {"type": "String"}}},
   "novelNextPageSemantics": "下一页，第 {page} 页",
   "novelPreviousPageSemantics": "上一页，第 {page} 页",
+  "novelTablePreviousPage": "上一页",
+  "novelTableNextPage": "下一页",
   "@novelNextPageSemantics": {"placeholders": {"page": {"type": "int"}}},
   "@novelPreviousPageSemantics": {"placeholders": {"page": {"type": "int"}}},
   "novelPageIndicator": "{currentPage} / {totalPages}",

@@ -214,6 +214,111 @@ Future<void> _unmount(WidgetTester tester, _Reader reader) async {
 }
 
 void main() {
+  testWidgets('a native table owns its drag and keeps its offsets on return', (
+    tester,
+  ) async {
+    final reader = _Reader(
+      html:
+          '<p>before</p><table width="480" cellpadding="3">'
+          '<tr height="420"><td rowspan="2">first</td><td>right</td></tr>'
+          '<tr><td>tail</td></tr></table><p>after</p>',
+    );
+    await _show(tester, reader);
+    await tester.pumpAndSettle();
+    final controller = reader.statuses.last.controller!;
+    expect(controller.snapshot, hasLength(3));
+    expect(reader.positions.last.pageIndex, 0);
+    expect(reader.navigation.turnNext(), isTrue);
+    await tester.pumpAndSettle();
+    expect(reader.positions.last.pageIndex, 1);
+    expect(reader.positions.last.isWholeBodyVisible, isFalse);
+    final table = find.byType(ForumBodyTableBookViewport);
+    final next = find.byKey(const Key('novel-reader-table-next'));
+    expect(table, findsOneWidget);
+    expect(find.byTooltip(_l10n(tester).novelTableNextPage), findsOneWidget);
+    expect(
+      tester.getRect(table).bottom,
+      lessThanOrEqualTo(tester.getRect(next).top),
+    );
+    final viewport = tester.widget<ForumBodyTableBookViewport>(table);
+    final h = viewport.horizontalController, v = viewport.verticalController;
+    final maxX = h.position.maxScrollExtent, maxY = v.position.maxScrollExtent;
+    expect(maxX, greaterThan(0));
+    expect(maxY, greaterThan(0));
+    final oldCount = reader.positions.length;
+    h.jumpTo(maxX);
+    v.jumpTo(maxY);
+    await tester.pumpAndSettle();
+    await tester.drag(table, const Offset(-150, 0));
+    await tester.pumpAndSettle();
+    expect(reader.positions, hasLength(oldCount));
+    expect(reader.positions.last.pageIndex, 1);
+    expect(reader.edges, isEmpty);
+
+    await tester.tap(next);
+    await tester.pumpAndSettle();
+    expect(reader.positions.last.pageIndex, 2);
+    expect(reader.navigation.turnPrevious(), isTrue);
+    await tester.pumpAndSettle();
+    expect(reader.positions.last.pageIndex, 1);
+    final returned = tester.widget<ForumBodyTableBookViewport>(table);
+    expect(returned.horizontalController.offset, maxX);
+    expect(returned.verticalController.offset, maxY);
+    final previous = find.byKey(const Key('novel-reader-table-previous'));
+    await tester.tap(previous);
+    await tester.pumpAndSettle();
+    expect(reader.positions.last.pageIndex, 0);
+    await _unmount(tester, reader);
+  });
+
+  testWidgets(
+    'table reflow keeps the old layout painted until new cells mount',
+    (tester) async {
+      final reader = _Reader(
+        html: '<table><tr><td><ruby>A<rt>a</rt></ruby> actual body</td></tr></table>',
+      );
+      await _show(tester, reader);
+      await tester.pumpAndSettle();
+      final table = find.byType(ForumBodyTableBookViewport);
+      final old = tester.widget<ForumBodyTableBookViewport>(table).layout;
+      final original = reader.statuses.last.controller!;
+      final initialPositions = reader.positions.length;
+      await _show(
+        tester,
+        reader,
+        preferences: reader.preferences.copyWith(fontSize: 14),
+      );
+      var sawStaging = false;
+      for (
+        var i = 0;
+        i < 100 && reader.positions.length == initialPositions;
+        i++
+      ) {
+        await tester.pump(const Duration(milliseconds: 16));
+        final allTables = find.byType(
+          ForumBodyTableBookViewport,
+          skipOffstage: false,
+        );
+        if (allTables.evaluate().length == 2) {
+          sawStaging = true;
+          expect(
+            tester.widget<ForumBodyTableBookViewport>(table).layout,
+            same(old),
+          );
+          expect(old.isClosed, isFalse);
+        }
+      }
+      await tester.pumpAndSettle();
+      expect(sawStaging, isTrue);
+      expect(reader.statuses.last.controller, isNot(same(original)));
+      expect(reader.positions.length, greaterThan(initialPositions));
+      expect(reader.positions.last.isReadOnlyCompatibilityRestore, isTrue);
+      expect(old.isClosed, isTrue);
+      expect(reader.owner.activeCacheHandles, 1);
+      await _unmount(tester, reader);
+    },
+  );
+
   testWidgets(
     'shell activity suspends before a frame and rejects stale semantics through a frameless pause/resume',
     (tester) async {

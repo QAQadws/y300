@@ -282,6 +282,7 @@ final class NovelReaderNativeLayoutScope {
       layoutId: layoutId,
       limits: limits,
       collapses: collapses,
+      dedicatedTables: true,
       imageResolver: catalog?.resolve,
       inlineImageResolver: catalog == null
           ? null

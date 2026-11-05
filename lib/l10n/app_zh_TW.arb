@@ -969,6 +969,8 @@
   "novelPageValue": "第 {currentPage} 頁，共 {totalPages}",
   "novelNextPageSemantics": "下一頁，第 {page} 頁",
   "novelPreviousPageSemantics": "上一頁，第 {page} 頁",
+  "novelTablePreviousPage": "上一頁",
+  "novelTableNextPage": "下一頁",
   "novelPageIndicator": "{currentPage} / {totalPages}",
   "novelChapterTurnContinue": "{direction, select, next {繼續滑動進入下一章} previous {繼續滑動進入上一章} other {繼續滑動切換章節}}",
   "novelChapterTurnRelease": "{direction, select, next {鬆手進入下一章 · {title}} previous {鬆手進入上一章 · {title}} other {鬆手切換章節 · {title}}}",

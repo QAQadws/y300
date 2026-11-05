@@ -2603,6 +2603,12 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get novelTablePreviousPage => '上一页';
+
+  @override
+  String get novelTableNextPage => '下一页';
+
+  @override
   String novelPageIndicator(int currentPage, String totalPages) {
     return '$currentPage / $totalPages';
   }
@@ -8554,6 +8560,12 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String novelPreviousPageSemantics(int page) {
     return '上一頁，第 $page 頁';
   }
+
+  @override
+  String get novelTablePreviousPage => '上一頁';
+
+  @override
+  String get novelTableNextPage => '下一頁';
 
   @override
   String novelPageIndicator(int currentPage, String totalPages) {

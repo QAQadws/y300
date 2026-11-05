@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:y300/features/fonts/fonts.dart' show ResolvedFont;
 import 'package:y300/features/library_shared/presentation/reader/reader_models.dart';
+import 'package:y300/features/library_shared/presentation/reader/reader_tap_zones.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
@@ -269,6 +270,12 @@ class _NativePagedSurfaceState extends State<NovelReaderNativePagedSurface> {
     final document = widget.semanticDocument;
     final rawHtml = widget.rawHtml;
     final controller = _status?.controller;
+    final view = controller?.visibleView;
+    final showTableNavigation =
+        page != null &&
+        view != null &&
+        view.pageIndex == page &&
+        view.snapshot[view.pageIndex].table != null;
     bool currentContent() =>
         mounted &&
         _active &&
@@ -277,7 +284,7 @@ class _NativePagedSurfaceState extends State<NovelReaderNativePagedSurface> {
         episode == widget.episode.episodeId &&
         identical(document, widget.semanticDocument) &&
         rawHtml == widget.rawHtml;
-    void turnFromSemantics(bool forward) {
+    void turnCurrentPage(bool forward) {
       // A late accessibility action must not follow a shared command port into
       // a new owner/layout or a different actually confirmed page.
       if (!currentContent() ||
@@ -333,10 +340,10 @@ class _NativePagedSurfaceState extends State<NovelReaderNativePagedSurface> {
             : null,
         onIncrease:
             canNavigate && page != null && (page + 1 < count || !isFinal)
-            ? () => turnFromSemantics(true)
+            ? () => turnCurrentPage(true)
             : null,
         onDecrease: canNavigate && page != null && page > 0
-            ? () => turnFromSemantics(false)
+            ? () => turnCurrentPage(false)
             : null,
         child: Padding(
           key: const Key('novel-reader-native-paged-surface'),
@@ -459,6 +466,25 @@ class _NativePagedSurfaceState extends State<NovelReaderNativePagedSurface> {
                           isFinal: isFinal,
                           showIndicator:
                               widget.preferences.showProgressIndicator,
+                          showTableNavigation: showTableNavigation,
+                          reverse:
+                              widget.preferences.flowMode ==
+                              NovelReaderFlowMode.pagedRtl,
+                          onTablePrevious:
+                              showTableNavigation &&
+                                  canNavigate &&
+                                  (page > 0 ||
+                                      widget.previousChapterTitle != null)
+                              ? () => turnCurrentPage(false)
+                              : null,
+                          onTableNext:
+                              showTableNavigation &&
+                                  canNavigate &&
+                                  (page + 1 < count ||
+                                      !isFinal ||
+                                      widget.nextChapterTitle != null)
+                              ? () => turnCurrentPage(true)
+                              : null,
                           active: _active,
                           onRetry: () => recover(true),
                           onChooseScrollMode: widget.onChooseScrollMode == null
@@ -506,6 +532,10 @@ class _NativePagedFooter extends StatelessWidget {
     required this.count,
     required this.isFinal,
     required this.showIndicator,
+    required this.showTableNavigation,
+    required this.reverse,
+    required this.onTablePrevious,
+    required this.onTableNext,
     required this.active,
     required this.onRetry,
     required this.onChooseScrollMode,
@@ -517,6 +547,10 @@ class _NativePagedFooter extends StatelessWidget {
   final int count;
   final bool isFinal;
   final bool showIndicator;
+  final bool showTableNavigation;
+  final bool reverse;
+  final VoidCallback? onTablePrevious;
+  final VoidCallback? onTableNext;
   final bool active;
   final VoidCallback onRetry;
   final VoidCallback? onChooseScrollMode;
@@ -589,11 +623,56 @@ class _NativePagedFooter extends StatelessWidget {
                 ),
               ),
             ),
+            if (showTableNavigation)
+              SizedBox(
+                width: math.min(
+                  kMinInteractiveDimension * 2,
+                  constraints.maxWidth,
+                ),
+                child: ReaderOwnedTapRegion(
+                  child: Row(
+                    textDirection: reverse
+                        ? TextDirection.rtl
+                        : TextDirection.ltr,
+                    children: [
+                      Expanded(
+                        child: IconButton(
+                          key: const Key('novel-reader-table-previous'),
+                          tooltip: l10n.novelTablePreviousPage,
+                          onPressed: onTablePrevious,
+                          icon: Icon(
+                            reverse ? Icons.chevron_right : Icons.chevron_left,
+                          ),
+                          color: palette.foreground,
+                          disabledColor: palette.muted,
+                        ),
+                      ),
+                      Expanded(
+                        child: IconButton(
+                          key: const Key('novel-reader-table-next'),
+                          tooltip: l10n.novelTableNextPage,
+                          onPressed: onTableNext,
+                          icon: Icon(
+                            reverse ? Icons.chevron_left : Icons.chevron_right,
+                          ),
+                          color: palette.foreground,
+                          disabledColor: palette.muted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             if (error)
               SizedBox(
                 width: math.min(
                   kMinInteractiveDimension * actions.length,
-                  constraints.maxWidth,
+                  showTableNavigation
+                      ? math.max(
+                          0,
+                          constraints.maxWidth - 2 * kMinInteractiveDimension,
+                        )
+                      : constraints.maxWidth,
                 ),
                 child: Row(
                   children: [

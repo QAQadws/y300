@@ -348,8 +348,9 @@ final class NovelReaderNativePagedController {
 
   NovelReaderPaginationPosition? confirmPreparedVisible(
     NovelReaderNativePageDelivery delivery,
-    List<ForumBodyPreparedTextFragment> fragments,
-  ) {
+    List<ForumBodyPreparedTextFragment> fragments, {
+    ForumBodyTablePageLease? table,
+  }) {
     if (isClosed ||
         _suspended ||
         (_error != null && !_prefixNavigation) ||
@@ -358,6 +359,12 @@ final class NovelReaderNativePagedController {
         delivery.view.state != NovelReaderNativePageViewState.transferred ||
         _session!.isClosed ||
         _session!.isLayoutOwnerRetired) {
+      return null;
+    }
+    final tablePage = delivery.view.snapshot[delivery.pageIndex].table;
+    if ((tablePage == null) != (table == null) ||
+        (table != null &&
+            !_session!.ownsTablePageLease(delivery.pageIndex, table))) {
       return null;
     }
     try {
@@ -418,6 +425,20 @@ final class NovelReaderNativePagedController {
     _bootstrapConversionAnchor = null;
     _bootstrapEntry = null;
     return position;
+  }
+
+  void reportTablePresentationFailure(
+    NovelReaderNativePageView view,
+    ForumBodyTablePageLease table,
+    Object error,
+  ) {
+    if (isClosed ||
+        _suspended ||
+        !(identical(view, _target?.view) || identical(view, _visible?.view)) ||
+        !_session!.ownsTablePageLease(view.pageIndex, table)) {
+      return;
+    }
+    _pause(error);
   }
 
   /// A later accepted image frame changes visibility, never reading authority,
