@@ -83,7 +83,8 @@ final class NovelReaderNativeViewWindow {
   final NovelReaderNativeViewWindowLimits limits;
   final NovelReaderNativeViewJobLimits jobLimits;
   final _views = <int, NovelReaderNativePageView>{};
-  final _deferred = <int, (int, int)>{};
+  // Releasing image-only reservations does not change the native cache revision.
+  final _deferred = <int, (int, int, int)>{};
   final _capacityDeferred = <int>{};
   NovelReaderNativePageViewJob? _active;
   int? _activePage;
@@ -235,7 +236,11 @@ final class NovelReaderNativeViewWindow {
           if (page != _center &&
               (_capacityDeferred.contains(page) ||
                   _deferred[page] ==
-                      (prefix.length, session.layoutBudgetRevision))) {
+                      (
+                        prefix.length,
+                        session.layoutBudgetRevision,
+                        session.activeIssuedImages + session.reservedViewImages,
+                      ))) {
             continue;
           }
           selected = page;
@@ -276,6 +281,7 @@ final class NovelReaderNativeViewWindow {
             _deferred[page] = (
               session.snapshot.length,
               session.layoutBudgetRevision,
+              session.activeIssuedImages + session.reservedViewImages,
             );
           }
         } on ForumBodyTextPagePreparationException catch (error) {
@@ -292,12 +298,15 @@ final class NovelReaderNativeViewWindow {
             if (page == _center ||
                 (error.failure != ForumBodyTextPageSessionFailure.leaseLimit &&
                     error.failure !=
+                        ForumBodyTextPageSessionFailure.imageLimit &&
+                    error.failure !=
                         ForumBodyTextPageSessionFailure.preparationLimit)) {
               rethrow;
             }
             _deferred[page] = (
               session.snapshot.length,
               session.layoutBudgetRevision,
+              session.activeIssuedImages + session.reservedViewImages,
             );
           }
         } catch (_) {

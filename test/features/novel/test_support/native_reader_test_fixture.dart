@@ -12,6 +12,8 @@ final class NativeReaderTestFixture {
     String html, {
     int cacheEntries = 32,
     int maxIssuedLeases = 128,
+    int? maxIssuedImages,
+    ForumBodyImageResolver? imageResolver,
     double width = 100,
     double height = 100,
     TextScaler textScaler = TextScaler.noScaling,
@@ -51,11 +53,13 @@ final class NativeReaderTestFixture {
         maxTextCodeUnits: 20000,
         maxRuns: 10000,
         maxIssuedLeases: maxIssuedLeases,
+        maxIssuedImages: maxIssuedImages,
       ),
       layoutId: layoutId,
       width: width,
       height: height,
       textScaler: textScaler,
+      imageResolver: imageResolver,
     );
     addTearDown(() {
       parent.cancel();

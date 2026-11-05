@@ -14,6 +14,12 @@ import '../test_support/native_reader_test_fixture.dart';
 
 const _html = '<p>ab</p><p>cd</p><p>ef</p><p>gh</p>';
 
+final class _ImageResource implements ForumHtmlPreparedImageResource {
+  const _ImageResource(this.cacheKey);
+  @override
+  final String cacheKey;
+}
+
 Future<void> _flush() async {
   for (var turn = 0; turn < 40; turn++) {
     await Future<void>.value();
@@ -42,6 +48,84 @@ NovelReaderNativeViewWindow _window(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'released zero-native image reservation retries a deferred neighbor',
+    () async {
+      final fixture = NativeReaderTestFixture(
+        '<p>A</p><img src="https://example.invalid/1.png">',
+        maxIssuedImages: 1,
+        imageResolver: (identity, element) => ForumBodyImageInput(
+          identity: identity,
+          element: element,
+          isSticker: false,
+          layout: const ForumHtmlImageLayout(aspectRatio: 1),
+          entry: ForumHtmlReadableImageEntry(
+            index: 0,
+            url: element.resource!.rawSource!,
+            rawSrc: element.resource!.rawSource!,
+            resource: _ImageResource(element.path),
+          ),
+        ),
+      );
+      final reservation = fixture.session.openPagePreparation(1);
+      final window = _window(fixture);
+      await window.prepareAvailable();
+      expect(window.viewForPage(0)!.isReady, isTrue);
+      expect(window.viewForPage(1), isNull);
+      expect(fixture.session.reservedViewImages, 1);
+      final nativeRevision = fixture.session.layoutBudgetRevision;
+      reservation.close();
+      expect(fixture.session.layoutBudgetRevision, nativeRevision);
+      await window.prepareAvailable();
+      expect(window.viewForPage(1)!.isReady, isTrue);
+      expect(window.retainedPageCount, 2);
+      expect(fixture.session.activeIssuedImages, 1);
+      window.close();
+      expect(fixture.session.activeIssuedImages, 0);
+      expect(fixture.session.reservedViewImages, 0);
+    },
+  );
+
+  test(
+    'optional image capacity defers and navigation releases previous resources',
+    () async {
+      final fixture = NativeReaderTestFixture(
+        '<img src="https://example.invalid/0.png"><img src="https://example.invalid/1.png">',
+        maxIssuedImages: 1,
+        imageResolver: (identity, element) => ForumBodyImageInput(
+          identity: identity,
+          element: element,
+          isSticker: false,
+          layout: const ForumHtmlImageLayout(aspectRatio: 1),
+          entry: ForumHtmlReadableImageEntry(
+            index: int.parse(element.path),
+            url: element.resource!.rawSource!,
+            rawSrc: element.resource!.rawSource!,
+            resource: _ImageResource(element.path),
+          ),
+        ),
+      );
+      final window = _window(fixture);
+      await window.prepareAvailable();
+      expect(window.retainedPageCount, 1);
+      final previous = window.viewForPage(0)!;
+      expect(window.viewForPage(1), isNull);
+      expect(fixture.session.activeIssuedImages, 1);
+      expect(fixture.session.activeIssuedLeases, 0);
+      expect(fixture.session.reservedViewImages, 0);
+      await window.prepareAvailable();
+      expect(window.viewForPage(0), same(previous));
+      window.setCenter(1);
+      await window.prepareAvailable();
+      expect(previous.state, NovelReaderNativePageViewState.closed);
+      expect(window.viewForPage(1)!.isReady, isTrue);
+      expect(fixture.session.activeIssuedImages, 1);
+      window.close();
+      expect(fixture.session.activeIssuedImages, 0);
+      expect(fixture.session.reservedViewImages, 0);
+    },
+  );
 
   for (final pendingPage in [0, 1]) {
     test(
