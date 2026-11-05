@@ -21,6 +21,7 @@ final class _Fixture {
     int? pageImages,
     int textLimit = 10000,
     TextScaler textScaler = TextScaler.noScaling,
+    Size imageSize = const Size(40, 20),
   }) {
     document = const ForumBodyParser().parse(
       html: html,
@@ -51,7 +52,7 @@ final class _Fixture {
           document: document,
           element: element,
           image: const InlineImageDescription(),
-          dimensions: inlineImageDimensions(const Size(40, 20)),
+          dimensions: inlineImageDimensions(imageSize),
         );
         images.add(input);
         return input;
@@ -106,6 +107,32 @@ final class _Fixture {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'actual nested width and tracking fit geometry while preserving frozen source',
+    () {
+      final f = _Fixture(
+        '<div style="padding-left:10px;padding-right:10px">'
+        '<p style="letter-spacing:2px">A<img src="a">B</p></div>',
+        imageSize: const Size(120, 60),
+        textScaler: TextScaler.linear(2),
+      );
+      f.finish();
+      final prepared = f.prepare(0);
+      final fragment = prepared.single as ForumBodyPreparedInlineFragment;
+      final view = fragment.view, image = view.images.values.single;
+      expect(view.width, 80);
+      expect(view.content.horizontalInset, 2);
+      expect(image.rect.size, const Size(76, 38));
+      expect(image.input.source, same(f.images.single.source));
+      expect(image.input, isNot(same(f.images.single)));
+      expect(f.images.single.dimensions.size, const Size(120, 60));
+      expect(image.input.dimensions.baselineOffset, 38);
+      expect(fragment.imageCount, 1);
+      fragment.close();
+      expect(f.cache.activeLeases, 0);
+    },
+  );
 
   test(
     'real traversal produces text and distinct inline image source bindings',

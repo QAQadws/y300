@@ -16,18 +16,15 @@ typedef ForumBodyInlineImageResolver =
       ForumBodyResolvedStyle style,
     );
 
-/// One actual IR image occurrence and its resolved inline dimensions. The
-/// display description is an immutable Host value, never the Host or transport.
-/// Stickers have no invented readable-image ordinal or text/source interval.
-final class ForumBodyInlineImageInput {
-  ForumBodyInlineImageInput({
+/// One frozen actual image occurrence, independent of its paragraph geometry.
+/// Reflow may change dimensions while retaining this exact source association.
+final class ForumBodyInlineImageSource {
+  ForumBodyInlineImageSource({
     required ForumBodyDocument document,
     required this.element,
     required this.image,
-    required this.dimensions,
     this.entry,
   }) : identity = document.identity {
-    final size = dimensions.size, baseline = dimensions.baselineOffset;
     if (!identical(document.nodeAtPath(element.path), element) ||
         element.kind != ForumBodyElementKind.image ||
         element.resource?.rawSource == null ||
@@ -40,8 +37,47 @@ final class ForumBodyInlineImageInput {
                 entry!.cacheKey != image.cacheKey ||
                 (element.resource!.readableImageIndex != null &&
                     entry!.index != element.resource!.readableImageIndex) ||
-                entry!.index < 0)) ||
-        !size.width.isFinite ||
+                entry!.index < 0))) {
+      throw ArgumentError('Inline image source does not match its document');
+    }
+  }
+  final ForumBodyIdentity identity;
+  final ForumBodyElement element;
+  final ForumHtmlDisplayImage image;
+  final ForumHtmlReadableImageEntry? entry;
+  int get retainedCodeUnits =>
+      image.sourceUrl.length +
+      image.cacheKey.length +
+      element.resource!.rawSource!.length +
+      (element.resource!.alt?.length ?? 0) +
+      (element.resource!.title?.length ?? 0);
+}
+
+/// Resolved geometry for one frozen source. Stickers never acquire a readable
+/// image ordinal or text/source interval. Dimensions are already scaled.
+final class ForumBodyInlineImageInput {
+  factory ForumBodyInlineImageInput({
+    required ForumBodyDocument document,
+    required ForumBodyElement element,
+    required ForumHtmlDisplayImage image,
+    required PlaceholderDimensions dimensions,
+    ForumHtmlReadableImageEntry? entry,
+  }) => ForumBodyInlineImageInput.fromSource(
+    source: ForumBodyInlineImageSource(
+      document: document,
+      element: element,
+      image: image,
+      entry: entry,
+    ),
+    dimensions: dimensions,
+  );
+
+  ForumBodyInlineImageInput.fromSource({
+    required this.source,
+    required this.dimensions,
+  }) {
+    final size = dimensions.size, baseline = dimensions.baselineOffset;
+    if (!size.width.isFinite ||
         size.width <= 0 ||
         !size.height.isFinite ||
         size.height <= 0 ||
@@ -54,15 +90,30 @@ final class ForumBodyInlineImageInput {
       throw ArgumentError('Inline image does not match its source or geometry');
     }
   }
-  final ForumBodyIdentity identity;
-  final ForumBodyElement element;
-  final ForumHtmlDisplayImage image;
+  final ForumBodyInlineImageSource source;
+  ForumBodyIdentity get identity => source.identity;
+  ForumBodyElement get element => source.element;
+  ForumHtmlDisplayImage get image => source.image;
   final PlaceholderDimensions dimensions;
-  final ForumHtmlReadableImageEntry? entry;
-  int get retainedCodeUnits =>
-      image.sourceUrl.length +
-      image.cacheKey.length +
-      element.resource!.rawSource!.length +
-      (element.resource!.alt?.length ?? 0) +
-      (element.resource!.title?.length ?? 0);
+  ForumHtmlReadableImageEntry? get entry => source.entry;
+  int get retainedCodeUnits => source.retainedCodeUnits;
+
+  /// Fit the actual containing paragraph without upscaling or applying text
+  /// scale again. Baseline and aspect ratio use the same physical transform.
+  ForumBodyInlineImageInput fitWidth(double availableWidth) {
+    if (!availableWidth.isFinite || availableWidth <= 0) {
+      throw ArgumentError.value(availableWidth, 'availableWidth');
+    }
+    if (dimensions.size.width <= availableWidth) return this;
+    final factor = availableWidth / dimensions.size.width;
+    return ForumBodyInlineImageInput.fromSource(
+      source: source,
+      dimensions: PlaceholderDimensions(
+        size: Size(availableWidth, dimensions.size.height * factor),
+        alignment: dimensions.alignment,
+        baseline: dimensions.baseline,
+        baselineOffset: dimensions.baselineOffset! * factor,
+      ),
+    );
+  }
 }

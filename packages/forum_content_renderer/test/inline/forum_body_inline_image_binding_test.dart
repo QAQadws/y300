@@ -8,6 +8,33 @@ import 'test_support/inline_image_fixture.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'width fitting shares one actual source and preserves baseline without upscaling',
+    () {
+      final f = InlineImageFixture(size: const Size(80, 40));
+      final original = ForumBodyInlineImageInput.fromSource(
+        source: f.images[0]!.source,
+        dimensions: PlaceholderDimensions(
+          size: const Size(80, 40),
+          alignment: ui.PlaceholderAlignment.baseline,
+          baseline: TextBaseline.alphabetic,
+          baselineOffset: 30,
+        ),
+      );
+      final fitted = original.fitWidth(40);
+      expect(fitted.source, same(original.source));
+      expect(fitted.element, same(original.element));
+      expect(fitted.image, same(original.image));
+      expect(fitted.dimensions.size, const Size(40, 20));
+      expect(fitted.dimensions.baselineOffset, 15);
+      expect(original.dimensions.size, const Size(80, 40));
+      expect(original.fitWidth(100), same(original));
+      expect(fitted.fitWidth(100), same(fitted));
+      expect(() => original.fitWidth(0), throwsArgumentError);
+      expect(() => original.fitWidth(double.nan), throwsArgumentError);
+    },
+  );
   test(
     'a warm native layout binds current image inputs, never cached resource values',
     () {

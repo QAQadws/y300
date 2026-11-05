@@ -1,6 +1,7 @@
 import '../flow/forum_body_inline_flow_content.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_paragraph_geometry.dart';
+import '../paragraph/forum_body_horizontal_text_frame.dart';
 import '../paragraph/forum_body_text_request.dart';
 import 'forum_body_ruby_column_request.dart';
 import 'forum_body_ruby_container_background.dart';
@@ -43,7 +44,7 @@ final class ForumBodyInlinePlanInput {
             .atoms
             .map((atom) => atom.engineUtf16),
       );
-  static const revision = 29;
+  static const revision = 30;
 
   factory ForumBodyInlinePlanInput(
     ForumBodyInlineFlowContent input,
@@ -804,6 +805,27 @@ final class ForumBodyInlinePlanInput {
         emphasisTrees: emphasisTrees,
         groupMixedWords: false,
       );
+    }
+    if (images != null) {
+      final availableWidth =
+          input.layoutMode == ForumBodyParagraphLayoutMode.intrinsicSingleLine
+          ? width
+          : forumBodyInnerTextWidth(
+              width,
+              offset == 0
+                  ? 0
+                  : forumBodyHorizontalTextInset([
+                      input.style,
+                      for (final context in contexts)
+                        for (final part in context.projection.parts)
+                          context.runs[part.runIndex].style,
+                    ]),
+            );
+      for (final index in images.keys) {
+        final fitted = images[index]!.fitWidth(availableWidth);
+        images[index] = fitted;
+        requestsByAtom[index] = ForumBodyInlineImageAtomRequest(fitted);
+      }
     }
     final content = ForumBodyInlineSpanContent.compose(
       identity: input.identity,
