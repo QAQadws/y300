@@ -178,16 +178,36 @@ void main() {
     final tablePage = pages[1];
     final table = tablePage.table!;
     final layout = session.tableLayoutForPage(1)!;
-    expect(table.bounds.top, 11);
+    expect(table.bounds.top, 0);
     expect(table.bounds.height, layout.size.height);
     expect(table.bounds.height, greaterThan(240));
     expect(tablePage.usedHeight, table.bounds.bottom);
     expect(tablePage.backgrounds.single.height, layout.size.height);
     expect(tablePage.fragments, isEmpty);
     expect(pages.first.fragments.single.paragraphIndex, 0);
+    final before = pages.first.fragments.single;
+    expect(pages.first.usedHeight - before.top - before.height, 11);
     expect(pages.last.fragments.single.paragraphIndex, 1);
     expect(session.isComplete, isTrue);
     expect(cache.activeLeases, 0);
+  });
+
+  test('positive paragraph gaps survive flowing slice boundaries', () {
+    final session = _book(
+      _parse(
+        '<p style="margin-bottom:58px">before</p>'
+        '<p style="background-color:#ddeeff">after</p>',
+      ),
+      _cache(),
+      extent: ForumBodyTableExtent.natural,
+    );
+    _advanceBook(session, 2);
+    final pages = session.snapshot;
+    final before = pages.first.fragments.single;
+    final after = pages.last.fragments.single;
+    expect(pages.first.usedHeight + after.top - before.top - before.height, 58);
+    expect(pages.first.backgrounds, isEmpty);
+    expect(pages.last.backgrounds.single.top, after.top);
   });
 
   test('table content counts towards the chapter budget across pages', () {

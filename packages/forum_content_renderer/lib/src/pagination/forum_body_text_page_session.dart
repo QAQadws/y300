@@ -730,7 +730,14 @@ final class ForumBodyTextPageSession {
             _pendingListItem = unit;
           case ForumBodyBlockFlowSpace():
             if (unit.kind == ForumBodyBlockSpaceKind.collapsedMargin) {
-              _margin += unit.extent;
+              if (_tableExtent == ForumBodyTableExtent.natural &&
+                  unit.extent > 0) {
+                // A slice boundary is invisible in a scrolling document.
+                // Keep the gap even if it consumes the rest of this slice.
+                _composer.appendPadding(unit.extent, opensBackgrounds: false);
+              } else {
+                _margin += unit.extent;
+              }
             } else {
               _composer.appendPadding(unit.extent, spaceBefore: _margin);
               _margin = 0;
@@ -1149,13 +1156,12 @@ final class ForumBodyTextPageSession {
       final right = math.min(snapshot.width, table.left + table.width);
       final source = table.table.element.source;
       final natural = _tableExtent == ForumBodyTableExtent.natural;
-      final top = natural ? math.max(0.0, _margin) : 0.0;
       final height = natural ? layout.size.height : snapshot.height;
       _composer.publishTable(
         (
           path: table.table.element.path,
           sourceRange: (runeStart: source.runeStart, runeEnd: source.runeEnd),
-          bounds: Rect.fromLTWH(left, top, right - left, height),
+          bounds: Rect.fromLTWH(left, 0, right - left, height),
           contentSize: layout.size,
           fingerprint: layout.fingerprint,
         ),

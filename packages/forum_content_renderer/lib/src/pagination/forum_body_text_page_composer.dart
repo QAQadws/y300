@@ -264,7 +264,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 26;
+  static const revision = 27;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;
@@ -881,6 +881,7 @@ final class ForumBodyTextPageComposer {
     double extent, {
     double spaceBefore = 0,
     double spaceAtPageStart = 0,
+    bool opensBackgrounds = true,
   }) {
     _ensureOpen();
     if (!needsInput) throw StateError('Composition input is still pending');
@@ -891,7 +892,12 @@ final class ForumBodyTextPageComposer {
         spaceAtPageStart < 0) {
       throw ArgumentError.value(extent, 'extent');
     }
-    _padding = _ActivePadding(extent, spaceBefore, spaceAtPageStart);
+    _padding = _ActivePadding(
+      extent,
+      spaceBefore,
+      spaceAtPageStart,
+      opensBackgrounds,
+    );
   }
 
   ({double extentConsumed, int pagesPublished, bool isComplete})
@@ -919,7 +925,7 @@ final class ForumBodyTextPageComposer {
         active.started = true;
       }
       final consumed = math.min(active.remaining, height - _flowHeight);
-      _touchBackgrounds(_flowHeight);
+      if (active.opensBackgrounds) _touchBackgrounds(_flowHeight);
       _flowHeight += consumed;
       _usedHeight = math.max(_usedHeight, _flowHeight);
       final after = active.remaining - consumed;
@@ -1736,10 +1742,16 @@ final class _CompositionParagraph {
 }
 
 final class _ActivePadding {
-  _ActivePadding(this.remaining, this.spaceBefore, this.spaceAtPageStart);
+  _ActivePadding(
+    this.remaining,
+    this.spaceBefore,
+    this.spaceAtPageStart,
+    this.opensBackgrounds,
+  );
   double remaining;
   final double spaceBefore;
   final double spaceAtPageStart;
+  final bool opensBackgrounds;
   bool started = false;
 }
 
