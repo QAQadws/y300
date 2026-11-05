@@ -42,6 +42,168 @@ List<ForumBodyTextFlowUnit> _drain(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('Discuz span, clearance and table keep their inline source order', () {
+    final document = _document(
+      '<div style="padding:0 10px 0 20px">lead '
+      '<span style="float:left;margin-right:5px;color:red"><b>浮動</b></span>'
+      ' tail <br style="clear:both">'
+      '<table class="float" style="float:right;margin-left:5px">'
+      '<tbody><tr><td>格</td></tr></tbody></table>'
+      'end</div>',
+    );
+    for (final budget in [1, 64]) {
+      final cursor = ForumBodyBlockFlowCursor(
+        document: document,
+        reader: _reader,
+        width: 180,
+        dedicatedTables: true,
+        captureFloats: true,
+      );
+      addTearDown(cursor.close);
+      final units = <ForumBodyBlockFlowUnit>[];
+      while (!cursor.isComplete) {
+        final step = cursor.advance(maxEvents: budget);
+        expect(step.workDone, lessThanOrEqualTo(budget));
+        if (step.hasOutput) units.add(cursor.current!);
+      }
+      final flow = units.whereType<ForumBodyBlockFlowInline>().single;
+      expect(units.whereType<ForumBodyBlockFlowTable>(), isEmpty);
+      expect(flow.contentLeft, 20);
+      expect(flow.contentWidth, 150);
+      expect(flow.paragraph.index, 0);
+      final content = flow.paragraph.content;
+      expect(content.path, '0');
+      expect(content.identity, document.identity);
+      final parts = content.parts;
+      expect(parts, hasLength(6));
+      final lead = (parts[0] as ForumBodyInlineFlowText).content;
+      final left = parts[1] as ForumBodyInlineFlowFloat;
+      final tail = (parts[2] as ForumBodyInlineFlowText).content;
+      final clear = parts[3] as ForumBodyInlineFlowClear;
+      final right = parts[4] as ForumBodyInlineFlowFloat;
+      final end = (parts[5] as ForumBodyInlineFlowText).content;
+      expect(lead.projection.text, 'lead ');
+      expect(tail.projection.text, ' tail ');
+      expect(end.projection.text, 'end');
+      for (final control in [left, clear, right]) {
+        expect(
+          document.nodeAtPath(control.element.path),
+          same(control.element),
+        );
+        expect(control.event.phase, ForumBodyFlowPhase.open);
+      }
+      expect(left.event.style.floatSide, ForumBodyFloatSide.left);
+      expect(left.event.style.margin.right, const ForumBodyLength(5));
+      expect(right.element.kind, ForumBodyElementKind.table);
+      expect(right.event.style.floatSide, ForumBodyFloatSide.right);
+      expect(clear.event.style.clear, ForumBodyClear.both);
+      expect(clear.element.source.runeEnd - clear.element.source.runeStart, 1);
+      expect(
+        left.element.source.runeEnd,
+        lessThan(clear.element.source.runeStart),
+      );
+      expect(clear.element.source.runeEnd, right.element.source.runeStart);
+
+      final nested = ForumBodyTextFlowCursor(
+        document: document,
+        reader: _reader,
+        contentRoot: left.element,
+        captureFloats: true,
+      );
+      addTearDown(nested.close);
+      final floated = _drain(
+        nested,
+      ).whereType<ForumBodyTextFlowParagraph>().single;
+      expect(floated.content.projection.text, '浮動');
+      expect(floated.content.path, left.element.path);
+      expect(
+        floated.content.runs.single.style.textStyle.color,
+        const Color(0xffff0000),
+      );
+    }
+  });
+
+  test('float subtree is deferred and BR remains a real source fence', () {
+    final document = _document(
+      'before<br><span style="float:right">'
+      '${List.filled(600, '<i>child</i>').join()}</span>'
+      '<br style="clear:left">',
+    );
+    final cursor = ForumBodyTextFlowCursor(
+      document: document,
+      reader: _reader,
+      captureFloats: true,
+    );
+    addTearDown(cursor.close);
+    final units = _drain(cursor, budget: 1);
+    expect(cursor.resolvedNodeCount, 4);
+    final before = units.whereType<ForumBodyTextFlowParagraph>().single;
+    expect(before.content.projection.text, 'before\n');
+    expect(before.window, ForumBodyParagraphWindow.beforeTerminalEmptyLine);
+    final after = units.whereType<ForumBodyTextFlowInline>().single;
+    expect(after.content.appliesFirstLineIndent, isFalse);
+    expect(after.content.parts, [
+      isA<ForumBodyInlineFlowFloat>(),
+      isA<ForumBodyInlineFlowClear>(),
+    ]);
+    expect(after.window, ForumBodyParagraphWindow.full);
+    expect(
+      (units.last as ForumBodyTextFlowBoundary).trimmedTerminalBreak,
+      isNull,
+    );
+  });
+
+  test('clearance following a Discuz edit notice is not skipped', () {
+    final cursor = ForumBodyTextFlowCursor(
+      document: _document(
+        '<i class="pstatus">Notice</i><br><br style="clear:right">after',
+      ),
+      reader: _reader,
+      captureFloats: true,
+    );
+    addTearDown(cursor.close);
+    final units = _drain(cursor);
+    final notice = units.whereType<ForumBodyTextFlowParagraph>().single;
+    expect(notice.content.projection.text, 'Notice');
+    final parts = units
+        .whereType<ForumBodyTextFlowInline>()
+        .single
+        .content
+        .parts;
+    expect(parts, hasLength(2));
+    final clear = parts.first as ForumBodyInlineFlowClear;
+    final after = parts.last as ForumBodyInlineFlowText;
+    expect(clear.event.style.clear, ForumBodyClear.right);
+    expect(after.content.projection.text, 'after');
+  });
+
+  test(
+    'deferred float and clear controls count toward the structure budget',
+    () {
+      final cursor = ForumBodyTextFlowCursor(
+        document: _document(
+          '<span style="float:left">a</span><br style="clear:both">',
+        ),
+        reader: _reader,
+        captureFloats: true,
+        rubyLimits: const ForumBodyRubyContentLimits(maxStructureItems: 1),
+      );
+      addTearDown(cursor.close);
+      expect(
+        () => _drain(cursor),
+        throwsA(
+          isA<ForumBodyRubyContentException>().having(
+            (error) => error.failure,
+            'failure',
+            ForumBodyRubyContentFailure.structureLimit,
+          ),
+        ),
+      );
+      expect(cursor.isClosed, isTrue);
+      expect(cursor.current, isNull);
+    },
+  );
+
   test(
     'a 100000-character v1 chapter yields a stable page without resolving the full style tree',
     () {

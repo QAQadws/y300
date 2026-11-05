@@ -349,6 +349,8 @@ final class ForumBodyInlinePlanInput {
 
     for (final part in input.parts) {
       switch (part) {
+        case ForumBodyInlineFlowExclusion():
+          _unsupported(part.element.path);
         case ForumBodyInlineFlowImage(input: final image):
           if (image.identity != input.identity) {
             throw ForumBodyParagraphInputException(

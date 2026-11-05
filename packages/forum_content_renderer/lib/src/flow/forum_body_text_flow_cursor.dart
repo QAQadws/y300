@@ -85,14 +85,18 @@ final class ForumBodyTextFlowCursor {
     ForumBodyCollapseLayout? collapses,
     ForumBodyElement? contentRoot,
     this.dedicatedTables = false,
+    this.captureFloats = false,
   }) : _flow = ForumBodyStyledFlowCursor(
          document: document,
          reader: reader,
          collapses: collapses,
          contentRoot: contentRoot,
        );
-  static const revision = 11;
+  static const revision = 12;
   final bool dedicatedTables;
+
+  /// Requires a consumer for exclusion controls, including clearance BRs.
+  final bool captureFloats;
   final ForumBodyInlineImageResolver? inlineImageResolver;
   final ForumBodyParagraphContentBuilder paragraphBuilder;
   final ForumBodyRubyContentLimits rubyLimits;
@@ -101,7 +105,7 @@ final class ForumBodyTextFlowCursor {
   final _startedBlocks = <ForumBodyStyledFlowEvent>{};
   ForumBodyTextFlowImage? _pendingImage;
   String? _delegatedTable;
-  String? _inlineImageClosePath;
+  String? _inlineAtomClosePath;
   final _emptyListItems = <String, ForumBodyParagraphSequence>{};
   final _issues = <ForumBodyStyleIssue>[];
   ForumBodyTextFlowSequence? _before;
@@ -287,13 +291,18 @@ final class ForumBodyTextFlowCursor {
           continue;
         }
         if (event.phase == ForumBodyFlowPhase.close &&
-            event.node.path == _inlineImageClosePath) {
-          _inlineImageClosePath = null;
+            event.node.path == _inlineAtomClosePath) {
+          _inlineAtomClosePath = null;
           continue;
         }
         if (event.phase == ForumBodyFlowPhase.open &&
             event.node is ForumBodyElement) {
           final element = event.node as ForumBodyElement;
+          if (captureFloats &&
+              !_insideEditStatus &&
+              _captureExclusion(event, element, issues)) {
+            continue;
+          }
           if (dedicatedTables &&
               !_insideEditStatus &&
               element.kind == ForumBodyElementKind.table &&
@@ -330,7 +339,7 @@ final class ForumBodyTextFlowCursor {
                   : (_after ??= _newSequence(continuation: true));
               target.issues.addAll(issues);
               target.addImage(image);
-              _inlineImageClosePath = element.path;
+              _inlineAtomClosePath = element.path;
               continue;
             }
           }
@@ -397,6 +406,40 @@ final class ForumBodyTextFlowCursor {
     }
   }
 
+  bool _captureExclusion(
+    ForumBodyStyledFlowEvent event,
+    ForumBodyElement element,
+    List<ForumBodyStyleIssue> issues,
+  ) {
+    final ForumBodyInlineFlowExclusion control;
+    if (element.kind == ForumBodyElementKind.hardBreak) {
+      if (!_clearsFloats(event.style)) return false;
+      control = ForumBodyInlineFlowClear(event);
+    } else {
+      final side = event.style.floatSide;
+      if (side != ForumBodyFloatSide.left && side != ForumBodyFloatSide.right) {
+        return false;
+      }
+      control = ForumBodyInlineFlowFloat(event);
+    }
+    _flow.skipCurrentSubtree(event);
+    _inlineAtomClosePath = element.path;
+    final target = _break == null
+        ? (_before ??= _newSequence())
+        : (_after ??= _newSequence(continuation: true));
+    target.issues.addAll(issues);
+    target.addExclusion(control);
+    return true;
+  }
+
+  static bool _clearsFloats(ForumBodyResolvedStyle style) =>
+      switch (style.clear) {
+        ForumBodyClear.left ||
+        ForumBodyClear.right ||
+        ForumBodyClear.both => true,
+        ForumBodyClear.none || ForumBodyClear.unsupported => false,
+      };
+
   static String _parentPath(String path) {
     final separator = path.lastIndexOf('/');
     return separator < 0 ? '' : path.substring(0, separator);
@@ -416,7 +459,8 @@ final class ForumBodyTextFlowCursor {
         return _followingEditStatusHasBreak;
       }
       if (node is ForumBodyElement &&
-          node.kind == ForumBodyElementKind.hardBreak) {
+          node.kind == ForumBodyElementKind.hardBreak &&
+          !(captureFloats && _clearsFloats(event.style))) {
         _followingEditStatusHasBreak = true;
         _before?.close();
         _before = null;
@@ -571,7 +615,7 @@ final class ForumBodyTextFlowCursor {
     _blocks.clear();
     _startedBlocks.clear();
     _pendingImage = null;
-    _inlineImageClosePath = null;
+    _inlineAtomClosePath = null;
     for (final proof in _emptyListItems.values) {
       proof.close();
     }

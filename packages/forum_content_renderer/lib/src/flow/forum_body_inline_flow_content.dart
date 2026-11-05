@@ -3,6 +3,7 @@ import '../inline/forum_body_ruby_content.dart';
 import '../inline/forum_body_inline_image_input.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../style/forum_body_style_options.dart';
+import 'forum_body_styled_flow_cursor.dart';
 
 sealed class ForumBodyInlineFlowPart {
   const ForumBodyInlineFlowPart();
@@ -21,6 +22,24 @@ final class ForumBodyInlineFlowRuby extends ForumBodyInlineFlowPart {
 final class ForumBodyInlineFlowImage extends ForumBodyInlineFlowPart {
   const ForumBodyInlineFlowImage(this.input);
   final ForumBodyInlineImageInput input;
+}
+
+/// A control in the parent source order. It does not create a text run or
+/// consume any of its subtree in the parent's inline context.
+sealed class ForumBodyInlineFlowExclusion extends ForumBodyInlineFlowPart {
+  const ForumBodyInlineFlowExclusion(this.event);
+
+  final ForumBodyStyledFlowEvent event;
+  ForumBodyElement get element => event.node as ForumBodyElement;
+}
+
+final class ForumBodyInlineFlowFloat extends ForumBodyInlineFlowExclusion {
+  const ForumBodyInlineFlowFloat(super.event);
+}
+
+/// Retains the authored BR, including its source range, even at a block edge.
+final class ForumBodyInlineFlowClear extends ForumBodyInlineFlowExclusion {
+  const ForumBodyInlineFlowClear(super.event);
 }
 
 /// One unmeasured formatting context from the sole styled traversal. Ordinary

@@ -95,6 +95,16 @@ final class ForumBodyTextFlowSequence {
     _plain ??= _openPlain();
   }
 
+  void addExclusion(ForumBodyInlineFlowExclusion control) {
+    _ensureOpen();
+    _mixed = true;
+    _flushPlain();
+    charge(0, 0, 0, 1);
+    _parts.add(control);
+    _visible = true;
+    _plain = _openPlain();
+  }
+
   void endRuby() {
     _ensureOpen();
     // Admit the next raw sequence while its containing block is still open;

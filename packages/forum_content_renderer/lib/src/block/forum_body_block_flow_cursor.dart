@@ -185,6 +185,7 @@ final class ForumBodyBlockFlowCursor {
     ForumBodyCollapseLayout? collapses,
     ForumBodyElement? contentRoot,
     bool dedicatedTables = false,
+    bool captureFloats = false,
   }) : _flow = ForumBodyTextFlowCursor(
          document: document,
          reader: reader,
@@ -194,6 +195,7 @@ final class ForumBodyBlockFlowCursor {
          collapses: collapses,
          contentRoot: contentRoot,
          dedicatedTables: dedicatedTables,
+         captureFloats: captureFloats,
        ),
        _collapses = collapses,
        _rootFontSize = reader.textStyle.fontSize! {
