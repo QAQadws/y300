@@ -301,7 +301,10 @@ final class ForumBodyFloatBodyPreparation {
         ? null
         : _contentLength(authorHeight, vertical: true);
     final size = fitForumBodyReplacedImage(
-      intrinsicWidth: input.layout.displaySize?.width ?? availableWidth,
+      intrinsicWidth:
+          input.naturalSize?.width ??
+          input.layout.displaySize?.width ??
+          availableWidth,
       aspectRatio: input.aspectRatio,
       width: box.width == null ? htmlWidth : _contentLength(box.width),
       height: authorHeight == null ? htmlHeight : specifiedHeight,

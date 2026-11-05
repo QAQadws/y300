@@ -165,6 +165,66 @@ void main() {
   );
 
   testWidgets(
+    'floated image uses the frozen natural width in both reading modes',
+    (tester) async {
+      final chapter = await _chapter(
+        '<img src="https://x/a.png" style="float:left;margin-right:4px">AB',
+      );
+      final host = NativeReaderImageTestHost();
+      final resources = NovelReaderNativeImageResources(
+        chapter: chapter,
+        host: host,
+        policy: host,
+      );
+      final environment = await _environment(tester);
+      final keys = <String>{};
+      for (final width in [24.0, 48.0]) {
+        final images = await resources.capture(
+          cancellation: NovelReaderPaginationCancellationToken(),
+          maxCodeUnits: 10000,
+          resolvedLayouts: {
+            chapter.document.imageElements.single.path: ForumHtmlImageLayout(
+              aspectRatio: 2,
+              displaySize: Size(width, width / 2),
+            ),
+          },
+          scheduler: NovelReaderNativeWorkScheduler(nextFrame: () async {}),
+        );
+        final scope = await _scope(chapter, environment, images: images);
+        expect(keys.add(scope.paginationKey), isTrue);
+        for (final extent in ForumBodyTableExtent.values) {
+          final cache = ForumBodyParagraphCache(
+            maxEntries: 8,
+            maxEstimatedBytes: 1 << 22,
+          );
+          final session = scope.openSession(
+            cache: cache,
+            layoutId: 'float-image-${extent.name}',
+            limits: _limits,
+            tableExtent: extent,
+          );
+          try {
+            for (var step = 0; !session.isComplete; step++) {
+              expect(step, lessThan(1000));
+              session.advance(maxEvents: 4, maxLines: 1);
+            }
+            final parts = session.snapshot.single.fragments;
+            expect(parts.first.isFloated, isTrue);
+            expect(
+              parts.first.imageFrame!.imageRect.size,
+              Size(width, width / 2),
+            );
+            expect(parts.last.left, width + 4);
+          } finally {
+            session.close();
+            cache.close();
+          }
+        }
+      }
+    },
+  );
+
+  testWidgets(
     'script displacement captures a parent font with no visible glyph run',
     (tester) async {
       final chapter = await _chapter(

@@ -20,15 +20,19 @@ Future<NovelReaderNativeTableAnchor?> probeNovelReaderNativeTableAnchor({
   required ForumBodyTextPageSession session,
   required NovelReaderNativeAnchorMap anchors,
   required int pageIndex,
+  String? tablePath,
   required NovelReaderTextAnchor target,
   required bool allowNodeCompatibility,
   required NovelReaderNativeWorkScheduler scheduler,
   required NovelReaderPaginationCancellationToken token,
 }) async {
   token.throwIfCancelled();
-  final table = session.tableLayoutForPage(pageIndex);
+  final table = session.tableLayoutForPage(pageIndex, path: tablePath);
   if (table == null) return null;
-  final viewport = session.snapshot[pageIndex].table!.bounds;
+  final page = session.snapshot[pageIndex];
+  final viewport = tablePath == null
+      ? page.table!.bounds
+      : page.tableFrames.firstWhere((frame) => frame.path == tablePath).bounds;
   final ranges = anchors
       .sourceCandidates(target, allowNodeCompatibility: allowNodeCompatibility)
       .toList(growable: false);

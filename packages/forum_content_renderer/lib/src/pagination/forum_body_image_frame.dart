@@ -20,6 +20,7 @@ final class ForumBodyImageInput {
     required this.element,
     required this.entry,
     required this.layout,
+    this.naturalSize,
     this.isSticker = false,
   }) {
     if (element.kind != ForumBodyElementKind.image ||
@@ -34,6 +35,10 @@ final class ForumBodyImageInput {
   final ForumBodyElement element;
   final ForumHtmlReadableImageEntry entry;
   final ForumHtmlImageLayout layout;
+
+  /// Frozen dimensions for a replaced float. Ordinary block frames can keep
+  /// their ratio-only layout hint independently.
+  final Size? naturalSize;
   final bool isSticker;
 
   double get aspectRatio =>

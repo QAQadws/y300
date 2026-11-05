@@ -66,26 +66,33 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  for (final (table, roundTrip) in const [
-    (false, false),
-    (false, true),
-    (true, false),
-    (true, true),
+  for (final (bodyKind, roundTrip) in const [
+    ('text', false),
+    ('text', true),
+    ('table', false),
+    ('table', true),
+    ('floated table', true),
   ]) {
     testWidgets(
-      'mode change uses the visible source (table: $table, round trip: $roundTrip)',
+      'mode change uses the visible source ($bodyKind, round trip: $roundTrip)',
       (tester) async {
+        final table = bodyKind != 'text';
+        final floated = bodyKind == 'floated table';
         final rows = List.generate(
           18,
           (i) =>
               '<tr height="88"><td width="850">左列 $i</td>'
               '<td width="810">右列 $i，继续阅读同一个格子的文字。</td></tr>',
         ).join();
-        final repository = _ReadingRepository(
-          table
-              ? '<p>表格前</p><table width="1660" cellpadding="0">$rows</table>$_nativeLongBody'
-              : _nativeLongBody,
-        );
+        final markup = '<table width="1660" cellpadding="0">$rows</table>';
+        final repository = _ReadingRepository(switch (bodyKind) {
+          'floated table' =>
+            '<p>表格前</p><span style="float:right;width:300px;margin-left:5px">'
+                '浮动内表前。$markup浮动内表后。</span>'
+                '表旁文字<br style="clear:both">$_nativeLongBody',
+          'table' => '<p>表格前</p>$markup$_nativeLongBody',
+          _ => _nativeLongBody,
+        });
         final saved = NovelReadingProgress(
           novelId: _work,
           episodeId: _chapter,
@@ -124,6 +131,14 @@ void main() {
         outer.jumpTo(table ? 450 : outer.position.maxScrollExtent * .45);
         await tester.pumpAndSettle();
         if (table) {
+          if (floated) {
+            final page = tester
+                .widget<ForumBodyFlowSliver>(flow)
+                .prefix
+                .singleWhere((page) => page.floatedTables.isNotEmpty);
+            expect(page.floatedTables.single.bounds.width, 300);
+            expect(page.fragments.first.width, lessThan(500));
+          }
           tester
               .widget<ForumBodyTableFlowViewport>(
                 find.byType(ForumBodyTableFlowViewport),
@@ -390,109 +405,125 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets(
-    'scrolling table reflow keeps the visible source without saving',
-    (tester) async {
-      final rows = List.generate(
-        18,
-        (row) =>
-            '<tr height="88"><td width="850">左列 $row</td>'
-            '<td width="810">右列第 $row 行，继续阅读同一处文字。</td></tr>',
-      ).join();
-      final repository = _ReadingRepository(
-        '<p>表格前</p><table width="1660" cellpadding="0">$rows</table><p>表格后</p>',
-      );
-      final saved = NovelReadingProgress(
-        novelId: _work,
-        episodeId: _chapter,
-        scrollOffset: 0,
-        updatedAt: DateTime(2026, 10, 1),
-      );
-      repository.progress[_chapter] = saved;
-      repository.recent = _chapter;
-      await tester.pumpWidget(
-        _app(
-          repository,
-          nativePagination: true,
-          preferences: NovelReaderPreferences.defaults().copyWith(
-            flowMode: NovelReaderFlowMode.vertical,
+  for (final floated in [false, true]) {
+    testWidgets(
+      'scrolling table reflow keeps the visible source without saving (floated=$floated)',
+      (tester) async {
+        final rows = List.generate(
+          18,
+          (row) =>
+              '<tr height="88"><td width="850">左列 $row</td>'
+              '<td width="810">右列第 $row 行，继续阅读同一处文字。</td></tr>',
+        ).join();
+        final markup = '<table width="1660" cellpadding="0">$rows</table>';
+        final placed = floated
+            ? '<span style="float:right;width:300px;margin-left:5px">$markup</span>'
+                  '表旁文字<br style="clear:both">'
+            : markup;
+        final repository = _ReadingRepository('<p>表格前</p>$placed<p>表格后</p>');
+        final saved = NovelReadingProgress(
+          novelId: _work,
+          episodeId: _chapter,
+          scrollOffset: 0,
+          updatedAt: DateTime(2026, 10, 1),
+        );
+        repository.progress[_chapter] = saved;
+        repository.recent = _chapter;
+        await tester.pumpWidget(
+          _app(
+            repository,
+            nativePagination: true,
+            preferences: NovelReaderPreferences.defaults().copyWith(
+              flowMode: NovelReaderFlowMode.vertical,
+            ),
           ),
-        ),
-      );
-      final flow = find.byType(ForumBodyFlowSliver);
-      final table = find.byType(ForumBodyTableFlowViewport);
-      Future<ForumBodyFlowSliver> rendered({
-        ForumBodyTextPageSession? after,
-      }) async {
-        for (var frame = 0; frame < 250; frame++) {
-          await tester.runAsync(
-            () => Future<void>.delayed(const Duration(milliseconds: 2)),
-          );
-          await tester.pump();
-          if (flow.evaluate().isEmpty || table.evaluate().isEmpty) continue;
-          final widget = tester.widget<ForumBodyFlowSliver>(flow);
-          if (widget.prefix.isComplete && !identical(widget.session, after)) {
-            await tester.pumpAndSettle();
-            return tester.widget<ForumBodyFlowSliver>(flow);
+        );
+        final flow = find.byType(ForumBodyFlowSliver);
+        final table = find.byType(ForumBodyTableFlowViewport);
+        Future<ForumBodyFlowSliver> rendered({
+          ForumBodyTextPageSession? after,
+        }) async {
+          for (var frame = 0; frame < 250; frame++) {
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 2)),
+            );
+            await tester.pump();
+            if (flow.evaluate().isEmpty || table.evaluate().isEmpty) continue;
+            final widget = tester.widget<ForumBodyFlowSliver>(flow);
+            if (widget.prefix.isComplete && !identical(widget.session, after)) {
+              await tester.pumpAndSettle();
+              return tester.widget<ForumBodyFlowSliver>(flow);
+            }
           }
+          throw StateError('Flowing table did not present a complete layout');
         }
-        throw StateError('Flowing table did not present a complete layout');
-      }
 
-      final original = await rendered();
-      final outer = _verticalPosition(tester);
-      outer.jumpTo(450);
-      await tester.pumpAndSettle();
-      tester
-          .widget<ForumBodyTableFlowViewport>(table)
-          .horizontalController
-          .jumpTo(875);
-      await tester.pumpAndSettle();
-      expect(repository.progress[_chapter], same(saved));
+        final original = await rendered();
+        double? offsetFor(ForumBodyFlowSliver widget) {
+          if (!floated) return widget.initialTableOffset?.offset;
+          final slice = widget.prefix.singleWhere(
+            (page) => page.floatedTables.isNotEmpty,
+          );
+          return widget.session.flowTableOffset(
+            slice.index,
+            slice.floatedTables.single.path,
+          );
+        }
 
-      _controller(
-        tester,
-      ).previewPreferences(_state(tester).preferences.copyWith(fontSize: 27));
-      final next = await rendered(after: original.session);
-      expect(original.session.isClosed, isTrue);
-      expect(next.initialTableOffset?.offset, greaterThan(800));
-      expect(
+        final outer = _verticalPosition(tester);
+        outer.jumpTo(450);
+        await tester.pumpAndSettle();
         tester
             .widget<ForumBodyTableFlowViewport>(table)
             .horizontalController
-            .offset,
-        greaterThan(800),
-      );
-      expect(_verticalPosition(tester).pixels, closeTo(450, 88));
-      expect(repository.progress[_chapter], same(saved));
-      expect(repository.committed, isEmpty);
+            .jumpTo(875);
+        await tester.pumpAndSettle();
+        expect(repository.progress[_chapter], same(saved));
 
-      addTearDown(tester.view.resetPhysicalSize);
-      tester.view.physicalSize =
-          const Size(680, 600) * tester.view.devicePixelRatio;
-      final resized = await rendered(after: next.session);
-      expect(resized.prefix.width, lessThan(next.prefix.width));
-      expect(resized.initialTableOffset?.offset, greaterThan(800));
-      expect(_verticalPosition(tester).pixels, closeTo(450, 88));
+        _controller(
+          tester,
+        ).previewPreferences(_state(tester).preferences.copyWith(fontSize: 27));
+        final next = await rendered(after: original.session);
+        expect(original.session.isClosed, isTrue);
+        expect(offsetFor(next), greaterThan(800));
+        expect(
+          tester
+              .widget<ForumBodyTableFlowViewport>(table)
+              .horizontalController
+              .offset,
+          greaterThan(800),
+        );
+        expect(_verticalPosition(tester).pixels, closeTo(450, 88));
+        expect(repository.progress[_chapter], same(saved));
+        expect(repository.committed, isEmpty);
 
-      _controller(
-        tester,
-      ).previewPreferences(_state(tester).preferences.copyWith(fontSize: 31));
-      await tester.pump();
-      expect(
-        tester.widget<ForumBodyFlowSliver>(flow).session,
-        same(resized.session),
-      );
-      _verticalPosition(tester).jumpTo(0);
-      final afterMovement = await rendered(after: resized.session);
-      expect(afterMovement.initialTableOffset, isNull);
-      expect(_verticalPosition(tester).pixels, 0);
-      expect(repository.progress[_chapter], same(saved));
-      expect(repository.committed, isEmpty);
-      await tester.pumpWidget(const SizedBox.shrink());
-      expect(afterMovement.session.isClosed, isTrue);
-    },
-  );
+        addTearDown(tester.view.resetPhysicalSize);
+        tester.view.physicalSize =
+            const Size(680, 600) * tester.view.devicePixelRatio;
+        final resized = await rendered(after: next.session);
+        expect(resized.prefix.width, lessThan(next.prefix.width));
+        expect(offsetFor(resized), greaterThan(800));
+        expect(_verticalPosition(tester).pixels, closeTo(450, 88));
+
+        _controller(
+          tester,
+        ).previewPreferences(_state(tester).preferences.copyWith(fontSize: 31));
+        await tester.pump();
+        expect(
+          tester.widget<ForumBodyFlowSliver>(flow).session,
+          same(resized.session),
+        );
+        _verticalPosition(tester).jumpTo(0);
+        final afterMovement = await rendered(after: resized.session);
+        expect(offsetFor(afterMovement) ?? 0, 0);
+        expect(_verticalPosition(tester).pixels, 0);
+        expect(repository.progress[_chapter], same(saved));
+        expect(repository.committed, isEmpty);
+        await tester.pumpWidget(const SizedBox.shrink());
+        expect(afterMovement.session.isClosed, isTrue);
+      },
+    );
+  }
 
   testWidgets(
     'native scrolling reader restores against the complete table extent',

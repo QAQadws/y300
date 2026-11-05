@@ -63,6 +63,7 @@ final class NovelReaderNativePrefixVerifier {
   int _fragment = 0;
   int _rule = 0;
   int _background = 0;
+  int _floatedTable = 0;
   int _incomingLength = 0;
   bool _incomingComplete = false;
   NovelReaderNativePrefixState _state = NovelReaderNativePrefixState.active;
@@ -127,6 +128,7 @@ final class NovelReaderNativePrefixVerifier {
       if (old.index != incoming.index ||
           old.usedHeight != incoming.usedHeight ||
           old.table != incoming.table ||
+          old.floatedTables.length != incoming.floatedTables.length ||
           old.fragments.length != incoming.fragments.length ||
           old.rules.length != incoming.rules.length ||
           old.backgrounds.length != incoming.backgrounds.length) {
@@ -173,13 +175,23 @@ final class NovelReaderNativePrefixVerifier {
         }
         _background++;
         fragments++;
+      } else if (_floatedTable < old.floatedTables.length) {
+        if (old.floatedTables[_floatedTable] !=
+            incoming.floatedTables[_floatedTable]) {
+          _fail(NovelReaderNativePrefixMismatch.page);
+          break;
+        }
+        _floatedTable++;
+        fragments++;
       }
       if (_fragment == old.fragments.length &&
           _rule == old.rules.length &&
-          _background == old.backgrounds.length) {
+          _background == old.backgrounds.length &&
+          _floatedTable == old.floatedTables.length) {
         _fragment = 0;
         _rule = 0;
         _background = 0;
+        _floatedTable = 0;
         _page++;
         pages++;
         if (_page == prefixLength) {
@@ -210,6 +222,7 @@ final class NovelReaderNativePrefixVerifier {
   ) =>
       old.paragraphIndex == next.paragraphIndex &&
       old.kind == next.kind &&
+      old.isFloated == next.isFloated &&
       old.imageFrame == next.imageFrame &&
       old.listMarker?.baseline == next.listMarker?.baseline &&
       old.listMarker?.bounds == next.listMarker?.bounds &&

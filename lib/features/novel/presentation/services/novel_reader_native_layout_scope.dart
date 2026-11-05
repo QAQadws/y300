@@ -49,7 +49,7 @@ final class NovelReaderNativeLayoutScope {
   }) : _fontCollectionGeneration = fontCollectionGeneration,
        _paragraphInputs = paragraphInputs,
        _usesQuoteTheme = usesQuoteTheme;
-  static const fingerprintRevision = 15;
+  static const fingerprintRevision = 16;
   final NovelReaderNativePreparedChapter chapter;
   final ForumBodyReaderStyle reader;
   final TextScaler textScaler;
@@ -284,6 +284,7 @@ final class NovelReaderNativeLayoutScope {
       limits: limits,
       collapses: collapses,
       dedicatedTables: true,
+      captureFloats: true,
       tableExtent: tableExtent,
       imageResolver: catalog?.resolve,
       inlineImageResolver: catalog == null

@@ -11,6 +11,28 @@ import '../models/novel_reader_pagination_exception.dart';
 import 'novel_reader_native_work_scheduler.dart';
 import 'novel_reader_pagination_cancellation.dart';
 
+ForumHtmlImageLayout? updatedNovelReaderBlockImageLayout({
+  required ForumBodyImageInput input,
+  required ForumHtmlImageLayout resolved,
+  required ForumHtmlImageLayout? previous,
+  required bool isFloated,
+}) {
+  final ratio = resolved.aspectRatio ?? resolved.displaySize?.aspectRatio;
+  if (ratio == null || !ratio.isFinite || ratio <= 0) return null;
+  final previousSize = previous?.displaySize ?? input.naturalSize;
+  final resolvedSize = resolved.displaySize;
+  final size = isFloated
+      ? (resolvedSize != null && resolvedSize.isFinite && !resolvedSize.isEmpty
+            ? resolvedSize
+            : previousSize)
+      : null;
+  if (ratio == (previous?.aspectRatio ?? input.aspectRatio) &&
+      (!isFloated || size == previousSize)) {
+    return null;
+  }
+  return ForumHtmlImageLayout(aspectRatio: ratio, displaySize: size);
+}
+
 /// A layout request's synchronous resource adapter. It borrows the existing
 /// Host/policy; no transport, dimension lookup, image cache or native owner is
 /// created here. Only immutable values enter the sequential Session.
@@ -103,6 +125,7 @@ final class NovelReaderNativeImageResources {
             element: block.element,
             entry: block.entry,
             layout: ForumHtmlImageLayout(aspectRatio: block.aspectRatio),
+            naturalSize: blockLayout.displaySize,
           );
         }
       }
@@ -126,6 +149,8 @@ final class NovelReaderNativeImageResources {
               original?.image.cacheKey,
               original?.image.isSticker,
               input?.aspectRatio,
+              input?.naturalSize?.width,
+              input?.naturalSize?.height,
               frozenLayouts[path]?.displaySize?.width,
               frozenLayouts[path]?.displaySize?.height,
               original?.image.htmlSize?.width,

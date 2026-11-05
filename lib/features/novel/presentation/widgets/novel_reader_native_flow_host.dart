@@ -259,7 +259,12 @@ final class NovelReaderNativeFlowHostState
         onReadyChanged: (ready) => _ready(run, ready),
         onTableWindowChanged: widget.restoreReflowOffset == null
             ? null
-            : (index, window) => _tableWindowChanged(run, index, window),
+            : (index, window) =>
+                  _tableWindowChanged(run, index, prefix[index].table!, window),
+        onFloatedTableWindowChanged: widget.restoreReflowOffset == null
+            ? null
+            : (index, frame, window) =>
+                  _tableWindowChanged(run, index, frame, window),
         onFailure: (error, _) => _fail(run, error),
         buildSlice: (context, snapshot, index, fragments) =>
             _slice(context, run, snapshot, index, fragments),
@@ -394,6 +399,7 @@ final class NovelReaderNativeFlowHostState
   void _reportReady(_FlowRun run) {
     if (!_current(run) || !identical(_displayed, run)) return;
     _reportImages(run);
+    _proveNextTable(run);
     final reflow = run.reflow;
     if (run.ready &&
         reflow != null &&
@@ -420,7 +426,7 @@ final class NovelReaderNativeFlowHostState
     final offset = scroll.offset;
     if (_lastScrollOffset == offset) return;
     _lastScrollOffset = offset;
-    _displayed?.tablePosition = null;
+    _displayed?.clearTableWindows();
     _displayed?.textPosition = null;
     _displayed?.imageSample?.cancel();
     _cancelReflow();
@@ -435,7 +441,7 @@ final class NovelReaderNativeFlowHostState
     }
     _FlowSourcePosition? position;
     for (final candidate in [
-      _displayed?.tablePosition,
+      _displayed?.leadingTablePosition,
       _displayed?.textPosition,
       _request?.reflow?.source,
     ]) {
@@ -476,7 +482,6 @@ final class NovelReaderNativeFlowHostState
     _lastScrollOffset = position.pixels;
     run.reflow = _FlowReflow((
       identity: source.identity,
-      slice: null,
       tablePath: source.tablePath,
       anchor: source.anchor,
       imageProgress: source.imageProgress,
@@ -501,7 +506,7 @@ final class NovelReaderNativeFlowHostState
     final position = scroll.position;
     final pixels = position.pixels;
     if (position.isScrollingNotifier.value) return null;
-    final table = run.tablePosition;
+    final table = run.leadingTablePosition;
     final top = _bodyTop(run);
     final point = await _sampleSource(
       run,
@@ -518,7 +523,7 @@ final class NovelReaderNativeFlowHostState
       return null;
     }
     if (table != null &&
-        identical(run.tablePosition, table) &&
+        identical(run.leadingTablePosition, table) &&
         identical(table.scroll, position) &&
         table.pixels == pixels &&
         (point == null ||
@@ -553,30 +558,58 @@ final class NovelReaderNativeFlowHostState
   void _tableWindowChanged(
     _FlowRun run,
     int index,
+    ForumBodyTextPageTable frame,
     ForumBodyTableVisibleWindow? window,
   ) {
     if (!_current(run) || widget.restoreReflowOffset == null) return;
+    final key = (slice: index, path: frame.path);
+    run.tablePositions.remove(key);
+    if (run.tableProofKey == key) run.cancelTableProof();
+    if (window != null &&
+        window.layout.geometry.grid.table.path == frame.path) {
+      run.pendingTables[key] = (frame: frame, window: window);
+    } else {
+      run.pendingTables.remove(key);
+    }
+    _proveNextTable(run);
+  }
+
+  void _proveNextTable(_FlowRun run) {
+    if (!_current(run) || run.tableProof != null) return;
     final reflow = run.reflow;
+    final target = reflow?.target;
+    final path = reflow?.source.tablePath;
     if (reflow != null &&
-        (reflow.source.tablePath == null || reflow.target?.slice != index)) {
-      return;
-    }
-    if (window == null) {
-      if (run.tablePosition?.slice == index) run.tablePosition = null;
-      if (run.tableProofSlice == index) run.cancelTableProof();
-      return;
-    }
-    if (run.tablePosition case final previous?
-        when reflow == null &&
-            previous.slice != index &&
-            !window.hasUserScrolled) {
+        (!reflow.offsetApplied || target == null || path == null)) {
       return;
     }
     final scroll = widget.scrollController;
     final top = _bodyTop(run);
-    final table = run.prefix?[index].table;
-    if (!scroll.hasClients || top == null || table == null) return;
-    final tableTop = top + run.extentBefore(index) + table.bounds.top;
+    if (!scroll.hasClients || top == null) return;
+    // The viewport can expose several floats in one slice. Keep at most one
+    // coverage worker active and prefer the exact target during a restore.
+    while (run.pendingTables.isNotEmpty) {
+      final key = reflow == null
+          ? run.pendingTables.keys.first
+          : (slice: target!.slice, path: path!);
+      final candidate = run.pendingTables.remove(key);
+      if (candidate == null) return;
+      if (!candidate.window.isCurrent) continue;
+      _proveTable(run, key, candidate, top, scroll, reflow);
+      if (run.tableProof != null) return;
+    }
+  }
+
+  void _proveTable(
+    _FlowRun run,
+    _FlowTableKey key,
+    _FlowTableWindow candidate,
+    double bodyTop,
+    ScrollController scroll,
+    _FlowReflow? reflow,
+  ) {
+    final (:frame, :window) = candidate;
+    final tableTop = bodyTop + run.extentBefore(key.slice) + frame.bounds.top;
     final readableTop = scroll.offset + widget.viewportInsets.top - tableTop;
     final readable = Rect.fromLTWH(
       window.bounds.left,
@@ -585,10 +618,8 @@ final class NovelReaderNativeFlowHostState
       _readableHeight(scroll.position),
     );
     if (readable.isEmpty) return;
-    run.cancelTableProof();
-    run.tablePosition = null;
     final token = run.tableProof = NovelReaderPaginationCancellationToken();
-    run.tableProofSlice = index;
+    run.tableProofKey = key;
     final position = scroll.position;
     final pixels = scroll.offset;
     _lastScrollOffset = pixels;
@@ -614,16 +645,18 @@ final class NovelReaderNativeFlowHostState
         final anchor = proof!.anchor;
         final bounds = proof.bounds;
         if (anchor != null && bounds != null) {
-          run.tablePosition = (
+          final positionInBody = (
             identity: run.scope!.chapter.identity,
-            slice: index,
-            tablePath: table.path,
+            tablePath: frame.path,
             anchor: anchor,
             imageProgress: 0.0,
-            inset: bounds.topLeft - Offset(window.bounds.left, readableTop),
+            inset:
+                bounds.topLeft +
+                Offset(frame.bounds.left - window.bounds.left, -readableTop),
             scroll: position,
             pixels: pixels,
           );
+          run.tablePositions[key] = (position: positionInBody, window: window);
         }
         if (reflow != null) {
           _finishReflow(run, reflow, proof.matchesPreferred ? anchor : null);
@@ -631,7 +664,10 @@ final class NovelReaderNativeFlowHostState
       } on Object {
         if (!token.isCancelled && reflow != null) _finishReflow(run, reflow);
       } finally {
-        if (identical(run.tableProof, token)) run.cancelTableProof();
+        if (identical(run.tableProof, token)) {
+          run.cancelTableProof();
+          _proveNextTable(run);
+        }
       }
     }());
     // A settled table reports after paint. Its proof still needs another frame.
@@ -669,7 +705,9 @@ final class NovelReaderNativeFlowHostState
       if (!current()) return false;
       if (candidate != null) {
         final index = candidate.slice;
-        final table = prefix[index].table;
+        final table = prefix[index].tableFrames
+            .where((frame) => frame.path == source.tablePath)
+            .firstOrNull;
         final bounds = candidate.bounds;
         final height = _readableHeight(scroll.position);
         if (height <= 0 || (!candidate.isImage && bounds.height > height)) {
@@ -701,7 +739,7 @@ final class NovelReaderNativeFlowHostState
           horizontal: table == null
               ? null
               : (bounds.left -
-                        source.inset.dx.clamp(
+                        (source.inset.dx - table.bounds.left).clamp(
                           0.0,
                           table.bounds.width - bounds.width,
                         ))
@@ -734,7 +772,12 @@ final class NovelReaderNativeFlowHostState
       _retire(_displayed);
       _displayed = run;
       if (target.horizontal case final offset?) {
-        run.initialTableOffset = (slice: target.slice, offset: offset);
+        final path = source.tablePath!;
+        if (prefix[target.slice].table?.path == path) {
+          run.initialTableOffset = (slice: target.slice, offset: offset);
+        } else {
+          run.session!.setFlowTableOffset(target.slice, path, offset);
+        }
       }
     });
     final bool applied;
@@ -790,11 +833,14 @@ final class NovelReaderNativeFlowHostState
       );
     }
     for (var index = start; index < prefix.length; index++) {
-      if (prefix[index].table?.path != path) continue;
+      if (!prefix[index].tableFrames.any((frame) => frame.path == path)) {
+        continue;
+      }
       final candidate = await probeNovelReaderNativeTableAnchor(
         session: session,
         anchors: anchors,
         pageIndex: index,
+        tablePath: path,
         target: source.anchor,
         allowNodeCompatibility: false,
         scheduler: const NovelReaderNativeWorkScheduler(),
@@ -1004,21 +1050,20 @@ final class NovelReaderNativeFlowHostState
           : (_, _, _) => onFrameChanged(),
       onImageLayoutResolved: (fragment, layout) {
         final input = fragment.content.input;
-        final ratio = layout.aspectRatio ?? layout.displaySize?.aspectRatio;
-        if (!_current(run) ||
-            !fragment.isActive ||
-            !catalog.owns(input) ||
-            ratio == null ||
-            !ratio.isFinite ||
-            ratio <= 0 ||
-            ratio ==
-                (_imageLayouts[input.element.path]?.aspectRatio ??
-                    input.aspectRatio)) {
+        if (!_current(run) || !fragment.isActive || !catalog.owns(input)) {
           return;
         }
-        _imageLayouts[input.element.path] = ForumHtmlImageLayout(
-          aspectRatio: ratio,
+        final path = input.element.path;
+        final updated = updatedNovelReaderBlockImageLayout(
+          input: input,
+          resolved: layout,
+          previous: _imageLayouts[path],
+          isFloated: snapshot[index].fragments.any(
+            (item) => item.isFloated && item.path == path,
+          ),
         );
+        if (updated == null) return;
+        _imageLayouts[path] = updated;
         _scheduleReflow(run);
       },
       onInlineImageLayoutResolved: (fragment, binding, layout) {
@@ -1090,7 +1135,6 @@ final class NovelReaderNativeFlowHostState
             point != null) {
           run.textPosition = (
             identity: run.scope!.chapter.identity,
-            slice: point.slice,
             tablePath: null,
             anchor: point.anchor,
             imageProgress: 0.0,
@@ -1141,13 +1185,19 @@ final class NovelReaderNativeFlowHostState
 
 typedef _FlowSourcePosition = ({
   ForumBodyIdentity identity,
-  int? slice,
   String? tablePath,
   NovelReaderTextAnchor anchor,
   double imageProgress,
   Offset inset,
   ScrollPosition scroll,
   double pixels,
+});
+
+typedef _FlowTableKey = ({int slice, String path});
+
+typedef _FlowTableWindow = ({
+  ForumBodyTextPageTable frame,
+  ForumBodyTableVisibleWindow window,
 });
 
 final class _FlowReflow {
@@ -1227,12 +1277,17 @@ final class _FlowRun {
   NovelReadingImageTracker? imageTracker;
   ForumHtmlImageHost? imageHost;
   final _ends = <double>[];
-  _FlowSourcePosition? tablePosition;
+  final pendingTables = <_FlowTableKey, _FlowTableWindow>{};
+  final tablePositions =
+      <
+        _FlowTableKey,
+        ({_FlowSourcePosition position, ForumBodyTableVisibleWindow window})
+      >{};
   _FlowSourcePosition? textPosition;
   _FlowReflow? reflow;
   NovelReaderPaginationCancellationToken? imageSample;
   NovelReaderPaginationCancellationToken? tableProof;
-  int? tableProofSlice;
+  _FlowTableKey? tableProofKey;
   ({int slice, double offset})? initialTableOffset;
   bool ready = false;
   bool reportedReady = false;
@@ -1240,6 +1295,17 @@ final class _FlowRun {
 
   double get extent => _ends.lastOrNull ?? 0;
   double extentBefore(int slice) => slice == 0 ? 0 : _ends[slice - 1];
+
+  _FlowSourcePosition? get leadingTablePosition {
+    _FlowSourcePosition? leading;
+    for (final item in tablePositions.values) {
+      if (item.window.isCurrent &&
+          (leading == null || item.position.inset.dy < leading.inset.dy)) {
+        leading = item.position;
+      }
+    }
+    return leading;
+  }
 
   void updatePrefix(ForumBodyTextPageSnapshot next) {
     for (var i = prefix?.length ?? 0; i < next.length; i++) {
@@ -1251,11 +1317,17 @@ final class _FlowRun {
   void cancelTableProof() {
     tableProof?.cancel();
     tableProof = null;
-    tableProofSlice = null;
+    tableProofKey = null;
+  }
+
+  void clearTableWindows() {
+    cancelTableProof();
+    pendingTables.clear();
+    tablePositions.clear();
   }
 
   void stop() {
-    cancelTableProof();
+    clearTableWindows();
     imageSample?.cancel();
     reflow?.token.cancel();
     token.cancel();

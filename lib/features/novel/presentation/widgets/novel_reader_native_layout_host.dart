@@ -1149,23 +1149,25 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
     ForumHtmlImageHost? host,
   ) {
     final input = fragment.content.input;
-    final ratio = layout.aspectRatio ?? layout.displaySize?.aspectRatio;
     if (!_live(request) ||
         !identical(host, widget.imageHost) ||
         !fragment.isActive ||
         request.scope.images?.owns(input) != true ||
         view.snapshot.layoutId != request.session.snapshot.layoutId ||
-        _imageGeometryIdentity != input.identity ||
-        ratio == null ||
-        !ratio.isFinite ||
-        ratio <= 0) {
+        _imageGeometryIdentity != input.identity) {
       return;
     }
     final path = input.element.path;
-    if (ratio == (_imageLayouts[path]?.aspectRatio ?? input.aspectRatio)) {
-      return;
-    }
-    _imageLayouts[path] = ForumHtmlImageLayout(aspectRatio: ratio);
+    final updated = updatedNovelReaderBlockImageLayout(
+      input: input,
+      resolved: layout,
+      previous: _imageLayouts[path],
+      isFloated: view.snapshot[view.pageIndex].fragments.any(
+        (item) => item.isFloated && item.path == path,
+      ),
+    );
+    if (updated == null) return;
+    _imageLayouts[path] = updated;
     _imageReflowRequest = request;
     _scheduleImageReflow();
   }
