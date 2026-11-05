@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show precisionErrorTolerance;
 import 'package:flutter/widgets.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_paged_turn_motion.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 import '../controllers/novel_reader_native_paged_controller.dart';
 import '../controllers/novel_reader_chapter_drag_controller.dart';
@@ -28,6 +29,10 @@ typedef NovelReaderNativeImageTapHandler = void Function(
   ForumBodyPreparedTextFragment,
   ForumBodyInlineImageBinding?,
   bool Function(),
+);
+typedef NovelReaderNativeCollapseToggle = void Function(
+  NovelReaderNativePageView,
+  ForumBodyTextPageFragment,
 );
 
 /// Native page mounting and gesture boundary. The Host owns controllers,
@@ -62,6 +67,7 @@ class NovelReaderNativePagedViewport extends StatefulWidget {
     this.onImageLayoutResolved,
     this.onInlineImageLayoutResolved,
     this.onImageTap,
+    this.onCollapseToggle,
   });
 
   final NovelReaderNativePagedController controller;
@@ -88,6 +94,7 @@ class NovelReaderNativePagedViewport extends StatefulWidget {
   final NovelReaderNativeImageLayoutResolved? onImageLayoutResolved;
   final NovelReaderNativeInlineImageLayoutResolved? onInlineImageLayoutResolved;
   final NovelReaderNativeImageTapHandler? onImageTap;
+  final NovelReaderNativeCollapseToggle? onCollapseToggle;
 
   @override
   State<NovelReaderNativePagedViewport> createState() =>
@@ -255,6 +262,15 @@ class _NovelReaderNativePagedViewportState
               );
             },
       frozen: frozen,
+      onCollapseToggle: frozen || widget.onCollapseToggle == null
+          ? null
+          : (view, fragment) {
+              if (mounted &&
+                  widget.active &&
+                  identical(displayed.controller, widget.controller)) {
+                widget.onCollapseToggle?.call(view, fragment);
+              }
+            },
       reverse: widget.reverse,
       navigationController: widget.navigationController,
       onTurnToAdjacentChapter: widget.onTurnToAdjacentChapter,
@@ -339,6 +355,7 @@ class _NativeLayoutViewport extends StatefulWidget {
     required this.onImageLayoutResolved,
     required this.onInlineImageLayoutResolved,
     required this.onImageTap,
+    required this.onCollapseToggle,
   });
   final NovelReaderNativePagedController controller;
   final ForumHtmlImageHost? imageHost;
@@ -346,6 +363,7 @@ class _NativeLayoutViewport extends StatefulWidget {
   final NovelReaderNativeImageLayoutResolved? onImageLayoutResolved;
   final NovelReaderNativeInlineImageLayoutResolved? onInlineImageLayoutResolved;
   final NovelReaderNativeImageTapHandler? onImageTap;
+  final NovelReaderNativeCollapseToggle? onCollapseToggle;
   final double width;
   final double height;
   final int initialPage;
@@ -881,6 +899,31 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
     widget.onPageUnmounted?.call();
   }
 
+  bool _isStablePage(NovelReaderNativePageView view) {
+    final controller = widget.controller;
+    final page = view.pageIndex;
+    return mounted &&
+        _fits &&
+        !_scrolling &&
+        !widget.frozen &&
+        !controller.isClosed &&
+        !controller.hasPendingNavigation &&
+        identical(controller.visibleView, view) &&
+        _page == page &&
+        _pages.hasClients &&
+        !_pages.position.isScrollingNotifier.value &&
+        ((_pages.page ?? -1) - page).abs() <= precisionErrorTolerance;
+  }
+
+  void _toggleCollapse(
+    NovelReaderNativePageView view,
+    ForumBodyTextPageFragment fragment,
+  ) {
+    if (_isStablePage(view) && _mountedPages.containsKey(view)) {
+      widget.onCollapseToggle?.call(view, fragment);
+    }
+  }
+
   void _tapImage(
     NovelReaderNativePageView view,
     ForumBodyPreparedTextFragment fragment,
@@ -899,23 +942,13 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
         )) {
       return;
     }
-    final controller = widget.controller, page = view.pageIndex;
     bool current() =>
-        mounted &&
-        _fits &&
-        !_scrolling &&
-        !controller.isClosed &&
-        !controller.hasPendingNavigation &&
-        identical(controller.visibleView, view) &&
-        _page == page &&
+        _isStablePage(view) &&
         fragment.isActive &&
         (binding == null ||
             (fragment is ForumBodyPreparedInlineFragment &&
                 identical(fragment.view.images[binding.atomIndex], binding))) &&
-        identical(_mountedPages[view], fragments) &&
-        _pages.hasClients &&
-        !_pages.position.isScrollingNotifier.value &&
-        ((_pages.page ?? -1) - page).abs() <= precisionErrorTolerance;
+        identical(_mountedPages[view], fragments);
     if (current()) tap(fragment, binding, current);
   }
 
@@ -982,6 +1015,9 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
                               ? null
                               : (fragment, binding) =>
                                     _tapImage(view, fragment, binding),
+                          onCollapseToggle: widget.onCollapseToggle == null
+                              ? null
+                              : (fragment) => _toggleCollapse(view, fragment),
                           key: ObjectKey(view),
                           view: view,
                           // Retain the confirmed origin through cancellation
@@ -1072,6 +1108,7 @@ class _NativeMountedPage extends StatefulWidget {
     required this.onImageLayoutResolved,
     required this.onInlineImageLayoutResolved,
     required this.onImageTap,
+    required this.onCollapseToggle,
   });
   final NovelReaderNativePageView view;
   final ForumHtmlImageHost? imageHost;
@@ -1083,6 +1120,7 @@ class _NativeMountedPage extends StatefulWidget {
     ForumBodyInlineImageBinding?,
   )?
   onImageTap;
+  final ValueChanged<ForumBodyTextPageFragment>? onCollapseToggle;
   final bool keepAlive;
   final void Function(
     NovelReaderNativePageView,
@@ -1123,12 +1161,23 @@ class _NativeMountedPageState extends State<_NativeMountedPage>
       return const SizedBox.shrink();
     }
     final view = widget.view;
+    final l10n = widget.onCollapseToggle == null
+        ? null
+        : Localizations.of<AppLocalizations>(context, AppLocalizations);
     return ForumBodyTextPageSurface.prepared(
       snapshot: view.snapshot,
       pageIndex: view.pageIndex,
       layoutId: view.snapshot.layoutId,
       fragments: _fragments,
       imageHost: widget.imageHost,
+      collapseLabels: l10n == null
+          ? null
+          : ForumHtmlCollapseLabels(
+              fallbackTitle: l10n.threadHtmlCollapseContent,
+              expandedSemanticsLabel: l10n.threadHtmlCollapseExpanded,
+              collapsedSemanticsLabel: l10n.threadHtmlCollapseCollapsed,
+            ),
+      onCollapseToggle: widget.onCollapseToggle,
       onImageDisplayChanged: (_, _) => widget.onImageDisplayChanged(),
       onInlineImageDisplayChanged: (_, _, _) => widget.onImageDisplayChanged(),
       onImageTap: widget.onImageTap == null

@@ -32,12 +32,16 @@ final class NovelReaderNativeImageResources {
   Future<NovelReaderNativeImageCatalog> capture({
     required NovelReaderPaginationCancellationToken cancellation,
     required int maxCodeUnits,
+    ForumBodyCollapseLayout? collapses,
     Map<String, ForumHtmlImageLayout> resolvedLayouts = const {},
     Map<String, Size> resolvedInlineSizes = const {},
     NovelReaderNativeWorkScheduler scheduler =
         const NovelReaderNativeWorkScheduler(),
   }) async {
     if (maxCodeUnits < 0) throw ArgumentError.value(maxCodeUnits);
+    if (collapses != null && !identical(collapses.document, chapter.document)) {
+      throw ArgumentError('Native image collapse source changed');
+    }
     final layouts = Map<String, ForumHtmlImageLayout>.of(resolvedLayouts);
     final inlineSizes = Map<String, Size>.of(resolvedInlineSizes);
     final inputs = <String, ForumBodyImageInput?>{};
@@ -50,6 +54,13 @@ final class NovelReaderNativeImageResources {
     for (final element in chapter.document.imageElements) {
       cancellation.throwIfCancelled();
       final path = element.path;
+      if (++batch == 64 || watch.elapsedMicroseconds >= 3000) {
+        await scheduler.nextFrame(cancellation);
+        cancellation.throwIfCancelled();
+        batch = 0;
+        watch.reset();
+      }
+      if (collapses?.hidesPath(path) == true) continue;
       final anchor = chapter.anchors.imageAtPath(path);
       final original = anchor == null
           ? _resolveSticker(element)
@@ -122,11 +133,6 @@ final class NovelReaderNativeImageResources {
             ]),
           ),
         );
-      }
-      if (++batch == 64 || watch.elapsedMicroseconds >= 3000) {
-        await scheduler.nextFrame(cancellation);
-        batch = 0;
-        watch.reset();
       }
     }
     cancellation.throwIfCancelled();

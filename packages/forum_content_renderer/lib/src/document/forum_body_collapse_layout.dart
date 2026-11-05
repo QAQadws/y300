@@ -70,15 +70,25 @@ final class ForumBodyCollapseLayout {
       document,
       Map.unmodifiable(sections),
       Map.unmodifiable(elements),
+      Set.unmodifiable([
+        for (final section in sections.values)
+          if (!section.expanded) section.body.path,
+      ]),
     );
   }
 
-  const ForumBodyCollapseLayout._(this.document, this.sections, this._elements);
+  const ForumBodyCollapseLayout._(
+    this.document,
+    this.sections,
+    this._elements,
+    this._closedBodies,
+  );
 
   static final _classSpace = RegExp(r'\s+');
   final ForumBodyDocument document;
   final Map<String, ForumBodyCollapseSection> sections;
   final Map<ForumBodyElement, ForumBodyCollapseSection> _elements;
+  final Set<String> _closedBodies;
 
   ForumBodyCollapseSection? sectionFor(ForumBodyElement element) =>
       _elements[element];
@@ -88,5 +98,17 @@ final class ForumBodyCollapseLayout {
     return section != null &&
         identical(element, section.body) &&
         !section.expanded;
+  }
+
+  /// A path from this document is excluded when it falls inside a closed body.
+  /// The check walks path segments, so adjacent sibling indices cannot match.
+  bool hidesPath(String path) {
+    if (_closedBodies.isEmpty) return false;
+    var end = path.length;
+    while (end > 0) {
+      if (_closedBodies.contains(path.substring(0, end))) return true;
+      end = path.lastIndexOf('/', end - 1);
+    }
+    return false;
   }
 }

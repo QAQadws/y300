@@ -26,6 +26,7 @@ import 'package:y300/features/novel/presentation/services/novel_reader_native_wo
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_performance_policy.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_native_layout_host.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_native_paged_viewport.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/identity_text_converter.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
 
@@ -275,6 +276,114 @@ Future<List<int>> _canvasPixel(WidgetTester tester, {int? x, int? y}) async {
 }
 
 void main() {
+  testWidgets('fold reflow preserves its source and retires old controls', (
+    tester,
+  ) async {
+    final reader = _Reader(
+      html:
+          '<p>before</p>'
+          '<div class="showcollapse_box">'
+          '<div class="showcollapse_title">same title</div>'
+          '<div class="showcollapse_content" style="display:none">'
+          '<p>outer body</p><div class="showcollapse_box showcollapse_active">'
+          '<div class="showcollapse_title">same title</div>'
+          '<div class="showcollapse_content" style="display:none">'
+          '<p>inner body</p><div class="showcollapse_gather">control</div>'
+          '</div></div></div></div><p>after</p>',
+    );
+    final viewport = find.byType(NovelReaderNativePagedViewport);
+    final toggles = find.byWidgetPredicate(
+      (widget) =>
+          widget is InkWell &&
+          widget.key is ValueKey<String> &&
+          (widget.key! as ValueKey<String>).value.startsWith(
+            'forum-native-collapse-toggle-',
+          ),
+    );
+    await _show(
+      tester,
+      reader,
+      width: 220,
+      height: 180,
+      startsAtBeginning: true,
+    );
+    await tester.pumpAndSettle();
+    final closed = tester
+        .widget<NovelReaderNativePagedViewport>(viewport)
+        .controller;
+    final before = reader.positions.last.anchor;
+    Object anchorKey(NovelReaderTextAnchor anchor) => (
+      anchor.episodeId,
+      anchor.nodeId,
+      anchor.textOffset,
+      anchor.formatVersion,
+      anchor.textIdentity,
+    );
+    expect(toggles, findsOneWidget);
+    final oldTap = tester.widget<InkWell>(toggles).onTap!;
+    await tester.tap(toggles);
+    await tester.pumpAndSettle();
+    final opened = tester
+        .widget<NovelReaderNativePagedViewport>(viewport)
+        .controller;
+    expect(opened, isNot(same(closed)));
+    expect(opened.paginationKey, isNot(closed.paginationKey));
+    expect(toggles, findsNWidgets(2));
+    expect(anchorKey(reader.positions.last.anchor), anchorKey(before));
+    expect(reader.positions.last.isReadOnlyCompatibilityRestore, isTrue);
+    oldTap();
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<NovelReaderNativePagedViewport>(viewport).controller,
+      same(opened),
+    );
+
+    await _show(
+      tester,
+      reader,
+      width: 230,
+      height: 180,
+      startsAtBeginning: true,
+    );
+    await tester.pumpAndSettle();
+    expect(toggles, findsNWidgets(2));
+    final resized = tester
+        .widget<NovelReaderNativePagedViewport>(viewport)
+        .controller;
+    final resizedView = resized.visibleView!;
+    final resizedFragments =
+        resizedView.snapshot[resizedView.pageIndex].fragments;
+    final innerTitle = resizedFragments.lastIndexWhere(
+      (fragment) => fragment.collapseHeader != null,
+    );
+    final innerBody = resizedView.coverage.points
+        .firstWhere((point) => point.fragmentIndex == innerTitle + 1)
+        .anchor;
+    resized.requestAnchor(innerBody);
+    await tester.pumpAndSettle();
+    expect(anchorKey(reader.positions.last.anchor), anchorKey(innerBody));
+    await tester.tap(toggles.last);
+    await tester.pumpAndSettle();
+    expect(toggles, findsNWidgets(2));
+    final innerClosed = tester
+        .widget<NovelReaderNativePagedViewport>(viewport)
+        .controller;
+    final view = innerClosed.visibleView!;
+    expect(
+      view.snapshot[view.pageIndex].fragments
+          .map((fragment) => fragment.collapseHeader?.expanded)
+          .whereType<bool>(),
+      [true, false],
+    );
+    expect(reader.positions.last.isReadOnlyCompatibilityRestore, isTrue);
+    final location = view.coverage.locate(reader.positions.last.anchor)!;
+    final title =
+        view.snapshot[view.pageIndex].fragments[location.fragmentIndex];
+    expect(title.collapseHeader?.expanded, isFalse);
+    expect(reader.service.calls, 1);
+    await _unmount(tester, reader);
+  });
+
   testWidgets(
     'real Host seals by actual owner bytes and turns without waiting on its visible page',
     (tester) async {

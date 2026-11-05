@@ -83,6 +83,59 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
+    'closed fold images do not enter the Host or the viewer sequence',
+    () async {
+      final chapter = await _htmlChapter(
+        '<div class="showcollapse_box">'
+        '<div class="showcollapse_title">Title</div>'
+        '<div class="showcollapse_content" style="display:none">$_image</div>'
+        '</div>$_image',
+      );
+      final host = _SnapshotHost();
+      final defaults = ForumBodyCollapseLayout(chapter.document);
+      final fold = defaults.sections.values.single;
+      final hidden = chapter.document.imageElements.first;
+      final outside = chapter.document.imageElements.last;
+      final resources = NovelReaderNativeImageResources(
+        chapter: chapter,
+        host: host,
+        policy: NativeReaderImageTestHost(),
+      );
+      Future<NovelReaderNativeImageCatalog> capture(
+        ForumBodyCollapseLayout layout,
+      ) => resources.capture(
+        cancellation: NovelReaderPaginationCancellationToken(),
+        maxCodeUnits: 10000,
+        collapses: layout,
+        scheduler: const NovelReaderNativeWorkScheduler(nextFrame: _yield),
+      );
+      final closed = await capture(defaults);
+      expect(host.descriptions, hasLength(1));
+      expect(closed.resolve(chapter.identity, hidden), isNull);
+      expect(
+        closed.resolve(chapter.identity, outside)!.entry,
+        same(closed.sequence.entries.single),
+      );
+      final open = await capture(
+        ForumBodyCollapseLayout(
+          chapter.document,
+          expansionOverrides: {fold.id: true},
+        ),
+      );
+      expect(host.descriptions, hasLength(3));
+      expect(open.sequence.entries, [
+        open.resolve(chapter.identity, hidden)!.entry,
+        open.resolve(chapter.identity, outside)!.entry,
+      ]);
+      expect(
+        open.sequence.entries.map((item) => item.index).toSet(),
+        hasLength(2),
+      );
+      expect(open.geometryIdentity, isNot(closed.geometryIdentity));
+    },
+  );
+
+  test(
     'actual Session fits frozen catalog sources in the containing styled block',
     () async {
       final chapter = await _htmlChapter(

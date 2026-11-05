@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:html_pagination_core/html_pagination_core.dart'
+    show HtmlProjectionAffinity;
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/fonts/fonts.dart' show ResolvedFont;
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
@@ -16,6 +18,7 @@ import '../controllers/novel_reader_paged_navigation_controller.dart';
 import '../models/novel_reader_chapter_turn.dart';
 import '../models/novel_reader_anchor_navigation_request.dart';
 import '../models/novel_reader_native_host_status.dart';
+import '../models/novel_reader_native_page_coverage.dart';
 import '../models/novel_reader_native_page_view.dart';
 import '../models/novel_reader_native_image_tap.dart';
 import '../models/novel_reader_native_prepared_chapter.dart';
@@ -192,6 +195,9 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
   bool _selectAnchorNavigation = false;
   int _navigationFrameRevision = 0;
   late bool _lastActive;
+  ForumBodyIdentity? _collapseIdentity;
+  final _collapseExpansion = <String, bool>{};
+  NovelReaderTextAnchor? _collapseRestoreHint;
   ForumBodyIdentity? _imageGeometryIdentity;
   final _imageLayouts = <String, ForumHtmlImageLayout>{};
   final _inlineImageSizes = <String, Size>{};
@@ -265,6 +271,13 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
     final chapterChanged =
         oldWidget.semanticDocument.episodeId !=
         widget.semanticDocument.episodeId;
+    if (chapterChanged ||
+        !identical(
+          oldWidget.readingAuthorityIdentity,
+          widget.readingAuthorityIdentity,
+        )) {
+      _resetCollapses();
+    }
     if (ownerChanged ||
         novelChanged ||
         chapterChanged ||
@@ -667,6 +680,9 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         reverse: request.reverse,
         backgroundColor: request.scope.backgroundColor,
         imageHost: imageHost,
+        onCollapseToggle: request.scope.collapses == null
+            ? null
+            : (view, fragment) => _toggleCollapse(request, view, fragment),
         onImageLayoutResolved: (view, fragment, layout) =>
             _imageLayoutResolved(request, view, fragment, layout, imageHost),
         onInlineImageLayoutResolved: (view, fragment, binding, layout) =>
@@ -837,6 +853,16 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         return;
       }
       final chapter = prepared as NovelReaderNativePreparedChapter;
+      if (_collapseIdentity != chapter.identity) {
+        _resetCollapses();
+        _collapseIdentity = chapter.identity;
+      }
+      final collapses = chapter.document.collapseElements.isEmpty
+          ? null
+          : ForumBodyCollapseLayout(
+              chapter.document,
+              expansionOverrides: _collapseExpansion,
+            );
       if (_imageGeometryIdentity != chapter.identity) {
         _imageGeometryIdentity = chapter.identity;
         _imageLayouts.clear();
@@ -853,6 +879,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
           ).capture(
             cancellation: token,
             maxCodeUnits: config.sessionLimits.maxTextCodeUnits,
+            collapses: collapses,
             resolvedLayouts: _imageLayouts,
             resolvedInlineSizes: _inlineImageSizes,
             scheduler: config.scheduler,
@@ -862,6 +889,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
       final scope = await NovelReaderNativeLayoutScope.prepare(
         chapter: chapter,
         images: images,
+        collapses: collapses,
         environment: environment!,
         width: box.width,
         height: box.height,
@@ -921,7 +949,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         }
       }
       var position = config.progressSnapshot;
-      var hint = config.conversionAnchor;
+      var hint = _collapseRestoreHint ?? config.conversionAnchor;
       final visibleRequest = old?.confirmed != null
           ? old
           : _retired.where((request) => request.confirmed != null).lastOrNull;
@@ -1048,6 +1076,65 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
     }
   }
 
+  void _toggleCollapse(
+    _LayoutRequest request,
+    NovelReaderNativePageView view,
+    ForumBodyTextPageFragment fragment,
+  ) {
+    if (!_live(request) ||
+        !identical(request.controller.visibleView, view) ||
+        _collapseIdentity != request.scope.chapter.identity) {
+      return;
+    }
+    final header = fragment.collapseHeader;
+    final fold = request.scope.collapses?.sections[header?.id];
+    if (header == null ||
+        fold == null ||
+        header.titlePath != fold.title.path ||
+        header.expanded != fold.expanded) {
+      return;
+    }
+    final fragments = view.snapshot[view.pageIndex].fragments;
+    final index = fragments.indexOf(fragment);
+    if (index < 0) return;
+
+    final anchor = request.confirmed?.anchor;
+    final location = anchor == null ? null : view.coverage.locate(anchor);
+    final body = fold.body.source;
+    final hidesLocation =
+        fold.expanded &&
+        switch (location) {
+          NovelReaderNativeImageCoverage(:final path) => path.startsWith(
+            '${fold.body.path}/',
+          ),
+          NovelReaderNativeCoveragePoint(:final sourceRune, :final affinity) =>
+            affinity == HtmlProjectionAffinity.downstream
+                ? sourceRune >= body.runeStart && sourceRune < body.runeEnd
+                : sourceRune > body.runeStart && sourceRune <= body.runeEnd,
+          null => false,
+        };
+    // A fold action changes the viewport only. If the old point disappears,
+    // restore at actual coverage from the clicked title without saving it.
+    _collapseRestoreHint = location != null && !hidesLocation
+        ? location.anchor
+        : view.coverage.locations
+              .where((point) => point.fragmentIndex == index)
+              .firstOrNull
+              ?.anchor;
+    final expanded = !fold.expanded;
+    setState(() {
+      if (expanded == fold.initiallyExpanded) {
+        _collapseExpansion.remove(fold.id);
+      } else {
+        _collapseExpansion[fold.id] = expanded;
+      }
+      _selectionRevision++;
+      _paintOnlyCandidate = false;
+      _needsLayout = true;
+      _busy = true;
+    });
+  }
+
   void _imageLayoutResolved(
     _LayoutRequest request,
     NovelReaderNativePageView view,
@@ -1151,6 +1238,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
     NovelReaderPaginationPosition position,
   ) {
     if (!_live(request)) return;
+    _collapseRestoreHint = null;
     request.confirmed = position;
     _scheduleImageReflow();
     _closeRetired();
@@ -1221,7 +1309,14 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
     _retired.clear();
   }
 
+  void _resetCollapses() {
+    _collapseIdentity = null;
+    _collapseExpansion.clear();
+    _collapseRestoreHint = null;
+  }
+
   void _closeAll() {
+    _resetCollapses();
     _imageGeometryIdentity = null;
     _imageLayouts.clear();
     _inlineImageSizes.clear();

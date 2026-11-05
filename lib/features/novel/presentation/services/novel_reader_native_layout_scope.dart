@@ -42,13 +42,14 @@ final class NovelReaderNativeLayoutScope {
     required this.maxNativeEntriesPerPage,
     required this.maxNativeEstimatedBytesPerPage,
     required this.images,
+    required this.collapses,
     required int fontCollectionGeneration,
     required String paragraphInputs,
     required bool usesQuoteTheme,
   }) : _fontCollectionGeneration = fontCollectionGeneration,
        _paragraphInputs = paragraphInputs,
        _usesQuoteTheme = usesQuoteTheme;
-  static const fingerprintRevision = 14;
+  static const fingerprintRevision = 15;
   final NovelReaderNativePreparedChapter chapter;
   final ForumBodyReaderStyle reader;
   final TextScaler textScaler;
@@ -62,6 +63,7 @@ final class NovelReaderNativeLayoutScope {
   final int? maxNativeEntriesPerPage;
   final int? maxNativeEstimatedBytesPerPage;
   final NovelReaderNativeImageCatalog? images;
+  final ForumBodyCollapseLayout? collapses;
   final int _fontCollectionGeneration;
   final String _paragraphInputs;
   final bool _usesQuoteTheme;
@@ -78,10 +80,14 @@ final class NovelReaderNativeLayoutScope {
     int? maxParagraphCacheEntries,
     int? maxParagraphCacheEstimatedBytes,
     NovelReaderNativeImageCatalog? images,
+    ForumBodyCollapseLayout? collapses,
   }) async {
     cancellation.throwIfCancelled();
     if (images != null && images.identity != chapter.identity) {
       throw StateError('Native image geometry source changed');
+    }
+    if (collapses != null && !identical(collapses.document, chapter.document)) {
+      throw ArgumentError('Native collapse layout source changed');
     }
     final pageHandleLimit = _pageHandleLimit(maxIssuedLeases);
     if (maxParagraphCacheEntries != null && maxParagraphCacheEntries <= 0) {
@@ -169,6 +175,12 @@ final class NovelReaderNativeLayoutScope {
       pageEntryLimit,
       pageByteLimit,
       images?.geometryIdentity,
+      if (collapses != null)
+        [
+          for (final fold in collapses.sections.values)
+            if (fold.expanded != fold.initiallyExpanded)
+              [fold.id, fold.expanded],
+        ],
       ...readerValues,
       // The canvas is painted outside native paragraphs. Text/inline colors
       // above remain part of this signature and still replace painted inputs.
@@ -185,6 +197,7 @@ final class NovelReaderNativeLayoutScope {
       maxNativeEntriesPerPage: pageEntryLimit,
       maxNativeEstimatedBytesPerPage: pageByteLimit,
       images: images,
+      collapses: collapses,
       fontCollectionGeneration: fontCollectionGeneration,
       paragraphInputs: jsonEncode([...revisions, ...readerValues]),
       usesQuoteTheme: inputs.usesQuoteTheme,
@@ -240,6 +253,7 @@ final class NovelReaderNativeLayoutScope {
       maxNativeEntriesPerPage: maxNativeEntriesPerPage,
       maxNativeEstimatedBytesPerPage: maxNativeEstimatedBytesPerPage,
       images: images,
+      collapses: collapses,
       fontCollectionGeneration: fontCollectionGeneration,
       paragraphInputs: _paragraphInputs,
       usesQuoteTheme: _usesQuoteTheme,
@@ -267,6 +281,7 @@ final class NovelReaderNativeLayoutScope {
       cache: cache,
       layoutId: layoutId,
       limits: limits,
+      collapses: collapses,
       imageResolver: catalog?.resolve,
       inlineImageResolver: catalog == null
           ? null
