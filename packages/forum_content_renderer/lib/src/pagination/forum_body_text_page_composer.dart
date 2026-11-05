@@ -75,6 +75,7 @@ final class ForumBodyTextPageFragment {
     this.engineRange,
     this.imageCount = 0,
     this.imagePaths = const [],
+    this.isFloated = false,
   });
   final int paragraphIndex;
   final String? path;
@@ -103,6 +104,7 @@ final class ForumBodyTextPageFragment {
   final ForumBodyTextPageListMarker? listMarker;
   final ForumBodyTextPageCollapseHeader? collapseHeader;
   final ForumBodyImageFrame? imageFrame;
+  final bool isFloated;
 
   /// Actual inline engine window, including source-free resource slots and
   /// mechanical prefixes. It is never a display/source or semantic interval.
@@ -277,7 +279,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 36;
+  static const revision = 37;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;

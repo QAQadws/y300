@@ -4,19 +4,25 @@ typedef _ThreadTableSource = ({
   String path,
   String areaPath,
   ForumBodyTableVisibleWindow window,
-  double insetX,
 });
 
 typedef _ThreadTableResult = ({
   int index,
+  String path,
   double offset,
   ForumBodyTablePreparedSlice slice,
+});
+
+typedef _ThreadTableWindow = ({
+  ForumBodyTextPageTable frame,
+  ForumBodyTableVisibleWindow window,
 });
 
 typedef _ThreadSourceCandidate = ({
   ForumBodyTextPageSnapshot snapshot,
   int page,
   ForumBodyTableAreaLayout? area,
+  ForumBodyTextPageTable? frame,
 });
 
 final class _ThreadSourceReflowProbe {
@@ -83,25 +89,20 @@ extension on _ThreadPostNativeFlowState {
         : ForumBodyFlowTextAnchor.firstVisible(window);
     _ThreadTableSource? table;
     for (final entry in old.tableWindows.entries) {
-      final frame = old.prefix![entry.key].table!;
-      final tableTop = old.pageTops[entry.key] + frame.bounds.top;
+      final (:frame, :window) = entry.value;
+      final tableTop = old.pageTops[entry.key.$1] + frame.bounds.top;
       if (point != null && tableTop >= point.bounds.top) continue;
       final ({ForumBodyFlowSourceAnchor anchor, Rect bounds, String areaPath})?
       hit =
-          ForumBodyFlowTextAnchor.firstVisibleInTable(entry.value) ??
-          ForumBodyFlowImageAnchor.firstVisibleInTable(entry.value);
+          ForumBodyFlowTextAnchor.firstVisibleInTable(window) ??
+          ForumBodyFlowImageAnchor.firstVisibleInTable(window);
       if (hit == null) continue;
       final bounds = hit.bounds.shift(
-        Offset(frame.bounds.left - entry.value.bounds.left, tableTop),
+        Offset(frame.bounds.left - window.bounds.left, tableTop),
       );
       if (point != null && point.bounds.top <= bounds.top) continue;
       point = (anchor: hit.anchor, bounds: bounds);
-      table = (
-        path: frame.path,
-        areaPath: hit.areaPath,
-        window: entry.value,
-        insetX: hit.bounds.left - entry.value.bounds.left,
-      );
+      table = (path: frame.path, areaPath: hit.areaPath, window: window);
     }
     if (point == null) return null;
     final probe = next.sourceProbe = _ThreadSourceReflowProbe(
@@ -137,6 +138,26 @@ extension on _ThreadPostNativeFlowState {
       clock.start();
     }
 
+    Future<List<ForumBodyPreparedTextFragment>?> prepare(
+      ForumBodyTextPagePreparation job,
+    ) async {
+      try {
+        while (!job.isReady && current() && frames < 48) {
+          var steps = 0;
+          while (!job.isReady &&
+              steps++ < 6 &&
+              clock.elapsedMicroseconds < 2200) {
+            final step = job.advance(maxFragments: 2, maxParts: 8);
+            if (step.waitingForLayoutBudget) break;
+          }
+          if (!job.isReady) await nextFrame();
+        }
+        return current() && job.isReady ? job.takeFragments() : null;
+      } finally {
+        job.close();
+      }
+    }
+
     try {
       await nextFrame();
       while (current() && frames < 48) {
@@ -154,20 +175,11 @@ extension on _ThreadPostNativeFlowState {
           final job = area == null
               ? session.openPagePreparation(index)
               : area.openPagePreparation(target.page);
-          var fragments = const <ForumBodyPreparedTextFragment>[];
+          final prepared = await prepare(job);
+          if (prepared == null) return;
+          var fragments = prepared;
           try {
-            while (!job.isReady && current() && frames < 48) {
-              var steps = 0;
-              while (!job.isReady &&
-                  steps++ < 6 &&
-                  clock.elapsedMicroseconds < 2200) {
-                final step = job.advance(maxFragments: 2, maxParts: 8);
-                if (step.waitingForLayoutBudget) break;
-              }
-              if (!job.isReady) await nextFrame();
-            }
-            if (!current() || !job.isReady) return;
-            fragments = job.takeFragments();
+            if (!current()) return;
             final bounds = probe.anchor.locate(
               snapshot: target.snapshot,
               page: target.page,
@@ -182,8 +194,24 @@ extension on _ThreadPostNativeFlowState {
                 fragments: fragments,
               );
             } else {
-              final frame = prefix[index].table!;
+              final frame = target.frame!;
               if (bounds.width > frame.bounds.width) continue;
+              // A floated table and its surrounding text mount together.
+              if (prefix[index].fragments.isNotEmpty) {
+                final body = await prepare(session.openPagePreparation(index));
+                if (body == null) return;
+                if (!current()) {
+                  for (final fragment in body) {
+                    fragment.close();
+                  }
+                  return;
+                }
+                probe.slice = ForumBodyFlowPreparedSlice(
+                  session: session,
+                  index: index,
+                  fragments: body,
+                );
+              }
               final tableBounds = bounds.shift(
                 area.contentBounds.topLeft +
                     Offset(0, area.pageTop(target.page)),
@@ -192,10 +220,16 @@ extension on _ThreadPostNativeFlowState {
                   next.pageTops[index] + frame.bounds.top + tableBounds.top;
               probe.tableResult = (
                 index: index,
-                offset: (tableBounds.left - probe.table!.insetX).clamp(
-                  0.0,
-                  math.max(0.0, frame.contentSize.width - frame.bounds.width),
-                ),
+                path: frame.path,
+                offset:
+                    (tableBounds.left + frame.bounds.left - probe.before.left)
+                        .clamp(
+                          0.0,
+                          math.max(
+                            0.0,
+                            frame.contentSize.width - frame.bounds.width,
+                          ),
+                        ),
                 slice: ForumBodyTablePreparedSlice(
                   area: area,
                   page: target.page,
@@ -209,7 +243,6 @@ extension on _ThreadPostNativeFlowState {
             for (final fragment in fragments) {
               fragment.close();
             }
-            job.close();
           }
         }
         index++;
@@ -238,20 +271,23 @@ Iterable<_ThreadSourceCandidate?> _sourceCandidates(
   final source = probe.table;
   if (source == null) {
     if (page.table == null && page.fragments.any(probe.anchor.matchesHint)) {
-      yield (snapshot: prefix, page: index, area: null);
+      yield (snapshot: prefix, page: index, area: null, frame: null);
     }
     return;
   }
-  if (page.table?.path != source.path) return;
-  final table = session.tableLayoutForPage(index)!;
-  for (final area in table.captions.followedBy(table.cells)) {
-    yield null;
-    if (area.element.path != source.areaPath) continue;
-    final snapshot = area.snapshot;
-    for (final slice in snapshot) {
-      yield slice.fragments.any(probe.anchor.matchesHint)
-          ? (snapshot: snapshot, page: slice.index, area: area)
-          : null;
+  for (final frame in page.tableFrames) {
+    if (frame.path != source.path) continue;
+    final table = session.tableLayoutForPage(index, path: frame.path)!;
+    for (final area in table.captions.followedBy(table.cells)) {
+      yield null;
+      if (area.element.path != source.areaPath) continue;
+      final snapshot = area.snapshot;
+      for (final slice in snapshot) {
+        yield slice.fragments.any(probe.anchor.matchesHint)
+            ? (snapshot: snapshot, page: slice.index, area: area, frame: frame)
+            : null;
+      }
+      return;
     }
     return;
   }

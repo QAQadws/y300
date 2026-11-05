@@ -821,7 +821,7 @@ final class ForumBodyTextPageSession {
             );
           case ForumBodyBlockFlowImage():
             _consumeFlowIndex(unit.image.index);
-            _ensureFloatLineAvailable();
+            _margin = _composer.clearForFullWidthBlock(_margin);
             _pendingImage = unit;
           case ForumBodyBlockFlowListItemStart():
             _pendingListItem = unit;
@@ -876,7 +876,7 @@ final class ForumBodyTextPageSession {
               _pendingInline = unit;
             }
           case ForumBodyBlockFlowRule():
-            _ensureFloatLineAvailable();
+            _margin = _composer.clearForFullWidthBlock(_margin);
             _composer.appendRule(
               path: unit.path,
               left: unit.left,
@@ -1435,12 +1435,6 @@ final class ForumBodyTextPageSession {
   void _consumeFlowIndex(int index) {
     if (index != _nextFlowIndex) throw StateError('Unordered body flow input');
     _nextFlowIndex++;
-  }
-
-  void _ensureFloatLineAvailable() {
-    if (_openFloat != null && _composer.hasFloatExclusion(_margin)) {
-      _requiresFloatLineLayout();
-    }
   }
 
   Never _requiresFloatLineLayout() =>

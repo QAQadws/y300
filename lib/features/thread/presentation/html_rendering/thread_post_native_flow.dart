@@ -190,19 +190,13 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
               imageAnchorController: widget.imageAnchorController,
               imagePathForIndex: run.images!.pathForIndex,
               initialSlice: run.initialSlice,
-              initialTableOffset: table == null
-                  ? null
-                  : (slice: table.index, offset: table.offset),
               initialTableSlice: table == null
                   ? null
                   : (index: table.index, slice: table.slice),
               onTableWindowChanged: (index, window) {
-                if (window?.isCurrent == true) {
-                  run.tableWindows[index] = window!;
-                } else {
-                  run.tableWindows.remove(index);
-                }
+                run.recordTableWindow(index, run.prefix![index].table!, window);
               },
+              onFloatedTableWindowChanged: run.recordTableWindow,
               onReadyChanged: (ready) {
                 if (!_current(run)) return;
                 run.ready = ready;
@@ -291,6 +285,7 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
         limits: _limits,
         collapses: collapses,
         tableExtent: ForumBodyTableExtent.natural,
+        captureFloats: true,
         imageResolver: images.block,
         inlineImageResolver: (identity, element, style) =>
             images.inline(identity, element, style, scaler, _sliceHeight),
@@ -406,6 +401,10 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
           _imageResolved(run, input.element, layout, _ThreadImageChange.table);
           return;
         }
+        if (run.floatedImages.contains(input.element.path)) {
+          _imageResolved(run, input.element, layout, _ThreadImageChange.source);
+          return;
+        }
         final ratio = layout.aspectRatio ?? layout.displaySize?.aspectRatio;
         if ((input.entry.htmlWidth != null && input.entry.htmlHeight != null) ||
             ratio == null ||
@@ -430,7 +429,7 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
             binding.input.element,
             layout,
             snapshot.layoutId == run.prefix!.layoutId
-                ? _ThreadImageChange.inline
+                ? _ThreadImageChange.source
                 : _ThreadImageChange.table,
           );
         }
@@ -536,7 +535,7 @@ Future<ForumBodyDocument> _parseThreadNativeBody(String source, String html) =>
       debugName: 'thread-native-body',
     );
 
-enum _ThreadImageChange { block, inline, table }
+enum _ThreadImageChange { block, source, table }
 
 final class _ThreadFlowRun {
   _ThreadFlowRun(this.inputs, Map<String, _ThreadImageChange> changes)
@@ -545,7 +544,7 @@ final class _ThreadFlowRun {
           ? changes.keys.toSet()
           : const {},
       preserveSource =
-          changes.containsValue(_ThreadImageChange.inline) ||
+          changes.containsValue(_ThreadImageChange.source) ||
           changes.containsValue(_ThreadImageChange.table),
       preserveTable = changes.containsValue(_ThreadImageChange.table);
 
@@ -554,8 +553,9 @@ final class _ThreadFlowRun {
   final bool preserveSource, preserveTable;
   final boundsKey = GlobalKey();
   final blockImages = <String, ({double top, double height})>{};
+  final floatedImages = <String>{};
   final pageTops = <double>[];
-  final tableWindows = <int, ForumBodyTableVisibleWindow>{};
+  final tableWindows = <(int, String), _ThreadTableWindow>{};
   _ThreadSourceReflowProbe? sourceProbe;
   ForumBodyFlowPreparedSlice? initialSlice;
   _ThreadTableResult? initialTable;
@@ -574,13 +574,32 @@ final class _ThreadFlowRun {
     pageTops.add(height);
     for (final fragment in page.fragments) {
       if (fragment.imageFrame case final frame?) {
-        blockImages[fragment.path!] = (
+        final path = fragment.path!;
+        if (fragment.isFloated) {
+          floatedImages.add(path);
+          continue;
+        }
+        blockImages[path] = (
           top: height + fragment.top + frame.imageRect.top,
           height: frame.imageRect.height,
         );
       }
     }
     height += page.usedHeight;
+  }
+
+  void recordTableWindow(
+    int index,
+    ForumBodyTextPageTable frame,
+    ForumBodyTableVisibleWindow? window,
+  ) {
+    final key = (index, frame.path);
+    if (window?.isCurrent == true &&
+        window!.layout.geometry.grid.table.path == frame.path) {
+      tableWindows[key] = (frame: frame, window: window);
+    } else {
+      tableWindows.remove(key);
+    }
   }
 
   void close() {

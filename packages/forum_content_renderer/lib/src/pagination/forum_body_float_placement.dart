@@ -228,6 +228,17 @@ extension ForumBodyFloatPlacement on ForumBodyTextPageComposer {
     _flowHeight = _clearFloatTop(clear, _flowHeight);
   }
 
+  /// Full-width resources and rules cannot share an exclusion band. Consume
+  /// their pending gap once before moving their entire box below the floats.
+  double clearForFullWidthBlock(double spaceBefore) {
+    if (!hasFloatExclusion(spaceBefore)) return spaceBefore;
+    _ensureFloatBoundary();
+    final top = math.max(0.0, _flowHeight + spaceBefore);
+    final cleared = _clearFloatTop(ForumBodyClear.both, top);
+    _flowHeight = cleared;
+    return 0;
+  }
+
   bool hasFloatExclusion(double spaceBefore) => _floats.any(
     (float) => float.bounds.bottom > math.max(0.0, _flowHeight + spaceBefore),
   );
@@ -422,5 +433,6 @@ ForumBodyTextPageFragment _shiftFloatFragment(
     engineRange: fragment.engineRange,
     imageCount: fragment.imageCount,
     imagePaths: fragment.imagePaths,
+    isFloated: true,
   );
 }

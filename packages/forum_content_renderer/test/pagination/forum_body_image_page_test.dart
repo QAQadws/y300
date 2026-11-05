@@ -783,6 +783,24 @@ void main() {
     },
   );
 
+  test('a full-width rule and block image clear the preceding float', () {
+    final f = _Fixture(
+      '<span style="float:left;width:24px;height:30px">F</span>'
+      'AA<hr><img src="https://x/tall">',
+    );
+    final s = f.session(captureFloats: true, height: 150);
+    _finish(s);
+    final page = s.snapshot.single;
+    final rule = page.rules.single;
+    final image = page.fragments.last;
+    expect(page.fragments.first.isFloated, isTrue);
+    expect(page.fragments[1].width, 76);
+    expect(rule.top, greaterThanOrEqualTo(30));
+    expect(image.isFloated, isFalse);
+    expect(image.width, 100);
+    expect(image.top, greaterThanOrEqualTo(rule.top + rule.thickness));
+  });
+
   test('a floated image uses its natural size in a flowing slice', () {
     final f = _Fixture(
       '<img src="https://x/tall" style="float:left;margin:2px">',

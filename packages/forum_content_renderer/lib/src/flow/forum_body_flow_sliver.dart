@@ -265,7 +265,10 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
       _ready[seed!.index] = _makeDelivery(seed.index, fragments);
     }
     final table = flow.initialTableSlice;
-    if (table != null && table.slice.isPending) {
+    if (table != null &&
+        table.slice.isPending &&
+        !_ready.containsKey(table.index) &&
+        flow.prefix[table.index].fragments.isEmpty) {
       _ready[table.index] = _makeDelivery(table.index, const []);
     }
   }
@@ -691,6 +694,10 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
     final initial = flow is ForumBodyFlowBox ? flow.initialTableSlice : null;
     final frame = table.frame;
     final dedicated = widget.prefix[index].table?.path == frame.path;
+    final layout = table.lease.layout;
+    final seed = initial?.index == index && initial!.slice.isPending
+        ? initial.slice
+        : null;
     final reportsWindow = dedicated
         ? widget.onTableWindowChanged != null
         : widget.onFloatedTableWindowChanged != null;
@@ -698,10 +705,13 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
       key: ValueKey(frame.path),
       rect: frame.bounds,
       child: ForumBodyTableFlowViewport(
-        layout: table.lease.layout,
+        layout: layout,
         horizontalController: table.horizontal,
-        initialSlice: dedicated && initial?.index == index
-            ? initial!.slice
+        initialSlice:
+            seed != null &&
+                (layout.cells.contains(seed.area) ||
+                    layout.captions.contains(seed.area))
+            ? seed
             : null,
         onFailure: (error, stack) {
           if (identical(_ready[index], delivery)) {

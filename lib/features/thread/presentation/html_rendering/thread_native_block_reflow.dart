@@ -79,7 +79,10 @@ extension on _ThreadPostNativeFlowState {
       isCurrent: () => _current(next) && identical(_shown, next),
     );
     next.initialSlice = next.sourceProbe?.takeSlice();
-    next.initialTable = next.sourceProbe?.takeTable();
+    final table = next.initialTable = next.sourceProbe?.takeTable();
+    if (table != null) {
+      next.session!.setFlowTableOffset(table.index, table.path, table.offset);
+    }
     next.cancelSourceProbe();
     return true;
   }

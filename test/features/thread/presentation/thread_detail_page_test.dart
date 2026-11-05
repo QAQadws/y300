@@ -226,19 +226,24 @@ void main() {
       },
     );
 
-    for (final inTable in [false, true]) {
+    for (final destination in ['block', 'table', 'floated table']) {
       testWidgets(
-        'native image reader returns to an offscreen duplicate (table=$inTable)',
+        'native image reader returns to an offscreen duplicate ($destination)',
         (tester) async {
           SharedPreferences.setMockInitialValues(<String, Object>{
             'reader_pref_mode': 'ltr',
           });
-          const image =
-              '<img src="/images/same.png" width="800" height="48">';
-          final distant = inTable
-              ? '<table width="1600"><tr><td width="1200">Left</td>'
-                    '<td width="400">$image</td></tr></table>'
-              : image;
+          const image = '<img src="/images/same.png" width="800" height="48">';
+          final inTable = destination != 'block';
+          const table =
+              '<table width="1600"><tr><td width="1200">Left</td>'
+              '<td width="400">$image</td></tr></table>';
+          final distant = switch (destination) {
+            'table' => table,
+            'floated table' =>
+              '<span style="float:left;width:250px;margin-right:5px">$table</span>',
+            _ => image,
+          };
           final gap = List.filled(45, '<p>Text between pictures.</p>').join();
           const hidden =
               '<div class="showcollapse_box">'
@@ -266,6 +271,18 @@ void main() {
           }
           final session = tester.widget<ForumBodyFlowBox>(flow).session;
           expect(session.snapshot.isComplete, isTrue);
+          if (destination == 'floated table') {
+            final slice = session.snapshot.singleWhere(
+              (page) => page.floatedTables.isNotEmpty,
+            );
+            expect(slice.floatedTables.single.bounds.width, 250);
+            expect(
+              slice.fragments.any(
+                (part) => part.width < session.snapshot.width,
+              ),
+              isTrue,
+            );
+          }
           expect(images, findsOneWidget);
           final scroll = tester
               .widget<ThreadDetailContent>(find.byType(ThreadDetailContent))
@@ -535,126 +552,148 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('native table image resize keeps both coordinates of a glyph', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(370, 650);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      final dimensions = _DelayedForumImageDimensions();
-      final tail = List.filled(37, '<p>Following text.</p>').join();
-      await tester.pumpWidget(
-        _buildTestApp(
-          _imageReturnRepository(
-            '<p>Before the table.</p><table cellpadding="0">'
-            '<tr><td><img src="/images/late.jpg" style="display:inline-block"></td>'
-            '<td width="950"></td></tr>'
-            '<tr><td></td><td><p>Visible source inside the right cell.</p></td>'
-            '</tr></table>$tail',
-          ),
-          imageCacheService: _FailedThreadInlineImageCacheService(),
-          additionalOverrides: [
-            forumImageDimensionIndexProvider.overrideWithValue(dimensions),
-          ],
-          home: const ThreadDetailPage(tid: '100', nativeBody: true),
-        ),
-      );
-      final flowFinder = find.byType(ForumBodyFlowBox);
-      final tableFinder = find.byType(ForumBodyTableFlowViewport);
-      final imageFinder = find.byType(ForumHtmlImageView);
-      ForumBodyTableVisibleWindow? window() => tableFinder.evaluate().isEmpty
-          ? null
-          : ForumBodyTableFlowViewport.borrowPaintedWindow(
-              tester.element(tableFinder),
+    for (final floated in [false, true]) {
+      testWidgets(
+        'native table image resize keeps both coordinates of a glyph (floated=$floated)',
+        (tester) async {
+          tester.view.physicalSize = const Size(370, 650);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          final dimensions = _DelayedForumImageDimensions();
+          final tail = List.filled(37, '<p>Following text.</p>').join();
+          const table =
+              '<table cellpadding="0">'
+              '<tr><td><img src="/images/late.jpg" style="display:inline-block"></td>'
+              '<td width="950"></td></tr>'
+              '<tr><td></td><td><p>Visible source inside the right cell.</p></td>'
+              '</tr></table>';
+          final placed = floated
+              ? '<span style="float:right;width:280px;margin-left:6px">$table</span>'
+                    '<br style="clear:both">After the table.'
+              : table;
+          await tester.pumpWidget(
+            _buildTestApp(
+              _imageReturnRepository('<p>Before the table.</p>$placed$tail'),
+              imageCacheService: _FailedThreadInlineImageCacheService(),
+              additionalOverrides: [
+                forumImageDimensionIndexProvider.overrideWithValue(dimensions),
+              ],
+              home: const ThreadDetailPage(tid: '100', nativeBody: true),
+            ),
+          );
+          final flowFinder = find.byType(ForumBodyFlowBox);
+          final tableFinder = find.byType(ForumBodyTableFlowViewport);
+          final imageFinder = find.byType(ForumHtmlImageView);
+          ForumBodyTableVisibleWindow? window() =>
+              tableFinder.evaluate().isEmpty
+              ? null
+              : ForumBodyTableFlowViewport.borrowPaintedWindow(
+                  tester.element(tableFinder),
+                );
+          for (var frame = 0; frame < 250; frame++) {
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 2)),
             );
-      for (var frame = 0; frame < 250; frame++) {
-        await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 2)),
-        );
-        await tester.pump();
-        if (imageFinder.evaluate().isNotEmpty &&
-            window() != null &&
-            tester.widget<ForumBodyFlowBox>(flowFinder).prefix.isComplete) {
-          break;
-        }
-      }
-      expect(imageFinder, findsOneWidget);
-      expect(dimensions.queriedSpecs, isNotEmpty);
-      final old = tester.widget<ForumBodyTableFlowViewport>(tableFinder);
-      final session = tester.widget<ForumBodyFlowBox>(flowFinder).session;
-      final vertical = tester
-          .widget<ThreadDetailContent>(find.byType(ThreadDetailContent))
-          .scrollController!;
-      final viewportTop = tester
-          .getTopLeft(find.byKey(const Key('thread-detail-list')))
-          .dy;
-      vertical.jumpTo(
-        vertical.offset + tester.getTopLeft(tableFinder).dy - viewportTop,
+            await tester.pump();
+            if (imageFinder.evaluate().isNotEmpty &&
+                window() != null &&
+                tester.widget<ForumBodyFlowBox>(flowFinder).prefix.isComplete) {
+              break;
+            }
+          }
+          expect(imageFinder, findsOneWidget);
+          expect(dimensions.queriedSpecs, isNotEmpty);
+          final old = tester.widget<ForumBodyTableFlowViewport>(tableFinder);
+          final session = tester.widget<ForumBodyFlowBox>(flowFinder).session;
+          final vertical = tester
+              .widget<ThreadDetailContent>(find.byType(ThreadDetailContent))
+              .scrollController!;
+          final viewportTop = tester
+              .getTopLeft(find.byKey(const Key('thread-detail-list')))
+              .dy;
+          vertical.jumpTo(
+            vertical.offset + tester.getTopLeft(tableFinder).dy - viewportTop,
+          );
+          old.horizontalController.jumpTo(8);
+          for (var frame = 0; frame < 20; frame++) {
+            await tester.pump(const Duration(milliseconds: 16));
+          }
+          expect(imageFinder, findsOneWidget);
+          final origin = window()!;
+          final sample = ForumBodyFlowTextAnchor.firstVisibleInTable(origin);
+          expect(
+            sample,
+            isNotNull,
+            reason:
+                '${origin.bounds} and '
+                '${origin.layout.cells.map((cell) => cell.contentBounds)}',
+          );
+          final source = sample!;
+          expect(source.areaPath, old.layout.cells.last.element.path);
+          final at =
+              tester.getTopLeft(tableFinder) +
+              source.bounds.topLeft -
+              Offset(old.horizontalController.offset, 0);
+          final oldY = vertical.offset;
+          dimensions.pending.complete(
+            const ForumImageDimensions(
+              width: 196,
+              height: 148,
+              source: ForumImageDimensionSource.cacheMetadata,
+            ),
+          );
+          for (var frame = 0; frame < 220; frame++) {
+            await tester.pump(const Duration(milliseconds: 16));
+            if (identical(
+              tester.widget<ForumBodyFlowBox>(flowFinder).session,
+              session,
+            )) {
+              continue;
+            }
+            expect(tableFinder, findsOneWidget);
+            final current = tester.widget<ForumBodyTableFlowViewport>(
+              tableFinder,
+            );
+            expect(current.verticalController, isNull);
+            final next = window();
+            expect(
+              next,
+              isNotNull,
+              reason: 'The measured cell mounts in the first frame.',
+            );
+            final bounds = [
+              for (final cell in next!.slices)
+                if (source.anchor.locate(
+                      snapshot: cell.area.snapshot,
+                      page: cell.page,
+                      fragments: cell.fragments,
+                    )
+                    case final bounds?)
+                  bounds.shift(cell.bounds.topLeft),
+            ].single;
+            final after =
+                tester.getTopLeft(tableFinder) +
+                bounds.topLeft -
+                Offset(current.horizontalController.offset, 0);
+            expect(after.dx, closeTo(at.dx, 1));
+            expect(after.dy, closeTo(at.dy, 1));
+            expect(current.horizontalController.offset, greaterThan(35));
+            expect(vertical.offset, greaterThan(oldY + 30));
+            break;
+          }
+          final replacement = tester
+              .widget<ForumBodyFlowBox>(flowFinder)
+              .session;
+          expect(replacement, isNot(same(session)));
+          expect(session.isClosed, isTrue);
+          await tester.pumpWidget(const SizedBox.shrink());
+          expect(replacement.activeIssuedTablePages, 0);
+          expect(replacement.isClosed, isTrue);
+          expect(tester.takeException(), isNull);
+        },
       );
-      old.horizontalController.jumpTo(8);
-      for (var frame = 0; frame < 20; frame++) {
-        await tester.pump(const Duration(milliseconds: 16));
-      }
-      expect(imageFinder, findsOneWidget);
-      final origin = window()!;
-      final sample = ForumBodyFlowTextAnchor.firstVisibleInTable(origin);
-      expect(
-        sample,
-        isNotNull,
-        reason: '${origin.bounds} and '
-            '${origin.layout.cells.map((cell) => cell.contentBounds)}',
-      );
-      final source = sample!;
-      expect(source.areaPath, old.layout.cells.last.element.path);
-      final at = tester.getTopLeft(tableFinder) +
-          source.bounds.topLeft -
-          Offset(old.horizontalController.offset, 0);
-      final oldY = vertical.offset;
-      dimensions.pending.complete(
-        const ForumImageDimensions(
-          width: 196,
-          height: 148,
-          source: ForumImageDimensionSource.cacheMetadata,
-        ),
-      );
-      for (var frame = 0; frame < 220; frame++) {
-        await tester.pump(const Duration(milliseconds: 16));
-        if (identical(tester.widget<ForumBodyFlowBox>(flowFinder).session, session)) {
-          continue;
-        }
-        expect(tableFinder, findsOneWidget);
-        final current = tester.widget<ForumBodyTableFlowViewport>(tableFinder);
-        expect(current.verticalController, isNull);
-        final next = window();
-        expect(next, isNotNull, reason: 'The measured cell mounts in the first frame.');
-        final bounds = [
-          for (final cell in next!.slices)
-            if (source.anchor.locate(
-                  snapshot: cell.area.snapshot,
-                  page: cell.page,
-                  fragments: cell.fragments,
-                )
-                case final bounds?)
-              bounds.shift(cell.bounds.topLeft),
-        ].single;
-        final after = tester.getTopLeft(tableFinder) +
-            bounds.topLeft -
-            Offset(current.horizontalController.offset, 0);
-        expect(after.dx, closeTo(at.dx, 1));
-        expect(after.dy, closeTo(at.dy, 1));
-        expect(current.horizontalController.offset, greaterThan(35));
-        expect(vertical.offset, greaterThan(oldY + 30));
-        break;
-      }
-      final replacement = tester.widget<ForumBodyFlowBox>(flowFinder).session;
-      expect(replacement, isNot(same(session)));
-      expect(session.isClosed, isTrue);
-      await tester.pumpWidget(const SizedBox.shrink());
-      expect(replacement.activeIssuedTablePages, 0);
-      expect(replacement.isClosed, isTrue);
-      expect(tester.takeException(), isNull);
-    });
+    }
 
     for (final inline in [false, true]) {
       testWidgets(

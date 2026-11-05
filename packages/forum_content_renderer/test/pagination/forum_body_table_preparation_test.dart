@@ -269,7 +269,7 @@ void main() {
     final session = _book(
       _parse(
         '<p>before</p><table style="float:right" width="30" height="60">'
-        '<tr><td>cell</td></tr></table><hr>',
+        '<tr><td>cell</td></tr></table><div style="position:absolute">X</div>',
       ),
       cache,
       extent: ForumBodyTableExtent.natural,
@@ -282,10 +282,10 @@ void main() {
     expect(
       () => _advanceBook(session, 2),
       throwsA(
-        isA<ForumBodyTextPageSessionException>().having(
+        isA<ForumBodyBlockFlowException>().having(
           (error) => error.failure,
           'failure',
-          ForumBodyTextPageSessionFailure.floatLineLayout,
+          ForumBodyBlockFlowFailure.geometry,
         ),
       ),
     );
