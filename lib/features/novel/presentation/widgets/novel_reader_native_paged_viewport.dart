@@ -17,6 +17,7 @@ import '../models/novel_reader_native_page_delivery.dart';
 import '../models/novel_reader_native_page_view.dart';
 import '../models/novel_reader_pagination_position.dart';
 import '../models/novel_reader_native_text_selection.dart';
+import '../models/novel_reader_native_link_handler.dart';
 import '../services/novel_reader_native_table_window_proof.dart';
 import '../services/novel_reader_pagination_cancellation.dart';
 
@@ -77,6 +78,7 @@ class NovelReaderNativePagedViewport extends StatefulWidget {
     this.onPositionChanged,
     this.onScrollActivityChanged,
     this.onTextSelection,
+    this.onLinkTap,
     this.imageHost,
     this.onPageUnmounted,
     this.onImageLayoutResolved,
@@ -104,6 +106,7 @@ class NovelReaderNativePagedViewport extends StatefulWidget {
   final ValueChanged<NovelReaderPaginationPosition>? onPositionChanged;
   final ValueChanged<bool>? onScrollActivityChanged;
   final ValueChanged<NovelReaderNativeTextSelection>? onTextSelection;
+  final NovelReaderNativeLinkHandler? onLinkTap;
   final ForumHtmlImageHost? imageHost;
   final VoidCallback? onPageUnmounted;
   final NovelReaderNativeImageLayoutResolved? onImageLayoutResolved;
@@ -346,6 +349,18 @@ class _NovelReaderNativePagedViewportState
             widget.onPositionChanged?.call(position);
           }
         },
+        onLinkTap: frozen || widget.onLinkTap == null
+            ? null
+            : (url, isCurrent) {
+                final binding = _binding;
+                bool current() =>
+                    mounted &&
+                    widget.active &&
+                    binding == _binding &&
+                    identical(displayed.controller, widget.controller) &&
+                    isCurrent();
+                if (current()) widget.onLinkTap?.call(url, current);
+              },
         onTextSelection: widget.onTextSelection == null
             ? null
             : (selection) {
@@ -401,6 +416,7 @@ class _NativeLayoutViewport extends StatefulWidget {
     required this.onPositionChanged,
     required this.onScrollActivityChanged,
     required this.onTextSelection,
+    required this.onLinkTap,
     required this.imageHost,
     required this.onPageUnmounted,
     required this.onImageLayoutResolved,
@@ -434,6 +450,7 @@ class _NativeLayoutViewport extends StatefulWidget {
   final ValueChanged<NovelReaderPaginationPosition> onPositionChanged;
   final ValueChanged<bool> onScrollActivityChanged;
   final ValueChanged<NovelReaderNativeTextSelection>? onTextSelection;
+  final NovelReaderNativeLinkHandler? onLinkTap;
 
   @override
   State<_NativeLayoutViewport> createState() => _NativeLayoutViewportState();
@@ -1206,6 +1223,24 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
     }
   }
 
+  void _tapLink(
+    NovelReaderNativePageView view,
+    String url,
+    bool Function() isCurrent,
+  ) {
+    final controller = widget.controller;
+    final revision = controller.navigationRevision;
+    bool current() =>
+        mounted &&
+        !widget.frozen &&
+        !controller.isSuspended &&
+        revision == controller.navigationRevision &&
+        _isSettledPage(view) &&
+        _mountedPages.containsKey(view) &&
+        isCurrent();
+    if (current()) widget.onLinkTap?.call(url, current);
+  }
+
   void _tapImage(
     NovelReaderNativePageView view,
     ForumBodyPreparedTextFragment fragment,
@@ -1341,6 +1376,10 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
                           },
                           onTableOffsetChanged: (offset) =>
                               _tableOffsets[page] = offset,
+                          onLinkTap: widget.frozen || widget.onLinkTap == null
+                              ? null
+                              : (url, isCurrent) =>
+                                    _tapLink(view, url, isCurrent),
                           onTextSelection:
                               widget.frozen || widget.onTextSelection == null
                               ? null
@@ -1417,6 +1456,7 @@ class _NativeMountedPage extends StatefulWidget {
     required this.onMounted,
     required this.onUnmounted,
     required this.onTextSelection,
+    required this.onLinkTap,
     required this.imageHost,
     required this.onImageDisplayChanged,
     required this.onImageLayoutResolved,
@@ -1453,6 +1493,7 @@ class _NativeMountedPage extends StatefulWidget {
   final ValueChanged<NovelReaderNativePageView> onUnmounted;
   final void Function(ForumBodyTextSelectionSnapshot, bool Function())?
   onTextSelection;
+  final NovelReaderNativeLinkHandler? onLinkTap;
   final ValueChanged<bool> onTableReadyChanged;
   final ValueChanged<ForumBodyTableVisibleWindow?> onTableWindowChanged;
   final ValueChanged<Object> onTableFailure;
@@ -1606,6 +1647,12 @@ class _NativeMountedPageState extends State<_NativeMountedPage>
           ? null
           : (fragment, binding, layout) => widget.onInlineImageLayoutResolved
                 ?.call(widget.view, fragment, binding, layout),
+      onLinkTap: widget.onLinkTap == null
+          ? null
+          : (url) => widget.onLinkTap?.call(
+              url,
+              () => mounted && fragments.every((fragment) => fragment.isActive),
+            ),
       onSourceLongPress: widget.onTextSelection == null
           ? null
           : (_, selection) => widget.onTextSelection!(

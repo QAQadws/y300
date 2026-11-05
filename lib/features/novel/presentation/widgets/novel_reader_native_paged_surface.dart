@@ -23,6 +23,7 @@ import '../models/novel_reader_pagination_exception.dart';
 import '../models/novel_reader_pagination_position.dart';
 import '../models/novel_reader_native_text_selection.dart';
 import '../models/novel_reader_native_image_tap.dart';
+import '../models/novel_reader_native_link_handler.dart';
 import '../novel_text_resolver.dart';
 import '../services/novel_reader_display_resolvers.dart';
 import '../services/novel_reader_native_owner.dart';
@@ -74,6 +75,7 @@ class NovelReaderNativePagedSurface extends StatefulWidget {
     this.onContentTerminal,
     this.onScrollActivityChanged,
     this.onTextSelection,
+    this.onLinkTap,
     this.onImageTap,
     this.onStatusChanged,
     this.onChooseScrollMode,
@@ -121,6 +123,7 @@ class NovelReaderNativePagedSurface extends StatefulWidget {
   final VoidCallback? onContentTerminal;
   final ValueChanged<bool>? onScrollActivityChanged;
   final ValueChanged<NovelReaderNativeTextSelection>? onTextSelection;
+  final NovelReaderNativeLinkHandler? onLinkTap;
   final ValueChanged<NovelReaderNativeImageTap>? onImageTap;
   final ValueChanged<NovelReaderNativeHostStatus>? onStatusChanged;
   final VoidCallback? onChooseScrollMode;
@@ -404,6 +407,7 @@ class _NativePagedSurfaceState extends State<NovelReaderNativePagedSurface> {
                           active: widget.active,
                           activity: widget.activity,
                           onTextSelection: widget.onTextSelection,
+                          onLinkTap: widget.onLinkTap,
                           onImageTap: widget.onImageTap,
                           startsAtBeginning: widget.startsAtBeginning,
                           conversionAnchor: widget.conversionAnchor,

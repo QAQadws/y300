@@ -13,6 +13,7 @@ import '../../domain/models/novel_reader_document.dart';
 import '../../domain/models/novel_reader_marks.dart';
 import '../../domain/models/novel_reader_preferences.dart';
 import '../models/novel_reader_native_image_tap.dart';
+import '../models/novel_reader_native_link_handler.dart';
 import '../models/novel_reader_native_prepared_chapter.dart';
 import '../models/novel_reader_native_source_location.dart';
 import '../models/novel_reader_native_text_selection.dart';
@@ -60,6 +61,7 @@ final class NovelReaderNativeFlowHost extends StatefulWidget {
     required this.onInteraction,
     required this.onImageTap,
     required this.onTextSelection,
+    this.onLinkTap,
     this.idleScheduler,
     this.viewportInsets = EdgeInsets.zero,
     this.initialSource,
@@ -87,6 +89,7 @@ final class NovelReaderNativeFlowHost extends StatefulWidget {
   final VoidCallback onInteraction;
   final ValueChanged<NovelReaderNativeImageTap> onImageTap;
   final ValueChanged<NovelReaderNativeTextSelection> onTextSelection;
+  final NovelReaderNativeLinkHandler? onLinkTap;
   final NovelReaderPaginationIdleScheduler? idleScheduler;
   final EdgeInsets viewportInsets;
   final NovelReaderNativeSourceLocation? initialSource;
@@ -1089,6 +1092,17 @@ final class NovelReaderNativeFlowHostState
         _inlineSizes[key] = size;
         _scheduleReflow(run);
       },
+      onLinkTap: widget.onLinkTap == null
+          ? null
+          : (url) {
+              // Other visible slices can still be preparing. The hit belongs
+              // to this mounted delivery under the current source request.
+              bool linkCurrent() =>
+                  _current(run) &&
+                  identical(_displayed, run) &&
+                  fragments.every((fragment) => fragment.isActive);
+              if (linkCurrent()) widget.onLinkTap?.call(url, linkCurrent);
+            },
       onSourceLongPress: (_, selection) {
         if (current()) {
           widget.onTextSelection(

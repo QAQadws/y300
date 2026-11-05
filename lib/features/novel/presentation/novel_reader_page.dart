@@ -10,6 +10,7 @@ import 'package:y300/features/thread/data/providers/thread_repository_providers.
 import 'package:y300/features/thread/presentation/services/thread_post_route_launcher.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/app/navigation/forum_link_opener.dart';
 import 'package:y300/core/clipboard/clipboard_providers.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
@@ -1244,6 +1245,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       activity: _nativeActivity,
       onTextSelection: (selection) =>
           unawaited(_openNativeTextSelection(identity, selection)),
+      onLinkTap: (url, isCurrent) => _openNativeLink(identity, url, isCurrent),
       onImageTap: (tap) => unawaited(_openNativeImage(identity, tap)),
       idleScheduler: widget.nativeIdleScheduler,
       navigationController: _pagedNavigationController,
@@ -1570,6 +1572,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                 onContentReady: onContentReady,
                 onContentTerminal: onContentTerminal,
                 onInteraction: _cancelPendingReaderTap,
+                onLinkTap: (url, isCurrent) =>
+                    _openNativeLink(surfaceIdentity, url, isCurrent),
                 onImageTap: (tap) =>
                     unawaited(_openNativeImage(surfaceIdentity, tap)),
                 onTextSelection: (selection) => unawaited(
@@ -3282,6 +3286,23 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       return;
     }
     _showReaderSnackBar(AppLocalizations.of(context).novelLinkOpenFailed);
+  }
+
+  void _openNativeLink(String identity, String url, bool Function() isCurrent) {
+    bool current() =>
+        _isReadingVisible && _isCurrentReaderSurface(identity) && isCurrent();
+    if (!current()) return;
+    _cancelPendingReaderTap();
+    unawaited(
+      ref
+          .read(forumLinkOpenerProvider)
+          .open(
+            context: context,
+            url: url,
+            session: _postRouteSession,
+            isCurrent: current,
+          ),
+    );
   }
 
   Future<void> _openNativeImage(

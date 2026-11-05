@@ -21,6 +21,7 @@ import '../models/novel_reader_native_host_status.dart';
 import '../models/novel_reader_native_page_coverage.dart';
 import '../models/novel_reader_native_page_view.dart';
 import '../models/novel_reader_native_image_tap.dart';
+import '../models/novel_reader_native_link_handler.dart';
 import '../models/novel_reader_native_prepared_chapter.dart';
 import '../models/novel_reader_pagination_position.dart';
 import '../models/novel_reader_native_text_selection.dart';
@@ -79,6 +80,7 @@ class NovelReaderNativeLayoutHost extends StatefulWidget {
     this.onContentTerminal,
     this.onScrollActivityChanged,
     this.onTextSelection,
+    this.onLinkTap,
     this.onImageTap,
     this.active = true,
     this.activity,
@@ -141,6 +143,7 @@ class NovelReaderNativeLayoutHost extends StatefulWidget {
   final VoidCallback? onContentTerminal;
   final ValueChanged<bool>? onScrollActivityChanged;
   final ValueChanged<NovelReaderNativeTextSelection>? onTextSelection;
+  final NovelReaderNativeLinkHandler? onLinkTap;
   final ValueChanged<NovelReaderNativeImageTap>? onImageTap;
 
   /// Shell supplies frontmost && resumed && unobstructed reading authority.
@@ -764,6 +767,17 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
             widget.placeholderBuilder?.call(context, _status) ??
             const SizedBox.shrink(),
         onPositionChanged: (position) => _confirmed(request, position),
+        onLinkTap: widget.onLinkTap == null
+            ? null
+            : (url, isCurrent) {
+                final revision = _selectionRevision;
+                bool current() =>
+                    mounted &&
+                    revision == _selectionRevision &&
+                    _live(request) &&
+                    isCurrent();
+                if (current()) widget.onLinkTap?.call(url, current);
+              },
         onTextSelection: widget.onTextSelection == null
             ? null
             : (selection) {
