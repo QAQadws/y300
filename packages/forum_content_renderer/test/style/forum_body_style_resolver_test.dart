@@ -51,6 +51,58 @@ ForumBodyResolvedStyle byId(
 }
 
 void main() {
+  test('Discuz float markup retains physical sides, margins and clearance', () {
+    final result = resolve(
+      '<div dir="rtl"><span id="left" style="float:left;margin-right:5px">'
+      '<strong id="child">浮动</strong></span>正文'
+      '<span id="right" style="float:right;margin-left:5px">右</span>'
+      '<br id="clear" style="clear: both">'
+      '<table id="table" class="float" style="float: left; margin-right: 5px;">'
+      '<tbody><tr><td>表格</td></tr></tbody></table></div>',
+    );
+    final left = byId(result, 'left');
+    final right = byId(result, 'right');
+    final table = byId(result, 'table');
+    expect(left.textDirection, TextDirection.rtl);
+    expect(left.floatSide, ForumBodyFloatSide.left);
+    expect(left.margin.right, const ForumBodyLength(5));
+    expect(left.display, ForumBodyDisplay.inline);
+    expect(byId(result, 'child').floatSide, ForumBodyFloatSide.none);
+    expect(right.floatSide, ForumBodyFloatSide.right);
+    expect(right.margin.left, const ForumBodyLength(5));
+    expect(byId(result, 'clear').clear, ForumBodyClear.both);
+    expect(table.floatSide, ForumBodyFloatSide.left);
+    expect(table.margin.right, const ForumBodyLength(5));
+    expect(table.display, ForumBodyDisplay.table);
+    expect(
+      result.styles.issues.map((issue) => issue.property),
+      unorderedEquals(['float', 'float', 'clear', 'float']),
+    );
+  });
+
+  test('float and clear preserve the effective declaration and style copies', () {
+    final result = resolve(
+      '<div id="parent" style="float:RIGHT !important;float:left;clear:left">'
+      '<div id="inherit" style="float:inherit;clear:inherit">a</div>'
+      '<div id="reset" style="float:initial;clear:unset">b</div>'
+      '<div id="unsupported" style="float:inline-start;clear:inline-end">c</div>'
+      '</div>',
+    );
+    final inherited = byId(result, 'inherit');
+    expect(inherited.floatSide, ForumBodyFloatSide.right);
+    expect(inherited.clear, ForumBodyClear.left);
+    final copy = inherited.withTextStyle(const TextStyle(fontSize: 17));
+    expect(copy.floatSide, inherited.floatSide);
+    expect(copy.clear, inherited.clear);
+    expect(byId(result, 'reset').floatSide, ForumBodyFloatSide.none);
+    expect(byId(result, 'reset').clear, ForumBodyClear.none);
+    expect(
+      byId(result, 'unsupported').floatSide,
+      ForumBodyFloatSide.unsupported,
+    );
+    expect(byId(result, 'unsupported').clear, ForumBodyClear.unsupported);
+  });
+
   test(
     'sup and sub resolve own alignment, smaller font and inherited placement',
     () {

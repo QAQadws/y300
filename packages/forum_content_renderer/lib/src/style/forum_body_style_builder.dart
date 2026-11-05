@@ -10,7 +10,7 @@ import 'forum_body_style_options.dart';
 import 'forum_body_text_emphasis_resolver.dart';
 import 'forum_body_list_style_resolver.dart';
 
-const forumBodyStyleRevision = 23;
+const forumBodyStyleRevision = 24;
 ForumBodyLength forumBodyReaderIndent(
   ForumBodyReaderStyle reader,
   double size,
@@ -109,6 +109,8 @@ final class ForumBodyStyleBuilder {
     if (!declarations.isValid) {
       _issue(node, 'style', 'malformed');
     }
+    // Float and clearance are retained below, but remain diagnostics until
+    // native layout consumes them.
     for (final declaration in declarations.declarations) {
       if (!_handled.contains(declaration.property)) {
         _issue(node, declaration.property, declaration.value);
@@ -588,6 +590,21 @@ final class ForumBodyStyleBuilder {
         rootFontSize: reader.textStyle.fontSize!,
         onUnsupported: (property, value) => _issue(node, property, value),
       ),
+      floatSide: switch (value('float')) {
+        null || 'none' || 'initial' || 'unset' => ForumBodyFloatSide.none,
+        'left' => ForumBodyFloatSide.left,
+        'right' => ForumBodyFloatSide.right,
+        'inherit' => parent.floatSide,
+        _ => ForumBodyFloatSide.unsupported,
+      },
+      clear: switch (value('clear')) {
+        null || 'none' || 'initial' || 'unset' => ForumBodyClear.none,
+        'left' => ForumBodyClear.left,
+        'right' => ForumBodyClear.right,
+        'both' => ForumBodyClear.both,
+        'inherit' => parent.clear,
+        _ => ForumBodyClear.unsupported,
+      },
       lineHeight: height,
       hidden:
           parent.hidden ||

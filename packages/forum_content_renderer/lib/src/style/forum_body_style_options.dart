@@ -33,6 +33,10 @@ enum ForumBodyStyleProperty {
 
 enum ForumBodyTextRole { body, heading, quote, code, list, table, ruby, notice }
 
+enum ForumBodyFloatSide { none, left, right, unsupported }
+
+enum ForumBodyClear { none, left, right, both, unsupported }
+
 enum ForumBodyWhiteSpace { normal, pre, preWrap, preLine }
 
 enum ForumBodyDisplay {
@@ -123,6 +127,8 @@ final class ForumBodyResolvedStyle {
     this.margin = const ForumBodyInsets(),
     this.padding = const ForumBodyInsets(),
     this.box = const ForumBodyBoxStyle(),
+    this.floatSide = ForumBodyFloatSide.none,
+    this.clear = ForumBodyClear.none,
     this.lineHeight = const ForumBodyLineHeight.natural(),
     this.hidden = false,
     this.strong = false,
@@ -151,6 +157,8 @@ final class ForumBodyResolvedStyle {
   final ForumBodyInsets margin;
   final ForumBodyInsets padding;
   final ForumBodyBoxStyle box;
+  final ForumBodyFloatSide floatSide;
+  final ForumBodyClear clear;
   final ForumBodyLineHeight lineHeight;
   final bool hidden;
   final bool strong;
@@ -191,6 +199,8 @@ final class ForumBodyResolvedStyle {
           margin: margin,
           padding: padding,
           box: box,
+          floatSide: floatSide,
+          clear: clear,
           lineHeight: lineHeight,
           hidden: hidden,
           strong: strong,

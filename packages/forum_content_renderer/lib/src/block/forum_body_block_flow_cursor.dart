@@ -344,7 +344,7 @@ final class ForumBodyBlockFlowCursor {
             node.path,
           );
         }
-        _validateNormalFlow(node);
+        _validateNormalFlow(node, event.style);
         final parent = _frames.lastOrNull;
         const leading = ForumCollapseHeaderMetrics.titleStart;
         const trailing = ForumCollapseHeaderMetrics.inset;
@@ -563,10 +563,20 @@ final class ForumBodyBlockFlowCursor {
     return value;
   }
 
-  static void _validateNormalFlow(ForumBodyElement node) {
+  static void _validateNormalFlow(
+    ForumBodyElement node,
+    ForumBodyResolvedStyle style,
+  ) {
     // These properties change the adjoining-margin contract or require box
     // geometry not represented by this ordinary port. Do not silently apply
     // normal-flow collapse to a float, positioned box or fixed-height block.
+    if (style.floatSide != ForumBodyFloatSide.none ||
+        style.clear != ForumBodyClear.none) {
+      throw ForumBodyBlockFlowException(
+        ForumBodyBlockFlowFailure.geometry,
+        node.path,
+      );
+    }
     final effective = <String, ForumBodyDeclaration>{};
     for (final declaration in node.style.declarations) {
       final previous = effective[declaration.property];
@@ -588,7 +598,6 @@ final class ForumBodyBlockFlowCursor {
         }.contains(raw),
         'max-height' => !const {'none', 'initial', 'unset'}.contains(raw),
         'position' => !const {'static', 'initial', 'unset'}.contains(raw),
-        'float' || 'clear' => !const {'none', 'initial', 'unset'}.contains(raw),
         'overflow' ||
         'overflow-x' ||
         'overflow-y' => !const {'visible', 'initial', 'unset'}.contains(raw),
