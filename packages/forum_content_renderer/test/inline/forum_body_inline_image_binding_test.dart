@@ -139,6 +139,8 @@ void main() {
       final f = InlineImageFixture();
       final view = f.view();
       final images = view.images.values.toList();
+      final prepared = ForumBodyPreparedTextFragment.inline(view);
+      expect(prepared.hasRenderedImages, isFalse);
       expect(images.map((i) => i.input.element.path), ['0/1', '0/2']);
       expect(images.map((i) => i.input.image.cacheKey).toSet(), hasLength(1));
       expect(view.content.projection.display.text, 'AB');
@@ -153,6 +155,7 @@ void main() {
         expect(binding.reportDisplayFrame(true), isFalse);
       }
       expect(view.hasRenderedImages, isTrue);
+      expect(prepared.hasRenderedImages, isTrue);
       final glyphs = view.glyphBoxes(0, 2);
       expect(glyphs, hasLength(2));
       expect(
@@ -167,6 +170,7 @@ void main() {
         expect(image.hasRenderedFrame, isFalse);
         expect(image.reportDisplayFrame(true), isFalse);
       }
+      expect(prepared.hasRenderedImages, isFalse);
     },
   );
   test(

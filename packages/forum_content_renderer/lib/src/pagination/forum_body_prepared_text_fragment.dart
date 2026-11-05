@@ -35,6 +35,10 @@ sealed class ForumBodyPreparedTextFragment {
   }) = ForumBodyPreparedFittedEmphasisFragment;
   bool get isActive;
   int get imageCount => 0;
+
+  /// Current accepted pixels for every resource in this delivery. Numeric
+  /// dimensions and a prepared placeholder cannot establish this state.
+  bool get hasRenderedImages => isActive && imageCount == 0;
   Iterable<Rect> get decorationBounds => const [];
 
   /// Borrowed for the same owner's page-budget checks and lifecycle counts.
@@ -72,6 +76,8 @@ final class ForumBodyPreparedImageFragment
   int get imageCount => isActive ? 1 : 0;
   bool _displayFrameReady = false;
   bool get hasRenderedImage => isActive && _displayFrameReady;
+  @override
+  bool get hasRenderedImages => hasRenderedImage;
 
   /// The mounted Page surface reports only callbacks accepted by the shared
   /// view's current Host/display binding. This does not create text coverage.
@@ -126,6 +132,8 @@ final class ForumBodyPreparedListItemFragment
   final ForumBodyPreparedTextFragment body;
   @override
   int get imageCount => body.imageCount;
+  @override
+  bool get hasRenderedImages => isActive && body.hasRenderedImages;
   final ForumBodyListMarkerPlan plan;
   final ForumBodyTextPageListMarker placement;
   final ForumBodyTextPictureLease picture;
@@ -305,6 +313,8 @@ final class ForumBodyPreparedInlineFragment
     extends ForumBodyPreparedTextFragment {
   @override
   int get imageCount => isActive ? view.images.length : 0;
+  @override
+  bool get hasRenderedImages => view.hasRenderedImages;
   const ForumBodyPreparedInlineFragment(this.view) : super._();
   final ForumBodyInlineParagraphView view;
   @override

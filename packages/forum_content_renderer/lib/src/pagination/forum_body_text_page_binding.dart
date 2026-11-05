@@ -1,4 +1,5 @@
 import 'dart:ui' show Offset;
+import 'package:flutter/foundation.dart' show listEquals;
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_layout.dart';
 import 'forum_body_text_page_composer.dart';
@@ -130,6 +131,12 @@ ForumBodyTextPage validateForumBodyPreparedTextPageBinding({
             view.coverageStartUtf16 != fragment.coverageStartUtf16 ||
             view.coverageEndUtf16 != fragment.coverageEndUtf16 ||
             view.engineRange != fragment.engineRange ||
+            !listEquals(
+              view.images.values
+                  .map((image) => image.input.element.path)
+                  .toList(growable: false),
+              fragment.imagePaths,
+            ) ||
             fragment.sourceHint !=
                 forumBodySourceHint(
                   content.projection.display,

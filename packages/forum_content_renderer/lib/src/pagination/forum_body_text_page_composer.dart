@@ -70,6 +70,7 @@ final class ForumBodyTextPageFragment {
     this.imageFrame,
     this.engineRange,
     this.imageCount = 0,
+    this.imagePaths = const [],
   });
   final int paragraphIndex;
   final String? path;
@@ -80,6 +81,10 @@ final class ForumBodyTextPageFragment {
 
   /// Actual resource slots in this numeric window; separate from text/fonts.
   final int imageCount;
+
+  /// Actual bound source occurrences in this window, only candidate metadata
+  /// for restore. Geometry and readable delivery must still verify each path.
+  final List<String> imagePaths;
   final int coverageStartUtf16;
   final int coverageEndUtf16;
 
@@ -229,7 +234,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 20;
+  static const revision = 21;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;
@@ -414,6 +419,7 @@ final class ForumBodyTextPageComposer {
           kind: ForumBodyTextPageFragmentKind.image,
           imageFrame: active.frame,
           imageCount: 1,
+          imagePaths: List.unmodifiable([active.path]),
         ),
       );
       _fragmentCount++;
@@ -1052,6 +1058,7 @@ final class ForumBodyTextPageComposer {
           kind: layout.kind,
           listMarker: marker,
           imageCount: images,
+          imagePaths: layout.imagePaths(firstLine, end),
           engineRange:
               layout.kind == ForumBodyTextPageFragmentKind.inline &&
                   firstLine < end
@@ -1346,9 +1353,36 @@ final class _CompositionParagraph {
       : const <int>[];
 
   int imageCount(int startLine, int endLine) {
-    if (_inline == null || startLine == endLine) return 0;
+    if (_inline?.projection.hasResources != true) return 0;
+    final window = _imageWindow(startLine, endLine);
+    return window.end - window.start;
+  }
+
+  late final _imageSourcePaths = _inline?.projection.hasResources == true
+      ? <String?>[
+          for (final atom in _inline!.projection.atoms)
+            if (atom.isResource)
+              (lease! as ForumBodyInlineParagraphLease)
+                  .content
+                  .images[atom.index]
+                  ?.element
+                  .path,
+        ]
+      : const <String?>[];
+
+  List<String> imagePaths(int startLine, int endLine) {
+    if (_inline?.projection.hasResources != true) return const [];
+    final window = _imageWindow(startLine, endLine);
+    if (window.start == window.end) return const [];
+    return List.unmodifiable([
+      for (var i = window.start; i < window.end; i++) ?_imageSourcePaths[i],
+    ]);
+  }
+
+  ({int start, int end}) _imageWindow(int startLine, int endLine) {
+    if (_inline == null || startLine == endLine) return (start: 0, end: 0);
     final offsets = _imageEngineOffsets;
-    if (offsets.isEmpty) return 0;
+    if (offsets.isEmpty) return (start: 0, end: 0);
     int lowerBound(int offset) {
       var low = 0, high = offsets.length;
       while (low < high) {
@@ -1362,8 +1396,10 @@ final class _CompositionParagraph {
       return low;
     }
 
-    return lowerBound(lines[endLine - 1].engineCoverageEndUtf16) -
-        lowerBound(lines[startLine].engineCoverageStartUtf16);
+    return (
+      start: lowerBound(lines[startLine].engineCoverageStartUtf16),
+      end: lowerBound(lines[endLine - 1].engineCoverageEndUtf16),
+    );
   }
 
   final ForumBodyIdentity identity;

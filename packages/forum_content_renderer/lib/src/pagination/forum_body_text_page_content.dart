@@ -1,4 +1,5 @@
 import 'package:flutter/painting.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import '../document/forum_body_document.dart';
 
 import '../inline/forum_body_inline_span_content.dart';
@@ -131,6 +132,8 @@ final class ForumBodyImagePageContent extends ForumBodyTextPageContent {
         fragment.coverageEndUtf16 != 0 ||
         fragment.sourceHint != null ||
         fragment.imageCount != 1 ||
+        fragment.imagePaths.length != 1 ||
+        fragment.imagePaths.single != input.element.path ||
         fragment.listMarker != null) {
       throw const ForumBodyTextPageSurfaceException(
         ForumBodyTextPageSurfaceFailure.geometry,
@@ -617,15 +620,17 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
 
   @override
   int imageCountFor(ForumBodyTextPageFragment fragment) {
-    final count = visibleAtoms(
-      fragment,
-    ).where(content.images.containsKey).length;
-    if (fragment.imageCount != count) {
+    final paths = [
+      for (final index in visibleAtoms(fragment))
+        if (content.images[index] case final image?) image.element.path,
+    ];
+    if (fragment.imageCount != paths.length ||
+        !listEquals(fragment.imagePaths, paths)) {
       throw const ForumBodyTextPageSurfaceException(
         ForumBodyTextPageSurfaceFailure.geometry,
       );
     }
-    return count;
+    return paths.length;
   }
 
   @override

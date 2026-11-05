@@ -145,6 +145,8 @@ void main() {
         expect(fragment.sourceHint, isNull);
         expect(fragment.engineRange, (startUtf16: i, endUtf16: i + 1));
         expect(fragment.imageCount, 1);
+        expect(fragment.imagePaths, ['0/$i']);
+        expect(() => fragment.imagePaths.clear(), throwsUnsupportedError);
         final prepared = f.prepare(i);
         final view = (prepared.single as ForumBodyPreparedInlineFragment).view;
         expect(view.images.keys, [i]);
