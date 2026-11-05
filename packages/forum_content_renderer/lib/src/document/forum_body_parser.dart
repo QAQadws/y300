@@ -37,7 +37,7 @@ final class ForumBodyParser {
     this.fragmentParser = const DefaultHtmlFragmentParser(),
     this.limits = const ForumBodyParseLimits(),
   });
-  static const revision = 3;
+  static const revision = 4;
   final HtmlFragmentParser fragmentParser;
   final ForumBodyParseLimits limits;
 
@@ -69,6 +69,7 @@ final class ForumBodyParser {
       issues: builder.issues,
       imageElements: builder.imageElements,
       collapseElements: builder.collapseElements,
+      tableElements: builder.tableElements,
       parsedNodeCount: count,
       uniqueStyleCount: builder.styles.length,
     );
@@ -124,6 +125,7 @@ final class _BodyBuilder {
   final issues = <ForumBodyIssue>[];
   final imageElements = <ForumBodyElement>[];
   final collapseElements = <ForumBodyElement>[];
+  final tableElements = <ForumBodyElement>[];
   final styles = <String, ForumBodyAuthorStyle>{};
   final codec = CssInlineStyleDeclarationCodec.scoped();
 
@@ -207,6 +209,7 @@ final class _BodyBuilder {
     );
     if (kind == ForumBodyElementKind.image) imageElements.add(element);
     if (kind == ForumBodyElementKind.collapse) collapseElements.add(element);
+    if (kind == ForumBodyElementKind.table) tableElements.add(element);
     return element;
   }
 
@@ -290,6 +293,9 @@ final class _BodyBuilder {
       'rtc' => ForumBodyElementKind.rubyAnnotationContainer,
       'rp' => ForumBodyElementKind.rubyFallback,
       'table' => ForumBodyElementKind.table,
+      'caption' => ForumBodyElementKind.tableCaption,
+      'colgroup' => ForumBodyElementKind.tableColumnGroup,
+      'col' => ForumBodyElementKind.tableColumn,
       'thead' || 'tbody' || 'tfoot' => ForumBodyElementKind.tableSection,
       'tr' => ForumBodyElementKind.tableRow,
       'td' || 'th' => ForumBodyElementKind.tableCell,

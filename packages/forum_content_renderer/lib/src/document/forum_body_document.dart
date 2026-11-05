@@ -49,6 +49,9 @@ enum ForumBodyElementKind {
   rubyAnnotationContainer,
   rubyFallback,
   table,
+  tableCaption,
+  tableColumnGroup,
+  tableColumn,
   tableSection,
   tableRow,
   tableCell,
@@ -185,10 +188,12 @@ final class ForumBodyDocument {
     required this.uniqueStyleCount,
     Iterable<ForumBodyElement> imageElements = const [],
     Iterable<ForumBodyElement> collapseElements = const [],
+    Iterable<ForumBodyElement> tableElements = const [],
   }) : nodes = List.unmodifiable(nodes),
        issues = List.unmodifiable(issues),
        imageElements = List.unmodifiable(imageElements),
-       collapseElements = List.unmodifiable(collapseElements);
+       collapseElements = List.unmodifiable(collapseElements),
+       tableElements = List.unmodifiable(tableElements);
 
   final ForumBodyIdentity identity;
   final List<ForumBodyNode> nodes;
@@ -198,6 +203,7 @@ final class ForumBodyDocument {
   /// Actual image occurrences in source order, indexed during parsing.
   final List<ForumBodyElement> imageElements;
   final List<ForumBodyElement> collapseElements;
+  final List<ForumBodyElement> tableElements;
   final int parsedNodeCount;
   final int uniqueStyleCount;
 

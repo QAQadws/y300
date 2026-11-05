@@ -7,6 +7,7 @@ export 'src/block/forum_body_block_flow_cursor.dart';
 export 'src/document/forum_body_document.dart';
 export 'src/document/forum_body_collapse_layout.dart';
 export 'src/document/forum_body_parser.dart';
+export 'src/table/forum_body_table_grid.dart';
 export 'src/flow/forum_body_styled_flow_cursor.dart';
 export 'src/flow/forum_body_text_flow_cursor.dart';
 export 'src/flow/forum_body_inline_flow_content.dart';
