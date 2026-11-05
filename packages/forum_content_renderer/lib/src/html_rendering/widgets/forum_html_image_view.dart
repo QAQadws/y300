@@ -303,9 +303,12 @@ class _ForumHtmlImageViewState extends State<ForumHtmlImageView> {
         _promoteDecodedSize(size);
         if (_acceptCallback(revision) && forumHtmlValidImageSize(size)) {
           widget.onImageLayoutResolved?.call(
-            !sticker && widget.image.htmlSize == null
-                ? ForumHtmlImageLayout(aspectRatio: size.aspectRatio)
-                : _layout,
+            _inlineNaturalLayout(
+              size,
+              widget.image.htmlSize == null
+                  ? ForumHtmlImageLayout(aspectRatio: size.aspectRatio)
+                  : _layout,
+            ),
           );
         }
       },
@@ -333,6 +336,16 @@ class _ForumHtmlImageViewState extends State<ForumHtmlImageView> {
         : null;
     _viewportHandle?.reportFirstFrameRendered(canRetain: admission);
   }
+
+  ForumHtmlImageLayout _inlineNaturalLayout(
+    Size size,
+    ForumHtmlImageLayout otherwise,
+  ) =>
+      !widget.image.isSticker &&
+          widget.initialInlineSize != null &&
+          forumHtmlValidImageSize(size)
+      ? ForumHtmlImageLayout(displaySize: size, aspectRatio: size.aspectRatio)
+      : otherwise;
 
   void _schedulePrefetch() {
     final handle = _viewportHandle!;
@@ -543,7 +556,9 @@ class _ForumHtmlImageViewState extends State<ForumHtmlImageView> {
       setState(() => _cachedLayout = dimensions!.layout);
     }
     if (mounted && revision == _bindingRevision) {
-      widget.onImageLayoutResolved?.call(_layout);
+      widget.onImageLayoutResolved?.call(
+        _inlineNaturalLayout(dimensions.size, _layout),
+      );
     }
   }
 

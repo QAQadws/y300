@@ -194,7 +194,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
   late bool _lastActive;
   ForumBodyIdentity? _imageGeometryIdentity;
   final _imageLayouts = <String, ForumHtmlImageLayout>{};
-  final _stickerSizes = <String, Size>{};
+  final _inlineImageSizes = <String, Size>{};
   _LayoutRequest? _imageReflowRequest;
   bool _imageReflowScheduled = false;
 
@@ -670,7 +670,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         onImageLayoutResolved: (view, fragment, layout) =>
             _imageLayoutResolved(request, view, fragment, layout, imageHost),
         onInlineImageLayoutResolved: (view, fragment, binding, layout) =>
-            _stickerLayoutResolved(
+            _inlineImageLayoutResolved(
               request,
               view,
               fragment,
@@ -680,19 +680,29 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
             ),
         onImageTap: widget.onImageTap == null
             ? null
-            : (input, isCurrent) {
+            : (fragment, binding, isCurrent) {
                 final images = request.scope.images;
                 if (!_live(request) ||
                     images == null ||
-                    !images.owns(input) ||
                     !identical(imageHost, widget.imageHost) ||
                     !isCurrent()) {
                   return;
                 }
+                final entry = switch (fragment) {
+                  ForumBodyPreparedImageFragment(:final content)
+                      when binding == null && images.owns(content.input) =>
+                    content.input.entry,
+                  ForumBodyPreparedInlineFragment()
+                      when binding != null &&
+                          images.ownsInline(binding.input) =>
+                    binding.input.entry,
+                  _ => null,
+                };
+                if (entry == null) return;
                 final revision = _selectionRevision;
                 widget.onImageTap!(
                   NovelReaderNativeImageTap(
-                    input.entry,
+                    entry,
                     images.sequence,
                     () =>
                         mounted &&
@@ -830,7 +840,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
       if (_imageGeometryIdentity != chapter.identity) {
         _imageGeometryIdentity = chapter.identity;
         _imageLayouts.clear();
-        _stickerSizes.clear();
+        _inlineImageSizes.clear();
         _imageReflowRequest = null;
       }
       final images =
@@ -844,7 +854,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
             cancellation: token,
             maxCodeUnits: config.sessionLimits.maxTextCodeUnits,
             resolvedLayouts: _imageLayouts,
-            resolvedStickerSizes: _stickerSizes,
+            resolvedInlineSizes: _inlineImageSizes,
             scheduler: config.scheduler,
           );
       if (!current()) return;
@@ -1067,7 +1077,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
     _scheduleImageReflow();
   }
 
-  void _stickerLayoutResolved(
+  void _inlineImageLayoutResolved(
     _LayoutRequest request,
     NovelReaderNativePageView view,
     ForumBodyPreparedInlineFragment fragment,
@@ -1086,8 +1096,8 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         catalog == null ||
         !catalog.ownsInline(input) ||
         _imageGeometryIdentity != input.identity ||
-        !input.image.isSticker ||
-        input.image.htmlSize != null ||
+        !input.usesIntrinsicSize ||
+        (input.image.isSticker && input.image.htmlSize != null) ||
         size == null ||
         !size.isFinite ||
         size.isEmpty) {
@@ -1095,12 +1105,12 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
     }
     final key = input.image.cacheKey;
     final current =
-        _stickerSizes[key] ??
+        _inlineImageSizes[key] ??
         catalog.layoutFor(input.identity, input.element)?.displaySize;
     if (size == current) return;
     // Every occurrence can reuse the intrinsic size, but each page still owns
     // its own frozen frame and each occurrence keeps its own actual source.
-    _stickerSizes[key] = size;
+    _inlineImageSizes[key] = size;
     _imageReflowRequest = request;
     _scheduleImageReflow();
   }
@@ -1214,7 +1224,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
   void _closeAll() {
     _imageGeometryIdentity = null;
     _imageLayouts.clear();
-    _stickerSizes.clear();
+    _inlineImageSizes.clear();
     _imageReflowRequest = null;
     _chapterHintChanged(null);
     _finishNavigation(NovelReaderNavigationOutcome.retired);

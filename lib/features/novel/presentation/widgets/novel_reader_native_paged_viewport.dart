@@ -25,7 +25,8 @@ typedef NovelReaderNativeInlineImageLayoutResolved = void Function(
   ForumHtmlImageLayout,
 );
 typedef NovelReaderNativeImageTapHandler = void Function(
-  ForumBodyImageInput,
+  ForumBodyPreparedTextFragment,
+  ForumBodyInlineImageBinding?,
   bool Function(),
 );
 
@@ -235,18 +236,19 @@ class _NovelReaderNativePagedViewportState
       onInlineImageLayoutResolved: widget.onInlineImageLayoutResolved,
       onImageTap: widget.onImageTap == null
           ? null
-          : (image, isCurrent) {
+          : (fragment, binding, isCurrent) {
               if (frozen ||
                   !widget.active ||
                   !identical(displayed.controller, widget.controller)) {
                 return;
               }
-              final binding = _binding;
+              final displayRevision = _binding;
               widget.onImageTap!(
-                image,
+                fragment,
+                binding,
                 () =>
                     mounted &&
-                    binding == _binding &&
+                    displayRevision == _binding &&
                     identical(displayed.controller, widget.controller) &&
                     identical(displayed.imageHost, widget.imageHost) &&
                     isCurrent(),
@@ -879,6 +881,44 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
     widget.onPageUnmounted?.call();
   }
 
+  void _tapImage(
+    NovelReaderNativePageView view,
+    ForumBodyPreparedTextFragment fragment,
+    ForumBodyInlineImageBinding? binding,
+  ) {
+    final fragments = _mountedPages[view];
+    final tap = widget.onImageTap;
+    if (tap == null ||
+        widget.frozen ||
+        fragments == null ||
+        !fragments.any(
+          (mounted) =>
+              identical(mounted, fragment) ||
+              (mounted is ForumBodyPreparedListItemFragment &&
+                  identical(mounted.body, fragment)),
+        )) {
+      return;
+    }
+    final controller = widget.controller, page = view.pageIndex;
+    bool current() =>
+        mounted &&
+        _fits &&
+        !_scrolling &&
+        !controller.isClosed &&
+        !controller.hasPendingNavigation &&
+        identical(controller.visibleView, view) &&
+        _page == page &&
+        fragment.isActive &&
+        (binding == null ||
+            (fragment is ForumBodyPreparedInlineFragment &&
+                identical(fragment.view.images[binding.atomIndex], binding))) &&
+        identical(_mountedPages[view], fragments) &&
+        _pages.hasClients &&
+        !_pages.position.isScrollingNotifier.value &&
+        ((_pages.page ?? -1) - page).abs() <= precisionErrorTolerance;
+    if (current()) tap(fragment, binding, current);
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
@@ -940,36 +980,8 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
                               widget.onInlineImageLayoutResolved,
                           onImageTap: widget.onImageTap == null
                               ? null
-                              : (fragment) {
-                                  final fragments = _mountedPages[view];
-                                  bool current() =>
-                                      mounted &&
-                                      _fits &&
-                                      !_scrolling &&
-                                      !controller.isClosed &&
-                                      !controller.hasPendingNavigation &&
-                                      identical(controller.visibleView, view) &&
-                                      _page == page &&
-                                      fragment.isActive &&
-                                      fragments != null &&
-                                      identical(
-                                        _mountedPages[view],
-                                        fragments,
-                                      ) &&
-                                      fragments.contains(fragment) &&
-                                      _pages.hasClients &&
-                                      !_pages
-                                          .position
-                                          .isScrollingNotifier
-                                          .value &&
-                                      ((_pages.page ?? -1) - page).abs() <=
-                                          precisionErrorTolerance;
-                                  if (widget.frozen || !current()) return;
-                                  widget.onImageTap!(
-                                    fragment.content.input,
-                                    current,
-                                  );
-                                },
+                              : (fragment, binding) =>
+                                    _tapImage(view, fragment, binding),
                           key: ObjectKey(view),
                           view: view,
                           // Retain the confirmed origin through cancellation
@@ -1066,7 +1078,11 @@ class _NativeMountedPage extends StatefulWidget {
   final VoidCallback onImageDisplayChanged;
   final NovelReaderNativeImageLayoutResolved? onImageLayoutResolved;
   final NovelReaderNativeInlineImageLayoutResolved? onInlineImageLayoutResolved;
-  final ValueChanged<ForumBodyPreparedImageFragment>? onImageTap;
+  final void Function(
+    ForumBodyPreparedTextFragment,
+    ForumBodyInlineImageBinding?,
+  )?
+  onImageTap;
   final bool keepAlive;
   final void Function(
     NovelReaderNativePageView,
@@ -1115,7 +1131,12 @@ class _NativeMountedPageState extends State<_NativeMountedPage>
       imageHost: widget.imageHost,
       onImageDisplayChanged: (_, _) => widget.onImageDisplayChanged(),
       onInlineImageDisplayChanged: (_, _, _) => widget.onImageDisplayChanged(),
-      onImageTap: widget.onImageTap,
+      onImageTap: widget.onImageTap == null
+          ? null
+          : (fragment) => widget.onImageTap?.call(fragment, null),
+      onInlineImageTap: widget.onImageTap == null
+          ? null
+          : (fragment, binding) => widget.onImageTap?.call(fragment, binding),
       onImageLayoutResolved: (fragment, layout) =>
           widget.onImageLayoutResolved?.call(widget.view, fragment, layout),
       onInlineImageLayoutResolved: widget.onInlineImageLayoutResolved == null

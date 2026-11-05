@@ -48,7 +48,7 @@ final class NovelReaderNativeLayoutScope {
   }) : _fontCollectionGeneration = fontCollectionGeneration,
        _paragraphInputs = paragraphInputs,
        _usesQuoteTheme = usesQuoteTheme;
-  static const fingerprintRevision = 13;
+  static const fingerprintRevision = 14;
   final NovelReaderNativePreparedChapter chapter;
   final ForumBodyReaderStyle reader;
   final TextScaler textScaler;
@@ -270,8 +270,13 @@ final class NovelReaderNativeLayoutScope {
       imageResolver: catalog?.resolve,
       inlineImageResolver: catalog == null
           ? null
-          : (identity, element, style) =>
-                catalog.resolveSticker(identity, element, style, textScaler),
+          : (identity, element, style) => catalog.resolveInline(
+              identity,
+              element,
+              style,
+              textScaler,
+              height,
+            ),
       // Current and target pages coexist during a real PageView turn. Reserve
       // their shared issued-handle budget before publishing legal physical rows.
       maxNativeHandlesPerPage: maxNativeHandlesPerPage,

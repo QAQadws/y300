@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/painting.dart';
@@ -32,13 +33,13 @@ final class NovelReaderNativeImageResources {
     required NovelReaderPaginationCancellationToken cancellation,
     required int maxCodeUnits,
     Map<String, ForumHtmlImageLayout> resolvedLayouts = const {},
-    Map<String, Size> resolvedStickerSizes = const {},
+    Map<String, Size> resolvedInlineSizes = const {},
     NovelReaderNativeWorkScheduler scheduler =
         const NovelReaderNativeWorkScheduler(),
   }) async {
     if (maxCodeUnits < 0) throw ArgumentError.value(maxCodeUnits);
     final layouts = Map<String, ForumHtmlImageLayout>.of(resolvedLayouts);
-    final stickerSizes = Map<String, Size>.of(resolvedStickerSizes);
+    final inlineSizes = Map<String, Size>.of(resolvedInlineSizes);
     final inputs = <String, ForumBodyImageInput?>{};
     final sources = <String, ForumBodyInlineImageSource?>{};
     final frozenLayouts = <String, ForumHtmlImageLayout>{};
@@ -57,12 +58,13 @@ final class NovelReaderNativeImageResources {
       ForumBodyImageInput? input;
       if (original != null) {
         final display = original.image;
-        final learned = display.isSticker && display.htmlSize == null
-            ? stickerSizes[display.cacheKey]
-            : null;
+        final learned = inlineSizes[display.cacheKey];
         final layout = learned == null
             ? layouts[path] ?? display.initialLayout
-            : ForumHtmlImageLayout(displaySize: learned);
+            : ForumHtmlImageLayout(
+                displaySize: learned,
+                aspectRatio: learned.aspectRatio,
+              );
         for (final size in [layout.displaySize, original.image.htmlSize]) {
           if (size != null &&
               (!size.width.isFinite ||
@@ -74,11 +76,15 @@ final class NovelReaderNativeImageResources {
         }
         frozenLayouts[path] = layout;
         if (original.entry case final entry?) {
+          // A shared intrinsic hint cannot replace the block's authored pair.
+          final blockLayout =
+              layouts[path] ??
+              (display.htmlSize == null ? layout : display.initialLayout);
           final block = ForumBodyImageInput(
             identity: original.identity,
             element: element,
             entry: entry,
-            layout: layout,
+            layout: blockLayout,
           );
           // Block geometry needs one ratio, independent of display state.
           input = ForumBodyImageInput(
@@ -309,25 +315,49 @@ final class NovelReaderNativeImageCatalog {
     return sourceFor(identity, element) == null ? null : _layouts[element.path];
   }
 
-  ForumBodyInlineImageInput? resolveSticker(
+  ForumBodyInlineImageInput? resolveInline(
     ForumBodyIdentity identity,
     ForumBodyElement element,
     ForumBodyResolvedStyle style,
     TextScaler textScaler,
+    double pageHeight,
   ) {
     final source = sourceFor(identity, element);
-    if (source == null || !source.image.isSticker) return null;
-    final known = source.image.htmlSize ?? _layouts[element.path]?.displaySize;
-    final size =
-        known ?? Size.square(textScaler.scale(style.textStyle.fontSize!));
-    return ForumBodyInlineImageInput.fromSource(
+    if (source == null) return null;
+    if (!source.image.isSticker &&
+        !const {
+          'inline',
+          'inline-block',
+        }.contains(element.style.value('display')?.trim().toLowerCase())) {
+      return null;
+    }
+    for (final (property, normal) in const [
+      ('float', 'none'),
+      ('clear', 'none'),
+      ('position', 'static'),
+    ]) {
+      final value = element.style.value(property)?.trim().toLowerCase();
+      if (value != null &&
+          value != normal &&
+          value != 'initial' &&
+          value != 'unset') {
+        return null;
+      }
+    }
+    final em = textScaler.scale(style.textStyle.fontSize!);
+    final layout = _layouts[element.path]!;
+    final ratio = layout.isFallback ? null : layout.aspectRatio;
+    final hintedHeight = ratio == null ? em : em / ratio;
+    final intrinsic =
+        layout.displaySize ??
+        source.image.htmlSize ??
+        Size(em, hintedHeight.isFinite && hintedHeight > 0 ? hintedHeight : em);
+    return ForumBodyInlineImageInput.replaced(
       source: source,
-      dimensions: PlaceholderDimensions(
-        size: size,
-        alignment: PlaceholderAlignment.baseline,
-        baseline: TextBaseline.alphabetic,
-        baselineOffset: size.height,
-      ),
+      box: style.box,
+      intrinsicSize: intrinsic,
+      // Keep space for neighboring glyphs even when a decoded image is tall.
+      maxHeight: pageHeight - math.min(em, pageHeight / 2),
     );
   }
 

@@ -133,6 +133,85 @@ Future<void> _until(WidgetTester tester, bool Function() done) async {
 }
 
 void main() {
+  testWidgets(
+    'explicit inline images keep their actual viewer entries through natural-size reflow',
+    (tester) async {
+      const url = 'https://bbs.yamibo.com/data/attachment/forum/a.png';
+      final reader = _Reader(
+        html:
+            '<p>A<img src="$url" style="display:inline-block;width:28px;'
+            'height:14px">B<img src="$url" style="display:inline;width:24px">'
+            'C</p><img src="$url">',
+      );
+      await tester.pumpWidget(reader.widget());
+      await _until(tester, () => reader.positions.isNotEmpty);
+      final initial = reader.positions.last;
+      final surface = find.byType(ForumBodyInlineImageSurface);
+      List<ForumBodyInlineImageBinding> images() => tester
+          .widget<ForumBodyInlineImageSurface>(surface)
+          .view
+          .images
+          .values
+          .toList();
+      expect(images().map((image) => image.rect.size), [
+        const Size(28, 14),
+        const Size(24, 24),
+      ]);
+      final coverage = reader.controller.visibleView!.coverage;
+      expect(coverage.images.map((image) => image.imageIndex), [0, 1]);
+      expect(coverage.images.map((image) => image.path).toSet(), hasLength(2));
+      expect(initial.isWholeBodyVisible, isFalse);
+      reader.host.callback(0).frame!();
+      await tester.pump();
+      expect(reader.positions.last.isWholeBodyVisible, isFalse);
+      reader.host.callback(1).frame!();
+      await _until(tester, () => reader.positions.last.isWholeBodyVisible);
+
+      await tester.tapAt(tester.getTopLeft(surface) + images()[1].rect.center);
+      await tester.pump();
+      final tap = reader.taps.single;
+      expect(tap.entry.index, 1);
+      expect(tap.entry, same(tap.sequence.entries[1]));
+      expect(tap.sequence.entries.map((entry) => entry.index), [0, 1, 2]);
+      expect(tap.sequence.entries.map((entry) => entry.url).toSet(), {url});
+      expect(tap.isCurrent, isTrue);
+
+      reader.host.callback(0).resolved!(const Size(80, 40));
+      await tester.pumpAndSettle();
+      expect(reader.positions.last.paginationKey, initial.paginationKey);
+      final retired = reader.host.callback(1);
+      retired.resolved!(const Size(80, 40));
+      await _until(
+        tester,
+        () => reader.positions.last.paginationKey != initial.paginationKey,
+      );
+      expect(images().map((image) => image.rect.size), [
+        const Size(28, 14),
+        const Size(24, 12),
+      ]);
+      expect(tap.isCurrent, isFalse);
+      expect(reader.positions.last.anchor.nodeId, initial.anchor.nodeId);
+      expect(
+        reader.positions.last.anchor.textIdentity,
+        initial.anchor.textIdentity,
+      );
+      expect(reader.build.calls, 1);
+      final settled = reader.controller;
+      retired.resolved!(const Size(90, 80));
+      await tester.pumpAndSettle();
+      expect(reader.controller, same(settled));
+
+      expect(reader.controller.requestPage(1), isTrue);
+      await _until(tester, () => reader.controller.visiblePageIndex == 1);
+      final block = reader.controller.visibleView!.coverage.images.single;
+      expect(block.imageIndex, 2);
+      expect(block.inlineAtomIndex, isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      expect(reader.owner.activeCacheHandles, 0);
+    },
+  );
+
   testWidgets('Discuz stickers mount inline and gate actual page visibility', (
     tester,
   ) async {
