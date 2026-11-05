@@ -401,6 +401,11 @@ final class ForumBodyTextPageSession {
       lease.isActive &&
       _issuedTables.contains(lease);
 
+  bool ownsPreparedFragments(List<ForumBodyPreparedTextFragment> fragments) =>
+      !isClosed &&
+      !isLayoutOwnerRetired &&
+      fragments.every((item) => _issued.contains(item) && item.isActive);
+
   /// Each call handles at most one paragraph/padding input and publishes at
   /// most one page. Pinned-cache pressure retains the exact pending input; retry
   /// after view leases change instead of spinning or restarting the traversal.

@@ -438,6 +438,103 @@ void main() {
       );
     }
 
+    testWidgets('native inline resize keeps the same visible grapheme', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(370, 650);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final dimensions = _DelayedForumImageDimensions();
+      final words = List.filled(
+        12,
+        'Each line of the original paragraph can wrap again.',
+      ).join(' ');
+      final tail = List.filled(38, '<p>Following text.</p>').join();
+      await tester.pumpWidget(
+        _buildTestApp(
+          _imageReturnRepository(
+            '<p>Before the paragraph.</p><p>'
+            '<img src="/images/late.jpg" style="display:inline-block">'
+            '$words</p>$tail',
+          ),
+          imageCacheService: _FailedThreadInlineImageCacheService(),
+          additionalOverrides: [
+            forumImageDimensionIndexProvider.overrideWithValue(dimensions),
+          ],
+          home: const ThreadDetailPage(tid: '100', nativeBody: true),
+        ),
+      );
+      final body = find.byType(ForumBodyFlowBox);
+      final image = find.byKey(
+        const ValueKey(('native-readable-image', 'p1', 0)),
+      );
+      for (var frame = 0; frame < 250; frame++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 2)),
+        );
+        await tester.pump();
+        if (image.evaluate().isNotEmpty &&
+            tester.widget<ForumBodyFlowBox>(body).prefix.isComplete) {
+          break;
+        }
+      }
+      expect(image, findsOneWidget);
+      expect(dimensions.queriedSpecs, isNotEmpty);
+      final flow = tester.widget<ForumBodyFlowBox>(body);
+      final position = _imageReturnScrollable(tester).position;
+      final viewportTop = tester
+          .getTopLeft(find.byKey(const Key('thread-detail-list')))
+          .dy;
+      position.jumpTo(
+        position.pixels + tester.getRect(image).bottom + 42 - viewportTop,
+      );
+      await tester.pump(const Duration(milliseconds: 16));
+      final oldWindow = ForumBodyFlowBox.borrowPaintedTextWindow(
+        flow.key! as GlobalKey,
+      )!;
+      final source = ForumBodyFlowTextAnchor.firstVisible(oldWindow)!;
+      expect(source.anchor.path, '1');
+      final expectedTop = tester.getTopLeft(body).dy + source.bounds.top;
+      final offset = position.pixels;
+      dimensions.pending.complete(
+        const ForumImageDimensions(
+          width: 182,
+          height: 140,
+          source: ForumImageDimensionSource.cacheMetadata,
+        ),
+      );
+      for (var frame = 0; frame < 160; frame++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        final next = tester.widget<ForumBodyFlowBox>(body);
+        if (identical(next.session, flow.session)) continue;
+        final window = ForumBodyFlowBox.borrowPaintedTextWindow(
+          next.key! as GlobalKey,
+        );
+        expect(window, isNotNull, reason: 'The measured slice mounts at once.');
+        final target = [
+          for (final slice in window!.slices)
+            if (source.anchor.locate(
+                  snapshot: window.snapshot,
+                  page: slice.index,
+                  fragments: slice.fragments,
+                )
+                case final bounds?)
+              tester.getTopLeft(body).dy + slice.top + bounds.top,
+        ].single;
+        expect(target, closeTo(expectedTop, 1));
+        expect(position.pixels, greaterThan(offset + 65));
+        break;
+      }
+      final replacement = tester.widget<ForumBodyFlowBox>(body).session;
+      expect(replacement, isNot(same(flow.session)));
+      expect(flow.session.isClosed, isTrue);
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(replacement.activeIssuedFragments, 0);
+      expect(replacement.pendingPreparationCount, 0);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('late reading close cannot pop a rebound thread owner', (
       tester,
     ) async {

@@ -1,7 +1,7 @@
 part of 'thread_post_native_flow.dart';
 
 extension on _ThreadPostNativeFlowState {
-  bool _preserveBlockImageReflow(_ThreadFlowRun old, _ThreadFlowRun next) {
+  bool _preserveImageReflow(_ThreadFlowRun old, _ThreadFlowRun next) {
     final scrollable = Scrollable.maybeOf(context, axis: Axis.vertical);
     final controller = scrollable?.widget.controller;
     final position = scrollable?.position;
@@ -14,24 +14,32 @@ extension on _ThreadPostNativeFlowState {
         !box.attached ||
         !box.hasSize ||
         ModalRoute.of(context)?.isCurrent == false) {
+      next.cancelInlineProbe();
       return true;
     }
     final viewport = RenderAbstractViewport.maybeOf(box);
     if (viewport == null || position.axisDirection != AxisDirection.down) {
+      next.cancelInlineProbe();
       return true;
     }
     RenderObject? parent = box.parent;
     while (parent is RenderBox) {
       parent = parent.parent;
     }
-    if (parent is! RenderSliver) return true;
+    if (parent is! RenderSliver) {
+      next.cancelInlineProbe();
+      return true;
+    }
     final reversed =
         parent.constraints.growthDirection == GrowthDirection.reverse;
     final clip = MatrixUtils.transformRect(
       viewport.getTransformTo(box),
       viewport.paintBounds,
     );
-    if (!clip.isFinite || clip.width <= 0 || clip.height <= 0) return true;
+    if (!clip.isFinite || clip.width <= 0 || clip.height <= 0) {
+      next.cancelInlineProbe();
+      return true;
+    }
 
     final before = clip.top.clamp(0.0, old.height);
     if (!next.prefix!.isComplete && (reversed || before == old.height)) {
@@ -39,8 +47,25 @@ extension on _ThreadPostNativeFlowState {
       // the next visible floor. Wait for its actual extent.
       return false;
     }
-    final after = _afterBlockReflow(old, next, before);
-    if (after == null) return true;
+    final double? after;
+    if (next.preserveInline && before > 0 && before < old.height) {
+      final probe = next.inlineProbe ?? _beginInlineProbe(old, next, position);
+      if (probe == null ||
+          !probe.isAt(position) ||
+          probe.before.intersect(clip.inflate(.001)) != probe.before) {
+        next.cancelInlineProbe();
+        return true;
+      }
+      if (!probe.done) return false;
+      final top = probe.newTop;
+      after = top == null ? null : before + top - probe.before.top;
+    } else {
+      after = _afterBlockReflow(old, next, before);
+    }
+    if (after == null) {
+      next.cancelInlineProbe();
+      return true;
+    }
     final visibleHeight = clip.bottom.clamp(before, old.height) - before;
     if (!next.prefix!.isComplete && after + visibleHeight > next.height) {
       return false;
@@ -51,6 +76,8 @@ extension on _ThreadPostNativeFlowState {
       delta: delta,
       isCurrent: () => _current(next) && identical(_shown, next),
     );
+    next.initialSlice = next.inlineProbe?.takeSlice();
+    next.cancelInlineProbe();
     return true;
   }
 }

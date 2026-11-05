@@ -7,6 +7,7 @@ import 'package:flutter/rendering.dart'
 import 'package:flutter/widgets.dart';
 
 import '../pagination/forum_body_prepared_text_fragment.dart';
+import '../pagination/forum_body_text_page_binding.dart';
 import '../pagination/forum_body_text_page_composer.dart';
 import '../pagination/forum_body_text_page_preparation.dart';
 import '../pagination/forum_body_text_page_session.dart';
@@ -81,10 +82,64 @@ final class ForumBodyFlowBox extends _ForumBodyFlow {
     super.onTableWindowChanged,
     this.imageAnchorController,
     this.imagePathForIndex,
+    this.initialSlice,
   });
 
   final ForumHtmlImageAnchorController? imageAnchorController;
   final String? Function(int index)? imagePathForIndex;
+  final ForumBodyFlowPreparedSlice? initialSlice;
+
+  /// Borrow the currently painted box, including a retained predecessor while
+  /// a replacement is being prepared at the same width.
+  static ForumBodyFlowTextWindow? borrowPaintedTextWindow(GlobalKey key) {
+    final state = key.currentState;
+    return state is _ForumBodyFlowState && state.widget is ForumBodyFlowBox
+        ? state._borrowPaintedBox()
+        : null;
+  }
+}
+
+/// Transfers an already prepared non-table slice to its first flow view.
+/// The caller closes it if publication is cancelled before the view takes it.
+final class ForumBodyFlowPreparedSlice {
+  ForumBodyFlowPreparedSlice({
+    required this.session,
+    required this.index,
+    required List<ForumBodyPreparedTextFragment> fragments,
+  }) : _fragments = List.unmodifiable(fragments);
+
+  final ForumBodyTextPageSession session;
+  final int index;
+  List<ForumBodyPreparedTextFragment>? _fragments;
+
+  List<ForumBodyPreparedTextFragment>? _take(_ForumBodyFlow flow) {
+    final fragments = _fragments;
+    if (fragments == null) return null;
+    if (!identical(session, flow.session) ||
+        index < 0 ||
+        index >= flow.prefix.length ||
+        flow.prefix[index].table != null ||
+        !session.ownsPreparedFragments(fragments)) {
+      throw StateError('Prepared flow slice belongs to a different layout');
+    }
+    validateForumBodyPreparedTextPageBinding(
+      snapshot: flow.prefix,
+      pageIndex: index,
+      layoutId: flow.prefix.layoutId,
+      fragments: fragments,
+    );
+    _fragments = null;
+    return fragments;
+  }
+
+  void close() {
+    final fragments = _fragments;
+    _fragments = null;
+    if (fragments == null) return;
+    for (final fragment in fragments) {
+      fragment.close();
+    }
+  }
 }
 
 abstract class _ForumBodyFlow extends StatefulWidget {
@@ -144,6 +199,7 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
   void initState() {
     super.initState();
     _updatePrefix();
+    _adoptInitialSlice();
     _listen();
     _bindImageLocator();
   }
@@ -186,7 +242,16 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
       throw StateError('Flowing body prefix changed');
     }
     _updatePrefix();
+    if (!identical(oldWidget.session, widget.session)) _adoptInitialSlice();
     _schedule();
+  }
+
+  void _adoptInitialSlice() {
+    final flow = widget;
+    if (flow is! ForumBodyFlowBox) return;
+    final seed = flow.initialSlice;
+    final fragments = seed?._take(flow);
+    if (fragments != null) _ready[seed!.index] = _FlowDelivery(fragments);
   }
 
   void _updatePrefix() {
@@ -461,13 +526,29 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
     ),
   );
 
+  ForumBodyFlowTextWindow? _borrowPaintedBox() {
+    final box = _boxKey?.currentContext?.findRenderObject();
+    final position = _outerPosition;
+    if (box is! RenderBox || position == null) return null;
+    final clip = forumBodyVisibleBoxClip(box, position);
+    if (clip == null || clip.isEmpty) return null;
+    return _borrowTextWindow(
+      clip,
+      () =>
+          identical(position, _outerPosition) &&
+          forumBodyVisibleBoxClip(box, position) == clip,
+      allowRetained: true,
+    );
+  }
+
   ForumBodyFlowTextWindow? _borrowTextWindow(
     Rect bounds,
-    bool Function() stillLaidOut,
-  ) {
+    bool Function() stillLaidOut, {
+    bool allowRetained = false,
+  }) {
     final session = widget.session;
     if (!_fits ||
-        !widget.isCurrentLayout ||
+        (!widget.isCurrentLayout && !allowRetained) ||
         session.isClosed ||
         session.isLayoutOwnerRetired) {
       return null;
@@ -495,7 +576,7 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
       List.unmodifiable(slices),
       () =>
           mounted &&
-          widget.isCurrentLayout &&
+          (widget.isCurrentLayout || allowRetained) &&
           identical(widget.session, session) &&
           !session.isClosed &&
           !session.isLayoutOwnerRetired &&

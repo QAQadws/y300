@@ -11,6 +11,7 @@ import 'package:y300/l10n/app_localizations.dart';
 import 'thread_native_body_images.dart';
 
 part 'thread_native_block_reflow.dart';
+part 'thread_native_inline_reflow.dart';
 
 /// Thread adapter for the same natural flow used by the novel reader. The
 /// outer floor list owns scroll and reading authority.
@@ -63,7 +64,7 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
   );
   final _preparation = ForumPreparationScheduler.shared.createScope();
   final _resolvedImages = <String, ForumHtmlImageLayout>{};
-  final _changedImages = <String, bool>{};
+  final _changedImages = <String, _ThreadImageChange>{};
   ForumPreparationLease<ForumBodyDocument>? _work;
   ForumBodyDocument? _document;
   _ThreadFlowRun? _pending, _shown;
@@ -162,13 +163,11 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
           _error == null) {
         _layoutKey = key;
         if (!identical(_pending, _shown)) _pending?.close();
-        final blockChanges =
-            _shown?.inputs == inputs &&
-                _changedImages.values.every((main) => main)
-            ? _changedImages.keys.toSet()
-            : const <String>{};
+        final changes = _shown?.inputs == inputs
+            ? Map<String, _ThreadImageChange>.of(_changedImages)
+            : const <String, _ThreadImageChange>{};
         _changedImages.clear();
-        final run = _pending = _ThreadFlowRun(inputs, blockChanges);
+        final run = _pending = _ThreadFlowRun(inputs, changes);
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!_current(run)) return;
           widget.onGeometry(false, false);
@@ -188,6 +187,7 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
               isCurrentLayout: identical(run, _pending),
               imageAnchorController: widget.imageAnchorController,
               imagePathForIndex: run.images!.pathForIndex,
+              initialSlice: run.initialSlice,
               onReadyChanged: (ready) {
                 if (!_current(run)) return;
                 run.ready = ready;
@@ -305,39 +305,49 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
           run.append(snapshot[i]);
         }
         run.prefix = snapshot;
-        final previous = _shown;
-        if (snapshot.isNotEmpty &&
-            (snapshot.isComplete ||
-                run.height >= (previous?.height ?? 0) &&
-                    run.blockChanges.every(run.blockImages.containsKey)) &&
-            (previous == null ||
-                identical(previous, run) ||
-                run.blockChanges.isEmpty ||
-                _preserveBlockImageReflow(previous, run))) {
-          setState(() {
-            if (!identical(_shown, run)) _shown?.close();
-            _shown = run;
-          });
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (_current(run) &&
-                identical(run.prefix, snapshot) &&
-                _error == null) {
-              widget.onGeometry(run.ready, snapshot.isComplete);
-            }
-          });
-        } else if (snapshot.isEmpty && snapshot.isComplete) {
-          setState(() {
-            _shown?.close();
-            _shown = null;
-          });
-          widget.onGeometry(false, true);
-        }
+        _present(run);
       }
       run.waiting = step.waitingForLayoutBudget;
       if (!step.isComplete && !run.waiting) _ThreadFlowQueue.add(run.step!);
     } catch (error, stack) {
       _fail(error, stack);
     }
+  }
+
+  void _present(_ThreadFlowRun run) {
+    if (!_current(run) || _error != null) return;
+    final snapshot = run.prefix!;
+    if (snapshot.isEmpty) {
+      if (snapshot.isComplete) {
+        setState(() {
+          _shown?.close();
+          _shown = null;
+        });
+        widget.onGeometry(false, true);
+      }
+      return;
+    }
+    final previous = _shown;
+    if (!snapshot.isComplete &&
+        (run.height < (previous?.height ?? 0) ||
+            !run.blockChanges.every(run.blockImages.containsKey))) {
+      return;
+    }
+    if (previous != null &&
+        !identical(previous, run) &&
+        (run.blockChanges.isNotEmpty || run.preserveInline) &&
+        !_preserveImageReflow(previous, run)) {
+      return;
+    }
+    setState(() {
+      if (!identical(_shown, run)) _shown?.close();
+      _shown = run;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_current(run) && identical(run.prefix, snapshot) && _error == null) {
+        widget.onGeometry(run.ready, snapshot.isComplete);
+      }
+    });
   }
 
   Widget _buildSlice(
@@ -378,7 +388,7 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
       onImageLayoutResolved: (fragment, layout) {
         final input = fragment.content.input;
         if (snapshot.layoutId != run.prefix!.layoutId) {
-          _imageResolved(run, input.element, layout);
+          _imageResolved(run, input.element, layout, _ThreadImageChange.table);
           return;
         }
         final ratio = layout.aspectRatio ?? layout.displaySize?.aspectRatio;
@@ -395,12 +405,19 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
           run,
           input.element,
           ForumHtmlImageLayout(aspectRatio: ratio),
-          mainBlock: true,
+          _ThreadImageChange.block,
         );
       },
       onInlineImageLayoutResolved: (_, binding, layout) {
         if (binding.input.usesIntrinsicSize) {
-          _imageResolved(run, binding.input.element, layout);
+          _imageResolved(
+            run,
+            binding.input.element,
+            layout,
+            snapshot.layoutId == run.prefix!.layoutId
+                ? _ThreadImageChange.inline
+                : _ThreadImageChange.table,
+          );
         }
       },
       onSourceTap: (fragment, position) {
@@ -440,9 +457,9 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
   void _imageResolved(
     _ThreadFlowRun run,
     ForumBodyElement element,
-    ForumHtmlImageLayout layout, {
-    bool mainBlock = false,
-  }) {
+    ForumHtmlImageLayout layout,
+    _ThreadImageChange change,
+  ) {
     if (!_current(run) || _error != null) return;
     final original =
         _resolvedImages[element.path] ?? run.images!.layoutFor(element);
@@ -451,7 +468,7 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
       return;
     }
     _resolvedImages[element.path] = layout;
-    _changedImages[element.path] = mainBlock;
+    _changedImages[element.path] = change;
     if (run.reflowScheduled) return;
     run.reflowScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -504,13 +521,26 @@ Future<ForumBodyDocument> _parseThreadNativeBody(String source, String html) =>
       debugName: 'thread-native-body',
     );
 
+enum _ThreadImageChange { block, inline, table }
+
 final class _ThreadFlowRun {
-  _ThreadFlowRun(this.inputs, this.blockChanges);
+  _ThreadFlowRun(this.inputs, Map<String, _ThreadImageChange> changes)
+    : blockChanges =
+          changes.values.every((change) => change == _ThreadImageChange.block)
+          ? changes.keys.toSet()
+          : const {},
+      preserveInline =
+          changes.containsValue(_ThreadImageChange.inline) &&
+          !changes.containsValue(_ThreadImageChange.table);
 
   final Object inputs;
   final Set<String> blockChanges;
+  final bool preserveInline;
   final boundsKey = GlobalKey();
   final blockImages = <String, ({double top, double height})>{};
+  final pageTops = <double>[];
+  _ThreadInlineProbe? inlineProbe;
+  ForumBodyFlowPreparedSlice? initialSlice;
 
   ForumBodyTextPageSession? session;
   ForumBodyTextPageSnapshot? prefix;
@@ -523,6 +553,7 @@ final class _ThreadFlowRun {
   bool reflowScheduled = false;
 
   void append(ForumBodyTextPage page) {
+    pageTops.add(height);
     for (final fragment in page.fragments) {
       if (fragment.imageFrame case final frame?) {
         blockImages[fragment.path!] = (
@@ -537,7 +568,14 @@ final class _ThreadFlowRun {
   void close() {
     _ThreadFlowQueue.remove(step);
     unawaited(budget?.cancel());
+    cancelInlineProbe();
+    initialSlice?.close();
     session?.close();
+  }
+
+  void cancelInlineProbe() {
+    inlineProbe?.close();
+    inlineProbe = null;
   }
 }
 
