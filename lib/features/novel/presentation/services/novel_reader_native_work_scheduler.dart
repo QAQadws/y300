@@ -69,5 +69,13 @@ final class NovelReaderNativeWorkScheduler {
     }
   }
 
-  static Future<void> _nextFrame() => SchedulerBinding.instance.endOfFrame;
+  static Future<void> _nextFrame() {
+    final binding = SchedulerBinding.instance;
+    // During post-frame callbacks, endOfFrame queues completion on the next
+    // frame but only requests a frame itself when the scheduler is idle.
+    if (binding.schedulerPhase == SchedulerPhase.postFrameCallbacks) {
+      binding.ensureVisualUpdate();
+    }
+    return binding.endOfFrame;
+  }
 }

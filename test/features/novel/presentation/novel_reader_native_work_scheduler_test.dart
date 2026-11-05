@@ -84,6 +84,25 @@ void main() {
     expect(finished, isTrue);
   });
 
+  testWidgets('a yield started after layout schedules the next frame', (
+    tester,
+  ) async {
+    final token = NovelReaderPaginationCancellationToken();
+    addTearDown(token.cancel);
+    var finished = false;
+    tester.binding.addPostFrameCallback((_) async {
+      await const NovelReaderNativeWorkScheduler().nextFrame(token);
+      finished = true;
+    });
+
+    tester.binding.scheduleFrame();
+    await tester.pump();
+    expect(finished, isFalse);
+    expect(tester.binding.hasScheduledFrame, isTrue);
+    await tester.pumpAndSettle();
+    expect(finished, isTrue);
+  });
+
   test(
     'cancellation releases a frame wait and observes its late failure',
     () async {
