@@ -14,19 +14,21 @@ typedef NovelReaderNativeFlowPoint = ({
   int slice,
   NovelReaderTextAnchor anchor,
   Rect bounds,
+  bool isImage,
 });
 
 const _scheduler = NovelReaderNativeWorkScheduler();
 
-/// Read the first visible glyph, or verify a specific source in its new slice.
+/// Read the first eligible visible source, or verify one in its new slice.
 /// The caller supplies the readable clip in body coordinates.
-Future<NovelReaderNativeFlowPoint?> sampleNovelReaderFlowText({
+Future<NovelReaderNativeFlowPoint?> sampleNovelReaderFlowSource({
   required ForumBodyFlowTextWindow window,
   required NovelReaderNativeAnchorMap anchors,
   required Rect readable,
   required NovelReaderPaginationCancellationToken token,
   NovelReaderTextAnchor? preferred,
   int? targetSlice,
+  bool includeRenderedImages = false,
 }) async {
   final visible = window.bounds.intersect(readable);
   if (visible.isEmpty) return null;
@@ -54,15 +56,16 @@ Future<NovelReaderNativeFlowPoint?> sampleNovelReaderFlowText({
       preferred,
       token,
       isCurrent: () => window.isCurrent,
+      includeRenderedImages: includeRenderedImages,
     );
     if (point != null && window.isCurrent) return point;
   }
   return null;
 }
 
-/// A source hint only admits a candidate. Prepare its actual glyphs to find
+/// A source hint only admits a candidate. Prepare its actual layout to find
 /// new geometry, then release the temporary delivery before mounting.
-Future<NovelReaderNativeFlowPoint?> probeNovelReaderFlowText({
+Future<NovelReaderNativeFlowPoint?> probeNovelReaderFlowSource({
   required ForumBodyTextPageSession session,
   required ForumBodyTextPageSnapshot prefix,
   required NovelReaderNativeAnchorMap anchors,
@@ -137,6 +140,7 @@ Future<NovelReaderNativeFlowPoint?> _locate(
   NovelReaderTextAnchor? preferred,
   NovelReaderPaginationCancellationToken token, {
   bool Function()? isCurrent,
+  bool includeRenderedImages = false,
 }) async {
   token.throwIfCancelled();
   NovelReaderNativePageCoverageCursor? cursor;
@@ -148,6 +152,7 @@ Future<NovelReaderNativeFlowPoint?> _locate(
       layoutId: snapshot.layoutId,
       fragments: fragments,
       viewportClip: clip,
+      continuous: true,
     );
     final clock = Stopwatch()..start();
     var steps = 0;
@@ -163,18 +168,32 @@ Future<NovelReaderNativeFlowPoint?> _locate(
     }
     final coverage = work.result;
     final location = preferred == null
-        ? coverage.points
-              .where((point) => point.fragmentBounds?.isEmpty == false)
+        ? coverage.locations
+              .where(
+                (location) => switch (location) {
+                  NovelReaderNativeCoveragePoint(:final fragmentBounds) =>
+                    fragmentBounds?.isEmpty == false,
+                  NovelReaderNativeImageCoverage() =>
+                    includeRenderedImages &&
+                        location.isRenderedBy(
+                          fragments[location.fragmentIndex],
+                        ),
+                },
+              )
               .firstOrNull
         : coverage.locate(preferred);
-    if (location is! NovelReaderNativeCoveragePoint) return null;
-    final bounds = location.fragmentBounds;
+    if (location == null) return null;
+    final bounds = switch (location) {
+      NovelReaderNativeCoveragePoint(:final fragmentBounds) => fragmentBounds,
+      NovelReaderNativeImageCoverage(:final rect) => rect,
+    };
     if (bounds == null || bounds.isEmpty) return null;
     final fragment = snapshot[index].fragments[location.fragmentIndex];
     return (
       slice: index,
       anchor: location.anchor,
       bounds: bounds.shift(Offset(fragment.left, fragment.top)),
+      isImage: location is NovelReaderNativeImageCoverage,
     );
   } on NovelReaderNativeCoverageException catch (error) {
     if (error.failure != NovelReaderNativeCoverageFailure.budget) rethrow;

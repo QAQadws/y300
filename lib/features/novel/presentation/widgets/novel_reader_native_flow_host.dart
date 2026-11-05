@@ -17,7 +17,7 @@ import '../models/novel_reader_native_prepared_chapter.dart';
 import '../models/novel_reader_native_source_location.dart';
 import '../models/novel_reader_native_text_selection.dart';
 import '../services/novel_reader_native_image_resources.dart';
-import '../services/novel_reader_native_flow_text_position.dart';
+import '../services/novel_reader_native_flow_position.dart';
 import '../services/novel_reader_native_layout_scope.dart';
 import '../services/novel_reader_native_owner.dart';
 import '../services/novel_reader_native_preparation_service.dart';
@@ -401,7 +401,7 @@ final class NovelReaderNativeFlowHostState
         reflow.offsetApplied &&
         !reflow.verifying) {
       reflow.verifying = true;
-      unawaited(_verifyTextReflow(run, reflow));
+      unawaited(_verifyFlowReflow(run, reflow));
       WidgetsBinding.instance.ensureVisualUpdate();
     }
     if (run.ready && run.reflow == null && !run.reportedReady) {
@@ -479,6 +479,7 @@ final class NovelReaderNativeFlowHostState
       slice: null,
       tablePath: source.tablePath,
       anchor: source.anchor,
+      imageProgress: source.imageProgress,
       inset: Offset.zero,
       scroll: position,
       pixels: position.pixels,
@@ -491,7 +492,7 @@ final class NovelReaderNativeFlowHostState
   }
 
   /// Capture the settled source before replacing the scrolling surface.
-  Future<NovelReaderTextAnchor?> captureVisibleAnchor(
+  Future<NovelReaderNativeSourceLocation?> captureVisibleSource(
     NovelReaderPaginationCancellationToken token,
   ) async {
     final run = _displayed;
@@ -502,7 +503,12 @@ final class NovelReaderNativeFlowHostState
     if (position.isScrollingNotifier.value) return null;
     final table = run.tablePosition;
     final top = _bodyTop(run);
-    final point = await _sampleText(run, position, token);
+    final point = await _sampleSource(
+      run,
+      position,
+      token,
+      includeRenderedImages: true,
+    );
     if (token.isCancelled ||
         !_interactive(run) ||
         !scroll.hasClients ||
@@ -523,9 +529,25 @@ final class NovelReaderNativeFlowHostState
                         point.bounds.top -
                         pixels -
                         widget.viewportInsets.top))) {
-      return table.anchor;
+      return (
+        identity: table.identity,
+        anchor: table.anchor,
+        tablePath: table.tablePath,
+        imageProgress: 0.0,
+      );
     }
-    return point?.anchor;
+    if (point == null || top == null) return null;
+    final imageTop = top + run.extentBefore(point.slice) + point.bounds.top;
+    return (
+      identity: run.scope!.chapter.identity,
+      anchor: point.anchor,
+      tablePath: null,
+      imageProgress: point.isImage
+          ? ((pixels + widget.viewportInsets.top - imageTop) /
+                    point.bounds.height)
+                .clamp(0.0, 1.0)
+          : 0.0,
+    );
   }
 
   void _tableWindowChanged(
@@ -597,6 +619,7 @@ final class NovelReaderNativeFlowHostState
             slice: index,
             tablePath: table.path,
             anchor: anchor,
+            imageProgress: 0.0,
             inset: bounds.topLeft - Offset(window.bounds.left, readableTop),
             scroll: position,
             pixels: pixels,
@@ -649,13 +672,28 @@ final class NovelReaderNativeFlowHostState
         final table = prefix[index].table;
         final bounds = candidate.bounds;
         final height = _readableHeight(scroll.position);
-        if (bounds.height > height) {
+        if (height <= 0 || (!candidate.isImage && bounds.height > height)) {
           _finishReflow(run, reflow);
           return false;
         }
-        final focus = table == null
-            ? bounds
-            : bounds.shift(table.bounds.topLeft);
+        final Rect focus;
+        if (candidate.isImage) {
+          // Reveal a point within the original image. A natural flowing image
+          // can be taller than both its book page and the readable viewport.
+          final band = math.min(1.0, math.min(bounds.height, height));
+          final y = (bounds.height * source.imageProgress).clamp(
+            0.0,
+            bounds.height - band,
+          );
+          focus = Rect.fromLTWH(
+            bounds.left,
+            bounds.top + y,
+            bounds.width,
+            band,
+          );
+        } else {
+          focus = table == null ? bounds : bounds.shift(table.bounds.topLeft);
+        }
         final y = focus.top - source.inset.dy.clamp(0.0, height - focus.height);
         reflow.target = (
           slice: index,
@@ -742,7 +780,7 @@ final class NovelReaderNativeFlowHostState
     final source = reflow.source;
     final path = source.tablePath;
     if (path == null) {
-      return probeNovelReaderFlowText(
+      return probeNovelReaderFlowSource(
         session: session,
         prefix: prefix,
         anchors: anchors,
@@ -767,13 +805,14 @@ final class NovelReaderNativeFlowHostState
           slice: index,
           anchor: candidate.anchor,
           bounds: candidate.bounds,
+          isImage: false,
         );
       }
     }
     return null;
   }
 
-  Future<void> _verifyTextReflow(_FlowRun run, _FlowReflow reflow) async {
+  Future<void> _verifyFlowReflow(_FlowRun run, _FlowReflow reflow) async {
     final scroll = widget.scrollController;
     if (!scroll.hasClients) {
       _finishReflow(run, reflow);
@@ -783,7 +822,9 @@ final class NovelReaderNativeFlowHostState
     final pixels = position.pixels;
     NovelReaderNativeFlowPoint? point;
     try {
-      point = await _sampleText(
+      // The destination verifies mounted geometry here. Its accepted image
+      // frame remains a separate readiness check.
+      point = await _sampleSource(
         run,
         position,
         reflow.token,
@@ -802,18 +843,19 @@ final class NovelReaderNativeFlowHostState
     }
   }
 
-  Future<NovelReaderNativeFlowPoint?> _sampleText(
+  Future<NovelReaderNativeFlowPoint?> _sampleSource(
     _FlowRun run,
     ScrollPosition position,
     NovelReaderPaginationCancellationToken token, {
     NovelReaderTextAnchor? preferred,
     int? slice,
+    bool includeRenderedImages = false,
   }) async {
     final boundary = _bodyBoundary(run);
     final window = boundary?.borrowTextWindow();
     if (window == null) return null;
     final top = boundary!.constraints.precedingScrollExtent;
-    return sampleNovelReaderFlowText(
+    return sampleNovelReaderFlowSource(
       window: window,
       anchors: run.scope!.chapter.anchors,
       readable: Rect.fromLTWH(
@@ -825,6 +867,7 @@ final class NovelReaderNativeFlowHostState
       token: token,
       preferred: preferred,
       targetSlice: slice,
+      includeRenderedImages: includeRenderedImages,
     );
   }
 
@@ -1038,7 +1081,7 @@ final class NovelReaderNativeFlowHostState
           !token.isCancelled) {
         final position = scroll.position;
         final pixels = position.pixels;
-        final point = await _sampleText(run, position, token);
+        final point = await _sampleSource(run, position, token);
         if (_current(run) &&
             !token.isCancelled &&
             scroll.hasClients &&
@@ -1050,6 +1093,7 @@ final class NovelReaderNativeFlowHostState
             slice: point.slice,
             tablePath: null,
             anchor: point.anchor,
+            imageProgress: 0.0,
             inset: Offset(
               0,
               top +
@@ -1100,6 +1144,7 @@ typedef _FlowSourcePosition = ({
   int? slice,
   String? tablePath,
   NovelReaderTextAnchor anchor,
+  double imageProgress,
   Offset inset,
   ScrollPosition scroll,
   double pixels,

@@ -84,6 +84,8 @@ final class NovelReaderNativePageCoverageCursor {
     );
   }
 
+  /// Continuous slices use their actual extent. A partial image intersection
+  /// can locate its source there while still reporting clipped resources.
   factory NovelReaderNativePageCoverageCursor.prepared({
     required NovelReaderNativeAnchorMap anchors,
     required ForumBodyTextPageSnapshot snapshot,
@@ -91,6 +93,7 @@ final class NovelReaderNativePageCoverageCursor {
     required String layoutId,
     required List<ForumBodyPreparedTextFragment> fragments,
     Rect? viewportClip,
+    bool continuous = false,
     NovelReaderNativeCoverageLimits limits =
         const NovelReaderNativeCoverageLimits(),
   }) {
@@ -106,6 +109,9 @@ final class NovelReaderNativePageCoverageCursor {
     if (viewportClip != null &&
         (!viewportClip.isFinite || viewportClip.isEmpty)) {
       throw ArgumentError.value(viewportClip, 'viewportClip');
+    }
+    if (continuous && viewportClip == null) {
+      throw ArgumentError('Continuous coverage requires a physical clip');
     }
     if (snapshot[pageIndex].itemCount > limits.maxFragments) {
       _fail(NovelReaderNativeCoverageFailure.budget);
@@ -124,6 +130,7 @@ final class NovelReaderNativePageCoverageCursor {
       List.unmodifiable(fragments),
       limits,
       viewportClip,
+      continuous,
     );
   }
 
@@ -135,6 +142,7 @@ final class NovelReaderNativePageCoverageCursor {
     this._fragments,
     this.limits,
     this._viewportClip,
+    this._continuous,
   );
 
   NovelReaderNativeAnchorMap? _anchors;
@@ -144,6 +152,7 @@ final class NovelReaderNativePageCoverageCursor {
   final String layoutId;
   final NovelReaderNativeCoverageLimits limits;
   final Rect? _viewportClip;
+  final bool _continuous;
   final _points = <NovelReaderNativeCoveragePoint>[];
   final _images = <NovelReaderNativeImageCoverage>[];
   NovelReaderNativeCoverageState _state = NovelReaderNativeCoverageState.active;
@@ -253,7 +262,10 @@ final class NovelReaderNativePageCoverageCursor {
     final projection = _projection = prepared.projection;
     _runs = prepared.runs;
     final snapshot = _snapshot!;
-    var pageClip = Rect.fromLTWH(0, 0, snapshot.width, snapshot.height);
+    final height = _continuous
+        ? snapshot[pageIndex].usedHeight
+        : snapshot.height;
+    var pageClip = Rect.fromLTWH(0, 0, snapshot.width, height);
     if (_viewportClip case final viewport?) {
       pageClip = pageClip.intersect(viewport);
     }
@@ -381,7 +393,7 @@ final class NovelReaderNativePageCoverageCursor {
     }
     if (!_contains(image.rect)) {
       _hasClippedResources = true;
-      return;
+      if (!_continuous || _clip.isEmpty || !_clip.overlaps(image.rect)) return;
     }
     if (_points.length + _images.length >= limits.maxPoints) {
       _fail(NovelReaderNativeCoverageFailure.budget);

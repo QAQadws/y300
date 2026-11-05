@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -33,6 +35,8 @@ import 'package:y300/features/novel/presentation/controllers/novel_reader_native
 import 'package:y300/features/novel/presentation/novel_reader_page.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_native_prepared_chapter.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_native_page_coverage.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_native_source_location.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_preparation_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
@@ -134,7 +138,9 @@ void main() {
         final state = (host.key! as GlobalKey<NovelReaderNativeFlowHostState>)
             .currentState!;
         unawaited(
-          state.captureVisibleAnchor(token).then((anchor) => expected = anchor),
+          state
+              .captureVisibleSource(token)
+              .then((source) => expected = source?.anchor),
         );
         for (var frame = 0; frame < 50 && expected == null; frame++) {
           await tester.pump();
@@ -204,8 +210,8 @@ void main() {
           NovelReaderTextAnchor? actual;
           unawaited(
             returnedState
-                .captureVisibleAnchor(token)
-                .then((anchor) => actual = anchor),
+                .captureVisibleSource(token)
+                .then((source) => actual = source?.anchor),
           );
           for (var frame = 0; frame < 50 && actual == null; frame++) {
             await tester.pump();
@@ -243,6 +249,146 @@ void main() {
       },
     );
   }
+
+  testWidgets('the second duplicate long image keeps its position across modes', (
+    tester,
+  ) async {
+    final image = await tester.runAsync(() async {
+      final directory = await Directory.systemTemp.createTemp(
+        'y300-mode-image-',
+      );
+      final image = File('${directory.path}/image.png');
+      addTearDown(() async {
+        if (await image.exists()) await image.delete();
+        await directory.delete();
+      });
+      final recorder = ui.PictureRecorder();
+      Canvas(recorder).drawRect(
+        const Rect.fromLTWH(0, 0, 24, 192),
+        Paint()..color = Colors.blue,
+      );
+      final picture = recorder.endRecording();
+      final pixels = await picture.toImage(24, 192);
+      final data = (await pixels.toByteData(format: ui.ImageByteFormat.png))!;
+      pixels.dispose();
+      picture.dispose();
+      return image.writeAsBytes(data.buffer.asUint8List());
+    });
+    const slot =
+        '<img src="https://bbs.yamibo.com/data/attachment/forum/mode.png" width="24" height="192">';
+    final repository = _ReadingRepository('$slot$slot');
+    final saved = NovelReadingProgress(
+      novelId: _work,
+      episodeId: _chapter,
+      scrollOffset: 0,
+      updatedAt: DateTime(2026),
+    );
+    repository.progress[_chapter] = saved;
+    repository.recent = _chapter;
+    await tester.pumpWidget(
+      _app(
+        repository,
+        nativePagination: true,
+        images: _CachedModeImage(image!),
+        preferences: NovelReaderPreferences.defaults().copyWith(
+          flowMode: NovelReaderFlowMode.vertical,
+        ),
+      ),
+    );
+    final body = find.byType(ForumBodyFlowSliver);
+    for (var frame = 0; frame < 250; frame++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 2)),
+      );
+      await tester.pump();
+      if (body.evaluate().isNotEmpty &&
+          tester.widget<ForumBodyFlowSliver>(body).prefix.isComplete) {
+        break;
+      }
+    }
+    Future<NovelReaderNativeSourceLocation> capture() async {
+      final host = tester.widget<NovelReaderNativeFlowHost>(
+        find.byType(NovelReaderNativeFlowHost),
+      );
+      final state = (host.key! as GlobalKey<NovelReaderNativeFlowHostState>)
+          .currentState!;
+      final token = NovelReaderPaginationCancellationToken();
+      NovelReaderNativeSourceLocation? source;
+      try {
+        for (var frame = 0; frame < 250 && source == null; frame++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 2)),
+          );
+          await tester.pump();
+          var finished = false;
+          unawaited(
+            state.captureVisibleSource(token).then((value) {
+              source = value;
+              finished = true;
+            }),
+          );
+          for (var step = 0; step < 50 && !finished; step++) {
+            await tester.pump();
+          }
+          expect(finished, isTrue);
+        }
+        expect(source, isNotNull);
+        return source!;
+      } finally {
+        token.cancel();
+      }
+    }
+
+    final beginning = await capture();
+    await tester.pumpAndSettle();
+    final prefix = tester.widget<ForumBodyFlowSliver>(body).prefix;
+    expect(prefix, hasLength(2));
+    expect(prefix.last.usedHeight, greaterThan(1024));
+    final originalY = prefix.first.usedHeight + prefix.last.usedHeight * .4;
+    _verticalPosition(tester).jumpTo(originalY);
+    final original = await capture();
+    expect(original.anchor.nodeId, isNot(beginning.anchor.nodeId));
+    expect(original.imageProgress, closeTo(.4, .02));
+    await _changeModeViaDisplaySettings(tester, NovelReaderFlowMode.pagedLtr);
+    await _pumpNativeReady(tester, page: 1, advanceTime: true);
+    final controller = _nativeController(tester);
+    for (
+      var frame = 0;
+      frame < 150 && !controller.visibleImageHasFrame;
+      frame++
+    ) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 2)),
+      );
+      await tester.pump();
+    }
+    expect(controller.visibleImageHasFrame, isTrue);
+    final location = controller.visibleView!.coverage.locate(
+      original.anchor,
+    ) as NovelReaderNativeImageCoverage;
+    expect(location.imageIndex, 1);
+    expect(repository.progress[_chapter], same(saved));
+
+    await _changeModeViaDisplaySettings(tester, NovelReaderFlowMode.vertical);
+    for (var frame = 0; frame < 250; frame++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 2)),
+      );
+      await tester.pump();
+      if (body.evaluate().isNotEmpty &&
+          _verticalPosition(tester).pixels > prefix.first.usedHeight) {
+        break;
+      }
+    }
+    final returned = await capture();
+    expect(returned.anchor.nodeId, original.anchor.nodeId);
+    expect(returned.anchor.textIdentity, original.anchor.textIdentity);
+    expect(returned.imageProgress, closeTo(original.imageProgress, .003));
+    expect(repository.progress[_chapter], same(saved));
+    expect(repository.committed, isEmpty);
+    expect(repository.completed, isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   testWidgets(
     'scrolling table reflow keeps the visible source without saving',
@@ -2279,6 +2425,28 @@ class _PendingImageCache implements ImageCacheService {
   @override
   dynamic noSuchMethod(Invocation invocation) =>
       throw StateError('Unexpected image-cache call: ${invocation.memberName}');
+}
+
+final class _CachedModeImage extends _PendingImageCache {
+  _CachedModeImage(this.image);
+  final File image;
+
+  @override
+  Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
+    requests.add(request);
+    return (await getCached(request.cacheKey))!;
+  }
+
+  @override
+  Future<CachedImageResult?> getCached(String cacheKey) async =>
+      CachedImageResult(
+        success: true,
+        fromCache: true,
+        cacheKey: cacheKey,
+        localPath: image.path,
+        width: 24,
+        height: 192,
+      );
 }
 
 class _SourcePostLocator implements ThreadPostLocator {

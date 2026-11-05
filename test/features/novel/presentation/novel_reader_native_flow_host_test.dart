@@ -7,6 +7,7 @@ import 'package:y300/features/novel/domain/models/novel_reader_preferences.dart'
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_owner.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_preparation_service.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_scroll_controller.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_native_flow_host.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/identity_text_converter.dart';
@@ -153,8 +154,11 @@ void main() {
       final owner = NovelReaderNativeOwner();
       final scroll = ScrollController();
       final host = NativeReaderImageTestHost(aspectRatio: .1);
+      final flowKey = GlobalKey<NovelReaderNativeFlowHostState>();
+      final capture = NovelReaderPaginationCancellationToken();
       addTearDown(owner.dispose);
       addTearDown(scroll.dispose);
+      addTearDown(capture.cancel);
       final readiness = <bool>[];
       var ready = false;
       await tester.pumpWidget(
@@ -167,6 +171,7 @@ void main() {
                 controller: scroll,
                 slivers: [
                   NovelReaderNativeFlowHost(
+                    key: flowKey,
                     owner: owner,
                     readingAuthority: 'read',
                     sourceId: 'chapter',
@@ -208,13 +213,21 @@ void main() {
       await tester.pumpAndSettle();
       expect(ready, isTrue);
       expect(readiness.last, isFalse);
+      scroll.jumpTo(600);
+      await tester.pumpAndSettle();
+      final state = flowKey.currentState!;
+      expect(await state.captureVisibleSource(capture), isNull);
       final first = host.callback(0);
       first.frame!();
       await tester.pumpAndSettle();
       expect(readiness.last, isTrue);
+      final source = await state.captureVisibleSource(capture);
+      expect(source?.anchor.hasCanonicalTextOffset, isTrue);
+      expect(source?.imageProgress, greaterThan(.2));
       first.failed!();
       await tester.pumpAndSettle();
       expect(readiness.last, isFalse);
+      expect(await state.captureVisibleSource(capture), isNull);
 
       final flow = tester.widget<ForumBodyFlowSliver>(
         find.byType(ForumBodyFlowSliver),

@@ -23,7 +23,6 @@ import 'package:y300/features/library_shared/presentation/reader/reader_corner_d
 import 'package:y300/features/novel/application/novel_reader_display_preferences_coordinator.dart';
 import 'package:y300/features/novel/application/novel_reader_vertical_session_coordinator.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
-import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_spacing.dart';
 import 'package:y300/features/novel/domain/models/novel_episode_open_policy.dart';
 import 'package:y300/features/novel/domain/models/novel_source_reading_context.dart';
@@ -132,7 +131,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   NovelReaderController? _paginationSessionController;
   NovelReaderNativeOwner? _nativeOwner;
   final _nativeFlowKey = GlobalKey<NovelReaderNativeFlowHostState>();
-  ({NovelReaderDocument document, NovelReaderTextAnchor anchor})?
+  ({NovelReaderDocument document, NovelReaderNativeSourceLocation source})?
   _nativePagedEntry;
   ({NovelReaderDocument document, NovelReaderNativeSourceLocation source})?
   _nativeFlowEntry;
@@ -1102,15 +1101,26 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       return null;
     }
     final tablePath = view.snapshot[view.pageIndex].table?.path;
-    if (tablePath == null &&
-        view.coverage.locate(position.anchor)
-            is! NovelReaderNativeCoveragePoint) {
-      return null;
+    var imageProgress = 0.0;
+    if (tablePath == null) {
+      final location = view.coverage.locate(position.anchor);
+      if (location == null) return null;
+      if (location is NovelReaderNativeImageCoverage) {
+        if (!_nativeStatus!.controller!.visibleImageHasFrame) return null;
+        final entry = _nativePagedEntry;
+        if (entry != null &&
+            identical(entry.document, viewState.document) &&
+            entry.source.identity == view.snapshot.identity &&
+            identical(view.coverage.locate(entry.source.anchor), location)) {
+          imageProgress = entry.source.imageProgress;
+        }
+      }
     }
     return (
       identity: view.snapshot.identity,
       anchor: position.anchor,
       tablePath: tablePath,
+      imageProgress: imageProgress,
     );
   }
 
@@ -1203,7 +1213,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     final tid = viewState.currentEpisode.sourceTid;
     final entry = _nativePagedEntry;
     final anchor = identical(entry?.document, viewState.document)
-        ? entry?.anchor
+        ? entry?.source.anchor
         : null;
     return NovelReaderNativePagedSurface(
       owner: _nativeOwner!,
@@ -2938,9 +2948,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       }
       final token = capture = NovelReaderPaginationCancellationToken();
       pendingChange = () async {
-        NovelReaderTextAnchor? anchor;
+        NovelReaderNativeSourceLocation? source;
         try {
-          anchor = await flow.captureVisibleAnchor(token);
+          source = await flow.captureVisibleSource(token);
         } on Object {
           // The existing saved position remains usable without a visible hint.
         }
@@ -2963,11 +2973,11 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           return;
         }
         _nativePagedEntry =
-            anchor == null ||
+            source == null ||
                 !identical(latest.document, current.document) ||
                 latest.preferences.flowMode != NovelReaderFlowMode.vertical
             ? null
-            : (document: current.document, anchor: anchor);
+            : (document: current.document, source: source);
         coordinator.change(next);
       }();
     }

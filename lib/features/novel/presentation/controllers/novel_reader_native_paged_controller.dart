@@ -10,6 +10,7 @@ import 'package:y300/features/novel/domain/services/novel_reader_progress_policy
 import '../models/novel_reader_chapter_turn.dart';
 import '../models/novel_reader_native_anchor_map.dart';
 import '../models/novel_reader_native_page_delivery.dart';
+import '../models/novel_reader_native_page_coverage.dart';
 import '../models/novel_reader_native_page_view.dart';
 import '../models/novel_reader_pagination_exception.dart';
 import '../models/novel_reader_pagination_position.dart';
@@ -149,6 +150,7 @@ final class NovelReaderNativePagedController {
   NovelReaderNativeTargetWait? _ticket;
   NovelReaderNativePageDelivery? _target;
   NovelReaderNativePageDelivery? _visible;
+  bool Function()? _visibleImageFrame;
   NovelReaderPaginationPosition? _lastPosition;
   NovelReaderProgressSnapshot? _bootstrapPosition;
   NovelReaderTextAnchor? _bootstrapConversionAnchor;
@@ -185,6 +187,7 @@ final class NovelReaderNativePagedController {
   int? get unavailableAnchorRevision => _unavailableAnchorRevision;
   int? get visiblePageIndex => _visible?.pageIndex;
   NovelReaderNativePageView? get visibleView => _visible?.view;
+  bool get visibleImageHasFrame => _visibleImageFrame?.call() == true;
   NovelReaderNativePageDelivery? get readyTarget => _target;
   Stream<void> get changes => isClosed
       ? const Stream<void>.empty()
@@ -389,10 +392,8 @@ final class NovelReaderNativePagedController {
     final anchor = delivery.restoredAnchor == null
         ? null
         : coverage.locate(delivery.restoredAnchor!);
-    final actual =
-        tableProof?.anchor ??
-        anchor?.anchor ??
-        (coverage.hasLocations ? coverage.locations.first.anchor : null);
+    final location = anchor ?? coverage.locations.firstOrNull;
+    final actual = tableProof?.anchor ?? location?.anchor;
     final wholePage =
         table == null &&
         actual != null &&
@@ -402,6 +403,11 @@ final class NovelReaderNativePagedController {
         delivery.restoredAnchor?.hasCanonicalTextOffset == true &&
         !tableProof.matchesPreferred;
     _visible = delivery;
+    _visibleImageFrame = null;
+    if (location is NovelReaderNativeImageCoverage) {
+      final fragment = fragments[location.fragmentIndex];
+      _visibleImageFrame = () => location.isRenderedBy(fragment);
+    }
     _target = null;
     _phase = _error == null
         ? NovelReaderNativePagedPhase.ready
@@ -658,7 +664,10 @@ final class NovelReaderNativePagedController {
 
   void forgetPage(int page, NovelReaderNativePageView view) {
     final retryNeighbors = _window?.forgetPage(page, view) ?? false;
-    if (identical(_visible?.view, view)) _visible = null;
+    if (identical(_visible?.view, view)) {
+      _visible = null;
+      _visibleImageFrame = null;
+    }
     if (identical(_target?.view, view)) {
       _target = null;
       if (!isClosed && !_suspended) {
@@ -1335,6 +1344,7 @@ final class NovelReaderNativePagedController {
     _snapshot = null;
     _target = null;
     _visible = null;
+    _visibleImageFrame = null;
     _lastPosition = null;
     _unavailableAnchorRevision = null;
     _bootstrapPosition = null;

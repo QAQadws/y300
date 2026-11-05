@@ -56,6 +56,7 @@ final class _Fixture {
     double width = 100,
     bool inline = false,
     bool dedicatedTables = false,
+    ForumBodyTableExtent tableExtent = ForumBodyTableExtent.bookPage,
     Size imageSize = const Size(20, 10),
     NativeReaderImageTestHost? imageHost,
   }) {
@@ -78,6 +79,7 @@ final class _Fixture {
       width: width,
       height: height,
       dedicatedTables: dedicatedTables,
+      tableExtent: tableExtent,
       limits: const ForumBodyTextPageSessionLimits(
         maxPages: 100,
         maxFragments: 100,
@@ -143,6 +145,7 @@ NovelReaderNativePageCoverage _coverage(
   List<ForumBodyPreparedTextFragment> values, {
   int page = 0,
   Rect? viewportClip,
+  bool continuous = false,
   NovelReaderNativeCoverageLimits limits =
       const NovelReaderNativeCoverageLimits(),
 }) {
@@ -153,6 +156,7 @@ NovelReaderNativePageCoverage _coverage(
     layoutId: session.snapshot.layoutId,
     fragments: values,
     viewportClip: viewportClip,
+    continuous: continuous,
     limits: limits,
   );
   addTearDown(cursor.close);
@@ -248,6 +252,45 @@ void main() {
     expect(whole.hasClippedResources, isFalse);
     expect(partial.images, isEmpty);
     expect(partial.hasClippedResources, isTrue);
+  });
+
+  test('continuous source coverage uses the actual tall slice and clip', () {
+    final fixture = _Fixture('<img src="https://x/long.png">');
+    final session = fixture.session(
+      ratio: .1,
+      tableExtent: ForumBodyTableExtent.natural,
+    );
+    final fragments = fixture.prepare(session);
+    final fragment = fragments.single as ForumBodyPreparedImageFragment;
+    addTearDown(fragment.close);
+    const clip = Rect.fromLTWH(0, 650, 100, 50);
+    final coverage = _coverage(
+      fixture,
+      session,
+      fragments,
+      viewportClip: clip,
+      continuous: true,
+    );
+    expect(coverage.hasClippedResources, isTrue);
+    final image = coverage.images.single;
+    expect(image.rect.height, 1000);
+    expect(
+      image.anchor.nodeId,
+      fixture.chapter.anchors.images.single.anchor.nodeId,
+    );
+    expect(image.isRenderedBy(fragment), isFalse);
+    fragment.reportDisplayFrame(true);
+    expect(image.isRenderedBy(fragment), isTrue);
+    fragment.reportDisplayFrame(false);
+    expect(image.isRenderedBy(fragment), isFalse);
+    final outside = _coverage(
+      fixture,
+      session,
+      fragments,
+      viewportClip: const Rect.fromLTWH(0, 1001, 100, 50),
+      continuous: true,
+    );
+    expect(outside.images, isEmpty);
   });
 
   testWidgets('a mixed text page waits for every current inline image frame', (
@@ -398,6 +441,7 @@ void main() {
         expect(reports.last.isReadOnlyCompatibilityRestore, version != 1);
         expect(reports.last.hasUserNavigated, isFalse);
         expect(reports.last.isBodyEndVisible, isFalse);
+        expect(controller.visibleImageHasFrame, isFalse);
         final initial = reports.last;
         final old = host.callback(2);
         old.frame?.call();
@@ -405,6 +449,7 @@ void main() {
           await tester.pump(const Duration(milliseconds: 10));
         }
         expect(reports.last.isBodyEndVisible, isTrue);
+        expect(controller.visibleImageHasFrame, isTrue);
         expect(reports.last.isReadOnlyCompatibilityRestore, version != 1);
         expect(reports.last.hasUserNavigated, isFalse);
         expect(reports.last.anchor.nodeId, initial.anchor.nodeId);
@@ -413,9 +458,11 @@ void main() {
         await tester.pumpWidget(widget(next));
         await tester.pump(const Duration(milliseconds: 20));
         expect(reports.last.isBodyEndVisible, isFalse);
+        expect(controller.visibleImageHasFrame, isFalse);
         old.frame?.call();
         await tester.pump(const Duration(milliseconds: 20));
         expect(reports.last.isBodyEndVisible, isFalse);
+        expect(controller.visibleImageHasFrame, isFalse);
         next.callback(2).frame?.call();
         for (var i = 0; !reports.last.isBodyEndVisible && i < 20; i++) {
           await tester.pump(const Duration(milliseconds: 10));

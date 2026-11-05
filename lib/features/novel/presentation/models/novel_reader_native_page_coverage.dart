@@ -65,6 +65,30 @@ final class NovelReaderNativeImageCoverage
   /// The actual parent's empty insertion fence, used only to merge reading
   /// order. This is not image text coverage, a source cursor or a saved anchor.
   final int? parentDisplayFenceUtf16;
+
+  /// Recheck the exact accepted frame. Neighboring slots can be pending or
+  /// ready independently even when their cache keys and URLs are equal.
+  bool isRenderedBy(ForumBodyPreparedTextFragment fragment) {
+    if (!fragment.isActive) return false;
+    final body = fragment is ForumBodyPreparedListItemFragment
+        ? fragment.body
+        : fragment;
+    if (body is ForumBodyPreparedImageFragment) {
+      final input = body.content.input;
+      return inlineAtomIndex == null &&
+          input.element.path == path &&
+          input.entry.index == imageIndex &&
+          body.hasRenderedImage;
+    }
+    if (body is ForumBodyPreparedInlineFragment && inlineAtomIndex != null) {
+      final binding = body.view.images[inlineAtomIndex];
+      return binding != null &&
+          binding.input.element.path == path &&
+          binding.input.entry?.index == imageIndex &&
+          binding.hasRenderedFrame;
+    }
+    return false;
+  }
 }
 
 /// Pure geometry proof for one fully checked page. Text points require a
