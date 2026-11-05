@@ -10,9 +10,11 @@ import '../flow/forum_body_inline_flow_content.dart';
 import '../flow/forum_body_text_flow_cursor.dart';
 import '../inline/forum_body_inline_plan_input.dart';
 import '../inline/forum_body_inline_image_input.dart';
+import '../inline/forum_body_inline_text_window.dart';
 import '../inline/forum_body_ruby_content.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
+import '../paragraph/forum_body_paragraph_layout.dart';
 import '../style/forum_body_style_options.dart';
 import '../style/forum_body_length.dart';
 import '../table/forum_body_table_preparation.dart';
@@ -30,6 +32,7 @@ import 'forum_body_image_frame.dart';
 import 'forum_body_float_body_preparation.dart';
 
 part 'forum_body_float_session.dart';
+part 'forum_body_float_text.dart';
 
 enum ForumBodyTextPageSessionState { active, complete, failed, closed }
 
@@ -373,6 +376,7 @@ final class ForumBodyTextPageSession {
   _readyInline;
   ForumBodyInlineNativeEntriesPreparation? _entryPreparation;
   _FloatFlowAdmission? _floatFlow;
+  _FloatTextAdmission? _floatText;
   int _nextFlowIndex = 0;
   double _margin = 0;
   int _publishedPageCount = 0;
@@ -498,6 +502,19 @@ final class ForumBodyTextPageSession {
 
     try {
       while (true) {
+        if (_floatText case final admission?) {
+          final step = admission.advance(
+            maxLines: maxLines,
+            maxFormatParts: maxFormatParts,
+          );
+          _waiting = step.waiting;
+          if (!_waiting) formatUnits++;
+          if (admission.isComplete) {
+            admission.close();
+            _floatText = null;
+          }
+          return result(lines: step.lines, completed: admission.isComplete);
+        }
         if (_floatFlow case final admission?) {
           _waiting = admission.advance(
             maxEvents: maxEvents,
@@ -579,75 +596,23 @@ final class ForumBodyTextPageSession {
         }
         final pending = _pendingParagraph;
         if (pending != null) {
-          final admission = _paragraphAdmission ??= _openParagraphPlan(pending);
+          final admission = _paragraphAdmission ??= _openParagraphPlan(
+            pending.paragraph.content,
+            pending.contentWidth,
+          );
           if (!admission.isReady) {
             final step = admission.advance(maxParts: maxFormatParts);
             formatUnits += step.partsPrepared;
             _waiting = step.waitingForLayoutBudget;
             if (!admission.isReady) return result();
           }
-          ForumBodyTextPageContent input;
-          if (admission.isPlain) {
-            input = _decorate(
-              ForumBodyTextPageContent.paragraph(admission.plainContent),
-            );
-            final lease = admission.takePlainLease();
-            try {
-              if (_intrinsic != null) {
-                final widths = lease.layout.intrinsicWidths;
-                _intrinsic.add(widths.minimum, widths.preferred);
-              }
-              _composer.append(
-                lease: lease,
-                paragraphIndex: _content.items.length,
-                left: pending.contentLeft,
-                spaceBefore: _margin,
-                spaceAtPageStart: 0,
-                window: pending.paragraph.window,
-                listMarkers: _listPlan,
-              );
-            } catch (_) {
-              lease.release();
-              rethrow;
-            }
-            admission.close();
-          } else if (admission.isFitted) {
-            final fitted = admission.takeFitted();
-            input = _decorate(fitted);
-            if (_intrinsic != null) {
-              final width = fitted.plan.metrics.fontBounds.width;
-              _intrinsic.add(width, width);
-            }
-            _composer.appendFittedEmphasis(
-              plan: fitted.plan,
-              ensureOwner: _ensureActivePlan,
-              paragraphIndex: _content.items.length,
-              left: pending.contentLeft,
-              spaceBefore: _margin,
-              spaceAtPageStart: 0,
-              window: pending.paragraph.window,
-              listMarkers: _listPlan,
-            );
-          } else {
-            final ready = admission.take();
-            input = _decorate(ready.content);
-            if (_intrinsic != null) {
-              final widths = ready.content.paragraph.intrinsicWidths!;
-              _intrinsic.add(widths.minimum, widths.preferred);
-            }
-            _composer.appendEmphasis(
-              entries: ready.entries,
-              ensureOwner: _ensureActivePlan,
-              paragraphIndex: _content.items.length,
-              left: pending.contentLeft,
-              spaceBefore: _margin,
-              spaceAtPageStart: 0,
-              window: pending.paragraph.window,
-              listMarkers: _listPlan,
-            );
-          }
+          _appendParagraphPlan(
+            admission,
+            left: pending.contentLeft,
+            spaceBefore: _margin,
+            window: pending.paragraph.window,
+          );
           _paragraphAdmission = null;
-          _content.add(input);
           _pendingParagraph = null;
           _listPlan = null;
           _markersReady = false;
@@ -807,7 +772,17 @@ final class ForumBodyTextPageSession {
             }
           case ForumBodyBlockFlowParagraph():
             _consumeFlowIndex(unit.paragraph.index);
-            _ensureFloatLineAvailable();
+            if (_openFloat != null && _composer.hasFloatExclusion(_margin)) {
+              if (unit.listMarkers.isNotEmpty) _requiresFloatLineLayout();
+              _floatText = _FloatTextAdmission(
+                this,
+                unit.paragraph.content,
+                unit.paragraph.window,
+                left: unit.contentLeft,
+                width: unit.contentWidth,
+              );
+              return result();
+            }
             _pendingParagraph = unit;
           case ForumBodyBlockFlowInline():
             _consumeFlowIndex(unit.paragraph.index);
@@ -1096,19 +1071,89 @@ final class ForumBodyTextPageSession {
   }
 
   ForumBodyEmphasisPageAdmission _openParagraphPlan(
-    ForumBodyBlockFlowParagraph paragraph,
+    ForumBodyParagraphContent content,
+    double width,
   ) {
-    final content = paragraph.paragraph.content;
     _content.check(_decorate(ForumBodyTextPageContent.paragraph(content)));
     return ForumBodyEmphasisPageAdmission(
       content: content,
-      width: paragraph.contentWidth,
+      width: width,
       cache: _cache,
       textScaler: _textScaler,
       ensureOwner: _ensureActivePlan,
       validateCounts: _content.checkCounts,
       captureIntrinsicWidths: _intrinsic != null,
     );
+  }
+
+  void _appendParagraphPlan(
+    ForumBodyEmphasisPageAdmission admission, {
+    required double left,
+    required double spaceBefore,
+    required ForumBodyParagraphWindow window,
+  }) {
+    ForumBodyTextPageContent input;
+    final index = _content.items.length;
+    if (admission.isPlain) {
+      input = _decorate(
+        ForumBodyTextPageContent.paragraph(admission.plainContent),
+      );
+      final lease = admission.takePlainLease();
+      try {
+        if (_intrinsic != null) {
+          final widths = lease.layout.intrinsicWidths;
+          _intrinsic.add(widths.minimum, widths.preferred);
+        }
+        _composer.append(
+          lease: lease,
+          paragraphIndex: index,
+          left: left,
+          spaceBefore: spaceBefore,
+          spaceAtPageStart: 0,
+          window: window,
+          listMarkers: _listPlan,
+        );
+      } catch (_) {
+        lease.release();
+        rethrow;
+      }
+      admission.close();
+    } else if (admission.isFitted) {
+      final fitted = admission.takeFitted();
+      input = _decorate(fitted);
+      if (_intrinsic != null) {
+        final width = fitted.plan.metrics.fontBounds.width;
+        _intrinsic.add(width, width);
+      }
+      _composer.appendFittedEmphasis(
+        plan: fitted.plan,
+        ensureOwner: _ensureActivePlan,
+        paragraphIndex: index,
+        left: left,
+        spaceBefore: spaceBefore,
+        spaceAtPageStart: 0,
+        window: window,
+        listMarkers: _listPlan,
+      );
+    } else {
+      final ready = admission.take();
+      input = _decorate(ready.content);
+      if (_intrinsic != null) {
+        final widths = ready.content.paragraph.intrinsicWidths!;
+        _intrinsic.add(widths.minimum, widths.preferred);
+      }
+      _composer.appendEmphasis(
+        entries: ready.entries,
+        ensureOwner: _ensureActivePlan,
+        paragraphIndex: index,
+        left: left,
+        spaceBefore: spaceBefore,
+        spaceAtPageStart: 0,
+        window: window,
+        listMarkers: _listPlan,
+      );
+    }
+    _content.add(input);
   }
 
   void _admitImage(ForumBodyBlockFlowImage unit) {
@@ -1261,11 +1306,14 @@ final class ForumBodyTextPageSession {
 
   void _ensureFloatLineAvailable() {
     if (_openFloat != null && _composer.hasFloatExclusion(_margin)) {
+      _requiresFloatLineLayout();
+    }
+  }
+
+  Never _requiresFloatLineLayout() =>
       throw const ForumBodyTextPageSessionException(
         ForumBodyTextPageSessionFailure.floatLineLayout,
       );
-    }
-  }
 
   void _fail() {
     if (isClosed) return;
@@ -1276,6 +1324,8 @@ final class ForumBodyTextPageSession {
     _closePendingTable();
     _floatFlow?.close();
     _floatFlow = null;
+    _floatText?.close();
+    _floatText = null;
     _listPreparation?.close();
     _listPreparation = null;
     _listPlan = null;
@@ -1304,6 +1354,8 @@ final class ForumBodyTextPageSession {
     _closePendingTable();
     _floatFlow?.close();
     _floatFlow = null;
+    _floatText?.close();
+    _floatText = null;
     for (final lease in _issuedTables.toList()) {
       lease.close();
     }

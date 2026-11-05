@@ -1,5 +1,12 @@
 part of 'forum_body_text_page_composer.dart';
 
+typedef ForumBodyFloatLineBand = ({
+  double left,
+  double width,
+  double spaceBefore,
+  double bottom,
+});
+
 extension ForumBodyFloatPlacement on ForumBodyTextPageComposer {
   /// Place a whole measured float in the current draft without consuming its
   /// height in normal flow. A full draft seals before the caller retries the
@@ -170,6 +177,85 @@ extension ForumBodyFloatPlacement on ForumBodyTextPageComposer {
   bool hasFloatExclusion(double spaceBefore) => _floats.any(
     (float) => float.bounds.bottom > math.max(0.0, _flowHeight + spaceBefore),
   );
+
+  /// Only a box that currently determines an edge can end this band. A
+  /// contained box may end earlier without changing the line's usable width.
+  ForumBodyFloatLineBand nextFloatTextBand({
+    required double left,
+    required double width,
+    required double spaceBefore,
+  }) {
+    _ensureFloatBoundary();
+    final right = left + width;
+    final top = math.max(0.0, _flowHeight + spaceBefore);
+    var bandTop = top;
+    for (final float in _floats) {
+      final bounds = float.bounds;
+      if (bounds.bottom > top && bounds.right > left && bounds.left < right) {
+        // A signed block gap cannot place a new line above the start of an
+        // already placed float and then let that line overlap it from above.
+        bandTop = math.max(bandTop, bounds.top);
+      }
+    }
+    var bandLeft = left, bandRight = right;
+    double? leftEnd, rightEnd;
+    for (final float in _floats) {
+      final bounds = float.bounds;
+      if (bounds.bottom <= bandTop ||
+          bounds.right <= left ||
+          bounds.left >= right) {
+        continue;
+      }
+      if (float.side == ForumBodyFloatSide.left && bounds.right >= bandLeft) {
+        leftEnd = bounds.right == bandLeft && leftEnd != null
+            ? math.max(leftEnd, bounds.bottom)
+            : bounds.bottom;
+        bandLeft = bounds.right;
+      } else if (float.side == ForumBodyFloatSide.right &&
+          bounds.left <= bandRight) {
+        rightEnd = bounds.left == bandRight && rightEnd != null
+            ? math.max(rightEnd, bounds.bottom)
+            : bounds.bottom;
+        bandRight = bounds.left;
+      }
+    }
+    return (
+      left: bandLeft,
+      width: math.max(0, bandRight - bandLeft),
+      spaceBefore: bandTop - _flowHeight,
+      bottom: math.min(leftEnd ?? double.infinity, rightEnd ?? double.infinity),
+    );
+  }
+
+  void moveBelowFloatTextBand(double bottom) {
+    _ensureFloatBoundary();
+    _flowHeight = math.max(_flowHeight, bottom);
+  }
+
+  /// Retire the old native width only when its physical band or page is over.
+  /// If no legal row was consumed, leave the rendered ordinal available for
+  /// the next width. The source caller can then discard the tentative input.
+  ({int? endUtf16, bool blocked})? retireFloatTextBand({
+    required double bottom,
+    required bool pageSealed,
+  }) {
+    final active = _active;
+    if (active == null ||
+        (!pageSealed && !active.outsideFloatBand && _flowHeight < bottom)) {
+      return null;
+    }
+    final consumed = active.nextLine > active.firstLine;
+    final result = (
+      endUtf16: consumed
+          ? active.input.lines[active.nextLine - 1].coverageEndUtf16
+          : null,
+      blocked: active.outsideFloatBand,
+    );
+    active.input.lease?.release();
+    _active = null;
+    if (consumed) _nextParagraphIndex++;
+    return result;
+  }
 
   void _ensureFloatBoundary() {
     _ensureOpen();

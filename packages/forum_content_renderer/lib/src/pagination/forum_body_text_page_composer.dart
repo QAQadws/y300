@@ -271,7 +271,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 29;
+  static const revision = 30;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;
@@ -312,6 +312,9 @@ final class ForumBodyTextPageComposer {
   int _fragmentCount = 0;
   double _usedHeight = 0;
   double _flowHeight = 0;
+  // A float can touch the page bottom while ordinary lines can still fit
+  // beside it. Only the in-flow cursor can exhaust that remaining space.
+  double get _flowSealExtent => _floats.isEmpty ? _usedHeight : _flowHeight;
   bool _complete = false;
   bool _closed = false;
 
@@ -368,7 +371,7 @@ final class ForumBodyTextPageComposer {
     _ensureOpen();
     if (!needsInput) throw StateError('Composition input is still pending');
     _backgrounds.close(path, _flowHeight);
-    if (_usedHeight >= height && !_backgrounds.needsEndBoundary) _seal();
+    if (_flowSealExtent >= height && !_backgrounds.needsEndBoundary) _seal();
   }
 
   void _touchBackgrounds(double top) {
@@ -643,7 +646,7 @@ final class ForumBodyTextPageComposer {
       _flowHeight = bottom;
       _usedHeight = math.max(_usedHeight, bottom);
       _image = null;
-      if (_usedHeight >= height && !_backgrounds.needsEndBoundary) _seal();
+      if (_flowSealExtent >= height && !_backgrounds.needsEndBoundary) _seal();
       return (pagesPublished: _pages.length - before, isComplete: true);
     } catch (_) {
       close();
@@ -719,7 +722,7 @@ final class ForumBodyTextPageComposer {
       _flowHeight = bottom;
       _usedHeight = math.max(_usedHeight, bottom);
       _rule = null;
-      if (_usedHeight == height && !_backgrounds.needsEndBoundary) _seal();
+      if (_flowSealExtent == height && !_backgrounds.needsEndBoundary) _seal();
       return (pagesPublished: _pages.length - before, isComplete: true);
     } catch (_) {
       close();
@@ -946,7 +949,7 @@ final class ForumBodyTextPageComposer {
       // for values such as 0.1 + 0.2. Padding carries no source text coverage.
       active.remaining = after;
       if (after <= precisionErrorTolerance) _padding = null;
-      if (_usedHeight == height &&
+      if (_flowSealExtent == height &&
           (_padding != null || !_backgrounds.needsEndBoundary)) {
         _seal();
       }
@@ -967,6 +970,7 @@ final class ForumBodyTextPageComposer {
   /// group remains for the next page. This is publication progress, not a stall.
   ({int linesInspected, int pagesPublished, bool paragraphCompleted}) advance({
     required int maxLines,
+    double? floatBandBottom,
   }) {
     _ensureOpen();
     if (maxLines <= 0) throw ArgumentError.value(maxLines, 'maxLines');
@@ -988,10 +992,19 @@ final class ForumBodyTextPageComposer {
           }
           final line = layout.lines[active.scanLine++];
           inspected++;
+          if (floatBandBottom != null &&
+              (line.left < -precisionErrorTolerance ||
+                  line.left + line.width >
+                      layout.width + precisionErrorTolerance)) {
+            active.outsideFloatBand = true;
+          }
           if (line.canBreakAfter) active.groupEnd = active.scanLine;
         }
         final end = active.groupEnd;
         if (end == null) return _result(inspected, pagesBefore, false);
+        if (active.outsideFloatBand) {
+          return _result(inspected, pagesBefore, false);
+        }
         final continuation =
             _draft.isNotEmpty && _draft.last.paragraphIndex == active.index;
         if (!continuation &&
@@ -1320,11 +1333,12 @@ final class ForumBodyTextPageComposer {
         }
         // A still-open rounded box can end at this exact edge. Resolve its
         // actual close/continuation before publishing immutable corner metadata.
-        if (_usedHeight == height &&
+        if (_flowSealExtent == height &&
             (!paragraphComplete || !_backgrounds.needsEndBoundary)) {
           _seal();
         }
         if (paragraphComplete ||
+            (floatBandBottom != null && _flowHeight >= floatBandBottom) ||
             inspected >= maxLines ||
             _pages.length != pagesBefore) {
           return _result(inspected, pagesBefore, paragraphComplete);
@@ -1812,4 +1826,5 @@ final class _ActiveParagraph {
   int nextLine;
   int scanLine;
   int? groupEnd;
+  bool outsideFloatBand = false;
 }

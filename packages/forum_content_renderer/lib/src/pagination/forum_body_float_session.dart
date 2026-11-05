@@ -11,12 +11,19 @@ List<ForumBodyTextPageContent> borrowForumBodyFloatInputs(
 }
 
 final class _FloatFlowAdmission {
-  _FloatFlowAdmission(this._session, this._unit);
+  _FloatFlowAdmission(this._session, this._unit)
+    // Text flow reuses the already admitted source to express a trailing
+    // empty row. It must not replay controls from that earlier source.
+    : _next =
+          _unit.paragraph.window == ForumBodyParagraphWindow.terminalEmptyLine
+          ? _unit.paragraph.content.parts.length - 1
+          : 0;
 
   final ForumBodyTextPageSession _session;
   final ForumBodyBlockFlowInline _unit;
-  int _next = 0;
+  int _next;
   bool _cleared = false;
+  bool _startedText = false;
   ForumBodyFloatBodyPreparation? _preparation;
   ForumBodyFloatBodyLayout? _layout;
   List<ForumBodyTextPageContent>? _inputs;
@@ -31,7 +38,10 @@ final class _FloatFlowAdmission {
   }) {
     final content = _unit.paragraph.content;
     final part = content.parts[_next];
-    if (_unit.listMarkers.isNotEmpty) _requiresLineLayout();
+    if (_unit.listMarkers.isNotEmpty) _session._requiresFloatLineLayout();
+    final text = part is ForumBodyInlineFlowText
+        ? trimForumBodyInlineText(part.content, leading: true, trailing: true)
+        : null;
     switch (part) {
       case ForumBodyInlineFlowClear():
         _session._composer.clearMeasuredFloats(part.event.style.clear);
@@ -77,18 +87,35 @@ final class _FloatFlowAdmission {
         layout.close();
         _layout = null;
         _inputs = null;
-      case ForumBodyInlineFlowText(content: final text)
-          when text.projection.text.isEmpty ||
-              ((text.style.whiteSpace == ForumBodyWhiteSpace.normal ||
-                      text.style.whiteSpace == ForumBodyWhiteSpace.preLine) &&
-                  text.projection.text.codeUnits.every((unit) => unit == 0x20)):
+      case ForumBodyInlineFlowText() when text!.projection.text.isEmpty:
         break;
+      case ForumBodyInlineFlowText()
+          when _next + 1 == content.parts.length ||
+              content.parts[_next + 1] is ForumBodyInlineFlowClear:
+        final suffix = _next + 1 == content.parts.length;
+        final terminalRow =
+            _unit.paragraph.window ==
+            ForumBodyParagraphWindow.terminalEmptyLine;
+        final paragraph = text!.withFirstLineIndent(
+          content.appliesFirstLineIndent &&
+              !_startedText &&
+              !_cleared &&
+              !terminalRow,
+        );
+        _session._floatText = _FloatTextAdmission(
+          _session,
+          paragraph,
+          suffix ? _unit.paragraph.window : ForumBodyParagraphWindow.full,
+          left: _unit.contentLeft,
+          width: _unit.contentWidth,
+        );
+        _startedText = true;
       default:
         if (!_cleared ||
             content.parts
                 .skip(_next)
                 .any((part) => part is ForumBodyInlineFlowExclusion)) {
-          _requiresLineLayout();
+          _session._requiresFloatLineLayout();
         }
         _session._ensureFloatLineAvailable();
         _session._pendingInline = _unit;
@@ -111,10 +138,6 @@ final class _FloatFlowAdmission {
     _next++;
     return false;
   }
-
-  Never _requiresLineLayout() => throw const ForumBodyTextPageSessionException(
-    ForumBodyTextPageSessionFailure.floatLineLayout,
-  );
 
   void close() {
     _preparation?.close();
