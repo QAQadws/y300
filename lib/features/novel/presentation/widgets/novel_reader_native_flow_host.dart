@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
@@ -12,6 +13,7 @@ import 'package:y300/l10n/app_localizations.dart';
 import '../../domain/models/novel_reader_document.dart';
 import '../../domain/models/novel_reader_marks.dart';
 import '../../domain/models/novel_reader_preferences.dart';
+import '../models/novel_reader_anchor_navigation_request.dart';
 import '../models/novel_reader_native_image_tap.dart';
 import '../models/novel_reader_native_link_handler.dart';
 import '../models/novel_reader_native_prepared_chapter.dart';
@@ -29,7 +31,10 @@ import '../services/novel_reader_native_table_window_proof.dart';
 import '../services/novel_reader_native_work_scheduler.dart';
 import '../services/novel_reader_pagination_cancellation.dart';
 import '../services/novel_reader_pagination_demand.dart';
+import '../services/novel_reader_pagination_performance_policy.dart';
 import '../services/novel_reading_image_host.dart';
+
+part 'novel_reader_native_flow_navigation.dart';
 
 typedef NovelReaderFlowOffsetRestore = Future<bool> Function(
   double? Function() resolveOffset,
@@ -67,6 +72,9 @@ final class NovelReaderNativeFlowHost extends StatefulWidget {
     this.initialSource,
     this.restoreReflowOffset,
     this.textHighlight,
+    this.navigationRequest,
+    this.activity,
+    this.onNavigationFinished,
     this.onReflowRestored,
   });
 
@@ -96,6 +104,13 @@ final class NovelReaderNativeFlowHost extends StatefulWidget {
   final NovelReaderNativeSourceLocation? initialSource;
   final NovelReaderFlowOffsetRestore? restoreReflowOffset;
   final NovelReaderTextRange? textHighlight;
+  final NovelReaderAnchorNavigationRequest? navigationRequest;
+  final ValueListenable<bool>? activity;
+  final void Function(
+    NovelReaderAnchorNavigationRequest,
+    NovelReaderNavigationOutcome,
+  )?
+  onNavigationFinished;
   final ValueChanged<NovelReaderTextAnchor>? onReflowRestored;
 
   @override
@@ -128,12 +143,15 @@ final class NovelReaderNativeFlowHostState
   bool _initialSourceTaken = false;
   int _revision = 0;
   double? _lastScrollOffset;
+  _FlowTextNavigation? _navigation;
 
   @override
   void initState() {
     super.initState();
     widget.owner.addListener(_ownerChanged);
     widget.scrollController.addListener(_outerMoved);
+    widget.activity?.addListener(_navigationActivityChanged);
+    _replaceNavigation();
   }
 
   @override
@@ -142,16 +160,27 @@ final class NovelReaderNativeFlowHostState
     if (!identical(oldWidget.owner, widget.owner)) {
       oldWidget.owner.removeListener(_ownerChanged);
       widget.owner.addListener(_ownerChanged);
+      _retireNavigation();
     }
     if (!identical(oldWidget.scrollController, widget.scrollController)) {
       oldWidget.scrollController.removeListener(_outerMoved);
       widget.scrollController.addListener(_outerMoved);
       _lastScrollOffset = null;
       _cancelReflow();
+      _retireNavigation();
+    }
+    if (!identical(oldWidget.activity, widget.activity)) {
+      oldWidget.activity?.removeListener(_navigationActivityChanged);
+      widget.activity?.addListener(_navigationActivityChanged);
+      _navigationActivityChanged();
+    }
+    if (!identical(oldWidget.navigationRequest, widget.navigationRequest)) {
+      _replaceNavigation();
     }
   }
 
   void _ownerChanged() {
+    if (widget.owner.isClosed) _retireNavigation();
     if (mounted) setState(() => _revision++);
   }
 
@@ -197,6 +226,7 @@ final class NovelReaderNativeFlowHostState
       _revision,
     );
     if (_layoutKey != key && widget.width > 0 && !widget.owner.isClosed) {
+      if (_navigation?.run != null) _retireNavigation();
       _layoutKey = key;
       final sameDocument = _documentKey == documentKey;
       final position = sameDocument ? _positionForReflow() : null;
@@ -259,6 +289,7 @@ final class NovelReaderNativeFlowHostState
                 (notification is UserScrollNotification &&
                     notification.direction != ScrollDirection.idle))) {
           _cancelReflow();
+          _retireNavigation();
         }
         return false;
       },
@@ -377,6 +408,10 @@ final class NovelReaderNativeFlowHostState
           if (!_current(run)) return;
           final start = run.prefix?.length ?? 0;
           run.updatePrefix(prefix);
+          if (_navigation case final navigation?
+              when identical(navigation.run, run)) {
+            navigation.published();
+          }
           if (prefix.isEmpty) {
             if (prefix.isComplete) _empty(run);
             return;
@@ -411,7 +446,12 @@ final class NovelReaderNativeFlowHostState
   void _ready(_FlowRun run, bool ready) {
     if (!_current(run) || !identical(_displayed, run)) return;
     run.ready = ready;
-    run.demand.update(targetPending: !ready, pageIndex: 0);
+    run.demand.update(
+      targetPending:
+          !ready ||
+          (identical(_navigation?.run, run) && _navigation!.needsPrefix),
+      pageIndex: 0,
+    );
     _reportReady(run);
   }
 
@@ -433,6 +473,7 @@ final class NovelReaderNativeFlowHostState
       run.reportedReady = true;
       widget.onContentReady();
     }
+    _scheduleNavigation();
   }
 
   void _reportImages(_FlowRun run) => widget.onImagesReadyChanged(
@@ -449,6 +490,10 @@ final class NovelReaderNativeFlowHostState
     _displayed?.textPosition = null;
     _displayed?.imageSample?.cancel();
     _cancelReflow();
+    if (_navigation case final navigation?
+        when navigation.run != null && !navigation.applyingOffset) {
+      _retireNavigation();
+    }
   }
 
   _FlowSourcePosition? _positionForReflow() {
@@ -513,7 +558,10 @@ final class NovelReaderNativeFlowHostState
   void cancelSourceRestore() {
     _initialSourceTaken = true;
     _cancelReflow();
+    _retireNavigation();
   }
+
+  void cancelTextNavigation() => _retireNavigation();
 
   /// Capture the settled source before replacing the scrolling surface.
   Future<NovelReaderNativeSourceLocation?> captureVisibleSource(
@@ -582,6 +630,10 @@ final class NovelReaderNativeFlowHostState
   ) {
     if (!_current(run) || widget.restoreReflowOffset == null) return;
     final key = (slice: index, path: frame.path);
+    if (_navigation case final navigation?
+        when identical(navigation.run, run) && navigation.table == key) {
+      navigation.window = window;
+    }
     run.tablePositions.remove(key);
     if (run.tableProofKey == key) run.cancelTableProof();
     if (window != null &&
@@ -716,7 +768,13 @@ final class NovelReaderNativeFlowHostState
     if (reflow.target == null) {
       final NovelReaderNativeFlowPoint? candidate;
       try {
-        candidate = await _probeReflow(run, reflow, start);
+        candidate = await _probeFlowAnchor(
+          run,
+          source.anchor,
+          source.tablePath,
+          start,
+          reflow.token,
+        );
       } on Object {
         if (current()) _finishReflow(run, reflow);
         return false;
@@ -831,39 +889,42 @@ final class NovelReaderNativeFlowHostState
     return true;
   }
 
-  Future<NovelReaderNativeFlowPoint?> _probeReflow(
+  Future<NovelReaderNativeFlowPoint?> _probeFlowAnchor(
     _FlowRun run,
-    _FlowReflow reflow,
+    NovelReaderTextAnchor anchor,
+    String? tablePath,
     int start,
+    NovelReaderPaginationCancellationToken token,
   ) async {
     final prefix = run.prefix!;
     final session = run.session!;
     final anchors = run.scope!.chapter.anchors;
-    final source = reflow.source;
-    final path = source.tablePath;
-    if (path == null) {
+    if (tablePath == null) {
       return probeNovelReaderFlowSource(
         session: session,
         prefix: prefix,
         anchors: anchors,
-        target: source.anchor,
+        target: anchor,
         start: start,
-        token: reflow.token,
+        token: token,
       );
     }
     for (var index = start; index < prefix.length; index++) {
-      if (!prefix[index].tableFrames.any((frame) => frame.path == path)) {
+      if ((index - start) % 64 == 63) {
+        await const NovelReaderNativeWorkScheduler().nextFrame(token);
+      }
+      if (!prefix[index].tableFrames.any((frame) => frame.path == tablePath)) {
         continue;
       }
       final candidate = await probeNovelReaderNativeTableAnchor(
         session: session,
         anchors: anchors,
         pageIndex: index,
-        tablePath: path,
-        target: source.anchor,
+        tablePath: tablePath,
+        target: anchor,
         allowNodeCompatibility: false,
         scheduler: const NovelReaderNativeWorkScheduler(),
-        token: reflow.token,
+        token: token,
       );
       if (candidate != null) {
         return (
@@ -957,6 +1018,7 @@ final class NovelReaderNativeFlowHostState
   }
 
   void _empty(_FlowRun run) {
+    _finishNavigation(NovelReaderNavigationOutcome.unavailable);
     setState(() {
       _retire(_displayed);
       _displayed = null;
@@ -968,6 +1030,7 @@ final class NovelReaderNativeFlowHostState
 
   void _fail(_FlowRun run, Object error) {
     if (!_current(run) || _error != null) return;
+    _finishNavigation(NovelReaderNavigationOutcome.unavailable);
     setState(() => _error = error);
     run.stop();
     if (!identical(_displayed, run)) _retire(run);
@@ -1202,6 +1265,9 @@ final class NovelReaderNativeFlowHostState
 
   @override
   void dispose() {
+    widget.activity?.removeListener(_navigationActivityChanged);
+    _navigation?.close();
+    _navigation = null;
     widget.owner.removeListener(_ownerChanged);
     widget.scrollController.removeListener(_outerMoved);
     _request?.close();

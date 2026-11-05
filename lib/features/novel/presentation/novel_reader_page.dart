@@ -276,9 +276,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         widget.nativePagination &&
         _isReadingVisible &&
         viewState != null &&
-        viewState.transition == null &&
-        viewState.preferences.flowMode != NovelReaderFlowMode.vertical;
-    if (!active) {
+        viewState.transition == null;
+    if (!active ||
+        viewState.preferences.flowMode == NovelReaderFlowMode.vertical) {
       _nativeStatus = null;
       _nativeStatusSurface = null;
       if (!_resumed ||
@@ -365,6 +365,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     // awaiting the existing flush of the last qualified position lease.
     _syncNativeActivity();
     if (!_resumed) {
+      _nativeFlowKey.currentState?.cancelTextNavigation();
       ref
           .read(novelReaderControllerProvider(_args).notifier)
           .cancelPendingCompletion();
@@ -818,6 +819,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     }
     _nativeOverlayTurn = null;
     if (_pendingPageSeekRequest != null || _pendingSearchNavigation != null) {
+      _nativeFlowKey.currentState?.cancelTextNavigation();
       setState(() {
         _pendingPageSeekRequest = null;
         _isProgressSeekInFlight = false;
@@ -841,8 +843,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       ),
       onBack: () => _popReader(),
       actions: [
-        if (widget.nativePagination &&
-            viewState.preferences.flowMode != NovelReaderFlowMode.vertical)
+        if (widget.nativePagination)
           ReaderToolbarAction(
             id: 'search-text',
             icon: Icons.search,
@@ -930,6 +931,27 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     } finally {
       _textSearchOpening = false;
     }
+  }
+
+  bool _finishTextSearchNavigation(
+    String identity,
+    NovelReaderAnchorNavigationRequest request,
+    NovelReaderNavigationOutcome outcome,
+  ) {
+    if (!_isCurrentReaderSurface(identity) ||
+        !identical(_pendingSearchNavigation, request)) {
+      return false;
+    }
+    final arrived = outcome == NovelReaderNavigationOutcome.arrived;
+    setState(() {
+      _pendingSearchNavigation = null;
+      if (!arrived) _searchHighlight = null;
+    });
+    if (outcome == NovelReaderNavigationOutcome.unavailable) {
+      _showReaderSnackBar(AppLocalizations.of(context).novelPositionChanged);
+    }
+    _observeReadingSurface();
+    return arrived;
   }
 
   ReaderBottomBarConfig _buildBottomBarConfig(
@@ -1353,23 +1375,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       navigationController: _pagedNavigationController,
       textHighlight: _searchHighlight?.range,
       navigationRequest: _pendingSearchNavigation,
-      onNavigationFinished: (request, outcome) {
-        if (!_isCurrentReaderSurface(identity) ||
-            !identical(_pendingSearchNavigation, request)) {
-          return;
-        }
-        setState(() {
-          _pendingSearchNavigation = null;
-          if (outcome != NovelReaderNavigationOutcome.arrived) {
-            _searchHighlight = null;
-          }
-        });
-        if (outcome == NovelReaderNavigationOutcome.unavailable) {
-          _showReaderSnackBar(
-            AppLocalizations.of(context).novelPositionChanged,
-          );
-        }
-      },
+      onNavigationFinished: (request, outcome) =>
+          _finishTextSearchNavigation(identity, request, outcome),
       pageSeekRequest: _pendingPageSeekRequest,
       onPageSeekFinished: (request, outcome) {
         if (!_isCurrentReaderSurface(identity) ||
@@ -1680,6 +1687,31 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                   );
                 },
                 textHighlight: _searchHighlight?.range,
+                navigationRequest: _pendingSearchNavigation,
+                activity: _nativeActivity,
+                onNavigationFinished: (request, outcome) {
+                  final arrived = _finishTextSearchNavigation(
+                    surfaceIdentity,
+                    request,
+                    outcome,
+                  );
+                  if (!arrived ||
+                      !_isReadingVisible ||
+                      !_scrollController.hasClients ||
+                      !_verticalSession.claimPosition(session)) {
+                    return;
+                  }
+                  _verticalSession.clearThemeRestore(themeRequest);
+                  unawaited(
+                    ref
+                        .read(novelReaderControllerProvider(_args).notifier)
+                        .onScrollOffsetChanged(
+                          _scrollController.offset,
+                          bodySnapshot: _visibleBodySnapshot(viewState),
+                        ),
+                  );
+                  _observeReadingSurface();
+                },
                 onReflowRestored: (_) {
                   if (_isCurrentVerticalSession(session) &&
                       _verticalSession.claimPosition(session)) {
@@ -2126,6 +2158,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       idle:
           !_readingScrolling &&
           !_isProgressSeekInFlight &&
+          _pendingSearchNavigation == null &&
           (!native ||
               (_nativeOverlayTurn == null &&
                   _nativeStatus?.controller?.hasPendingNavigation == false)) &&

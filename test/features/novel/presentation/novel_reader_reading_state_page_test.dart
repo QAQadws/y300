@@ -1037,6 +1037,170 @@ void main() {
     },
   );
 
+  for (final destination in ['paragraph', 'table', 'floated table']) {
+    testWidgets('vertical search proves an offscreen hit in $destination', (
+      tester,
+    ) async {
+      const table =
+          '<table width="1600"><tr height="140"><td width="900">First cell</td>'
+          '<td width="700">Unique highlight needle</td></tr></table>';
+      final inTable = destination != 'paragraph';
+      if (inTable) {
+        await tester.binding.setSurfaceSize(const Size(360, 640));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+      }
+      final tail = switch (destination) {
+        'floated table' =>
+          '<span style="float:right;width:300px">$table</span>'
+              '旁边正文<br style="clear:both">',
+        'table' => table,
+        _ => '<p>Unique high<b>light</b> needle</p>',
+      };
+      final filler = inTable
+          ? _nativeLongBody
+          : List.generate(700, (i) => '<p>第$i段小说正文</p>').join();
+      final idle = Completer<void>();
+      addTearDown(idle.complete);
+      final repository = _ReadingRepository('$filler$tail');
+      await tester.pumpWidget(
+        _app(
+          repository,
+          nativePagination: true,
+          nativeIdleScheduler: inTable ? null : () => idle.future,
+          preferences: NovelReaderPreferences.defaults().copyWith(
+            flowMode: NovelReaderFlowMode.vertical,
+          ),
+        ),
+      );
+      final flow = find.byType(ForumBodyFlowSliver);
+      final host = find.byType(NovelReaderNativeFlowHost);
+      Future<void> waitUntil(bool Function() predicate) async {
+        for (var frame = 0; frame < 225; frame++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 2)),
+          );
+          await tester.pump(const Duration(milliseconds: 8));
+          if (predicate()) return;
+        }
+        fail('The vertical reader did not reach the requested state');
+      }
+
+      await waitUntil(
+        () =>
+            flow.evaluate().isNotEmpty &&
+            find.byType(ForumBodyTextPageSurface).evaluate().isNotEmpty,
+      );
+      final first = tester.widget<ForumBodyFlowSliver>(flow);
+      final scroll = _verticalPosition(tester);
+      expect(scroll.pixels, 0);
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(NovelReaderPage)),
+      );
+      final overlay = tester
+          .widget<ReaderOverlayScaffold>(find.byType(ReaderOverlayScaffold))
+          .controller!;
+
+      Future<void> chooseHit() async {
+        overlay.showMenu();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 260));
+        await tester.tap(
+          find.byKey(const Key('shared-reader-top-action-search-text')),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 250));
+        await tester.enterText(
+          find.byKey(const Key('novel-reader-text-search-field')),
+          'highlight',
+        );
+        await tester.pump();
+        await tester.tap(find.byTooltip(l10n.commonSearch));
+        await tester.pump();
+        await tester.pump();
+        await tester.tap(
+          find.descendant(
+            of: find.byType(ListTile),
+            matching: find.textContaining('highlight'),
+          ),
+        );
+      }
+
+      await chooseHit();
+      if (!inTable) {
+        // Start a real drag while the request is probing a partial prefix.
+        await waitUntil(() {
+          final pending = tester.widget<NovelReaderNativeFlowHost>(host);
+          return pending.activity?.value == true &&
+              pending.navigationRequest != null;
+        });
+        expect(
+          tester.widget<ForumBodyFlowSliver>(flow).prefix.isComplete,
+          isFalse,
+        );
+        await tester.drag(
+          find.byKey(const Key('novel-reader-paragraph-list')),
+          const Offset(0, -120),
+        );
+        await waitUntil(
+          () =>
+              !scroll.isScrollingNotifier.value &&
+              tester
+                      .widget<NovelReaderNativeFlowHost>(host)
+                      .navigationRequest ==
+                  null,
+        );
+        expect(scroll.pixels, greaterThan(0));
+        expect(scroll.pixels, lessThan(1000));
+        expect(
+          tester.widget<NovelReaderNativeFlowHost>(host).textHighlight,
+          isNull,
+        );
+        await chooseHit();
+      }
+      await waitUntil(
+        () =>
+            tester.widget<NovelReaderNativeFlowHost>(host).navigationRequest !=
+            null,
+      );
+      await waitUntil(
+        () =>
+            scroll.pixels > (inTable ? 0 : 1000) &&
+            tester.widget<NovelReaderNativeFlowHost>(host).navigationRequest ==
+                null,
+      );
+      final mark = tester.widget<ForumBodyTextHighlight>(
+        find.byType(ForumBodyTextHighlight),
+      );
+      expect(mark.ranges, isNotEmpty);
+      expect(
+        tester.widget<ForumBodyFlowSliver>(flow).session,
+        same(first.session),
+      );
+      expect(
+        tester
+            .widgetList<ForumBodyTextPageSurface>(
+              find.byType(ForumBodyTextPageSurface),
+            )
+            .any((page) => page.locateSourceRanges(mark.ranges).isNotEmpty),
+        isTrue,
+      );
+      if (inTable) {
+        final table = tester.widget<ForumBodyTableFlowViewport>(
+          find.byType(ForumBodyTableFlowViewport),
+        );
+        expect(table.horizontalController.offset, greaterThan(500));
+      }
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pump();
+      expect(
+        repository.progress[_chapter]?.scrollOffset,
+        closeTo(scroll.pixels, 1),
+      );
+      await tester.pumpWidget(const SizedBox());
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('native slider request closes the menu before actual arrival', (
     tester,
   ) async {
@@ -2244,6 +2408,7 @@ Widget _app(
   EdgeInsets safeArea = EdgeInsets.zero,
   bool nativePagination = false,
   NovelReaderNativePreparationService? nativePreparation,
+  Future<void> Function()? nativeIdleScheduler,
 }) => ProviderScope(
   overrides: [
     novelRepositoryProvider.overrideWithValue(repository),
@@ -2284,7 +2449,7 @@ Widget _app(
       novelId: _work,
       initialEpisodeId: _chapter,
       nativePagination: nativePagination,
-      nativeIdleScheduler: _nativeIdle,
+      nativeIdleScheduler: nativeIdleScheduler ?? _nativeIdle,
     ),
   ),
 );
