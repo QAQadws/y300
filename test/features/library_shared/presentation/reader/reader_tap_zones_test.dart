@@ -9,6 +9,36 @@ import 'package:y300/features/library_shared/presentation/reader/reader_paged_tu
 import 'package:y300/features/library_shared/presentation/reader/reader_tap_zones.dart';
 
 void main() {
+  testWidgets('an owned region keeps its tap without activating the reader', (
+    tester,
+  ) async {
+    var controlTaps = 0;
+    var readerTaps = 0;
+    await tester.pumpWidget(
+      _buildTapZones(
+        onCenterTap: () => readerTaps++,
+        onRightTap: () => readerTaps++,
+        child: Align(
+          alignment: Alignment.centerRight,
+          child: ReaderOwnedTapRegion(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => controlTaps++,
+              child: const SizedBox(width: 140, height: 100),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tapAt(const Offset(500, 300));
+    await tester.pump(const Duration(milliseconds: 330));
+    expect(controlTaps, 1);
+    expect(readerTaps, 0);
+    await tester.tapAt(const Offset(300, 300));
+    await tester.pump(const Duration(milliseconds: 330));
+    expect(readerTaps, 1);
+  });
+
   testWidgets('stationary long presses never commit a reader tap', (
     tester,
   ) async {
@@ -226,6 +256,7 @@ Widget _buildTapZones({
   double bottomSafeFraction = 0,
   ValueListenable<bool>? blockedListenable,
   ReaderGestureCoordinator? gestureCoordinator,
+  Widget child = const ColoredBox(color: Colors.white),
 }) {
   return LocalizedTestApp(
     home: Scaffold(
@@ -242,7 +273,7 @@ Widget _buildTapZones({
               onCenterTap: onCenterTap,
               onLeftTap: onLeftTap,
               onRightTap: onRightTap,
-              child: const ColoredBox(color: Colors.white),
+              child: child,
             ),
           ],
         ),

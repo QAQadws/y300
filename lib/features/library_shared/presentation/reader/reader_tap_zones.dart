@@ -2,6 +2,35 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_gesture_coordinator.dart';
 
+/// A child surface that owns taps through its own controls or selection.
+/// The reader's raw pointer listener runs after the child on the hit path.
+class ReaderOwnedTapRegion extends StatelessWidget {
+  const ReaderOwnedTapRegion({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final scope = context.dependOnInheritedWidgetOfExactType<_ReaderTapScope>();
+    if (scope == null) return child;
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => scope.coordinator.cancelPendingTap(),
+      onPointerUp: (_) => scope.coordinator.cancelPendingTap(),
+      child: child,
+    );
+  }
+}
+
+class _ReaderTapScope extends InheritedWidget {
+  const _ReaderTapScope({required this.coordinator, required super.child});
+  final ReaderGestureCoordinator coordinator;
+
+  @override
+  bool updateShouldNotify(_ReaderTapScope oldWidget) =>
+      oldWidget.coordinator != coordinator;
+}
+
 /// Reader tap-zone layout shared by long-form readers.
 ///
 /// This widget listens to raw pointer events as a parent of the reader content.
@@ -80,7 +109,10 @@ class _ReaderTapZonesState extends State<ReaderTapZones> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            widget.child ?? const SizedBox.expand(),
+            _ReaderTapScope(
+              coordinator: _gestureCoordinator,
+              child: widget.child ?? const SizedBox.expand(),
+            ),
             IgnorePointer(
               child: FractionallySizedBox(
                 widthFactor: 1,
