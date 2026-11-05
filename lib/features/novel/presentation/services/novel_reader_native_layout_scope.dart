@@ -265,6 +265,7 @@ final class NovelReaderNativeLayoutScope {
     required ForumBodyParagraphCache cache,
     required String layoutId,
     required ForumBodyTextPageSessionLimits limits,
+    ForumBodyTableExtent tableExtent = ForumBodyTableExtent.bookPage,
   }) {
     if (_pageHandleLimit(limits.maxIssuedLeases) != maxNativeHandlesPerPage) {
       throw ArgumentError(
@@ -283,6 +284,7 @@ final class NovelReaderNativeLayoutScope {
       limits: limits,
       collapses: collapses,
       dedicatedTables: true,
+      tableExtent: tableExtent,
       imageResolver: catalog?.resolve,
       inlineImageResolver: catalog == null
           ? null

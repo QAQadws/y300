@@ -59,6 +59,7 @@ import 'package:y300/features/novel/presentation/widgets/novel_reader_delayed_lo
 import 'package:y300/features/novel/presentation/widgets/novel_reader_html_document_view.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_html_paged_surface.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_native_paged_surface.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_native_flow_host.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_chapter_interactions_button.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
@@ -849,6 +850,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         value: fraction,
         leadingLabel: '${(fraction * 100).floor()}%',
         trailingLabel: '100%',
+        sliderEnabled:
+            !widget.nativePagination || _nativeVerticalEndKnown(viewState),
         interactionLocked: isLocked,
         previousEnabled: viewState.hasPreviousEpisode && !isLocked,
         nextEnabled: viewState.hasNextEpisode && !isLocked,
@@ -945,6 +948,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       return;
     }
     final fraction = value.clamp(0.0, 1.0).toDouble();
+    if (widget.nativePagination && !_nativeVerticalEndKnown(viewState)) {
+      setState(() => _progressSliderPreview = null);
+      return;
+    }
     final maxScrollExtent = _scrollController.position.maxScrollExtent;
     final geometry = _currentBodyGeometry(viewState);
     if (geometry == null || !geometry.isUsable || !_isReadingVisible) return;
@@ -1119,11 +1126,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     _observeReadingSurface();
   }
 
-  Widget _buildNativePagedReader(
-    NovelReaderViewState viewState,
-    ReaderChromeInsets chromeInsets,
-    String identity,
-  ) {
+  void _bindNativeImageHost(NovelReaderViewState viewState) {
     final base = ref.watch(forumHtmlImageHostProvider);
     final tid = viewState.currentEpisode.sourceTid;
     final referer = _imageRefererFor(viewState);
@@ -1139,6 +1142,15 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         imageRequestResolver: base.imageRequestResolver,
       );
     }
+  }
+
+  Widget _buildNativePagedReader(
+    NovelReaderViewState viewState,
+    ReaderChromeInsets chromeInsets,
+    String identity,
+  ) {
+    _bindNativeImageHost(viewState);
+    final tid = viewState.currentEpisode.sourceTid;
     return NovelReaderNativePagedSurface(
       owner: _nativeOwner!,
       readingAuthorityIdentity: viewState.readingAuthorityRevision,
@@ -1370,7 +1382,44 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           ? _scrollController.offset
           : null,
     );
-    final children = <Widget>[
+    if (widget.nativePagination) _bindNativeImageHost(viewState);
+    final nativePreparation = widget.nativePagination
+        ? ref.watch(novelReaderNativePreparationServiceProvider)
+        : null;
+    final htmlPreparation = widget.nativePagination
+        ? null
+        : ref.watch(novelReaderHtmlPreparationServiceProvider);
+    void onImagesReady(bool ready) {
+      if (_isCurrentReaderSurface(surfaceIdentity)) {
+        _imagesReady = ready;
+        _observeReadingSurface();
+      }
+    }
+
+    void onContentReady() {
+      if (_isSuspendedVerticalContent(session)) {
+        _verticalSession.markSuspendedContent(session);
+        return;
+      }
+      _restoreVerticalOffsetAfterThemeUpdate(request: themeRequest);
+      _restoreVerticalOffsetAfterContentReady(session: session);
+    }
+
+    void onContentTerminal() {
+      if (_isSuspendedVerticalContent(session)) {
+        _verticalSession.markSuspendedContent(session, terminal: true);
+        return;
+      }
+      if (!_isCurrentVerticalSession(session) ||
+          !_verticalSession.ownsTheme(themeRequest)) {
+        return;
+      }
+      _verticalSession.clearThemeRestore(themeRequest);
+      _verticalSession.markContentTerminal(session);
+      _markReaderSurfaceReady(surfaceIdentity);
+    }
+
+    List<Widget> children(double width) => [
       NovelReadingBodySliver(
         effectiveViewportHeight: math.max(
           0,
@@ -1381,10 +1430,20 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         layoutIdentity: (surfaceIdentity, _bodyContentRevision),
         onGeometry: (geometry) {
           if (_isCurrentReaderSurface(surfaceIdentity)) {
-            _bodyGeometry = geometry;
-            _bodyGeometryOwner = surfaceIdentity;
-            _bodyTopInset = chromeInsets.topInset;
-            _bodyBottomInset = chromeInsets.persistentBottomInset;
+            void accept() {
+              _bodyGeometry = geometry;
+              _bodyGeometryOwner = surfaceIdentity;
+              _bodyTopInset = chromeInsets.topInset;
+              _bodyBottomInset = chromeInsets.persistentBottomInset;
+            }
+
+            if (widget.nativePagination &&
+                _nativeVerticalEndKnown(viewState) !=
+                    geometry.finalBoundaryKnown) {
+              setState(accept);
+            } else {
+              accept();
+            }
             _scheduleVerticalRestoreAttempt(
               session: session,
               trigger: 'body_geometry',
@@ -1392,69 +1451,73 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
             _observeReadingSurface();
           }
         },
-        sliver: NovelReaderHtmlDocumentView(
-          preparationService: ref.watch(
-            novelReaderHtmlPreparationServiceProvider,
-          ),
-          asSliver: true,
-          preparedChapterCache: _preparedChapterCache,
-          rawHtml: viewState.currentContent.rawHtml,
-          episode: viewState.currentEpisode,
-          preferences: viewState.renderPreferences,
-          typography: typography,
-          theme: htmlTheme,
-          imageReferer: _imageRefererFor(viewState),
-          onLinkTap: (link) {
-            if (_isCurrentReaderSurface(surfaceIdentity)) {
-              _openReaderLink(link, externalLauncher);
-            }
-          },
-          onOpenImage: (request) {
-            if (_isCurrentReaderSurface(surfaceIdentity)) {
-              _openHtmlReaderImage(request);
-            }
-          },
-          onImageFallback: (request) {
-            if (_isCurrentReaderSurface(surfaceIdentity)) {
-              _copyNovelImageUrl(request.url);
-            }
-          },
-          onContentInteraction: _cancelPendingReaderTap,
-          onImagesReadyChanged: (ready) {
-            if (_isCurrentReaderSurface(surfaceIdentity)) {
-              _imagesReady = ready;
-              _observeReadingSurface();
-            }
-          },
-          onContentReady: () {
-            if (_isSuspendedVerticalContent(session)) {
-              _verticalSession.markSuspendedContent(session);
-              return;
-            }
-            _restoreVerticalOffsetAfterThemeUpdate(request: themeRequest);
-            _restoreVerticalOffsetAfterContentReady(session: session);
-          },
-          onContentTerminal: () {
-            if (_isSuspendedVerticalContent(session)) {
-              _verticalSession.markSuspendedContent(session, terminal: true);
-              return;
-            }
-            if (!_isCurrentVerticalSession(session) ||
-                !_verticalSession.ownsTheme(themeRequest)) {
-              return;
-            }
-            _verticalSession.clearThemeRestore(themeRequest);
-            _verticalSession.markContentTerminal(session);
-            _markReaderSurfaceReady(surfaceIdentity);
-          },
-          onRetry: () {
-            if (_isCurrentReaderSurface(surfaceIdentity)) {
-              ref.invalidate(novelReaderControllerProvider(_args));
-            }
-          },
-        ),
+        sliver: widget.nativePagination
+            ? NovelReaderNativeFlowHost(
+                owner: _nativeOwner!,
+                readingAuthority: viewState.readingAuthorityRevision,
+                sourceId: viewState.currentEpisode.episodeId,
+                rawHtml: viewState.currentContent.rawHtml,
+                document: viewState.document,
+                preferences: viewState.renderPreferences,
+                resolvedFont: viewState.bodyFont,
+                converter: resolveTextConverter(
+                  viewState.renderPreferences.sharedConversionMode,
+                ),
+                preparationService: nativePreparation!,
+                width: width,
+                scrollController: _scrollController,
+                imageHost: _nativeImageHost!,
+                imagePolicy: _nativeImagePolicy!,
+                threadId: viewState.currentEpisode.sourceTid,
+                idleScheduler: widget.nativeIdleScheduler,
+                onImagesReadyChanged: onImagesReady,
+                onContentReady: onContentReady,
+                onContentTerminal: onContentTerminal,
+                onInteraction: _cancelPendingReaderTap,
+                onImageTap: (tap) =>
+                    unawaited(_openNativeImage(surfaceIdentity, tap)),
+                onTextSelection: (selection) => unawaited(
+                  _openNativeTextSelection(surfaceIdentity, selection),
+                ),
+              )
+            : NovelReaderHtmlDocumentView(
+                preparationService: htmlPreparation,
+                asSliver: true,
+                preparedChapterCache: _preparedChapterCache,
+                rawHtml: viewState.currentContent.rawHtml,
+                episode: viewState.currentEpisode,
+                preferences: viewState.renderPreferences,
+                typography: typography,
+                theme: htmlTheme,
+                imageReferer: _imageRefererFor(viewState),
+                onLinkTap: (link) {
+                  if (_isCurrentReaderSurface(surfaceIdentity)) {
+                    _openReaderLink(link, externalLauncher);
+                  }
+                },
+                onOpenImage: (request) {
+                  if (_isCurrentReaderSurface(surfaceIdentity)) {
+                    _openHtmlReaderImage(request);
+                  }
+                },
+                onImageFallback: (request) {
+                  if (_isCurrentReaderSurface(surfaceIdentity)) {
+                    _copyNovelImageUrl(request.url);
+                  }
+                },
+                onContentInteraction: _cancelPendingReaderTap,
+                onImagesReadyChanged: onImagesReady,
+                onContentReady: onContentReady,
+                onContentTerminal: onContentTerminal,
+                onRetry: () {
+                  if (_isCurrentReaderSurface(surfaceIdentity)) {
+                    ref.invalidate(novelReaderControllerProvider(_args));
+                  }
+                },
+              ),
       ),
-      if (viewState.nextEpisode != null)
+      if (viewState.nextEpisode != null &&
+          (!widget.nativePagination || _nativeVerticalEndKnown(viewState)))
         SliverToBoxAdapter(
           child: Padding(
             padding: EdgeInsets.only(
@@ -1538,7 +1601,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                     NovelReaderSpacing.verticalPagePadding +
                         chromeInsets.persistentBottomInset,
                   ),
-                  sliver: SliverMainAxisGroup(slivers: children),
+                  sliver: SliverMainAxisGroup(
+                    slivers: children(constraints.maxWidth - 2 * sidePadding),
+                  ),
                 ),
               ],
             );
@@ -1638,6 +1703,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           current.preferences.flowMode == NovelReaderFlowMode.vertical &&
           _readerSurfaceIdentity(current) == requested &&
           _readyReaderSurfaceIdentity == requested &&
+          (!widget.nativePagination || _nativeVerticalEndKnown(current)) &&
           _hasRestoredOffset &&
           _scrollController.hasClients &&
           _scrollController.position.hasContentDimensions;
@@ -1676,7 +1742,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     _overlayController.hideMenu();
     // Only drag/seek callbacks confirm navigation. Layout-driven offset changes
     // may update the view but must not create a new recorded visit.
-    if (_userScrollActive) {
+    if (_userScrollActive && (!widget.nativePagination || _imagesReady)) {
       final viewState = ref
           .read(novelReaderControllerProvider(_args))
           .asData
@@ -1692,6 +1758,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       }
     }
   }
+
+  bool _nativeVerticalEndKnown(NovelReaderViewState state) =>
+      _bodyGeometryOwner == _readerSurfaceIdentity(state) &&
+      _bodyGeometry?.finalBoundaryKnown == true;
 
   NovelReadingBodyGeometry? _currentBodyGeometry(
     NovelReaderViewState viewState,
@@ -1732,7 +1802,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   ) {
     final geometry = _currentBodyGeometry(viewState);
     if (geometry == null) return null;
-    final percent = geometry.progressPercent;
+    final percent = widget.nativePagination && !geometry.finalBoundaryKnown
+        ? null
+        : geometry.progressPercent;
     return _progressPolicy
         .verticalSnapshot(
           novelId: widget.novelId,
@@ -2003,6 +2075,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     }
     final max = _scrollController.position.maxScrollExtent;
     final body = _currentBodyGeometry(current);
+    if (widget.nativePagination && body?.finalBoundaryKnown != true) {
+      _verticalSession.finishRestore(request, applied: false);
+      return;
+    }
     final usesBodyBasis =
         snapshot.percentBasis == NovelProgressPercentBasis.bodyGeometryV1 ||
         snapshot.percentBasis == NovelProgressPercentBasis.pagedStartV1;

@@ -38,6 +38,8 @@ import 'package:y300/features/novel/presentation/services/novel_reader_native_pr
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reading_body_sliver.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_html_paged_surface.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_html_document_view.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_native_flow_host.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_native_paged_surface.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_native_paged_viewport.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/identity_text_converter.dart';
@@ -59,6 +61,100 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
   });
+
+  testWidgets(
+    'native scrolling reader restores against the complete table extent',
+    (tester) async {
+      final repository = _ReadingRepository(
+        '<p>表格前</p><table width="950" cellpadding="0">'
+        '<tr height="1250"><td width="475">左列</td><td width="475">右列</td></tr>'
+        '<tr><td colspan="2">表格底部</td></tr></table><p>表格后</p>',
+      );
+      final saved = NovelReadingProgress(
+        novelId: _work,
+        episodeId: _chapter,
+        flowMode: NovelReaderFlowMode.pagedLtr,
+        scrollOffset: 0,
+        pageIndex: 2,
+        pageCount: 5,
+        paginationKey: 'previous-book-layout',
+        progressPercent: .4,
+        isProgressPercentValid: true,
+        percentBasis: NovelProgressPercentBasis.pagedStartV1,
+        updatedAt: DateTime(2026, 10, 1),
+      );
+      repository.progress[_chapter] = saved;
+      repository.recent = _chapter;
+      await tester.pumpWidget(
+        _app(
+          repository,
+          nativePagination: true,
+          preferences: NovelReaderPreferences.defaults().copyWith(
+            flowMode: NovelReaderFlowMode.vertical,
+          ),
+        ),
+      );
+      final flow = find.byType(ForumBodyFlowSliver);
+      final table = find.byType(ForumBodyTableFlowViewport);
+      for (var frame = 0; frame < 250; frame++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 2)),
+        );
+        await tester.pump();
+        if (flow.evaluate().isNotEmpty &&
+            tester
+                .renderObject<RenderForumBodyFlowBoundary>(flow)
+                .finalBoundaryKnown &&
+            _verticalPosition(tester).pixels > 0 &&
+            table.evaluate().isNotEmpty) {
+          break;
+        }
+      }
+      expect(flow, findsOneWidget);
+      await tester.pumpAndSettle();
+      expect(find.byType(NovelReaderHtmlDocumentView), findsNothing);
+      expect(
+        tester
+            .renderObject<RenderForumBodyFlowBoundary>(flow)
+            .finalBoundaryKnown,
+        isTrue,
+      );
+      expect(table, findsOneWidget);
+      final geometry = _bodyLayout(tester);
+      final position = _verticalPosition(tester);
+      final expected =
+          geometry.bodyTop + .4 * geometry.bodyRange - geometry.topChrome;
+      expect(geometry.bodyRange, greaterThan(500));
+      expect(position.pixels, closeTo(expected, 1));
+      final horizontal = tester
+          .widget<ForumBodyTableFlowViewport>(table)
+          .horizontalController;
+      expect(horizontal.position.maxScrollExtent, greaterThan(0));
+      final point =
+          tester.getTopLeft(
+            find.byKey(const Key('novel-reader-paragraph-list')),
+          ) +
+          const Offset(430, 280);
+      await tester.dragFrom(point, const Offset(-100, 0));
+      await tester.pumpAndSettle();
+      expect(horizontal.offset, greaterThan(0));
+      expect(position.pixels, closeTo(expected, 1));
+      expect(repository.progress[_chapter], same(saved));
+      expect(repository.committed, isEmpty);
+      expect(repository.completed, isEmpty);
+
+      final owner = tester
+          .widget<NovelReaderNativeFlowHost>(
+            find.byType(NovelReaderNativeFlowHost),
+          )
+          .owner;
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      expect(owner.isClosed, isTrue);
+      expect(owner.activeCacheHandles, 0);
+      expect(repository.progress[_chapter], same(saved));
+    },
+  );
 
   for (final future in [false, true]) {
     testWidgets(
@@ -584,12 +680,19 @@ void main() {
       await tester.tap(
         find.byKey(const Key('novel-reader-pagination-fallback')),
       );
-      await _pumpBodyWithoutAdvancingTime(tester);
+      for (var frame = 0; frame < 100 && preparation.calls < 2; frame++) {
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
       expect(find.byType(NovelReaderNativePagedSurface), findsNothing);
+      expect(find.byType(NovelReaderNativeFlowHost), findsOneWidget);
+      expect(find.byType(NovelReaderHtmlDocumentView), findsNothing);
+      expect(preparation.calls, 2);
       expect(
         find.byKey(const Key('novel-reader-paragraph-list')),
         findsOneWidget,
       );
+      expect(repository.committed, isEmpty);
       await tester.pumpWidget(const SizedBox());
     },
   );
@@ -1056,6 +1159,45 @@ void main() {
   });
 
   testWidgets(
+    'native scrolling waits for an image first frame at chapter end',
+    (tester) async {
+      final repository = _ReadingRepository(
+        '<p>图文短章。</p><img src="https://bbs.yamibo.com/data/attachment/forum/pending.png"'
+        ' width="100" height="100">',
+      );
+      final images = _PendingImageCache();
+      await tester.pumpWidget(
+        _app(
+          repository,
+          images: images,
+          nativePagination: true,
+          preferences: NovelReaderPreferences.defaults().copyWith(
+            flowMode: NovelReaderFlowMode.vertical,
+          ),
+        ),
+      );
+      for (var frame = 0; frame < 250 && images.requests.isEmpty; frame++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 2)),
+        );
+        await tester.pump();
+      }
+      await tester.pump(const Duration(seconds: 1));
+      final flow = find.byType(ForumBodyFlowSliver);
+      expect(flow, findsOneWidget);
+      expect(
+        tester
+            .renderObject<RenderForumBodyFlowBoundary>(flow)
+            .finalBoundaryKnown,
+        isTrue,
+      );
+      expect(images.requests, isNotEmpty);
+      expect(repository.completed, isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
     'body percentage resumes at the same offset through safe area without rewriting history',
     (tester) async {
       const safeArea = EdgeInsets.only(top: 24, bottom: 18);
@@ -1381,12 +1523,10 @@ Future<void> _pumpPagedReady(WidgetTester tester) async {
 }
 
 ScrollPosition _verticalPosition(WidgetTester tester) => tester
-    .state<ScrollableState>(
-      find.descendant(
-        of: find.byKey(const Key('novel-reader-paragraph-list')),
-        matching: find.byType(Scrollable),
-      ),
+    .widget<CustomScrollView>(
+      find.byKey(const Key('novel-reader-paragraph-list')),
     )
+    .controller!
     .position;
 
 ({double bodyTop, double bodyRange, double topChrome, double bottomChrome})
