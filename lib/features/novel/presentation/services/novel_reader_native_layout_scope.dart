@@ -48,7 +48,7 @@ final class NovelReaderNativeLayoutScope {
   }) : _fontCollectionGeneration = fontCollectionGeneration,
        _paragraphInputs = paragraphInputs,
        _usesQuoteTheme = usesQuoteTheme;
-  static const fingerprintRevision = 12;
+  static const fingerprintRevision = 13;
   final NovelReaderNativePreparedChapter chapter;
   final ForumBodyReaderStyle reader;
   final TextScaler textScaler;
@@ -257,6 +257,7 @@ final class NovelReaderNativeLayoutScope {
         'Session handle budget differs from its layout fingerprint',
       );
     }
+    final catalog = images;
     return ForumBodyTextPageSession(
       document: chapter.document,
       reader: reader,
@@ -266,7 +267,11 @@ final class NovelReaderNativeLayoutScope {
       cache: cache,
       layoutId: layoutId,
       limits: limits,
-      imageResolver: images?.resolve,
+      imageResolver: catalog?.resolve,
+      inlineImageResolver: catalog == null
+          ? null
+          : (identity, element, style) =>
+                catalog.resolveSticker(identity, element, style, textScaler),
       // Current and target pages coexist during a real PageView turn. Reserve
       // their shared issued-handle budget before publishing legal physical rows.
       maxNativeHandlesPerPage: maxNativeHandlesPerPage,

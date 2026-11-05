@@ -75,6 +75,7 @@ final class NovelReaderNativePageCoverage {
     this.hasClippedGlyphs = false,
     Iterable<NovelReaderNativeImageCoverage> images = const [],
     this.hasClippedResources = false,
+    this.hasUnanchoredImages = false,
   }) : points = List.unmodifiable(points),
        images = List.unmodifiable(images);
   final ForumBodyIdentity identity;
@@ -83,6 +84,11 @@ final class NovelReaderNativePageCoverage {
   final List<NovelReaderNativeCoveragePoint> points;
   final List<NovelReaderNativeImageCoverage> images;
   final bool hasClippedResources;
+
+  /// Decorative inline images have physical coverage and frame requirements.
+  /// Their presence does not give them a semantic reading position.
+  final bool hasUnanchoredImages;
+  bool get hasImages => hasUnanchoredImages || images.isNotEmpty;
   int get locationCount => points.length + images.length;
   bool get hasLocations => points.isNotEmpty || images.isNotEmpty;
 

@@ -147,6 +147,7 @@ final class NovelReaderNativePageCoverageCursor {
   bool _resourcesComplete = false;
   bool _hasClippedGlyphs = false;
   bool _hasClippedResources = false;
+  bool _hasUnanchoredImages = false;
   Iterator<({int startUtf16, int endUtf16})>? _ranges;
   ForumBodyPreparedTextFragment? _fragment;
   HtmlDisplayTextProjection? _projection;
@@ -349,6 +350,14 @@ final class NovelReaderNativePageCoverageCursor {
 
   void _includeImage(_ImageCoverageInput image) {
     final source = _anchors!.imageAtPath(image.path), entry = image.entry;
+    if (image.isSticker) {
+      if (entry != null || source != null || image.atomIndex == null) {
+        _fail(NovelReaderNativeCoverageFailure.identity);
+      }
+      _hasUnanchoredImages = true;
+      _hasClippedResources |= !_contains(image.rect);
+      return;
+    }
     if (source == null ||
         entry == null ||
         source.rawSource != entry.rawSrc ||
@@ -390,6 +399,7 @@ final class NovelReaderNativePageCoverageCursor {
       pageIndex: pageIndex,
       hasClippedGlyphs: _hasClippedGlyphs,
       hasClippedResources: _hasClippedResources,
+      hasUnanchoredImages: _hasUnanchoredImages,
       points: _points,
       images: _images,
     );
@@ -421,6 +431,7 @@ final class NovelReaderNativePageCoverageCursor {
 typedef _ImageCoverageInput = ({
   String path,
   ForumHtmlReadableImageEntry? entry,
+  bool isSticker,
   Rect rect,
   int? atomIndex,
   int? fence,
@@ -436,6 +447,7 @@ Iterable<_ImageCoverageInput> _imageInputs(
     yield (
       path: body.content.input.element.path,
       entry: body.content.input.entry,
+      isSticker: false,
       rect: body.content.frame.imageRect,
       atomIndex: null,
       fence: null,
@@ -447,6 +459,7 @@ Iterable<_ImageCoverageInput> _imageInputs(
       yield (
         path: image.input.element.path,
         entry: image.input.entry,
+        isSticker: image.input.image.isSticker,
         rect: image.rect,
         atomIndex: image.atomIndex,
         fence: atom.displayStartUtf16,

@@ -67,6 +67,7 @@ final class ForumBodyParser {
       sourceMap: source,
       nodes: builder.children(fragment.nodes, ''),
       issues: builder.issues,
+      imageElements: builder.imageElements,
       parsedNodeCount: count,
       uniqueStyleCount: builder.styles.length,
     );
@@ -120,6 +121,7 @@ final class _BodyBuilder {
   _BodyBuilder(this.source);
   final HtmlSourceTextMap source;
   final issues = <ForumBodyIssue>[];
+  final imageElements = <ForumBodyElement>[];
   final styles = <String, ForumBodyAuthorStyle>{};
   final codec = CssInlineStyleDeclarationCodec.scoped();
 
@@ -187,7 +189,7 @@ final class _BodyBuilder {
     if (kind == ForumBodyElementKind.unknown) {
       issues.add(ForumBodyIssue(ForumBodyIssueCode.unknownElement, path));
     }
-    return ForumBodyElement(
+    final element = ForumBodyElement(
       path: path,
       source: source.rangesByPath[path]!,
       tag: tag,
@@ -201,6 +203,8 @@ final class _BodyBuilder {
           ? _resource(node, attributes)
           : null,
     );
+    if (kind == ForumBodyElementKind.image) imageElements.add(element);
+    return element;
   }
 
   ForumBodyResourceReference _resource(

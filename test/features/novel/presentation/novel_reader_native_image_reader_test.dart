@@ -24,6 +24,7 @@ import '../test_support/native_reader_image_test_host.dart';
 const _html =
     '<img src="https://bbs.yamibo.com/data/attachment/forum/a.png">'
     '<img src="https://bbs.yamibo.com/data/attachment/forum/a.png">';
+const _sticker = '<img src="static/image/smiley/test/01.gif" smilieid="1">';
 Future<void> _idle() async {}
 
 final class _Build implements NovelReaderNativeChapterBuildExecutor {
@@ -132,6 +133,58 @@ Future<void> _until(WidgetTester tester, bool Function() done) async {
 }
 
 void main() {
+  testWidgets('Discuz stickers mount inline and gate actual page visibility', (
+    tester,
+  ) async {
+    final reader = _Reader(html: '<p>A${_sticker}B</p>$_html');
+    await tester.pumpWidget(reader.widget());
+    await _until(tester, () => reader.positions.isNotEmpty);
+    final sticker = find.byKey(const ValueKey('native-test-image-null'));
+    expect(sticker, findsOneWidget);
+    expect(tester.getSize(sticker), const Size(10, 10));
+    final coverage = reader.controller.visibleView!.coverage;
+    expect(coverage.hasUnanchoredImages, isTrue);
+    expect(coverage.images, isEmpty);
+    expect(coverage.points.map((point) => point.anchor.nodeId).toSet(), {
+      'node-0',
+    });
+    final initial = reader.positions.last;
+    expect(initial.isWholeBodyVisible, isFalse);
+    expect(reader.semantic.blocks.map((block) => block.anchorId), [
+      'node-0',
+      'node-1',
+      'node-2',
+    ]);
+    reader.host.callback(null).frame!();
+    await _until(tester, () => reader.positions.last.isWholeBodyVisible);
+    expect(reader.positions.last.hasUserNavigated, initial.hasUserNavigated);
+    expect(reader.positions.last.anchor, initial.anchor);
+    await tester.tap(sticker);
+    await tester.pump();
+    expect(reader.taps, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a sticker-only page mounts without inventing a saved anchor', (
+    tester,
+  ) async {
+    final reader = _Reader(html: _sticker);
+    expect(reader.semantic.blocks, isEmpty);
+    await tester.pumpWidget(reader.widget());
+    await _until(tester, () => reader.positions.isNotEmpty);
+    expect(
+      find.byKey(const ValueKey('native-test-image-null')),
+      findsOneWidget,
+    );
+    expect(reader.controller.visibleView!.coverage.hasLocations, isFalse);
+    reader.host.callback(null).frame!();
+    await tester.pump();
+    expect(reader.positions.last.isReadOnlyCompatibilityRestore, isTrue);
+    expect(reader.positions.last.anchor.hasCanonicalTextOffset, isFalse);
+    expect(reader.positions.last.isWholeBodyVisible, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'image taps identify the actual settled slot and survive only the opening suspension',
     (tester) async {

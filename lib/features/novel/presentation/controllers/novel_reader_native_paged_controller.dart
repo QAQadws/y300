@@ -428,7 +428,7 @@ final class NovelReaderNativePagedController {
   ) {
     final visible = _visible, previous = _lastPosition;
     if (isClosed ||
-        view.coverage.images.isEmpty ||
+        !view.coverage.hasImages ||
         _suspended ||
         _ticket != null ||
         _target != null ||

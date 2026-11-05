@@ -10,7 +10,7 @@ final class NativeImageTestCallbacks {
     this.frame,
     this.failed,
   );
-  final int index;
+  final int? index;
   final ValueChanged<Size>? resolved;
   final VoidCallback? frame, failed;
 }
@@ -24,7 +24,7 @@ final class NativeReaderImageTestHost
   final callbacks = <NativeImageTestCallbacks>[];
   final dimensions = <Completer<({Size size, ForumHtmlImageLayout layout})?>>[];
   final resolvedSizes = <Size>[];
-  NativeImageTestCallbacks callback(int index) =>
+  NativeImageTestCallbacks callback(int? index) =>
       callbacks.lastWhere((c) => c.index == index);
   void completeDimensions() {
     for (final pending in dimensions) {
@@ -49,7 +49,13 @@ final class NativeReaderImageTestHost
     required int? imageIndex,
     required bool isSticker,
     Size? htmlSize,
-  }) => _Display(url.toString(), 'image:$imageIndex', aspectRatio, htmlSize);
+  }) => _Display(
+    url.toString(),
+    isSticker ? 'sticker:$url' : 'image:$imageIndex',
+    aspectRatio,
+    htmlSize,
+    isSticker,
+  );
   @override
   Future<({Size size, ForumHtmlImageLayout layout})?> loadDimensions(
     ForumHtmlDisplayImage image,
@@ -83,7 +89,9 @@ final class NativeReaderImageTestHost
     bool waitForCacheWrite = false,
     int retryToken = 0,
   }) {
-    final index = int.parse(image.cacheKey.substring(6));
+    final index = image.isSticker
+        ? null
+        : int.parse(image.cacheKey.substring(6));
     callbacks.add(
       NativeImageTestCallbacks(
         index,
@@ -106,7 +114,13 @@ final class _Resource implements ForumHtmlPreparedImageResource {
 }
 
 final class _Display implements ForumHtmlDisplayImage {
-  const _Display(this.sourceUrl, this.cacheKey, this.ratio, this.htmlSize);
+  const _Display(
+    this.sourceUrl,
+    this.cacheKey,
+    this.ratio,
+    this.htmlSize,
+    this.isSticker,
+  );
   @override
   final String sourceUrl, cacheKey;
   final double ratio;
@@ -115,8 +129,9 @@ final class _Display implements ForumHtmlDisplayImage {
   @override
   Object get identity => (sourceUrl, cacheKey);
   @override
-  bool get isSticker => false;
+  final bool isSticker;
   @override
-  ForumHtmlImageLayout get initialLayout =>
-      ForumHtmlImageLayout(aspectRatio: ratio, isFallback: true);
+  ForumHtmlImageLayout get initialLayout => isSticker
+      ? ForumHtmlImageLayout(displaySize: htmlSize)
+      : ForumHtmlImageLayout(aspectRatio: ratio, isFallback: true);
 }

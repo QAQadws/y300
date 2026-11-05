@@ -87,7 +87,12 @@ class DiscuzNovelReaderDocumentParser implements NovelReaderDocumentParser {
     }
 
     if (builder.blocks.isEmpty) {
-      return _fallbackDocument(episodeId, rawHtml, fallbackParagraphs);
+      return _fallbackDocument(
+        episodeId,
+        rawHtml,
+        fallbackParagraphs,
+        emptyProvenance: origins?.finish(normalizedHtml),
+      );
     }
     return _documentFromBlocks(
       episodeId,
@@ -100,8 +105,9 @@ class DiscuzNovelReaderDocumentParser implements NovelReaderDocumentParser {
   NovelReaderDocument _fallbackDocument(
     String episodeId,
     String rawHtml,
-    List<String> fallbackParagraphs,
-  ) {
+    List<String> fallbackParagraphs, {
+    NovelReaderSourceProvenance? emptyProvenance,
+  }) {
     final blocks = <RichBlock>[];
     var index = 0;
     for (final paragraph in fallbackParagraphs) {
@@ -117,7 +123,14 @@ class DiscuzNovelReaderDocumentParser implements NovelReaderDocumentParser {
       );
       index += 1;
     }
-    return _documentFromBlocks(episodeId, rawHtml, blocks);
+    // Resource-only HTML can prove its parse input without inventing a block.
+    // Any fallback text still has no DOM provenance.
+    return _documentFromBlocks(
+      episodeId,
+      rawHtml,
+      blocks,
+      sourceProvenance: blocks.isEmpty ? emptyProvenance : null,
+    );
   }
 
   NovelReaderDocument _documentFromBlocks(

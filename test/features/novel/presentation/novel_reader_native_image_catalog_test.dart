@@ -98,6 +98,7 @@ void main() {
           ).capture(
             cancellation: NovelReaderPaginationCancellationToken(),
             maxCodeUnits: 10000,
+            scheduler: const NovelReaderNativeWorkScheduler(nextFrame: _yield),
           );
       final cache = ForumBodyParagraphCache(
         maxEntries: 8,
