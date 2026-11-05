@@ -90,6 +90,7 @@ final class NovelReaderNativePageCoverageCursor {
     required int pageIndex,
     required String layoutId,
     required List<ForumBodyPreparedTextFragment> fragments,
+    Rect? viewportClip,
     NovelReaderNativeCoverageLimits limits =
         const NovelReaderNativeCoverageLimits(),
   }) {
@@ -101,6 +102,10 @@ final class NovelReaderNativePageCoverageCursor {
     }
     if (anchors.identity != snapshot.identity) {
       _fail(NovelReaderNativeCoverageFailure.identity);
+    }
+    if (viewportClip != null &&
+        (!viewportClip.isFinite || viewportClip.isEmpty)) {
+      throw ArgumentError.value(viewportClip, 'viewportClip');
     }
     if (snapshot[pageIndex].itemCount > limits.maxFragments) {
       _fail(NovelReaderNativeCoverageFailure.budget);
@@ -118,6 +123,7 @@ final class NovelReaderNativePageCoverageCursor {
       layoutId,
       List.unmodifiable(fragments),
       limits,
+      viewportClip,
     );
   }
 
@@ -128,6 +134,7 @@ final class NovelReaderNativePageCoverageCursor {
     this.layoutId,
     this._fragments,
     this.limits,
+    this._viewportClip,
   );
 
   NovelReaderNativeAnchorMap? _anchors;
@@ -136,6 +143,7 @@ final class NovelReaderNativePageCoverageCursor {
   final int pageIndex;
   final String layoutId;
   final NovelReaderNativeCoverageLimits limits;
+  final Rect? _viewportClip;
   final _points = <NovelReaderNativeCoveragePoint>[];
   final _images = <NovelReaderNativeImageCoverage>[];
   NovelReaderNativeCoverageState _state = NovelReaderNativeCoverageState.active;
@@ -245,12 +253,11 @@ final class NovelReaderNativePageCoverageCursor {
     final projection = _projection = prepared.projection;
     _runs = prepared.runs;
     final snapshot = _snapshot!;
-    final pageClip = Rect.fromLTWH(
-      -fragment.left,
-      -fragment.top,
-      snapshot.width,
-      snapshot.height,
-    );
+    var pageClip = Rect.fromLTWH(0, 0, snapshot.width, snapshot.height);
+    if (_viewportClip case final viewport?) {
+      pageClip = pageClip.intersect(viewport);
+    }
+    pageClip = pageClip.shift(Offset(-fragment.left, -fragment.top));
     for (final box in prepared.decorationBounds) {
       if (box.left < pageClip.left - precisionErrorTolerance ||
           box.right > pageClip.right + precisionErrorTolerance ||
@@ -259,14 +266,12 @@ final class NovelReaderNativePageCoverageCursor {
         _hasClippedGlyphs = true;
       }
     }
-    _clip = Rect.fromLTWH(0, 0, fragment.width, fragment.height).intersect(
-      Rect.fromLTWH(
-        -fragment.left,
-        -fragment.top,
-        snapshot.width,
-        snapshot.height,
-      ),
-    );
+    _clip = Rect.fromLTWH(
+      0,
+      0,
+      fragment.width,
+      fragment.height,
+    ).intersect(pageClip);
     if (fragment.kind == ForumBodyTextPageFragmentKind.image) {
       return const <({int startUtf16, int endUtf16})>[].iterator;
     }
@@ -286,33 +291,40 @@ final class NovelReaderNativePageCoverageCursor {
     final projection = _projection!;
     if (!_visibleStyles(projection, _runs, start, end)) return;
     final boxes = prepared.glyphBoxes(start, end);
+    Rect? bounds;
     if (boxes.isEmpty) {
       // An explicit separator belongs to the preceding physical row, even
       // when the engine emits no selection box. Require that entire measured
       // row to fit; do not invent a caret or blank-line height.
-      var coveredBreak = false;
       for (final line in prepared.lines) {
-        if (line.endUtf16 == start &&
-            line.coverageEndUtf16 == end &&
-            _contains(
-              Rect.fromLTRB(
-                line.left,
-                line.top,
-                line.left + line.width,
-                line.bottom,
-              ),
-            )) {
-          coveredBreak = true;
+        if (line.endUtf16 != start || line.coverageEndUtf16 != end) continue;
+        final row = Rect.fromLTRB(
+          line.left,
+          line.top,
+          line.left + line.width,
+          line.bottom,
+        );
+        if (_contains(row)) {
+          bounds = row;
           break;
         }
       }
-      if (!coveredBreak) return;
-    } else if (boxes.any((box) => !_contains(box.toRect()))) {
-      _hasClippedGlyphs = true;
-      return;
+      if (bounds == null) return;
+    } else {
+      for (final box in boxes) {
+        final rect = box.toRect();
+        if (!_contains(rect)) {
+          _hasClippedGlyphs = true;
+          return;
+        }
+        if (_viewportClip != null) {
+          bounds = bounds?.expandToInclude(rect) ?? rect;
+        }
+      }
     }
-    _addPoint(projection, start, HtmlProjectionAffinity.downstream);
-    _addPoint(projection, end, HtmlProjectionAffinity.upstream);
+    final captured = _viewportClip == null ? null : bounds;
+    _addPoint(projection, start, HtmlProjectionAffinity.downstream, captured);
+    _addPoint(projection, end, HtmlProjectionAffinity.upstream, captured);
   }
 
   bool _contains(Rect box) =>
@@ -326,6 +338,7 @@ final class NovelReaderNativePageCoverageCursor {
     HtmlDisplayTextProjection projection,
     int offset,
     HtmlProjectionAffinity affinity,
+    Rect? bounds,
   ) {
     final source = projection.sourceAtUtf16(offset, affinity: affinity);
     final anchor = _anchors!.anchorAtSourceRune(
@@ -344,6 +357,7 @@ final class NovelReaderNativePageCoverageCursor {
         displayUtf16: offset,
         sourceRune: source.sourceRune,
         affinity: affinity,
+        fragmentBounds: bounds,
       ),
     );
   }

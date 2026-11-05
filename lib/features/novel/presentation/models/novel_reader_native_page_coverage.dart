@@ -21,6 +21,7 @@ final class NovelReaderNativeCoveragePoint
     required this.displayUtf16,
     required this.sourceRune,
     required this.affinity,
+    this.fragmentBounds,
   });
   @override
   final NovelReaderTextAnchor anchor;
@@ -32,6 +33,10 @@ final class NovelReaderNativeCoveragePoint
   final int sourceRune;
   @override
   final HtmlProjectionAffinity affinity;
+
+  /// Full verified grapheme bounds in fragment-local coordinates. Captured
+  /// when the caller supplies a physical viewport clip.
+  final Rect? fragmentBounds;
 }
 
 /// Proof of the actual visible resource frame, not of loaded pixels or text.

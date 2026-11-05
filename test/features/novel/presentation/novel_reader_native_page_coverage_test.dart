@@ -15,6 +15,7 @@ final class _Fixture {
     double width = 100,
     double height = 100,
     bool complete = true,
+    bool dedicatedTables = false,
   }) {
     final semantic = const DiscuzNovelReaderDocumentParser(
       captureSourceProvenance: true,
@@ -51,6 +52,7 @@ final class _Fixture {
       layoutId: 'generation-a',
       width: width,
       height: height,
+      dedicatedTables: dedicatedTables,
     );
     addTearDown(() {
       session.close();
@@ -146,6 +148,53 @@ Matcher _failure(NovelReaderNativeCoverageFailure failure) => throwsA(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('a cell viewport proves only complete glyphs inside both clip axes', () {
+    final fixture = _Fixture(
+      '<table width="110"><tr><td><p>abc</p><p>def</p></td></tr></table>',
+      dedicatedTables: true,
+    );
+    final area = fixture.session.tableLayoutForPage(0)!.cells.single;
+    final work = area.openPagePreparation(0);
+    addTearDown(work.close);
+    for (var i = 0; i < 200 && !work.isReady; i++) {
+      work.advance(maxFragments: 1, maxParts: 2);
+    }
+    final fragments = work.takeFragments();
+    addTearDown(() {
+      for (final fragment in fragments) {
+        fragment.close();
+      }
+    });
+    expect(fragments, hasLength(2));
+    final frame = area.snapshot.single.fragments.last;
+    final complete = fragments.last.glyphBoxes(1, 2).single.toRect();
+    final cut = fragments.last.glyphBoxes(2, 3).single.toRect();
+    final viewport = complete
+        .expandToInclude(
+          Rect.fromLTRB(cut.left, cut.top, cut.center.dx, cut.bottom),
+        )
+        .shift(Offset(frame.left, frame.top));
+    final proof = _finish(
+      NovelReaderNativePageCoverageCursor.prepared(
+        anchors: fixture.anchors,
+        snapshot: area.snapshot,
+        pageIndex: 0,
+        layoutId: area.snapshot.layoutId,
+        fragments: fragments,
+        viewportClip: viewport,
+      ),
+    );
+    expect(proof.hasClippedGlyphs, isTrue);
+    expect(proof.points.map((p) => p.fragmentIndex), [1, 1]);
+    expect(proof.points.map((p) => p.displayUtf16), [1, 2]);
+    expect(proof.points.map((p) => p.fragmentBounds), [complete, complete]);
+    expect(
+      proof.points.every((point) => point.anchor.hasCanonicalTextOffset),
+      isTrue,
+    );
+  });
+
   test(
     'mixed script words keep canonical coverage across real line/page breaks',
     () {

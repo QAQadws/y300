@@ -138,6 +138,7 @@ NovelReaderNativePageCoverage _coverage(
   ForumBodyTextPageSession session,
   List<ForumBodyPreparedTextFragment> values, {
   int page = 0,
+  Rect? viewportClip,
   NovelReaderNativeCoverageLimits limits =
       const NovelReaderNativeCoverageLimits(),
 }) {
@@ -147,6 +148,7 @@ NovelReaderNativePageCoverage _coverage(
     pageIndex: page,
     layoutId: session.snapshot.layoutId,
     fragments: values,
+    viewportClip: viewportClip,
     limits: limits,
   );
   addTearDown(cursor.close);
@@ -170,6 +172,37 @@ NovelReaderNativePageCoverage _coverage(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('viewport clipping cannot prove an image from a partial frame', () {
+    final fixture = _Fixture('<img src="https://x/a.png">');
+    final session = fixture.session();
+    final values = fixture.prepare(session);
+    addTearDown(() {
+      for (final fragment in values) {
+        fragment.close();
+      }
+    });
+    final fragment = session.snapshot.single.fragments.single;
+    final bounds = fragment.imageFrame!.imageRect.shift(
+      Offset(fragment.left, fragment.top),
+    );
+    final whole = _coverage(fixture, session, values, viewportClip: bounds);
+    final partial = _coverage(
+      fixture,
+      session,
+      values,
+      viewportClip: Rect.fromLTRB(
+        bounds.left,
+        bounds.top,
+        bounds.right,
+        bounds.center.dy,
+      ),
+    );
+    expect(whole.images, hasLength(1));
+    expect(whole.hasClippedResources, isFalse);
+    expect(partial.images, isEmpty);
+    expect(partial.hasClippedResources, isTrue);
+  });
 
   testWidgets('a mixed text page waits for every current inline image frame', (
     tester,
