@@ -272,6 +272,7 @@ void main() {
     addTearDown(outer.dispose);
     final mounted = <ForumBodyTableAreaLayout, ForumBodyPreparedTextFragment>{};
     final ready = <bool>[];
+    final windows = <ForumBodyTableVisibleWindow?>[];
     final errors = <Object>[];
     const tableKey = ValueKey('table-book-viewport');
     await tester.pumpWidget(
@@ -289,6 +290,7 @@ void main() {
                   horizontalController: h,
                   verticalController: v,
                   onReadyChanged: ready.add,
+                  onWindowChanged: windows.add,
                   onFailure: (error, _) => errors.add(error),
                   buildSlice: (context, area, index, fragments) {
                     mounted[area] = fragments.single;
@@ -314,23 +316,47 @@ void main() {
     expect(first.isActive, isTrue);
     expect(mounted, hasLength(1));
     expect(ready, [true]);
+    final origin = windows.single!;
+    expect(origin.isCurrent, isTrue);
+    expect(origin.bounds, const Rect.fromLTWH(0, 0, 80, 48));
+    expect(origin.slices.single.area, same(layout.cells.first));
+    expect(origin.slices.single.fragments.single, same(first));
+    expect(origin.hasUserScrolled, isFalse);
 
     h.jumpTo(h.position.maxScrollExtent);
     v.jumpTo(v.position.maxScrollExtent);
+    expect(origin.isCurrent, isFalse);
     await tester.pumpAndSettle();
     expect(first.isActive, isFalse);
     expect(mounted[layout.cells.last]!.projection.text, 'tail');
     expect(ready, [true, false, true]);
     expect(errors, isEmpty);
+    expect(windows.last!.slices.single.area, same(layout.cells.last));
+    expect(windows.last!.hasUserScrolled, isFalse);
 
     await tester.drag(find.byKey(tableKey), const Offset(-160, 0));
     await tester.pumpAndSettle();
     expect(h.offset, h.position.maxScrollExtent);
     expect(outer.page, 0);
+    expect(windows.last!.hasUserScrolled, isFalse);
+    await tester.drag(find.byKey(tableKey), const Offset(0, 160));
+    await tester.pumpAndSettle();
+    final scrolled = windows.last!;
+    expect(scrolled.hasUserScrolled, isTrue);
+    expect(scrolled.bounds.top, 0);
+    expect(
+      scrolled.slices.map((slice) => slice.area),
+      contains(layout.cells[1]),
+    );
+    expect(
+      scrolled.slices.every((slice) => slice.bounds.overlaps(scrolled.bounds)),
+      isTrue,
+    );
     outer.jumpToPage(1);
     await tester.pumpAndSettle();
     expect(find.text('next'), findsOneWidget);
     expect(cache.activeLeases, 0);
+    expect(scrolled.isCurrent, isFalse);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

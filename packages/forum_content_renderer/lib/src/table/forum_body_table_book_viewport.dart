@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/widgets.dart';
 
 import '../pagination/forum_body_prepared_text_fragment.dart';
@@ -15,6 +16,33 @@ typedef ForumBodyTableSliceBuilder =
       List<ForumBodyPreparedTextFragment> fragments,
     );
 
+typedef ForumBodyTableVisibleSlice = ({
+  ForumBodyTableAreaLayout area,
+  int page,
+  Rect bounds,
+  List<ForumBodyPreparedTextFragment> fragments,
+});
+
+/// One settled, mounted window in table coordinates. Its fragments are
+/// borrowed; asynchronous consumers must recheck [isCurrent] before use.
+final class ForumBodyTableVisibleWindow {
+  const ForumBodyTableVisibleWindow._(
+    this.layout,
+    this.bounds,
+    this.slices,
+    this.hasUserScrolled,
+    this._isCurrent,
+  );
+
+  final ForumBodyTableLayout layout;
+  final Rect bounds;
+  final List<ForumBodyTableVisibleSlice> slices;
+  final bool hasUserScrolled;
+  final bool Function() _isCurrent;
+
+  bool get isCurrent => !layout.isClosed && _isCurrent();
+}
+
 /// A book-page viewport over one already composed table. Controllers are
 /// borrowed from the mounted page. Visible slices are owned here, including
 /// during preparation; a builder borrows them to paint the same source pages.
@@ -27,6 +55,7 @@ final class ForumBodyTableBookViewport extends StatefulWidget {
     required this.buildSlice,
     required this.onFailure,
     this.onReadyChanged,
+    this.onWindowChanged,
   });
 
   final ForumBodyTableLayout layout;
@@ -38,6 +67,10 @@ final class ForumBodyTableBookViewport extends StatefulWidget {
   /// True after all slices intersecting the current viewport have mounted.
   /// This is presentation readiness, not source or image coverage.
   final ValueChanged<bool>? onReadyChanged;
+
+  /// A settled window after its slices have mounted, or null while moving or
+  /// waiting for the newly visible slices. This does not confirm reading.
+  final ValueChanged<ForumBodyTableVisibleWindow?>? onWindowChanged;
 
   @override
   State<ForumBodyTableBookViewport> createState() => _TableBookViewportState();
@@ -54,6 +87,9 @@ final class _TableBookViewportState extends State<ForumBodyTableBookViewport> {
   final _failed = <_Slice>{};
   Set<_Slice> _visible = const {};
   Rect? _window;
+  Rect? _userScrollOrigin;
+  ForumBodyTableVisibleWindow? _publishedWindow;
+  int _scrollRevision = 0;
   _Slice? _working;
   ForumBodyTextPagePreparation? _preparation;
   StreamSubscription<int>? _budget;
@@ -80,8 +116,8 @@ final class _TableBookViewportState extends State<ForumBodyTableBookViewport> {
   }
 
   void _listen() {
-    widget.horizontalController.addListener(_schedule);
-    widget.verticalController.addListener(_schedule);
+    widget.horizontalController.addListener(_scrollChanged);
+    widget.verticalController.addListener(_scrollChanged);
     _budget = widget.layout.layoutBudgetChanges.listen((_) {
       if (_waiting || widget.layout.isClosed) {
         _waiting = false;
@@ -92,9 +128,28 @@ final class _TableBookViewportState extends State<ForumBodyTableBookViewport> {
   }
 
   void _unlisten(ForumBodyTableBookViewport config) {
-    config.horizontalController.removeListener(_schedule);
-    config.verticalController.removeListener(_schedule);
+    config.horizontalController.removeListener(_scrollChanged);
+    config.verticalController.removeListener(_scrollChanged);
     unawaited(_budget?.cancel());
+  }
+
+  void _scrollChanged() {
+    _scrollRevision++;
+    _schedule();
+  }
+
+  bool _onScroll(ScrollNotification notification) {
+    if ((notification is UserScrollNotification &&
+            notification.direction != ScrollDirection.idle) ||
+        (notification is ScrollStartNotification &&
+            notification.dragDetails != null)) {
+      _userScrollOrigin ??= _window;
+    }
+    if (notification is ScrollStartNotification ||
+        notification is ScrollEndNotification) {
+      _scrollChanged();
+    }
+    return false;
   }
 
   void _schedule() {
@@ -115,24 +170,15 @@ final class _TableBookViewportState extends State<ForumBodyTableBookViewport> {
         _clear();
       }
       _reportReady(false);
+      _publishWindow(null);
       return;
     }
-    final h = widget.horizontalController;
-    final v = widget.verticalController;
-    if (!h.hasClients ||
-        !v.hasClients ||
-        !h.position.hasContentDimensions ||
-        !v.position.hasContentDimensions) {
-      return;
-    }
-    final window = Rect.fromLTWH(
-      h.offset,
-      v.offset,
-      h.position.viewportDimension,
-      v.position.viewportDimension,
-    );
+    final window = _currentBounds();
+    if (window == null) return;
     if (window != _window) _updateWindow(window);
-    _reportReady(_visible.every(_ready.containsKey));
+    final ready = _visible.every(_ready.containsKey);
+    _reportReady(ready);
+    _publishWindow(ready && !_scrolling ? window : null);
     if (!mounted || _waiting) return;
     final slice = _working ?? _nextSlice();
     if (slice == null) return;
@@ -157,6 +203,67 @@ final class _TableBookViewportState extends State<ForumBodyTableBookViewport> {
         _schedule();
       }
     }
+  }
+
+  Rect? _currentBounds() {
+    final h = widget.horizontalController;
+    final v = widget.verticalController;
+    if (!h.hasClients ||
+        !v.hasClients ||
+        !h.position.hasContentDimensions ||
+        !v.position.hasContentDimensions) {
+      return null;
+    }
+    return Rect.fromLTWH(
+      h.offset,
+      v.offset,
+      h.position.viewportDimension,
+      v.position.viewportDimension,
+    );
+  }
+
+  bool get _scrolling =>
+      widget.horizontalController.position.isScrollingNotifier.value ||
+      widget.verticalController.position.isScrollingNotifier.value;
+
+  void _publishWindow(Rect? bounds) {
+    final onChanged = widget.onWindowChanged;
+    if (onChanged == null) return;
+    if (bounds == null) {
+      if (_publishedWindow == null) return;
+      _publishedWindow = null;
+      onChanged(null);
+      return;
+    }
+    if (_publishedWindow?.isCurrent == true) return;
+    final revision = _scrollRevision;
+    final layout = widget.layout;
+    final userOrigin = _userScrollOrigin;
+    _userScrollOrigin = null;
+    late final ForumBodyTableVisibleWindow window;
+    window = ForumBodyTableVisibleWindow._(
+      layout,
+      bounds,
+      List.unmodifiable([
+        for (final slice in _visible)
+          (
+            area: slice.area,
+            page: slice.page,
+            bounds: _sliceBounds(slice),
+            fragments: _ready[slice]!,
+          ),
+      ]),
+      userOrigin != null && userOrigin.topLeft != bounds.topLeft,
+      () =>
+          mounted &&
+          identical(widget.layout, layout) &&
+          revision == _scrollRevision &&
+          identical(_publishedWindow, window) &&
+          _currentBounds() == bounds &&
+          !_scrolling,
+    );
+    _publishedWindow = window;
+    onChanged(window);
   }
 
   void _reportReady(bool value) {
@@ -223,6 +330,7 @@ final class _TableBookViewportState extends State<ForumBodyTableBookViewport> {
 
   void _clear() {
     _stopWork();
+    _scrollRevision++;
     for (final fragments in _ready.values) {
       _release(fragments);
     }
@@ -230,6 +338,7 @@ final class _TableBookViewportState extends State<ForumBodyTableBookViewport> {
     _failed.clear();
     _visible = const {};
     _window = null;
+    _userScrollOrigin = null;
   }
 
   void _release(List<ForumBodyPreparedTextFragment> fragments) {
@@ -246,36 +355,39 @@ final class _TableBookViewportState extends State<ForumBodyTableBookViewport> {
       builder: (context, constraints) {
         assert(constraints.hasBoundedWidth && constraints.hasBoundedHeight);
         _schedule();
-        return SingleChildScrollView(
-          controller: widget.horizontalController,
-          primary: false,
-          scrollDirection: Axis.horizontal,
-          reverse: Directionality.of(context) == TextDirection.rtl,
-          physics: _physics,
-          child: SizedBox(
-            width: math.max(constraints.maxWidth, layout.size.width),
-            child: SingleChildScrollView(
-              controller: widget.verticalController,
-              primary: false,
-              physics: _physics,
-              child: SizedBox(
-                height: math.max(constraints.maxHeight, layout.size.height),
-                child: CustomPaint(
-                  painter: _TableBackgrounds(layout),
-                  child: Stack(
-                    children: [
-                      for (final entry in _ready.entries)
-                        Positioned.fromRect(
-                          key: ValueKey(entry.key),
-                          rect: _sliceBounds(entry.key),
-                          child: widget.buildSlice(
-                            context,
-                            entry.key.area,
-                            entry.key.page,
-                            entry.value,
+        return NotificationListener<ScrollNotification>(
+          onNotification: _onScroll,
+          child: SingleChildScrollView(
+            controller: widget.horizontalController,
+            primary: false,
+            scrollDirection: Axis.horizontal,
+            reverse: Directionality.of(context) == TextDirection.rtl,
+            physics: _physics,
+            child: SizedBox(
+              width: math.max(constraints.maxWidth, layout.size.width),
+              child: SingleChildScrollView(
+                controller: widget.verticalController,
+                primary: false,
+                physics: _physics,
+                child: SizedBox(
+                  height: math.max(constraints.maxHeight, layout.size.height),
+                  child: CustomPaint(
+                    painter: _TableBackgrounds(layout),
+                    child: Stack(
+                      children: [
+                        for (final entry in _ready.entries)
+                          Positioned.fromRect(
+                            key: ValueKey(entry.key),
+                            rect: _sliceBounds(entry.key),
+                            child: widget.buildSlice(
+                              context,
+                              entry.key.area,
+                              entry.key.page,
+                              entry.value,
+                            ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
