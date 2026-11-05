@@ -1,7 +1,8 @@
 import 'display_text_projection.dart';
 
 /// A parent engine atom. Its display range still contains the actual child
-/// text; an opaque/soft-space marker never acquires a new source coordinate.
+/// text; a resource instead has an empty insertion fence, not display text.
+/// Engine markers never acquire a new source coordinate.
 final class HtmlInlineTextAtom {
   const HtmlInlineTextAtom._(
     this.index,
@@ -9,6 +10,7 @@ final class HtmlInlineTextAtom {
     this.displayEndUtf16,
     this.engineUtf16,
     this.isSoftSpace,
+    this.isResource,
   );
   final int index;
   final int displayStartUtf16;
@@ -18,10 +20,14 @@ final class HtmlInlineTextAtom {
   /// Engine-only collapsible glue between two actual opaque atoms. The caller
   /// still proves native width, trimmed visibility and original child glyphs.
   final bool isSoftSpace;
+
+  /// Source-free opaque slot. Equal display endpoints locate its insertion
+  /// fence only; resource identity, geometry and visibility belong to the Host.
+  final bool isResource;
   int get engineEndUtf16 => engineUtf16 + 1;
 }
 
-/// A caret projected between display and parent engine coordinates.
+/// A boundary projected between display and parent engine coordinates.
 final class HtmlInlineTextPosition {
   const HtmlInlineTextPosition._({
     required this.engineUtf16,
@@ -32,7 +38,8 @@ final class HtmlInlineTextPosition {
   final int displayUtf16;
 
   /// False when rounded to a grapheme/atomic boundary or out of a mechanical
-  /// prefix. Source gaps still require a separate source projection.
+  /// prefix. A resource edge can be exact geometry without being a text caret;
+  /// source affinity and gaps still require a separate source projection.
   final bool isExact;
 }
 
@@ -52,14 +59,18 @@ final class HtmlInlineTextProjection {
     this.engineText,
     this.atoms,
     this.hasSoftSpaces,
+    this.hasResources,
     this.enginePrefix,
   );
-  static const revision = 3;
+  static const revision = 4;
 
   factory HtmlInlineTextProjection.build({
     required HtmlDisplayTextProjection display,
     required List<({int startUtf16, int endUtf16})> atomicRanges,
     Set<int> softSpaceAtoms = const {},
+    // Indices into atomicRanges. Only these entries may have empty endpoints;
+    // their order is retained even when several share one insertion fence.
+    Set<int> resourceAtoms = const {},
     String enginePrefix = '',
     int maxAtoms = 512,
     int maxDisplayCodeUnits = 16384,
@@ -73,6 +84,12 @@ final class HtmlInlineTextProjection {
       throw const HtmlInlineTextLimitException();
     }
     final atoms = <HtmlInlineTextAtom>[];
+    for (final index in resourceAtoms) {
+      RangeError.checkValidIndex(index, atomicRanges, 'resourceAtoms');
+      if (softSpaceAtoms.contains(index)) {
+        throw ArgumentError('Resource slots cannot be whitespace glue');
+      }
+    }
     for (final index in softSpaceAtoms) {
       RangeError.checkValidIndex(index, atomicRanges, 'softSpaceAtoms');
       if (index == 0 ||
@@ -87,19 +104,20 @@ final class HtmlInlineTextProjection {
     var previousEnd = 0;
     var removed = 0;
     for (final range in atomicRanges) {
+      final resource = resourceAtoms.contains(atoms.length);
       RangeError.checkValidRange(
         range.startUtf16,
         range.endUtf16,
         display.text.length,
       );
       if (range.startUtf16 < previousEnd ||
-          range.startUtf16 == range.endUtf16 ||
+          (resource != (range.startUtf16 == range.endUtf16)) ||
           display.sourceAtUtf16(range.startUtf16).displayUtf16 !=
               range.startUtf16 ||
           display.sourceAtUtf16(range.endUtf16).displayUtf16 !=
               range.endUtf16) {
         throw ArgumentError(
-          'Atoms require ordered, complete display graphemes',
+          'Atoms require ordered graphemes or explicit empty resource fences',
         );
       }
       final soft = softSpaceAtoms.contains(atoms.length);
@@ -119,6 +137,7 @@ final class HtmlInlineTextProjection {
           range.endUtf16,
           range.startUtf16 - removed + enginePrefix.length,
           soft,
+          resource,
         ),
       );
       removed += range.endUtf16 - range.startUtf16 - 1;
@@ -142,6 +161,7 @@ final class HtmlInlineTextProjection {
       engine.toString(),
       List.unmodifiable(atoms),
       softSpaceAtoms.isNotEmpty,
+      resourceAtoms.isNotEmpty,
       enginePrefix,
     );
   }
@@ -150,6 +170,7 @@ final class HtmlInlineTextProjection {
   final String engineText;
   final List<HtmlInlineTextAtom> atoms;
   final bool hasSoftSpaces;
+  final bool hasResources;
 
   /// One caller-owned mechanical engine unit before all source text/atoms. It
   /// has no display range, run, child identity or exact source caret of its own.
@@ -163,6 +184,23 @@ final class HtmlInlineTextProjection {
     final projected = display.sourceAtUtf16(offset, affinity: affinity);
     final value = projected.displayUtf16;
     final index = _lastAtomAtOrBefore(value, engine: false);
+    // Several consecutive resources can share one display fence. Affinity
+    // chooses its outer text caret; engine geometry retains every inner edge.
+    if (hasResources) {
+      final first = _firstAtomStartingAtOrAfter(value);
+      if (first < atoms.length &&
+          atoms[first].displayStartUtf16 == value &&
+          atoms[first].isResource) {
+        final last = atoms[index].isResource ? index : index - 1;
+        return HtmlInlineTextPosition._(
+          engineUtf16: affinity == HtmlProjectionAffinity.upstream
+              ? atoms[first].engineUtf16
+              : atoms[last].engineEndUtf16,
+          displayUtf16: value,
+          isExact: value == offset,
+        );
+      }
+    }
     if (index < 0) {
       return HtmlInlineTextPosition._(
         engineUtf16: value + enginePrefix.length,
@@ -193,6 +231,18 @@ final class HtmlInlineTextProjection {
     HtmlProjectionAffinity affinity = HtmlProjectionAffinity.downstream,
   }) {
     final rawDisplay = displayOffsetAtEngineUtf16(offset);
+    if (hasResources) {
+      final index = _lastAtomAtOrBefore(offset, engine: true);
+      if (index >= 0 &&
+          atoms[index].isResource &&
+          offset <= atoms[index].engineEndUtf16) {
+        return HtmlInlineTextPosition._(
+          engineUtf16: offset,
+          displayUtf16: rawDisplay,
+          isExact: true,
+        );
+      }
+    }
     final position = engineAtDisplayUtf16(rawDisplay, affinity: affinity);
     return HtmlInlineTextPosition._(
       engineUtf16: position.engineUtf16,
@@ -232,7 +282,13 @@ final class HtmlInlineTextProjection {
       isExact:
           position.isExact &&
           source.isExact &&
-          (enginePrefix.isEmpty || display.text.isNotEmpty),
+          (!hasResources ||
+              engineAtDisplayUtf16(
+                    position.displayUtf16,
+                    affinity: affinity,
+                  ).engineUtf16 ==
+                  offset) &&
+          ((!hasResources && enginePrefix.isEmpty) || display.text.isNotEmpty),
     );
   }
 
@@ -269,6 +325,7 @@ final class HtmlInlineTextProjection {
           atom.displayStartUtf16,
           atom.displayEndUtf16,
           atom.isSoftSpace,
+          atom.isResource,
         ),
       ),
     ),
@@ -286,7 +343,8 @@ final class HtmlInlineTextProjection {
       if (atoms[index].displayStartUtf16 !=
               other.atoms[index].displayStartUtf16 ||
           atoms[index].displayEndUtf16 != other.atoms[index].displayEndUtf16 ||
-          atoms[index].isSoftSpace != other.atoms[index].isSoftSpace) {
+          atoms[index].isSoftSpace != other.atoms[index].isSoftSpace ||
+          atoms[index].isResource != other.atoms[index].isResource) {
         return false;
       }
     }
@@ -308,5 +366,18 @@ final class HtmlInlineTextProjection {
       }
     }
     return low - 1;
+  }
+
+  int _firstAtomStartingAtOrAfter(int offset) {
+    var low = 0, high = atoms.length;
+    while (low < high) {
+      final middle = low + (high - low) ~/ 2;
+      if (atoms[middle].displayStartUtf16 < offset) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    return low;
   }
 }
