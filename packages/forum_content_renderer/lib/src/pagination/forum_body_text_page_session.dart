@@ -263,6 +263,7 @@ final class ForumBodyTextPageSession {
           contentRoot: contentRoot,
           dedicatedTables: composeTables,
           captureFloats: captureFloats,
+          dedicateFloatedTables: tableExtent == ForumBodyTableExtent.bookPage,
         ),
         composer,
         cache,

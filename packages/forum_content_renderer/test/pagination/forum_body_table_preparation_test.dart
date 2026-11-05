@@ -91,6 +91,7 @@ ForumBodyTextPageSession _book(
   String layoutId = 'table-book',
   ForumBodyTextPageSessionLimits limits = _limits,
   ForumBodyTableExtent extent = ForumBodyTableExtent.bookPage,
+  bool captureFloats = false,
 }) {
   final session = ForumBodyTextPageSession(
     document: document,
@@ -102,6 +103,7 @@ ForumBodyTextPageSession _book(
     height: 45,
     dedicatedTables: true,
     tableExtent: extent,
+    captureFloats: captureFloats,
   );
   addTearDown(session.close);
   return session;
@@ -160,6 +162,39 @@ void main() {
     session.close();
     expect(layout.isClosed, isTrue);
     expect(() => session.tableLayoutForPage(1), throwsStateError);
+  });
+
+  test('a directly floated table keeps its dedicated book page and source', () {
+    final document = _parse(
+      'Before<table style="float:right;margin-left:5px" width="190">'
+      '<tr><td colspan="2">head</td></tr><tr><td>A</td><td>B</td></tr>'
+      '</table>After',
+    );
+    final session = _book(document, _cache(), captureFloats: true);
+    _advanceBook(session, 1);
+    final prefix = session.snapshot;
+    _advanceBook(session, 3);
+    final pages = session.snapshot;
+    final table = document.tableElements.single;
+    expect(pages.first, same(prefix.single));
+    expect(pages[1].table!.path, table.path);
+    expect(pages[1].table!.sourceRange, (
+      runeStart: table.source.runeStart,
+      runeEnd: table.source.runeEnd,
+    ));
+    expect(pages[1].table!.bounds, const Rect.fromLTWH(0, 0, 100, 45));
+    expect(pages[1].table!.contentSize.width, 190);
+    expect(pages[1].fragments, isEmpty);
+    final lease = session.acquireTablePage(1)!;
+    expect(lease.layout.geometry.grid.cells.first.columnSpan, 2);
+    for (final (index, expected) in [(0, 'Before'), (2, 'After')]) {
+      final delivery = session.preparePageFragments(index).single;
+      expect(delivery.projection.text, expected);
+      delivery.close();
+    }
+    session.close();
+    expect(lease.isActive, isFalse);
+    expect(lease.layout.isClosed, isTrue);
   });
 
   test('flowing table slices keep their measured height and source order', () {
@@ -308,11 +343,13 @@ void main() {
     final cache = _cache();
     final session = _book(
       _parse(
+        '<span style="float:left;margin-right:5px"> \n <div>'
         '<table width="180" cellpadding="2"><tr height="120">'
         '<td rowspan="2" width="100"><ruby>A<rt>aa</rt></ruby></td>'
-        '<td>right</td></tr><tr><td>tail</td></tr></table>',
+        '<td>right</td></tr><tr><td>tail</td></tr></table></div></span>',
       ),
       cache,
+      captureFloats: true,
     );
     _advanceBook(session, 1);
     final layout = session.tableLayoutForPage(0)!;

@@ -271,7 +271,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 34;
+  static const revision = 35;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;

@@ -86,23 +86,28 @@ final class ForumBodyTextFlowCursor {
     ForumBodyElement? contentRoot,
     this.dedicatedTables = false,
     this.captureFloats = false,
+    this.dedicateFloatedTables = false,
   }) : _flow = ForumBodyStyledFlowCursor(
          document: document,
          reader: reader,
          collapses: collapses,
          contentRoot: contentRoot,
        );
-  static const revision = 12;
+  static const revision = 13;
   final bool dedicatedTables;
 
   /// Requires a consumer for exclusion controls, including clearance BRs.
   final bool captureFloats;
+
+  /// Book pages give a whole table its own viewport even inside a float shell.
+  final bool dedicateFloatedTables;
   final ForumBodyInlineImageResolver? inlineImageResolver;
   final ForumBodyParagraphContentBuilder paragraphBuilder;
   final ForumBodyRubyContentLimits rubyLimits;
   final ForumBodyStyledFlowCursor _flow;
   final _blocks = <ForumBodyStyledFlowEvent>[];
   final _startedBlocks = <ForumBodyStyledFlowEvent>{};
+  final _dedicatedTableShells = <String>{};
   ForumBodyTextFlowImage? _pendingImage;
   String? _delegatedTable;
   String? _inlineAtomClosePath;
@@ -284,6 +289,10 @@ final class ForumBodyTextFlowCursor {
         final issues = _flow.takePendingIssues();
         _issues.addAll(issues);
         if (_skipFollowingEditStatus(event)) continue;
+        if (event.phase == ForumBodyFlowPhase.close &&
+            _dedicatedTableShells.remove(event.node.path)) {
+          continue;
+        }
         if (event.style.hidden) continue;
         if (event.phase == ForumBodyFlowPhase.close &&
             event.node.path == _delegatedTable) {
@@ -298,15 +307,19 @@ final class ForumBodyTextFlowCursor {
         if (event.phase == ForumBodyFlowPhase.open &&
             event.node is ForumBodyElement) {
           final element = event.node as ForumBodyElement;
+          if (_dedicatedTableShells.contains(element.path)) continue;
+          final isDedicatedTable =
+              dedicatedTables &&
+              !_insideEditStatus &&
+              element.kind == ForumBodyElementKind.table &&
+              event.style.display == ForumBodyDisplay.table;
           if (captureFloats &&
               !_insideEditStatus &&
+              !(dedicateFloatedTables && isDedicatedTable) &&
               _captureExclusion(event, element, issues)) {
             continue;
           }
-          if (dedicatedTables &&
-              !_insideEditStatus &&
-              element.kind == ForumBodyElementKind.table &&
-              event.style.display == ForumBodyDisplay.table) {
+          if (isDedicatedTable) {
             _flow.skipCurrentSubtree(event);
             _delegatedTable = element.path;
             _boundaryPending = true;
@@ -420,6 +433,11 @@ final class ForumBodyTextFlowCursor {
       if (side != ForumBodyFloatSide.left && side != ForumBodyFloatSide.right) {
         return false;
       }
+      if (dedicatedTables &&
+          dedicateFloatedTables &&
+          _openDedicatedTableShell(element)) {
+        return true;
+      }
       control = ForumBodyInlineFlowFloat(event);
     }
     _flow.skipCurrentSubtree(event);
@@ -431,6 +449,34 @@ final class ForumBodyTextFlowCursor {
     target.addExclusion(control);
     return true;
   }
+
+  /// A book table owns its viewport. Walk through structural wrappers while
+  /// retaining the original styled traversal and the actual table event.
+  bool _openDedicatedTableShell(ForumBodyElement element) {
+    final shells = <String>[];
+    var node = element;
+    while (node.kind == ForumBodyElementKind.inline ||
+        node.kind == ForumBodyElementKind.container) {
+      ForumBodyElement? child;
+      for (final item in node.children) {
+        if (item is ForumBodyText &&
+            item.text.codeUnits.every(_isCollapsibleHtmlSpace)) {
+          continue;
+        }
+        if (item is! ForumBodyElement || child != null) return false;
+        child = item;
+      }
+      if (child == null) return false;
+      shells.add(node.path);
+      node = child;
+    }
+    if (shells.isEmpty || node.kind != ForumBodyElementKind.table) return false;
+    _dedicatedTableShells.addAll(shells);
+    return true;
+  }
+
+  static bool _isCollapsibleHtmlSpace(int codeUnit) =>
+      codeUnit == 0x20 || (codeUnit >= 0x09 && codeUnit <= 0x0d);
 
   static bool _clearsFloats(ForumBodyResolvedStyle style) =>
       switch (style.clear) {
@@ -614,6 +660,7 @@ final class ForumBodyTextFlowCursor {
     _followingEditStatusParent = null;
     _blocks.clear();
     _startedBlocks.clear();
+    _dedicatedTableShells.clear();
     _pendingImage = null;
     _inlineAtomClosePath = null;
     for (final proof in _emptyListItems.values) {
