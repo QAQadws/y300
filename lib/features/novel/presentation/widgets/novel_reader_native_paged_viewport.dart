@@ -1180,13 +1180,12 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
     widget.onPageUnmounted?.call();
   }
 
-  bool _isStablePage(NovelReaderNativePageView view) {
+  bool _isSettledPage(NovelReaderNativePageView view) {
     final controller = widget.controller;
     final page = view.pageIndex;
     return mounted &&
         _fits &&
         !_scrolling &&
-        !widget.frozen &&
         !controller.isClosed &&
         !controller.hasPendingNavigation &&
         identical(controller.visibleView, view) &&
@@ -1200,7 +1199,9 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
     NovelReaderNativePageView view,
     ForumBodyTextPageFragment fragment,
   ) {
-    if (_isStablePage(view) && _mountedPages.containsKey(view)) {
+    if (!widget.frozen &&
+        _isSettledPage(view) &&
+        _mountedPages.containsKey(view)) {
       widget.onCollapseToggle?.call(view, fragment);
     }
   }
@@ -1224,8 +1225,14 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
             ))) {
       return;
     }
+    final controller = widget.controller;
+    final revision = controller.navigationRevision;
+    // The reader suspends once after saving and before opening the viewer.
+    // The tap can borrow the same mounted slot through that suspension only.
     bool current() =>
-        _isStablePage(view) &&
+        controller.navigationRevision ==
+            revision + (controller.isSuspended ? 1 : 0) &&
+        _isSettledPage(view) &&
         fragment.isActive &&
         (binding == null ||
             (fragment is ForumBodyPreparedInlineFragment &&
