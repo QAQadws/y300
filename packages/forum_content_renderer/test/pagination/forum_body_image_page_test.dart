@@ -64,6 +64,7 @@ final class _Fixture {
     double height = 100,
     String id = 'images-1',
     ForumBodyTextPageSessionLimits limits = _limits,
+    int? maxNativeHandlesPerPage,
   }) {
     final result = ForumBodyTextPageSession(
       document: document,
@@ -78,6 +79,7 @@ final class _Fixture {
       width: 100,
       height: height,
       imageResolver: missingResolver ? null : resolver ?? resolve,
+      maxNativeHandlesPerPage: maxNativeHandlesPerPage,
     );
     addTearDown(result.close);
     return result;
@@ -534,6 +536,86 @@ void main() {
       expect(s.reservedViewLeases, 0);
       expect(f.cache.layoutBuildCount, 0);
       expect(_prepare(s, 0), hasLength(12));
+    },
+  );
+
+  for (final mixed in [false, true]) {
+    test(
+      'dense resource pages seal within actual delivery capacity: mixed=$mixed',
+      () {
+        final f = _Fixture(
+          List.filled(
+            7,
+            mixed
+                ? '<p>A</p><img src="https://x/a">'
+                : '<img src="https://x/a">',
+          ).join(),
+        );
+        final s = f.session(
+          resolver: (identity, node) => f.resolve(identity, node, ratio: 100),
+          limits: const ForumBodyTextPageSessionLimits(
+            maxPages: 20,
+            maxFragments: 100,
+            maxParagraphs: 100,
+            maxTextCodeUnits: 20000,
+            maxRuns: 100,
+            maxIssuedLeases: 3,
+          ),
+        );
+        _finish(s);
+        expect(s.snapshot.length, mixed ? 5 : 3);
+        expect(s.snapshot.every((page) => page.fragments.length <= 3), isTrue);
+        final paths = <String>[], text = StringBuffer();
+        for (final page in s.snapshot) {
+          expect(page.usedHeight, lessThan(100));
+          final values = _prepare(s, page.index);
+          for (final value in values) {
+            if (value is ForumBodyPreparedImageFragment) {
+              paths.add(value.content.input.element.path);
+            } else {
+              text.write(value.projection.text);
+            }
+            value.close();
+          }
+        }
+        expect(paths.toSet(), hasLength(7));
+        expect(text.toString(), mixed ? 'AAAAAAA' : '');
+        expect(s.activeIssuedLeases, 0);
+      },
+    );
+  }
+
+  test(
+    'Host page allotment retains current and neighbor resource pages without fake handles',
+    () {
+      final f = _Fixture(List.filled(7, '<img src="https://x/a">').join());
+      final s = f.session(
+        maxNativeHandlesPerPage: 3,
+        resolver: (identity, node) => f.resolve(identity, node, ratio: 100),
+        limits: const ForumBodyTextPageSessionLimits(
+          maxPages: 20,
+          maxFragments: 100,
+          maxParagraphs: 100,
+          maxTextCodeUnits: 20000,
+          maxRuns: 0,
+          maxIssuedLeases: 6,
+        ),
+      );
+      _finish(s);
+      expect(s.snapshot.map((p) => p.fragments.length), [3, 3, 1]);
+      final current = _prepare(s, 0), neighbor = _prepare(s, 1);
+      expect(s.activeIssuedLeases, 0);
+      expect(f.cache.layoutBuildCount, 0);
+      expect(
+        () => s.openPagePreparation(2),
+        _failure(ForumBodyTextPageSessionFailure.leaseLimit),
+      );
+      for (final value in current) {
+        value.close();
+      }
+      final last = _prepare(s, 2);
+      expect(neighbor.every((f) => f.isActive), isTrue);
+      expect(last.single.isActive, isTrue);
     },
   );
 }

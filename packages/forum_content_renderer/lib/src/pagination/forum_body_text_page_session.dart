@@ -61,6 +61,9 @@ final class ForumBodyTextPageSessionLimits {
   final int maxParagraphs;
   final int maxTextCodeUnits;
   final int maxRuns;
+
+  /// Bounds native handles and issued delivery objects independently. Images
+  /// have zero paragraph handles but still consume one delivery object.
   final int maxIssuedLeases;
   final int maxStyleIssues;
   final int maxPagePreparations;
@@ -172,6 +175,9 @@ final class ForumBodyTextPageSession {
       maxNativeHandlesPerPage: maxNativeHandlesPerPage,
       maxNativeEntriesPerPage: maxNativeEntriesPerPage,
       maxNativeEstimatedBytesPerPage: maxNativeEstimatedBytesPerPage,
+      // The Host's per-page slot allotment also bounds zero-native resources;
+      // their actual native handle count remains zero.
+      maxDeliveriesPerPage: maxNativeHandlesPerPage ?? limits.maxIssuedLeases,
     );
     try {
       return ForumBodyTextPageSession._(

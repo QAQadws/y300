@@ -200,6 +200,7 @@ final class ForumBodyTextPageComposer {
     this.maxNativeHandlesPerPage,
     this.maxNativeEntriesPerPage,
     this.maxNativeEstimatedBytesPerPage,
+    this.maxDeliveriesPerPage,
   }) {
     if (layoutId.isEmpty ||
         !width.isFinite ||
@@ -208,6 +209,7 @@ final class ForumBodyTextPageComposer {
         height <= 0 ||
         maxPages <= 0 ||
         maxFragments <= 0 ||
+        (maxDeliveriesPerPage != null && maxDeliveriesPerPage! <= 0) ||
         (maxNativeHandlesPerPage != null && maxNativeHandlesPerPage! <= 0) ||
         (maxNativeEntriesPerPage != null && maxNativeEntriesPerPage! <= 0) ||
         (maxNativeEstimatedBytesPerPage != null &&
@@ -215,7 +217,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 18;
+  static const revision = 19;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;
@@ -224,6 +226,9 @@ final class ForumBodyTextPageComposer {
   /// Explicit metadata budgets, not measured native/GPU memory.
   final int maxPages;
   final int maxFragments;
+
+  /// A resource may own zero native handles and still needs one delivery.
+  final int? maxDeliveriesPerPage;
   final int? maxNativeHandlesPerPage;
   final int? maxNativeEntriesPerPage;
   final int? maxNativeEstimatedBytesPerPage;
@@ -352,6 +357,11 @@ final class ForumBodyTextPageComposer {
     if (active == null) throw StateError('No image is pending');
     final before = _pages.length;
     try {
+      if (maxDeliveriesPerPage != null &&
+          _draft.length >= maxDeliveriesPerPage!) {
+        _seal();
+        return (pagesPublished: 1, isComplete: false);
+      }
       final atStart = _draft.isEmpty && _rules.isEmpty && _usedHeight == 0;
       final top = math.max(
         0.0,
@@ -738,6 +748,12 @@ final class ForumBodyTextPageComposer {
         if (end == null) return _result(inspected, pagesBefore, false);
         final continuation =
             _draft.isNotEmpty && _draft.last.paragraphIndex == active.index;
+        if (!continuation &&
+            maxDeliveriesPerPage != null &&
+            _draft.length >= maxDeliveriesPerPage!) {
+          _seal();
+          return _result(inspected, pagesBefore, false);
+        }
         final firstLine = continuation
             ? _draft.last.startLine
             : active.nextLine;
