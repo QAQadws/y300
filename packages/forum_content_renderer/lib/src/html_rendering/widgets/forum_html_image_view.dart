@@ -280,6 +280,18 @@ class _ForumHtmlImageViewState extends State<ForumHtmlImageView> {
             _intrinsicSize = size;
             _hasResolvedImageSize = true;
             widget.rememberInlineSize?.call(size);
+            if (_acceptCallback(revision)) {
+              // Metadata can seed a new fixed layout without resizing the
+              // current inline image. Explicit author dimensions still win.
+              widget.onImageLayoutResolved?.call(
+                widget.image.htmlSize == null
+                    ? ForumHtmlImageLayout(
+                        displaySize: size,
+                        aspectRatio: size.aspectRatio,
+                      )
+                    : _layout,
+              );
+            }
           }
           return;
         }

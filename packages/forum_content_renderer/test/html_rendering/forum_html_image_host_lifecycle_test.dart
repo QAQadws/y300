@@ -104,6 +104,131 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  for (final htmlSize in [null, const Size(30, 20)]) {
+    testWidgets(
+      'inline metadata can seed reflow without resizing: html=$htmlSize',
+      (tester) async {
+        final dimensions = _Dimensions(deferred: true);
+        final host = _SmileyHost(dimensions);
+        final layouts = <ForumHtmlImageLayout>[];
+        final remembered = <Size>[];
+        final displayed = <bool>[];
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Align(
+              alignment: Alignment.topLeft,
+              child: ForumHtmlImageView(
+                host: host,
+                image: host.resolveImage(
+                  url: Uri.parse('https://example.invalid/smiley.gif'),
+                  imageIndex: null,
+                  isSticker: true,
+                  htmlSize: htmlSize,
+                ),
+                rememberInlineSize: remembered.add,
+                onImageLayoutResolved: layouts.add,
+                onImageDisplayChanged: displayed.add,
+              ),
+            ),
+          ),
+        );
+        if (htmlSize == null) {
+          dimensions.pending.single.complete((
+            size: const Size(24, 24),
+            layout: const ForumHtmlImageLayout(
+              displaySize: Size(24, 24),
+              aspectRatio: 1,
+            ),
+          ));
+        } else {
+          expect(dimensions.pending, isEmpty);
+        }
+        await _frames(tester);
+        final current = tester.widget<_DisplayedSmiley>(
+          find.byType(_DisplayedSmiley),
+        );
+        final fixedSize = htmlSize ?? const Size(24, 24);
+        expect(tester.getSize(find.byType(_DisplayedSmiley)), fixedSize);
+        current.onResolved!(const Size(96, 64));
+        await _frames(tester);
+        expect(remembered.last, const Size(96, 64));
+        expect(layouts.last.displaySize, htmlSize ?? const Size(96, 64));
+        expect(layouts.last.aspectRatio, 1.5);
+        expect(tester.getSize(find.byType(_DisplayedSmiley)), fixedSize);
+        expect(displayed, isEmpty);
+        expect(host.blockSizes, isEmpty);
+
+        final acceptedLayouts = layouts.length;
+        final acceptedSizes = remembered.length;
+        current.onResolved!(Size.zero);
+        current.onResolved!(const Size(double.infinity, 20));
+        expect(layouts, hasLength(acceptedLayouts));
+        expect(remembered, hasLength(acceptedSizes));
+        current.onFirstFrame!();
+        expect(displayed, [true]);
+        expect(layouts, hasLength(acceptedLayouts));
+        await tester.pumpWidget(const SizedBox.shrink());
+        current.onResolved!(const Size(120, 40));
+        current.onFirstFrame!();
+        expect(layouts, hasLength(acceptedLayouts));
+        expect(remembered, hasLength(acceptedSizes));
+        host.pixels.dispose();
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('inline reflow metadata rejects retired A to B to A callbacks', (
+    tester,
+  ) async {
+    final dimensionsA = _Dimensions(deferred: true);
+    final dimensionsB = _Dimensions(deferred: true);
+    final hostA = _SmileyHost(dimensionsA);
+    final hostB = _SmileyHost(dimensionsB);
+    final layouts = <ForumHtmlImageLayout>[];
+    final remembered = <Size>[];
+    Widget build(_SmileyHost host) => MaterialApp(
+      home: Align(
+        alignment: Alignment.topLeft,
+        child: ForumHtmlImageView(
+          key: const ValueKey('inline-image-slot'),
+          host: host,
+          image: host.resolveImage(
+            url: Uri.parse('https://example.invalid/smiley.gif'),
+            imageIndex: null,
+            isSticker: true,
+          ),
+          rememberInlineSize: remembered.add,
+          onImageLayoutResolved: layouts.add,
+        ),
+      ),
+    );
+    await tester.pumpWidget(build(hostA));
+    final retired = tester.widget<_DisplayedSmiley>(
+      find.byType(_DisplayedSmiley),
+    );
+    await tester.pumpWidget(build(hostB));
+    await tester.pumpWidget(build(hostA));
+    retired.onResolved!(const Size(24, 24));
+    dimensionsA.pending.first.complete(_wideDimensions);
+    dimensionsB.pending.single.complete(_wideDimensions);
+    await _frames(tester);
+    expect(layouts, isEmpty);
+    expect(remembered, isEmpty);
+    final current = tester.widget<_DisplayedSmiley>(
+      find.byType(_DisplayedSmiley),
+    );
+    current.onResolved!(const Size(96, 64));
+    dimensionsA.pending.last.complete(_wideDimensions);
+    await _frames(tester);
+    expect(layouts.single.displaySize, const Size(96, 64));
+    expect(remembered, [const Size(96, 64)]);
+    await tester.pumpWidget(const SizedBox.shrink());
+    hostA.pixels.dispose();
+    hostB.pixels.dispose();
+    expect(tester.takeException(), isNull);
+  });
+
   for (final reportedSize in [false, true]) {
     testWidgets(
       'a displayed smiley ignores late metadata: size=$reportedSize',
