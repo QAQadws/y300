@@ -494,6 +494,10 @@ final class ForumBodyInlineParagraphLayout
 
   /// Physical edge reserve, independent of the first-line indent request.
   double get horizontalInset => _paintOffset.dx;
+
+  /// Includes the actual native placeholder widths of the current plan.
+  ({double minimum, double preferred}) get intrinsicWidths =>
+      _painter.intrinsicWidths(inset: horizontalInset);
   final Float64List _frameTops;
   final Float64List _frameBottoms;
   final Uint8List? _trimmedAtoms;

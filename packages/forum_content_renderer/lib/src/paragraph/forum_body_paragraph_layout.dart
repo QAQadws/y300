@@ -260,6 +260,10 @@ final class ForumBodyParagraphLayout
   /// The actual uniform single-line fitting transform, after per-size scaling.
   /// Decorations must share this value rather than infer it from text width.
   double get paintScale => _paintScale;
+
+  /// Before any single-line fit transform, from the same native paragraph.
+  ({double minimum, double preferred}) get intrinsicWidths =>
+      _painter.intrinsicWidths(inset: horizontalInset / _paintScale);
   final HtmlInlineTextProjection? _engineProjection;
   final List<ForumBodyParagraphLine> lines;
   @override

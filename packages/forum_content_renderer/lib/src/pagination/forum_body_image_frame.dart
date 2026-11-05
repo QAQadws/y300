@@ -62,6 +62,7 @@ final class ForumBodyImageFrame {
     required ForumBodyImageInput input,
     required double width,
     required double maxHeight,
+    double? maxImageWidth,
     required TextAlign align,
     required TextDirection direction,
   }) {
@@ -71,11 +72,14 @@ final class ForumBodyImageFrame {
         !maxHeight.isFinite ||
         maxHeight <= 0 ||
         !ratio.isFinite ||
-        ratio <= 0) {
+        ratio <= 0 ||
+        (maxImageWidth != null &&
+            (!maxImageWidth.isFinite || maxImageWidth <= 0))) {
       throw ArgumentError('Invalid image frame geometry');
     }
-    final height = math.min(maxHeight, width / ratio),
-        imageWidth = math.min(width, height * ratio);
+    final limit = math.min(width, maxImageWidth ?? width);
+    final height = math.min(maxHeight, limit / ratio),
+        imageWidth = math.min(limit, height * ratio);
     final factor = switch ((align, direction)) {
       (TextAlign.center, _) => .5,
       (TextAlign.right, _) ||

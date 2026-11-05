@@ -66,6 +66,7 @@ final class ForumBodyEmphasisParagraphMetrics {
     required this.textScaler,
     required this.height,
     required this.alphabeticBaseline,
+    required this.intrinsicWidths,
     required this.hasTerminalEmptyLine,
     required this.markCount,
     required this.retainedTextCodeUnits,
@@ -82,6 +83,7 @@ final class ForumBodyEmphasisParagraphMetrics {
   Map<double, double> get effectiveScales =>
       (textScaler as _ParagraphScaler).values;
   final double height, alphabeticBaseline;
+  final ({double minimum, double preferred})? intrinsicWidths;
   final bool hasTerminalEmptyLine;
   final int markCount, retainedTextCodeUnits, retainedRuns;
   double get width => reference.width;

@@ -39,9 +39,12 @@ ForumBodyTextPageSession _open(
   ForumBodyParagraphCache cache,
   List<ForumBodyElement> requests, {
   ForumBodyCollapseLayout? collapses,
+  double width = 160,
+  double? intrinsicAvailableWidth,
 }) => ForumBodyTextPageSession(
   document: document,
   contentRoot: root,
+  intrinsicAvailableWidth: intrinsicAvailableWidth,
   collapses: collapses,
   reader: _reader,
   cache: cache,
@@ -54,7 +57,7 @@ ForumBodyTextPageSession _open(
     maxIssuedLeases: 24,
   ),
   layoutId: root.path,
-  width: 160,
+  width: width,
   height: 240,
   imageResolver: (identity, element) {
     requests.add(element);
@@ -99,6 +102,48 @@ List<ForumBodyPreparedTextFragment> _prepare(ForumBodyTextPageSession session) {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'wide native probes report content widths and preserve a sized image',
+    () {
+      final document = _parse(
+        '<table><tr><td>'
+        '<p style="padding:4px">aaaa bb</p>'
+        '<img width="26" height="13" src="https://example.invalid/one.png">'
+        '</td></tr></table>',
+      );
+      final root = _grid(document).cells.single.element;
+      final cache = ForumBodyParagraphCache(
+        maxEntries: 24,
+        maxEstimatedBytes: 1 << 22,
+      );
+      addTearDown(cache.close);
+      for (final probe in [160.0, 1000.0]) {
+        final session = _open(
+          document,
+          root,
+          cache,
+          [],
+          width: probe,
+          intrinsicAvailableWidth: 160,
+        );
+        try {
+          expect(session.intrinsicWidths, isNull);
+          _finish(session);
+          final widths = session.intrinsicWidths!;
+          expect(widths.minimum, closeTo(48, 0.001));
+          expect(widths.preferred, closeTo(78, 0.001));
+          expect(
+            session.snapshot.single.fragments.last.imageFrame!.imageRect.width,
+            26,
+          );
+          expect(cache.activeLeases, 0);
+        } finally {
+          session.close();
+        }
+      }
+    },
+  );
 
   test('a real merged-grid cell uses native text, ruby and image delivery', () {
     final document = _parse();

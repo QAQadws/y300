@@ -44,6 +44,7 @@ final class ForumBodyEmphasisParagraphPreparation {
     this.maxGroupMarks = 512,
     this.maxMarks = 32768,
     this.maxHeight = 1048576,
+    this.captureIntrinsicWidths = false,
     Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
   }) : _content = content,
        _cache = cache,
@@ -81,6 +82,7 @@ final class ForumBodyEmphasisParagraphPreparation {
     }
   }
   final double width, maxHeight;
+  final bool captureIntrinsicWidths;
   final int maxLines, maxGroupLines, maxGroupMarks, maxMarks;
   ForumBodyParagraphContent? _content;
   ForumBodyParagraphCache? _cache;
@@ -106,6 +108,7 @@ final class ForumBodyEmphasisParagraphPreparation {
   double _pitch, _height = 0, _emptyBaseline = 0;
   bool _terminal = false;
   ForumBodyParagraphLease? _natural, _isolated;
+  ({double minimum, double preferred})? _intrinsicWidths;
   ForumBodyParagraphLineFramePreparation? _frameJob;
   ForumBodyParagraphLineFrames? _naturalFrames, _isolatedFrames;
   ForumBodyParagraphRowReferencePreparation? _referenceJob;
@@ -510,6 +513,9 @@ final class ForumBodyEmphasisParagraphPreparation {
               _paintParents.clear();
               _paintPhases.clear();
               final natural = _natural!;
+              if (captureIntrinsicWidths) {
+                _intrinsicWidths = natural.layout.intrinsicWidths;
+              }
               _natural = null;
               natural.release();
               _guard();
@@ -529,6 +535,7 @@ final class ForumBodyEmphasisParagraphPreparation {
                 lines: _lines!,
                 textScaler: _scaler!,
                 height: _height,
+                intrinsicWidths: _intrinsicWidths,
                 alphabeticBaseline: _lines!.isEmpty
                     ? _emptyBaseline
                     : _lines!.first.baseline,

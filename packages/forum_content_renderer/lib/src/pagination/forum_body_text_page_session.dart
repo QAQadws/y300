@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/painting.dart';
 
@@ -12,6 +13,8 @@ import '../inline/forum_body_ruby_content.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../style/forum_body_style_options.dart';
+import '../style/forum_body_length.dart';
+import 'forum_body_flow_width_measure.dart';
 import 'forum_body_text_page_composer.dart';
 import 'forum_body_text_page_preparation.dart';
 import 'forum_body_prepared_text_fragment.dart';
@@ -167,9 +170,17 @@ final class ForumBodyTextPageSession {
     ForumBodyCollapseLayout? collapses,
     // Scope a cell or caption to its actual descendants, with inherited style.
     ForumBodyElement? contentRoot,
+    double? intrinsicAvailableWidth,
     int? maxImagesPerPage,
   }) {
     limits._validate();
+    if (intrinsicAvailableWidth != null &&
+        (!intrinsicAvailableWidth.isFinite || intrinsicAvailableWidth <= 0)) {
+      throw ArgumentError.value(
+        intrinsicAvailableWidth,
+        'intrinsicAvailableWidth',
+      );
+    }
     if (maxImagesPerPage != null && maxImagesPerPage > limits.maxIssuedImages) {
       throw ArgumentError('Page image limit exceeds session capacity');
     }
@@ -214,6 +225,11 @@ final class ForumBodyTextPageSession {
         limits,
         textScaler,
         imageResolver,
+        contentRoot?.kind == ForumBodyElementKind.tableCell ||
+            contentRoot?.kind == ForumBodyElementKind.tableCaption,
+        intrinsicAvailableWidth == null
+            ? null
+            : ForumBodyFlowWidthMeasure(intrinsicAvailableWidth),
       );
     } catch (_) {
       composer.close();
@@ -228,12 +244,16 @@ final class ForumBodyTextPageSession {
     this.limits,
     this._textScaler,
     this._imageResolver,
+    this._tableBody,
+    this._intrinsic,
   ) : _content = _RetainedParagraphs(limits);
   final ForumBodyBlockFlowCursor _flow;
   final ForumBodyTextPageComposer _composer;
   final ForumBodyParagraphCache _cache;
   final TextScaler _textScaler;
   final ForumBodyImageResolver? _imageResolver;
+  final bool _tableBody;
+  final ForumBodyFlowWidthMeasure? _intrinsic;
   final ForumBodyTextPageSessionLimits limits;
   final _RetainedParagraphs _content;
   final _issued = <ForumBodyPreparedTextFragment>{};
@@ -264,6 +284,9 @@ final class ForumBodyTextPageSession {
 
   ForumBodyTextPageSessionState get state => _state;
   bool get isComplete => _state == ForumBodyTextPageSessionState.complete;
+  ForumBodyResolvedStyle get contentRootStyle => _flow.rootStyle;
+  ({double minimum, double preferred})? get intrinsicWidths =>
+      isComplete ? _intrinsic?.result : null;
   bool get isClosed => _state == ForumBodyTextPageSessionState.closed;
   bool get waitingForLayoutBudget => _waiting;
   ForumBodyTextPageSnapshot get snapshot => _composer.snapshot;
@@ -381,6 +404,9 @@ final class ForumBodyTextPageSession {
             }
           }
           _flow.resolveListItemGutter(item, gutter);
+          _intrinsic?.addListGutter(
+            math.max(0.0, gutter - item.availableGutter),
+          );
           _pendingListItem = null;
           formatUnits++;
           return result();
@@ -428,6 +454,10 @@ final class ForumBodyTextPageSession {
             );
             final lease = admission.takePlainLease();
             try {
+              if (_intrinsic != null) {
+                final widths = lease.layout.intrinsicWidths;
+                _intrinsic.add(widths.minimum, widths.preferred);
+              }
               _composer.append(
                 lease: lease,
                 paragraphIndex: pending.paragraph.index,
@@ -445,6 +475,10 @@ final class ForumBodyTextPageSession {
           } else if (admission.isFitted) {
             final fitted = admission.takeFitted();
             input = _decorate(fitted);
+            if (_intrinsic != null) {
+              final width = fitted.plan.metrics.fontBounds.width;
+              _intrinsic.add(width, width);
+            }
             _composer.appendFittedEmphasis(
               plan: fitted.plan,
               ensureOwner: _ensureActivePlan,
@@ -458,6 +492,10 @@ final class ForumBodyTextPageSession {
           } else {
             final ready = admission.take();
             input = _decorate(ready.content);
+            if (_intrinsic != null) {
+              final widths = ready.content.paragraph.intrinsicWidths!;
+              _intrinsic.add(widths.minimum, widths.preferred);
+            }
             _composer.appendEmphasis(
               entries: ready.entries,
               ensureOwner: _ensureActivePlan,
@@ -511,6 +549,10 @@ final class ForumBodyTextPageSession {
           final ready = _readyInline!;
           final input = _decorate(ready.content);
           try {
+            if (_intrinsic != null) {
+              final widths = ready.lease.layout.intrinsicWidths;
+              _intrinsic.add(widths.minimum, widths.preferred);
+            }
             _composer.appendInline(
               lease: ready.lease,
               paragraphIndex: mixed.paragraph.index,
@@ -625,6 +667,11 @@ final class ForumBodyTextPageSession {
             final event = unit.boundary.event!;
             final opens =
                 unit.boundary.kind == ForumBodyTextFlowBoundaryKind.openBlock;
+            if (opens) {
+              _intrinsic?.open(unit);
+            } else {
+              _intrinsic?.close(event.node.path);
+            }
             if (unit.collapseTitle case final section?) {
               if (opens) {
                 final box = unit.box!;
@@ -884,6 +931,7 @@ final class ForumBodyTextPageSession {
       textScaler: _textScaler,
       ensureOwner: _ensureActivePlan,
       validateCounts: _content.checkCounts,
+      captureIntrinsicWidths: _intrinsic != null,
     );
   }
 
@@ -909,13 +957,27 @@ final class ForumBodyTextPageSession {
         ForumBodyTextPageSessionFailure.imageStructure,
       );
     }
+    final htmlWidth = input.entry.htmlWidth ?? node.resource?.width;
+    final naturalWidth = htmlWidth ?? input.layout.displaySize?.width;
+    final cssWidth = style.box.width;
+    final usesNaturalWidth =
+        cssWidth == null || cssWidth.unit == ForumBodyLengthUnit.auto;
+    final imageWidth = usesNaturalWidth
+        ? naturalWidth ?? _intrinsic?.availableWidth
+        : null;
     final frame = ForumBodyImageFrame.resolve(
       input: input,
       width: unit.contentWidth,
       maxHeight: _composer.height,
+      maxImageWidth: _tableBody ? imageWidth : null,
       align: style.textAlign,
       direction: style.textDirection,
     );
+    if (_intrinsic != null) {
+      final preferred = imageWidth ?? _intrinsic.availableWidth;
+      final minimum = usesNaturalWidth && htmlWidth != null ? htmlWidth : 0.0;
+      _intrinsic.add(minimum, preferred);
+    }
     final content = _decorate(
       ForumBodyImagePageContent(
         input: input,

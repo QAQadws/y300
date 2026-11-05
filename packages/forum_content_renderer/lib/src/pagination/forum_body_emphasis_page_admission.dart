@@ -37,6 +37,7 @@ final class ForumBodyEmphasisPageAdmission {
     required TextScaler textScaler,
     required void Function() ensureOwner,
     required void Function(int text, int runs) validateCounts,
+    this.captureIntrinsicWidths = false,
   }) : _content = content,
        _cache = cache,
        _width = width,
@@ -50,6 +51,7 @@ final class ForumBodyEmphasisPageAdmission {
   ForumBodyParagraphFontOverflowPreparation? _plainFrames;
   ForumBodyParagraphCache? _cache;
   final double _width;
+  final bool captureIntrinsicWidths;
   TextScaler? _textScaler;
   void Function()? _ensureOwner;
   void Function(int, int)? _validateCounts;
@@ -111,6 +113,7 @@ final class ForumBodyEmphasisPageAdmission {
                   width: _width,
                   textScaler: _textScaler!,
                   ensureOwner: _guard,
+                  captureIntrinsicWidths: captureIntrinsicWidths,
                 );
                 _phase = _AdmissionPhase.measure;
               }
@@ -164,6 +167,7 @@ final class ForumBodyEmphasisPageAdmission {
                 width: _width,
                 textScaler: _textScaler!,
                 ensureOwner: _guard,
+                captureIntrinsicWidths: captureIntrinsicWidths,
               );
               _phase = _AdmissionPhase.measure;
             }

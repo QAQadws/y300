@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
@@ -138,6 +139,15 @@ final class ForumBodyNativeParagraphPainter
   }
 
   double get height => _laidOut.height;
+  ({double minimum, double preferred}) intrinsicWidths({double inset = 0}) {
+    final paragraph = _laidOut;
+    final minimum = math.max(0.0, paragraph.minIntrinsicWidth) + 2 * inset;
+    return (
+      minimum: minimum,
+      preferred: math.max(minimum, paragraph.maxIntrinsicWidth + 2 * inset),
+    );
+  }
+
   List<TextBox> get placeholderBoxes => List.unmodifiable([
     for (final box in _laidOut.getBoxesForPlaceholders())
       TextBox.fromLTRBD(
