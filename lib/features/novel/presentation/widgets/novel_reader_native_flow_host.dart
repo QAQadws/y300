@@ -66,6 +66,7 @@ final class NovelReaderNativeFlowHost extends StatefulWidget {
     this.viewportInsets = EdgeInsets.zero,
     this.initialSource,
     this.restoreReflowOffset,
+    this.textHighlight,
     this.onReflowRestored,
   });
 
@@ -94,6 +95,7 @@ final class NovelReaderNativeFlowHost extends StatefulWidget {
   final EdgeInsets viewportInsets;
   final NovelReaderNativeSourceLocation? initialSource;
   final NovelReaderFlowOffsetRestore? restoreReflowOffset;
+  final NovelReaderTextRange? textHighlight;
   final ValueChanged<NovelReaderTextAnchor>? onReflowRestored;
 
   @override
@@ -280,9 +282,16 @@ final class NovelReaderNativeFlowHostState
             _slice(context, run, snapshot, index, fragments),
       ),
     );
+    final highlight = widget.textHighlight;
     return SliverMainAxisGroup(
       slivers: [
-        body,
+        ForumBodyTextHighlight(
+          ranges: highlight == null
+              ? const []
+              : run.scope!.chapter.anchors.sourceRanges(highlight),
+          color: Theme.of(context).colorScheme.tertiary.withValues(alpha: .26),
+          child: body,
+        ),
         if (error != null) SliverToBoxAdapter(child: _failure(error)),
       ],
     );

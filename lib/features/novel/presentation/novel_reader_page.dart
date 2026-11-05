@@ -24,6 +24,7 @@ import 'package:y300/features/library_shared/presentation/reader/reader_corner_d
 import 'package:y300/features/novel/application/novel_reader_display_preferences_coordinator.dart';
 import 'package:y300/features/novel/application/novel_reader_vertical_session_coordinator.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_spacing.dart';
 import 'package:y300/features/novel/domain/models/novel_episode_open_policy.dart';
 import 'package:y300/features/novel/domain/models/novel_source_reading_context.dart';
@@ -59,6 +60,7 @@ import 'package:y300/features/novel/presentation/services/novel_reader_shared_pr
 import 'package:y300/features/novel/presentation/services/novel_reader_scroll_controller.dart';
 import 'package:y300/features/novel/presentation/services/novel_forum_html_render_theme_factory.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_display_settings_sheet.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_text_search_dialog.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_delayed_loading_boundary.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_html_document_view.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_html_paged_surface.dart';
@@ -160,9 +162,14 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   bool _allowPopAfterProgressFlush = false;
   bool _isHandlingPop = false;
   bool _textSelectionOpening = false;
+  bool _textSearchOpening = false;
   bool _nativeImageOpening = false;
   int _pageSeekSerial = 0;
   int _chapterEntrySerial = 0;
+  int _searchNavigationSerial = 0;
+  NovelReaderAnchorNavigationRequest? _pendingSearchNavigation;
+  ({NovelReaderDocument document, NovelReaderTextRange range})?
+  _searchHighlight;
   NovelReaderChapterEntryRequest? _pendingChapterEntryRequest;
   NovelReaderPageSeekRequest? _pendingPageSeekRequest;
   NovelReaderPaginationPosition? _pagedPosition;
@@ -468,6 +475,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
             _scheduleFontReferenceRepair(viewState, controller);
             final systemPadding = MediaQuery.paddingOf(context);
             final readerSurfaceIdentity = _readerSurfaceIdentity(viewState);
+            if (!identical(_searchHighlight?.document, viewState.document)) {
+              _searchHighlight = null;
+              _pendingSearchNavigation = null;
+            }
             if (viewState.preferences.flowMode ==
                     NovelReaderFlowMode.vertical ||
                 _conversionPosition?.chapter.episodeId !=
@@ -512,6 +523,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
               _readingScrolling = false;
               _userScrollActive = false;
               _pendingPageSeekRequest = null;
+              if (_pendingSearchNavigation != null) {
+                _pendingSearchNavigation = null;
+                _searchHighlight = null;
+              }
               _progressSliderPreview = null;
               _isProgressSeekInFlight = false;
               // The owner flips exactly when a switched-to chapter arrives, so
@@ -802,11 +817,15 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       return;
     }
     _nativeOverlayTurn = null;
-    if (_pendingPageSeekRequest != null) {
+    if (_pendingPageSeekRequest != null || _pendingSearchNavigation != null) {
       setState(() {
         _pendingPageSeekRequest = null;
         _isProgressSeekInFlight = false;
         _progressSliderPreview = null;
+        if (_pendingSearchNavigation != null) {
+          _pendingSearchNavigation = null;
+          _searchHighlight = null;
+        }
       });
     }
   }
@@ -822,6 +841,14 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       ),
       onBack: () => _popReader(),
       actions: [
+        if (widget.nativePagination &&
+            viewState.preferences.flowMode != NovelReaderFlowMode.vertical)
+          ReaderToolbarAction(
+            id: 'search-text',
+            icon: Icons.search,
+            label: l10n.novelSearchText,
+            onPressed: () => unawaited(_openTextSearch(viewState)),
+          ),
         ReaderToolbarAction(
           id: 'bookmark',
           icon: viewState.hasCurrentEpisodeBookmark
@@ -840,6 +867,69 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         ),
       ],
     );
+  }
+
+  Future<void> _openTextSearch(NovelReaderViewState viewState) async {
+    final identity = _readerSurfaceIdentity(viewState);
+    bool sourceCurrent() =>
+        _isCurrentReaderSurface(identity) &&
+        identical(
+          ref.read(novelReaderControllerProvider(_args)).asData?.value.document,
+          viewState.document,
+        );
+    if (_textSearchOpening || !sourceCurrent()) return;
+    _textSearchOpening = true;
+    _cancelPendingReaderTap();
+    try {
+      final range = await _runWithReaderSemanticsSuspended(() async {
+        if (!sourceCurrent() || ModalRoute.of(context)?.isCurrent == false) {
+          return null;
+        }
+        final service = ref.read(novelReaderSearchServiceProvider);
+        final navigator = Navigator.of(context, rootNavigator: true);
+        final route = DialogRoute<NovelReaderTextRange>(
+          context: context,
+          themes: InheritedTheme.capture(from: context, to: navigator.context),
+          builder: (context) => NovelReaderTextSearchDialog(
+            document: viewState.document,
+            service: service,
+            onClear: _searchHighlight == null
+                ? null
+                : () {
+                    if (sourceCurrent()) {
+                      setState(() {
+                        _searchHighlight = null;
+                        _pendingSearchNavigation = null;
+                      });
+                    }
+                  },
+          ),
+        );
+        final selection = await navigator.push(route);
+        await route.completed;
+        return selection;
+      });
+      if (range == null || !sourceCurrent()) return;
+      setState(() {
+        _pendingPageSeekRequest = null;
+        _isProgressSeekInFlight = false;
+        _progressSliderPreview = null;
+        _searchHighlight = (document: viewState.document, range: range);
+        _pendingSearchNavigation = NovelReaderAnchorNavigationRequest(
+          requestId: ++_searchNavigationSerial,
+          anchor: range.start,
+        );
+      });
+      _overlayController.hideMenu();
+    } on Object {
+      if (mounted && sourceCurrent()) {
+        _showReaderSnackBar(
+          AppLocalizations.of(context).novelSaveReadingProgressFailed,
+        );
+      }
+    } finally {
+      _textSearchOpening = false;
+    }
   }
 
   ReaderBottomBarConfig _buildBottomBarConfig(
@@ -1059,6 +1149,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       _paginationSessionCache.dispose();
       _paginationSessionCache = NovelReaderPaginationSessionCache();
       _nativeOwner?.dispose();
+      _searchHighlight = null;
+      _pendingSearchNavigation = null;
       _nativeOwner = null;
       _nativeStatus = null;
       _nativeStatusSurface = null;
@@ -1259,6 +1351,25 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       onImageTap: (tap) => unawaited(_openNativeImage(identity, tap)),
       idleScheduler: widget.nativeIdleScheduler,
       navigationController: _pagedNavigationController,
+      textHighlight: _searchHighlight?.range,
+      navigationRequest: _pendingSearchNavigation,
+      onNavigationFinished: (request, outcome) {
+        if (!_isCurrentReaderSurface(identity) ||
+            !identical(_pendingSearchNavigation, request)) {
+          return;
+        }
+        setState(() {
+          _pendingSearchNavigation = null;
+          if (outcome != NovelReaderNavigationOutcome.arrived) {
+            _searchHighlight = null;
+          }
+        });
+        if (outcome == NovelReaderNavigationOutcome.unavailable) {
+          _showReaderSnackBar(
+            AppLocalizations.of(context).novelPositionChanged,
+          );
+        }
+      },
       pageSeekRequest: _pendingPageSeekRequest,
       onPageSeekFinished: (request, outcome) {
         if (!_isCurrentReaderSurface(identity) ||
@@ -1568,6 +1679,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                         : metrics.pixels,
                   );
                 },
+                textHighlight: _searchHighlight?.range,
                 onReflowRestored: (_) {
                   if (_isCurrentVerticalSession(session) &&
                       _verticalSession.claimPosition(session)) {

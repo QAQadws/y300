@@ -4224,6 +4224,12 @@ abstract class AppLocalizations {
   /// **'搜索章节'**
   String get novelSearchChapters;
 
+  /// No description provided for @novelSearchText.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索本章正文'**
+  String get novelSearchText;
+
   /// No description provided for @novelNoMatchingChapters.
   ///
   /// In zh, this message translates to:

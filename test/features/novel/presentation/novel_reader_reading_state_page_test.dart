@@ -53,6 +53,7 @@ import 'package:y300/features/thread/domain/models/thread_post_target.dart';
 import 'package:y300/features/thread/domain/repositories/thread_post_locator.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/features/thread/presentation/thread_image_reader_page.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 import '../../../test_support/localized_test_app.dart';
 
@@ -948,6 +949,93 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
   }
+
+  testWidgets(
+    'chapter search jumps to the actual hit and highlights after reflow',
+    (tester) async {
+      final repository = _ReadingRepository(
+        '$_nativeLongBody<p>Unique high<b>light</b> needle</p>',
+      );
+      await tester.pumpWidget(_app(repository, nativePagination: true));
+      await _pumpNativeReady(tester);
+      final first = _nativeController(tester);
+      final last = first.snapshot!.length - 1;
+      expect(last, greaterThan(0));
+      final reader = find.byType(NovelReaderPage);
+      final l10n = AppLocalizations.of(tester.element(reader));
+      final overlay = tester
+          .widget<ReaderOverlayScaffold>(find.byType(ReaderOverlayScaffold))
+          .controller!;
+      overlay.showMenu();
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('shared-reader-top-action-search-text')),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('novel-reader-text-search-field')),
+        'highlight',
+      );
+      await tester.pump();
+      await tester.tap(find.byTooltip(l10n.commonSearch));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byType(ListTile),
+          matching: find.textContaining('highlight'),
+        ),
+      );
+      await _pumpNativeReady(tester, page: last, advanceTime: true);
+
+      List<Rect> paintedRects() {
+        final highlight = tester.widget<ForumBodyTextHighlight>(
+          find.byType(ForumBodyTextHighlight),
+        );
+        expect(highlight.ranges, isNotEmpty);
+        return [
+          for (final page in tester.widgetList<ForumBodyTextPageSurface>(
+            find.byType(ForumBodyTextPageSurface),
+          ))
+            ...page.locateSourceRanges(highlight.ranges),
+        ];
+      }
+
+      final before = paintedRects();
+      expect(before, isNotEmpty);
+      final container = ProviderScope.containerOf(
+        tester.element(reader),
+        listen: false,
+      );
+      container
+          .read(novelReaderControllerProvider(_args).notifier)
+          .previewPreferences(
+            _state(tester).preferences.copyWith(fontSize: 27),
+          );
+      await tester.pump();
+      await _pumpNativeReady(tester, advanceTime: true);
+      expect(_nativeController(tester), isNot(same(first)));
+      expect(paintedRects(), isNotEmpty);
+      expect(paintedRects(), isNot(before));
+      final page = _nativeController(tester).visiblePageIndex;
+      overlay.showMenu();
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('shared-reader-top-action-search-text')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(l10n.historySearchClear));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<ForumBodyTextHighlight>(find.byType(ForumBodyTextHighlight))
+            .ranges,
+        isEmpty,
+      );
+      expect(_nativeController(tester).visiblePageIndex, page);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 
   testWidgets('native slider request closes the menu before actual arrival', (
     tester,

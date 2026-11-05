@@ -62,6 +62,7 @@ class NovelReaderNativePagedSurface extends StatefulWidget {
     this.pageSeekRequest,
     this.onPageSeekFinished,
     this.navigationRequest,
+    this.textHighlight,
     this.onNavigationFinished,
     this.chapterEntryRequest,
     this.onChapterEntryApplied,
@@ -107,6 +108,7 @@ class NovelReaderNativePagedSurface extends StatefulWidget {
   final void Function(NovelReaderPageSeekRequest, NovelReaderNavigationOutcome)?
   onPageSeekFinished;
   final NovelReaderAnchorNavigationRequest? navigationRequest;
+  final NovelReaderTextRange? textHighlight;
   final void Function(
     NovelReaderAnchorNavigationRequest,
     NovelReaderNavigationOutcome,
@@ -418,6 +420,7 @@ class _NativePagedSurfaceState extends State<NovelReaderNativePagedSurface> {
                             pageSeekRequest: widget.pageSeekRequest,
                             onPageSeekFinished: widget.onPageSeekFinished,
                             navigationRequest: widget.navigationRequest,
+                            textHighlight: widget.textHighlight,
                             onNavigationFinished: widget.onNavigationFinished,
                             chapterEntryRequest: widget.chapterEntryRequest,
                             onChapterEntryApplied: widget.onChapterEntryApplied,

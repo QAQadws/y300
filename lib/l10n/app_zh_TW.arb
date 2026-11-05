@@ -944,6 +944,7 @@
   "novelImageLinkCopied": "圖片連結已複製",
   "novelWorkUpdateFailed": "作品更新失敗，已保留目前章節",
   "novelSearchChapters": "搜尋章節",
+  "novelSearchText": "搜尋本章正文",
   "novelNoMatchingChapters": "沒有符合的章節",
   "novelBookmark": "書籤",
   "novelCurrent": "目前",

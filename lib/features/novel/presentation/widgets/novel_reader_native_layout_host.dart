@@ -73,6 +73,7 @@ class NovelReaderNativeLayoutHost extends StatefulWidget {
     this.pageSeekRequest,
     this.onPageSeekFinished,
     this.navigationRequest,
+    this.textHighlight,
     this.onNavigationFinished,
     this.onPositionChanged,
     this.onStatusChanged,
@@ -132,6 +133,7 @@ class NovelReaderNativeLayoutHost extends StatefulWidget {
   final void Function(NovelReaderPageSeekRequest, NovelReaderNavigationOutcome)?
   onPageSeekFinished;
   final NovelReaderAnchorNavigationRequest? navigationRequest;
+  final NovelReaderTextRange? textHighlight;
   final void Function(
     NovelReaderAnchorNavigationRequest,
     NovelReaderNavigationOutcome,
@@ -676,7 +678,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
                   widget.semanticDocument.episodeId
           ? widget.imageHost
           : request.imageHost;
-      return NovelReaderNativePagedViewport(
+      final viewport = NovelReaderNativePagedViewport(
         key: ObjectKey(widget.owner),
         controller: request.controller,
         ownerIdentity: request.owner,
@@ -806,6 +808,14 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         onScrollActivityChanged: (scrolling) {
           if (_live(request)) widget.onScrollActivityChanged?.call(scrolling);
         },
+      );
+      final highlight = widget.textHighlight;
+      return ForumBodyTextHighlight(
+        ranges: highlight == null
+            ? const []
+            : request.scope.chapter.anchors.sourceRanges(highlight),
+        color: Theme.of(context).colorScheme.tertiary.withValues(alpha: .26),
+        child: viewport,
       );
     },
   );

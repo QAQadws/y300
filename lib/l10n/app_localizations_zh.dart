@@ -2515,6 +2515,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get novelSearchChapters => '搜索章节';
 
   @override
+  String get novelSearchText => '搜索本章正文';
+
+  @override
   String get novelNoMatchingChapters => '没有匹配的章节';
 
   @override
@@ -8472,6 +8475,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get novelSearchChapters => '搜尋章節';
+
+  @override
+  String get novelSearchText => '搜尋本章正文';
 
   @override
   String get novelNoMatchingChapters => '沒有符合的章節';
