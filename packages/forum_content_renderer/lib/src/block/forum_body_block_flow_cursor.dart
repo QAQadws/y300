@@ -5,6 +5,7 @@ import 'package:flutter/painting.dart';
 
 import '../document/forum_body_document.dart';
 import '../inline/forum_body_ruby_content.dart';
+import '../inline/forum_body_inline_image_input.dart';
 import '../flow/forum_body_text_flow_cursor.dart';
 import '../flow/forum_body_styled_flow_cursor.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
@@ -166,11 +167,13 @@ final class ForumBodyBlockFlowCursor {
     ForumBodyParagraphContentBuilder paragraphBuilder =
         const ForumBodyParagraphContentBuilder(),
     ForumBodyRubyContentLimits rubyLimits = const ForumBodyRubyContentLimits(),
+    ForumBodyInlineImageResolver? inlineImageResolver,
   }) : _flow = ForumBodyTextFlowCursor(
          document: document,
          reader: reader,
          paragraphBuilder: paragraphBuilder,
          rubyLimits: rubyLimits,
+         inlineImageResolver: inlineImageResolver,
        ),
        _rootFontSize = reader.textStyle.fontSize!,
        _rootDirection = reader.textDirection {
@@ -179,7 +182,7 @@ final class ForumBodyBlockFlowCursor {
       throw ArgumentError.value(width, 'width');
     }
   }
-  static const revision = 9;
+  static const revision = 10;
   final double width;
   final ForumBodyBlockEdgeMargins edgeMargins;
   final double _rootFontSize;

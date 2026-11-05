@@ -5,6 +5,16 @@ import 'package:flutter/painting.dart';
 import '../contracts/forum_html_display_image.dart';
 import '../document/forum_body_document.dart';
 import '../html_rendering/forum_html_prepared_render_document.dart';
+import '../style/forum_body_style_options.dart';
+
+/// Synchronous frozen-resource classification. Null retains block-image flow;
+/// this port must not start transport, dimension lookup or native layout work.
+typedef ForumBodyInlineImageResolver =
+    ForumBodyInlineImageInput? Function(
+      ForumBodyIdentity identity,
+      ForumBodyElement element,
+      ForumBodyResolvedStyle style,
+    );
 
 /// One actual IR image occurrence and its resolved inline dimensions. The
 /// display description is an immutable Host value, never the Host or transport.

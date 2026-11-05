@@ -6,6 +6,7 @@ import '../block/forum_body_block_flow_cursor.dart';
 import '../document/forum_body_document.dart';
 import '../flow/forum_body_text_flow_cursor.dart';
 import '../inline/forum_body_inline_plan_input.dart';
+import '../inline/forum_body_inline_image_input.dart';
 import '../inline/forum_body_ruby_content.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
@@ -34,6 +35,7 @@ enum ForumBodyTextPageSessionFailure {
   pageNotPrepared,
   imageResource,
   imageStructure,
+  imageLimit,
 }
 
 final class ForumBodyTextPageSessionException implements Exception {
@@ -53,9 +55,10 @@ final class ForumBodyTextPageSessionLimits {
     required this.maxTextCodeUnits,
     required this.maxRuns,
     required this.maxIssuedLeases,
+    int? maxIssuedImages,
     this.maxStyleIssues = 128,
     this.maxPagePreparations = 3,
-  });
+  }) : maxIssuedImages = maxIssuedImages ?? maxIssuedLeases;
   final int maxPages;
   final int maxFragments;
   final int maxParagraphs;
@@ -65,6 +68,10 @@ final class ForumBodyTextPageSessionLimits {
   /// Bounds native handles and issued delivery objects independently. Images
   /// have zero paragraph handles but still consume one delivery object.
   final int maxIssuedLeases;
+
+  /// Mounted and reserved image occurrences, independent of native handles
+  /// and outer fragment delivery objects. Sharing a URL does not share a slot.
+  final int maxIssuedImages;
   final int maxStyleIssues;
   final int maxPagePreparations;
 
@@ -75,6 +82,7 @@ final class ForumBodyTextPageSessionLimits {
         maxTextCodeUnits < 0 ||
         maxRuns < 0 ||
         maxIssuedLeases <= 0 ||
+        maxIssuedImages <= 0 ||
         maxStyleIssues < 0 ||
         maxPagePreparations <= 0) {
       throw ArgumentError('Invalid text page session limits');
@@ -154,8 +162,13 @@ final class ForumBodyTextPageSession {
     int? maxNativeEntriesPerPage,
     int? maxNativeEstimatedBytesPerPage,
     ForumBodyImageResolver? imageResolver,
+    ForumBodyInlineImageResolver? inlineImageResolver,
+    int? maxImagesPerPage,
   }) {
     limits._validate();
+    if (maxImagesPerPage != null && maxImagesPerPage > limits.maxIssuedImages) {
+      throw ArgumentError('Page image limit exceeds session capacity');
+    }
     if (maxNativeHandlesPerPage != null &&
         maxNativeHandlesPerPage > limits.maxIssuedLeases) {
       throw ArgumentError('Page handle limit exceeds session capacity');
@@ -178,6 +191,7 @@ final class ForumBodyTextPageSession {
       // The Host's per-page slot allotment also bounds zero-native resources;
       // their actual native handle count remains zero.
       maxDeliveriesPerPage: maxNativeHandlesPerPage ?? limits.maxIssuedLeases,
+      maxImagesPerPage: maxImagesPerPage ?? limits.maxIssuedImages,
     );
     try {
       return ForumBodyTextPageSession._(
@@ -187,6 +201,7 @@ final class ForumBodyTextPageSession {
           width: width,
           paragraphBuilder: paragraphBuilder,
           rubyLimits: rubyLimits,
+          inlineImageResolver: inlineImageResolver,
         ),
         composer,
         cache,
@@ -219,6 +234,7 @@ final class ForumBodyTextPageSession {
   final _preparations = <ForumBodyTextPagePreparation>{};
   int _reservedLeases = 0;
   int _reservedFragments = 0;
+  int _reservedImages = 0;
   StreamController<void>? _retirementEvents;
   final _issues = <ForumBodyStyleIssue>[];
   ForumBodyTextPageSessionState _state = ForumBodyTextPageSessionState.active;
@@ -258,6 +274,12 @@ final class ForumBodyTextPageSession {
       ? 0
       : _issued.where((fragment) => fragment.isActive).length;
   int get reservedViewFragments => _reservedFragments;
+  int get activeIssuedImages => _state == ForumBodyTextPageSessionState.closed
+      ? 0
+      : _issued
+            .where((fragment) => fragment.isActive)
+            .fold<int>(0, (sum, fragment) => sum + fragment.imageCount);
+  int get reservedViewImages => _reservedImages;
   int get layoutBudgetRevision => _cache.budgetRevision;
   Stream<int> get layoutBudgetChanges => _cache.budgetChanges;
   bool get isLayoutOwnerRetired => _cache.isClosed;
@@ -750,11 +772,20 @@ final class ForumBodyTextPageSession {
       );
     }
     var requested = 0;
+    var requestedImages = 0;
+    final availableImages =
+        limits.maxIssuedImages - activeIssuedImages - _reservedImages;
     final available =
         limits.maxIssuedLeases - activeIssuedLeases - _reservedLeases;
     for (final fragment in page.fragments) {
       final input = _content.items[fragment.paragraphIndex];
       requested += input.nativePreparationHandleCountFor(fragment);
+      requestedImages += input.imageCountFor(fragment);
+      if (requestedImages > availableImages) {
+        throw const ForumBodyTextPageSessionException(
+          ForumBodyTextPageSessionFailure.imageLimit,
+        );
+      }
       if (requested > available) {
         throw const ForumBodyTextPageSessionException(
           ForumBodyTextPageSessionFailure.leaseLimit,
@@ -775,6 +806,7 @@ final class ForumBodyTextPageSession {
     _preparations.add(preparation);
     _reservedLeases += preparation.expectedNativeLeaseCount;
     _reservedFragments += preparation.expectedFragmentCount;
+    _reservedImages += preparation.expectedImageCount;
     return preparation;
   }
 
@@ -782,6 +814,7 @@ final class ForumBodyTextPageSession {
     if (_preparations.remove(preparation)) {
       _reservedLeases -= preparation.expectedNativeLeaseCount;
       _reservedFragments -= preparation.expectedFragmentCount;
+      _reservedImages -= preparation.expectedImageCount;
     }
   }
 
@@ -921,6 +954,7 @@ final class ForumBodyTextPageSession {
     _preparations.clear();
     _reservedLeases = 0;
     _reservedFragments = 0;
+    _reservedImages = 0;
     for (final fragment in _issued) {
       fragment.close();
     }

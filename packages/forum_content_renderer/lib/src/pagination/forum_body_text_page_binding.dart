@@ -75,6 +75,9 @@ ForumBodyTextPage validateForumBodyPreparedTextPageBinding({
       ownerWitness ??= handle;
     }
     final fragment = page.fragments[index];
+    if (delivery.imageCount != fragment.imageCount) {
+      _fail(ForumBodyTextPageSurfaceFailure.geometry);
+    }
     final binding = delivery is ForumBodyPreparedListItemFragment
         ? delivery.body
         : delivery;
@@ -126,6 +129,7 @@ ForumBodyTextPage validateForumBodyPreparedTextPageBinding({
             view.height != fragment.height ||
             view.coverageStartUtf16 != fragment.coverageStartUtf16 ||
             view.coverageEndUtf16 != fragment.coverageEndUtf16 ||
+            view.engineRange != fragment.engineRange ||
             fragment.sourceHint !=
                 forumBodySourceHint(
                   content.projection.display,

@@ -27,6 +27,9 @@ final class ForumBodyRubyLevelUnion {
 
   ForumBodyRubyLevelMerge mergeAtom(ForumBodyRubyAtomMetrics atom) =>
       switch (atom) {
+        ForumBodyInlineImageAtomMetrics() => throw ArgumentError(
+          'An image has no ruby level',
+        ),
         ForumBodyTextBaselineAtomMetrics() ||
         ForumBodyIntrinsicInlineAtomMetrics() => throw ArgumentError(
           'Baseline text has no ruby level',

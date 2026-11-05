@@ -20,6 +20,7 @@ import 'forum_body_inline_text_window.dart';
 import 'forum_body_text_band_content.dart';
 import 'forum_body_ruby_tree_input.dart';
 import 'forum_body_emphasis_mark.dart';
+import 'forum_body_inline_image_input.dart';
 
 part 'forum_body_intrinsic_text_input.dart';
 
@@ -42,7 +43,7 @@ final class ForumBodyInlinePlanInput {
             .atoms
             .map((atom) => atom.engineUtf16),
       );
-  static const revision = 28;
+  static const revision = 29;
 
   factory ForumBodyInlinePlanInput(
     ForumBodyInlineFlowContent input,
@@ -60,6 +61,7 @@ final class ForumBodyInlinePlanInput {
     final requestsByAtom = <ForumBodyRubyAtomRequest>[];
     final atoms = <({int startUtf16, int endUtf16})>[];
     Set<int>? softSpaceAtoms;
+    Map<int, ForumBodyInlineImageInput>? images;
     final levelIds = <int>[];
     final roots = <String, int>{};
     var offset = 0;
@@ -346,6 +348,20 @@ final class ForumBodyInlinePlanInput {
 
     for (final part in input.parts) {
       switch (part) {
+        case ForumBodyInlineFlowImage(input: final image):
+          if (image.identity != input.identity) {
+            throw ForumBodyParagraphInputException(
+              ForumBodyParagraphInputFailure.identity,
+              image.element.path,
+            );
+          }
+          (images ??= {})[atoms.length] = image;
+          atoms.add((startUtf16: offset, endUtf16: offset));
+          requestsByAtom.add(ForumBodyInlineImageAtomRequest(image));
+          levelIds.add(-1);
+          previousCollapsibleSpace = false;
+          atLineStart = false;
+          lastPlain = null;
         case ForumBodyInlineFlowText():
           appendSourceText(part.content);
         case ForumBodyInlineFlowRuby():
@@ -799,6 +815,8 @@ final class ForumBodyInlinePlanInput {
       contexts: contexts,
       atomicRanges: atoms,
       softSpaceAtoms: softSpaceAtoms ?? const {},
+      resourceAtoms: images?.keys.toSet() ?? const {},
+      images: images ?? const {},
       sourceOrder: sourceOrder,
       maxContexts: maxParentContexts,
     );

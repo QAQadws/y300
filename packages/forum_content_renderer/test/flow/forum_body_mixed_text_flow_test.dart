@@ -54,6 +54,7 @@ String _text(List<ForumBodyRubyInlineContent> parts) => parts
 String _signature(ForumBodyInlineFlowContent input) => input.parts
     .map(
       (part) => switch (part) {
+        ForumBodyInlineFlowImage() => 'image:${part.input.element.path}',
         ForumBodyInlineFlowText() => 'text:${part.content.projection.text}',
         ForumBodyInlineFlowRuby() =>
           'ruby:${_text(part.group.base)}:${part.group.annotations.map((rt) => _text(rt.parts)).join("/")}',

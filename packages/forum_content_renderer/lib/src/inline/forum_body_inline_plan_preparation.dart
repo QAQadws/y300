@@ -314,6 +314,16 @@ final class ForumBodyInlinePlanPreparation {
     bool cachedOnly,
   ) {
     switch (request) {
+      case ForumBodyInlineImageAtomRequest(:final input):
+        _metrics.add(ForumBodyInlineImageAtomMetrics(input.dimensions));
+        return const ForumBodyRubyGroupPreparationStep(
+          partsPrepared: 0,
+          layoutsBuilt: 0,
+          partsInspected: 0,
+          isReady: true,
+          waitingForLayoutBudget: false,
+          formatUnitsPrepared: 1,
+        );
       case ForumBodyIntrinsicInlineAtomRequest(:final input):
         final job = _inlineBox ??= ForumBodyInlinePlanPreparation(
           input: input,
@@ -861,6 +871,11 @@ final class ForumBodyInlinePlanPreparation {
         }
       } else {
         _atomPlans.add(switch ((request, alignment.results[index])) {
+          (
+            ForumBodyInlineImageAtomRequest(:final input),
+            ForumBodyInlineImageAtomMetrics(),
+          ) =>
+            ForumBodyInlineImageAtomPlan(input: input, maxWidth: width),
           (
             ForumBodyIntrinsicInlineAtomRequest(),
             ForumBodyIntrinsicInlineAtomMetrics(),

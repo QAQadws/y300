@@ -1,5 +1,6 @@
 import '../document/forum_body_document.dart';
 import '../inline/forum_body_ruby_content.dart';
+import '../inline/forum_body_inline_image_input.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../style/forum_body_style_options.dart';
 import 'forum_body_inline_flow_content.dart';
@@ -63,7 +64,7 @@ final class ForumBodyTextFlowSequence {
   bool _closed = false;
 
   String? get path => block?.node.path;
-  bool get hasDisplayText => _visible || (_plain?.hasDisplayText ?? false);
+  bool get hasContent => _visible || (_plain?.hasDisplayText ?? false);
 
   ForumBodyParagraphSequence _openPlain() =>
       builder.openSequence(_flow!, block: block, layoutMode: layoutMode);
@@ -81,6 +82,16 @@ final class ForumBodyTextFlowSequence {
     _ensureOpen();
     _mixed = true;
     _flushPlain();
+  }
+
+  void addImage(ForumBodyInlineImageInput input) {
+    _ensureOpen();
+    _mixed = true;
+    _flushPlain();
+    charge(input.retainedCodeUnits, 0, 0, 1);
+    _parts.add(ForumBodyInlineFlowImage(input));
+    _visible = true;
+    _plain ??= _openPlain();
   }
 
   void endRuby() {

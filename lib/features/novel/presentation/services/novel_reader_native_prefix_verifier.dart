@@ -218,6 +218,8 @@ final class NovelReaderNativePrefixVerifier {
       old.endLine == next.endLine &&
       old.coverageStartUtf16 == next.coverageStartUtf16 &&
       old.coverageEndUtf16 == next.coverageEndUtf16 &&
+      old.engineRange == next.engineRange &&
+      old.imageCount == next.imageCount &&
       old.sourceHint == next.sourceHint &&
       old.left == next.left &&
       old.top == next.top &&

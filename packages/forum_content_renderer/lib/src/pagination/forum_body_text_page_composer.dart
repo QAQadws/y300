@@ -28,6 +28,7 @@ enum ForumBodyTextPageFailure {
   nativeHandleLimit,
   nativeEntryLimit,
   nativeByteLimit,
+  imageLimit,
   sceneLimit,
   backgroundDepth,
 }
@@ -67,6 +68,8 @@ final class ForumBodyTextPageFragment {
     required this.kind,
     this.listMarker,
     this.imageFrame,
+    this.engineRange,
+    this.imageCount = 0,
   });
   final int paragraphIndex;
   final String? path;
@@ -74,6 +77,9 @@ final class ForumBodyTextPageFragment {
   final int styleRevision;
   final int startLine;
   final int endLine;
+
+  /// Actual resource slots in this numeric window; separate from text/fonts.
+  final int imageCount;
   final int coverageStartUtf16;
   final int coverageEndUtf16;
 
@@ -87,6 +93,10 @@ final class ForumBodyTextPageFragment {
   final ForumBodyTextPageFragmentKind kind;
   final ForumBodyTextPageListMarker? listMarker;
   final ForumBodyImageFrame? imageFrame;
+
+  /// Actual inline engine window, including source-free resource slots and
+  /// mechanical prefixes. It is never a display/source or semantic interval.
+  final ({int startUtf16, int endUtf16})? engineRange;
 }
 
 /// Numeric decoration envelope only; no font input or source position.
@@ -201,6 +211,7 @@ final class ForumBodyTextPageComposer {
     this.maxNativeEntriesPerPage,
     this.maxNativeEstimatedBytesPerPage,
     this.maxDeliveriesPerPage,
+    this.maxImagesPerPage,
   }) {
     if (layoutId.isEmpty ||
         !width.isFinite ||
@@ -210,6 +221,7 @@ final class ForumBodyTextPageComposer {
         maxPages <= 0 ||
         maxFragments <= 0 ||
         (maxDeliveriesPerPage != null && maxDeliveriesPerPage! <= 0) ||
+        (maxImagesPerPage != null && maxImagesPerPage! <= 0) ||
         (maxNativeHandlesPerPage != null && maxNativeHandlesPerPage! <= 0) ||
         (maxNativeEntriesPerPage != null && maxNativeEntriesPerPage! <= 0) ||
         (maxNativeEstimatedBytesPerPage != null &&
@@ -217,7 +229,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 19;
+  static const revision = 20;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;
@@ -229,6 +241,7 @@ final class ForumBodyTextPageComposer {
 
   /// A resource may own zero native handles and still needs one delivery.
   final int? maxDeliveriesPerPage;
+  final int? maxImagesPerPage;
   final int? maxNativeHandlesPerPage;
   final int? maxNativeEntriesPerPage;
   final int? maxNativeEstimatedBytesPerPage;
@@ -236,6 +249,7 @@ final class ForumBodyTextPageComposer {
   int _nativeBytes = 0;
   int _usedNativeHandles = 0;
   int _lastFragmentNativeHandles = 0;
+  int _usedImages = 0, _lastFragmentImages = 0;
   int _sceneEntries = 0, _sceneBytes = 0;
   _EmphasisSceneReservation? _lastSceneReservation;
   final _pages = <ForumBodyTextPage>[];
@@ -362,6 +376,10 @@ final class ForumBodyTextPageComposer {
         _seal();
         return (pagesPublished: 1, isComplete: false);
       }
+      if (maxImagesPerPage != null && _usedImages >= maxImagesPerPage!) {
+        _seal();
+        return (pagesPublished: 1, isComplete: false);
+      }
       final atStart = _draft.isEmpty && _rules.isEmpty && _usedHeight == 0;
       final top = math.max(
         0.0,
@@ -395,10 +413,13 @@ final class ForumBodyTextPageComposer {
           height: active.frame.height,
           kind: ForumBodyTextPageFragmentKind.image,
           imageFrame: active.frame,
+          imageCount: 1,
         ),
       );
       _fragmentCount++;
       _lastFragmentNativeHandles = 0;
+      _usedImages++;
+      _lastFragmentImages = 1;
       _lastSceneReservation = null;
       _flowHeight = bottom;
       _usedHeight = math.max(_usedHeight, bottom);
@@ -778,6 +799,16 @@ final class ForumBodyTextPageComposer {
         final view = layout.lines.isEmpty
             ? null
             : layout.fragment(firstLine, end);
+        final images = layout.imageCount(firstLine, end);
+        final proposedImages =
+            _usedImages - (continuation ? _lastFragmentImages : 0) + images;
+        if (maxImagesPerPage != null && proposedImages > maxImagesPerPage!) {
+          if (_draft.isEmpty && _usedHeight == 0) {
+            _fail(ForumBodyTextPageFailure.imageLimit);
+          }
+          _seal();
+          return _result(inspected, pagesBefore, false);
+        }
         final fragmentHeight = view?.height ?? layout.height;
         final bottom =
             top + math.max(fragmentHeight, marker?.bounds.bottom ?? 0);
@@ -1020,6 +1051,15 @@ final class ForumBodyTextPageComposer {
           height: fragmentHeight,
           kind: layout.kind,
           listMarker: marker,
+          imageCount: images,
+          engineRange:
+              layout.kind == ForumBodyTextPageFragmentKind.inline &&
+                  firstLine < end
+              ? (
+                  startUtf16: layout.lines[firstLine].engineCoverageStartUtf16,
+                  endUtf16: layout.lines[end - 1].engineCoverageEndUtf16,
+                )
+              : null,
         );
         _touchBackgrounds(top + math.min(0, marker?.bounds.top ?? 0));
         if (!continuation && _fragmentCount >= maxFragments) {
@@ -1032,6 +1072,8 @@ final class ForumBodyTextPageComposer {
           _fragmentCount++;
         }
         _usedNativeHandles = proposed;
+        _usedImages = proposedImages;
+        _lastFragmentImages = images;
         if (addedEntries != null) _nativeEntries.addAll(addedEntries);
         _nativeBytes += addedBytes;
         if (scene != null) scene.apply(sceneAddition!);
@@ -1111,6 +1153,8 @@ final class ForumBodyTextPageComposer {
     _nativeEntries.clear();
     _nativeBytes = 0;
     _lastFragmentNativeHandles = 0;
+    _usedImages = 0;
+    _lastFragmentImages = 0;
     _sceneEntries = 0;
     _sceneBytes = 0;
     _lastSceneReservation = null;
@@ -1294,6 +1338,34 @@ final class _CompositionParagraph {
   nativeCostsInRange;
   final ForumBodyParagraphLayout? _text;
   final ForumBodyInlineParagraphLayout? _inline;
+  late final _imageEngineOffsets = _inline?.projection.hasResources == true
+      ? <int>[
+          for (final atom in _inline!.projection.atoms)
+            if (atom.isResource) atom.engineUtf16,
+        ]
+      : const <int>[];
+
+  int imageCount(int startLine, int endLine) {
+    if (_inline == null || startLine == endLine) return 0;
+    final offsets = _imageEngineOffsets;
+    if (offsets.isEmpty) return 0;
+    int lowerBound(int offset) {
+      var low = 0, high = offsets.length;
+      while (low < high) {
+        final middle = (low + high) >> 1;
+        if (offsets[middle] < offset) {
+          low = middle + 1;
+        } else {
+          high = middle;
+        }
+      }
+      return low;
+    }
+
+    return lowerBound(lines[endLine - 1].engineCoverageEndUtf16) -
+        lowerBound(lines[startLine].engineCoverageStartUtf16);
+  }
+
   final ForumBodyIdentity identity;
   final String? path;
   final String fontRevision;

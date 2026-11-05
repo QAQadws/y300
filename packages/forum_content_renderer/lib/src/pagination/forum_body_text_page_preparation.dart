@@ -93,6 +93,10 @@ ForumBodyTextPagePreparation createForumBodyTextPagePreparation({
     pageIndex,
     List.unmodifiable(inputs),
     count,
+    inputs.indexed.fold<int>(
+      0,
+      (sum, item) => sum + item.$2.imageCountFor(page.fragments[item.$1]),
+    ),
     textScaler,
     ensureOwner,
     onTransfer,
@@ -110,6 +114,7 @@ final class ForumBodyTextPagePreparation {
     this.pageIndex,
     this._inputs,
     this.expectedNativeLeaseCount,
+    this.expectedImageCount,
     this._textScaler,
     this._ensureOwner,
     this._onTransfer,
@@ -130,6 +135,7 @@ final class ForumBodyTextPagePreparation {
   final ForumBodyTextPageSnapshot snapshot;
   final int pageIndex;
   final int expectedNativeLeaseCount;
+  final int expectedImageCount;
   List<ForumBodyTextPageContent> _inputs;
   TextScaler? _textScaler;
   void Function()? _ensureOwner;

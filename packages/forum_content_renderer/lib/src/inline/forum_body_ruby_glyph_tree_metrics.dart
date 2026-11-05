@@ -17,6 +17,9 @@ final class ForumBodyRubyGlyphTreeMetrics {
   /// Geometry/decoration/marker plans must then be regenerated for this value.
   ForumBodyRubyGlyphTreeMetrics withAlignedRoot(ForumBodyRubyAtomMetrics root) {
     final value = switch (root) {
+      ForumBodyInlineImageAtomMetrics() => throw ArgumentError(
+        'A glyph tree root cannot become an image',
+      ),
       ForumBodyTextBaselineAtomMetrics() ||
       ForumBodyIntrinsicInlineAtomMetrics() => throw ArgumentError(
         'A glyph tree root cannot become baseline text',

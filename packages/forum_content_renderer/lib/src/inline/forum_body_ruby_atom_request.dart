@@ -7,6 +7,25 @@ import 'forum_body_ruby_root_box.dart';
 import 'forum_body_ruby_tree_input.dart';
 import '../style/forum_body_baseline_shift.dart';
 import 'forum_body_inline_plan_input.dart';
+import 'forum_body_inline_image_input.dart';
+
+/// A resource consumes a parent placeholder and no child font requests.
+final class ForumBodyInlineImageAtomRequest extends ForumBodyRubyAtomRequest {
+  const ForumBodyInlineImageAtomRequest(this.input);
+  final ForumBodyInlineImageInput input;
+  @override
+  List<ForumBodyTextRequest> get nativeRequests => const [];
+  @override
+  int get extraTextCodeUnits => input.retainedCodeUnits;
+  @override
+  ForumBodyRubyContainerBackground? get background => null;
+  @override
+  ForumBodyRubyRootBoxInput? get rootBox => null;
+  @override
+  ForumBodyRubyAtomRequest mapRequests(
+    ForumBodyTextRequest Function(ForumBodyTextRequest) map,
+  ) => this;
+}
 
 /// A bounded intrinsic text group has its own original parent and leaf plan.
 /// Its leaves are not rebound into an outer text band.

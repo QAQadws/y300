@@ -34,6 +34,7 @@ sealed class ForumBodyPreparedTextFragment {
     required ForumBodyFittedEmphasisPlan plan,
   }) = ForumBodyPreparedFittedEmphasisFragment;
   bool get isActive;
+  int get imageCount => 0;
   Iterable<Rect> get decorationBounds => const [];
 
   /// Borrowed for the same owner's page-budget checks and lifecycle counts.
@@ -67,6 +68,8 @@ final class ForumBodyPreparedImageFragment
   }) : _ensureOwner = ensureOwner,
        super._();
   final ForumBodyImagePageContent content;
+  @override
+  int get imageCount => isActive ? 1 : 0;
   bool _displayFrameReady = false;
   bool get hasRenderedImage => isActive && _displayFrameReady;
 
@@ -121,6 +124,8 @@ final class ForumBodyPreparedListItemFragment
     this.picture,
   ) : super._();
   final ForumBodyPreparedTextFragment body;
+  @override
+  int get imageCount => body.imageCount;
   final ForumBodyListMarkerPlan plan;
   final ForumBodyTextPageListMarker placement;
   final ForumBodyTextPictureLease picture;
@@ -298,6 +303,8 @@ final class ForumBodyPreparedParagraphFragment
 
 final class ForumBodyPreparedInlineFragment
     extends ForumBodyPreparedTextFragment {
+  @override
+  int get imageCount => isActive ? view.images.length : 0;
   const ForumBodyPreparedInlineFragment(this.view) : super._();
   final ForumBodyInlineParagraphView view;
   @override

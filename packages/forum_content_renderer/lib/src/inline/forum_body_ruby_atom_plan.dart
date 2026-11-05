@@ -11,6 +11,28 @@ import 'forum_body_ruby_tree_metrics_preparation.dart';
 import 'forum_body_inline_plan_preparation.dart';
 import 'forum_body_emphasis_line_layout.dart';
 import 'forum_body_text_baseline_layout.dart';
+import 'forum_body_inline_image_input.dart';
+
+/// Source-bound image geometry, independent from glyph/annotation requests.
+final class ForumBodyInlineImageAtomPlan extends ForumBodyRubyAtomPlan {
+  ForumBodyInlineImageAtomPlan({required this.input, required this.maxWidth})
+    : super._() {
+    if (!maxWidth.isFinite ||
+        maxWidth <= 0 ||
+        maxWidth > 16384 ||
+        input.dimensions.size.width > maxWidth ||
+        input.dimensions.size.height > 16384) {
+      throw ArgumentError('Inline image exceeds its parent geometry');
+    }
+  }
+  final ForumBodyInlineImageInput input;
+  @override
+  final double maxWidth;
+  @override
+  List<ForumBodyTextRequest> get nativeRequests => const [];
+  @override
+  int get extraTextCodeUnits => input.retainedCodeUnits;
+}
 
 /// One actual parent placeholder's pure source requests and measured row target.
 /// No native lease, owner, scheduler or page lifecycle belongs to this value.

@@ -274,6 +274,17 @@ final class ForumBodyInlineParagraphView {
   final int endLine;
   final int coverageStartUtf16;
   final int coverageEndUtf16;
+  ({int startUtf16, int endUtf16})? get engineRange {
+    _ensureActive();
+    final fragment = _fragment;
+    return fragment == null
+        ? null
+        : (
+            startUtf16: fragment.engineCoverageStartUtf16,
+            endUtf16: fragment.engineCoverageEndUtf16,
+          );
+  }
+
   ForumBodyInlineSpanContent get content {
     _ensureActive();
     return _parent!.content;

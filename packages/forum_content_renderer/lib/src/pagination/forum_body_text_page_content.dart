@@ -68,6 +68,7 @@ sealed class ForumBodyTextPageContent {
   ForumBodyIdentity get identity;
   double requestWidthFor(ForumBodyTextPageFragment fragment);
   int nativeHandleCountFor(ForumBodyTextPageFragment fragment);
+  int imageCountFor(ForumBodyTextPageFragment fragment) => 0;
   int nativePreparationHandleCountFor(ForumBodyTextPageFragment fragment) =>
       nativeHandleCountFor(fragment);
   Iterable<ForumBodyNativeRequestSlot> nativeFootprintFor(
@@ -104,6 +105,12 @@ final class ForumBodyImagePageContent extends ForumBodyTextPageContent {
   @override
   int get retainedTextCodeUnits => input.retainedCodeUnits;
   @override
+  int imageCountFor(ForumBodyTextPageFragment fragment) {
+    nativeHandleCountFor(fragment);
+    return 1;
+  }
+
+  @override
   double requestWidthFor(ForumBodyTextPageFragment fragment) => frame.width;
   @override
   int nativeHandleCountFor(ForumBodyTextPageFragment fragment) {
@@ -123,6 +130,7 @@ final class ForumBodyImagePageContent extends ForumBodyTextPageContent {
         fragment.coverageStartUtf16 != 0 ||
         fragment.coverageEndUtf16 != 0 ||
         fragment.sourceHint != null ||
+        fragment.imageCount != 1 ||
         fragment.listMarker != null) {
       throw const ForumBodyTextPageSurfaceException(
         ForumBodyTextPageSurfaceFailure.geometry,
@@ -151,6 +159,9 @@ final class ForumBodyListItemPageContent extends ForumBodyTextPageContent {
   final ForumBodyListMarkerPlan markers;
   @override
   ForumBodyTextPageContent get bodyContent => body;
+  @override
+  int imageCountFor(ForumBodyTextPageFragment fragment) =>
+      body.imageCountFor(fragment);
   @override
   ForumBodyIdentity get identity => body.identity;
   @override
@@ -311,6 +322,7 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
     }
     for (final (index, plan) in rubyAtoms.indexed) {
       final root = switch (plan) {
+        ForumBodyInlineImageAtomPlan() ||
         ForumBodyTextBaselineAtomPlan() ||
         ForumBodyIntrinsicInlineAtomPlan() => null,
         ForumBodyRubyTreeEmphasisAtomPlan(:final request) =>
@@ -324,6 +336,7 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
         throw ArgumentError('Ruby root font snapshot differs from request');
       }
       final background = switch (plan) {
+        ForumBodyInlineImageAtomPlan() ||
         ForumBodyTextBaselineAtomPlan() ||
         ForumBodyIntrinsicInlineAtomPlan() => null,
         ForumBodyRubyTreeEmphasisAtomPlan() => null,
@@ -349,7 +362,19 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
           'Soft native slots require actual soft-space plans',
         );
       }
+      if (content.projection.atoms[index].isResource !=
+              (plan is ForumBodyInlineImageAtomPlan) ||
+          (plan is ForumBodyInlineImageAtomPlan &&
+              !identical(content.images[index], plan.input))) {
+        throw ArgumentError(
+          'Inline resource slot requires its actual image plan',
+        );
+      }
       final target = switch (plan) {
+        ForumBodyInlineImageAtomPlan(:final input) => (
+          size: input.dimensions.size,
+          baseline: input.dimensions.baselineOffset!,
+        ),
         ForumBodyIntrinsicInlineAtomPlan(:final metrics) => (
           size: metrics.size,
           baseline: metrics.baseline,
@@ -396,10 +421,12 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
           );
         }
       }
-      content.resolveAtomicContexts(
-        index,
-        plan.sourceContexts.toList(growable: false),
-      );
+      if (plan is! ForumBodyInlineImageAtomPlan) {
+        content.resolveAtomicContexts(
+          index,
+          plan.sourceContexts.toList(growable: false),
+        );
+      }
       for (final request in plan.nativeRequests) {
         // Keep the complete band input inside this already bounded paragraph.
         // An off-input tail must not evade the session's retention accounting.
@@ -543,12 +570,42 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
         );
       }
     }
+    final engine = fragment.engineRange;
+    if (engine == null) {
+      if (fragment.startLine == fragment.endLine &&
+          content.projection.atoms.isEmpty) {
+        return const [];
+      }
+      throw const ForumBodyTextPageSurfaceException(
+        ForumBodyTextPageSurfaceFailure.geometry,
+      );
+    }
+    final projection = content.projectionForLayout(layoutMode);
+    RangeError.checkValidRange(
+      engine.startUtf16,
+      engine.endUtf16,
+      projection.engineText.length,
+    );
+    if (!projection.isLegalEngineBoundary(engine.startUtf16) ||
+        !projection.isLegalEngineBoundary(engine.endUtf16) ||
+        projection.displayRangeForEngineRange(
+              startUtf16: engine.startUtf16,
+              endUtf16: engine.endUtf16,
+            ) !=
+            (
+              startUtf16: fragment.coverageStartUtf16,
+              endUtf16: fragment.coverageEndUtf16,
+            )) {
+      throw const ForumBodyTextPageSurfaceException(
+        ForumBodyTextPageSurfaceFailure.geometry,
+      );
+    }
     final result = <int>[];
-    for (final atom in content.projection.atoms) {
-      if (atom.displayEndUtf16 <= fragment.coverageStartUtf16) continue;
-      if (atom.displayStartUtf16 >= fragment.coverageEndUtf16) break;
-      if (atom.displayStartUtf16 < fragment.coverageStartUtf16 ||
-          atom.displayEndUtf16 > fragment.coverageEndUtf16) {
+    for (final atom in projection.atoms) {
+      if (atom.engineEndUtf16 <= engine.startUtf16) continue;
+      if (atom.engineUtf16 >= engine.endUtf16) break;
+      if (atom.engineUtf16 < engine.startUtf16 ||
+          atom.engineEndUtf16 > engine.endUtf16) {
         throw const ForumBodyTextPageSurfaceException(
           ForumBodyTextPageSurfaceFailure.geometry,
         );
@@ -556,6 +613,19 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
       if (!trimmedAtomIndices.contains(atom.index)) result.add(atom.index);
     }
     return List.unmodifiable(result);
+  }
+
+  @override
+  int imageCountFor(ForumBodyTextPageFragment fragment) {
+    final count = visibleAtoms(
+      fragment,
+    ).where(content.images.containsKey).length;
+    if (fragment.imageCount != count) {
+      throw const ForumBodyTextPageSurfaceException(
+        ForumBodyTextPageSurfaceFailure.geometry,
+      );
+    }
+    return count;
   }
 
   @override

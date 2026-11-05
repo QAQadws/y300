@@ -1,5 +1,6 @@
 import '../document/forum_body_document.dart';
 import '../inline/forum_body_ruby_content.dart';
+import '../inline/forum_body_inline_image_input.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../style/forum_body_style_options.dart';
 
@@ -15,6 +16,11 @@ final class ForumBodyInlineFlowText extends ForumBodyInlineFlowPart {
 final class ForumBodyInlineFlowRuby extends ForumBodyInlineFlowPart {
   const ForumBodyInlineFlowRuby(this.group);
   final ForumBodyRubyGroupContent group;
+}
+
+final class ForumBodyInlineFlowImage extends ForumBodyInlineFlowPart {
+  const ForumBodyInlineFlowImage(this.input);
+  final ForumBodyInlineImageInput input;
 }
 
 /// One unmeasured formatting context from the sole styled traversal. Ordinary

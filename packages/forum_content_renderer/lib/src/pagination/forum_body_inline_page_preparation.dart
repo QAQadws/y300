@@ -20,7 +20,6 @@ import '../inline/forum_body_ruby_soft_space_layout.dart';
 import '../inline/forum_body_ruby_tree_layout.dart';
 import '../inline/forum_body_emphasis_line_layout.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
-import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_paragraph_layout.dart';
 import '../paragraph/forum_body_native_budget_input.dart';
 import 'forum_body_source_hint.dart';
@@ -41,6 +40,7 @@ final class _InlinePreparationWindow {
       endLine = f.endLine,
       coverageStartUtf16 = f.coverageStartUtf16,
       coverageEndUtf16 = f.coverageEndUtf16,
+      engineRange = f.engineRange,
       sourceHint = f.sourceHint,
       width = f.width,
       height = f.height;
@@ -54,6 +54,10 @@ final class _InlinePreparationWindow {
       endLine = f.endLine,
       coverageStartUtf16 = f.coverageStartUtf16,
       coverageEndUtf16 = f.coverageEndUtf16,
+      engineRange = (
+        startUtf16: f.engineCoverageStartUtf16,
+        endUtf16: f.engineCoverageEndUtf16,
+      ),
       sourceHint = forumBodySourceHint(
         parent.content.projection.display,
         f.coverageStartUtf16,
@@ -69,6 +73,7 @@ final class _InlinePreparationWindow {
       coverageStartUtf16,
       coverageEndUtf16;
   final ({int runeStart, int runeEnd})? sourceHint;
+  final ({int startUtf16, int endUtf16})? engineRange;
   final double width, height;
 }
 
@@ -237,6 +242,16 @@ final class ForumBodyInlinePagePreparation {
       if (_nextGroup < _indices.length) {
         final index = _indices[_nextGroup];
         final atom = input.rubyAtoms[index];
+        if (atom is ForumBodyInlineImageAtomPlan) {
+          if (!identical(input.content.images[index], atom.input)) {
+            throw const ForumBodyTextPageSurfaceException(
+              ForumBodyTextPageSurfaceFailure.identity,
+            );
+          }
+          _nextGroup++;
+          _workCount++;
+          return (cacheMiss: false, view: null);
+        }
         if (atom is ForumBodyIntrinsicInlineAtomPlan) {
           final target = atom.metrics;
           final job = _inlineBox ??= ForumBodyInlinePagePreparation(
@@ -490,7 +505,7 @@ final class ForumBodyInlinePagePreparation {
 
   void _validateParentAtoms(int maxParts) {
     final expected = _input!.content
-        .projectionForLayout(ForumBodyParagraphLayoutMode.wrap)
+        .projectionForLayout(_input!.layoutMode)
         .atoms;
     final actual = _parent!.layout.projection.atoms;
     var units = 0;
@@ -500,14 +515,15 @@ final class ForumBodyInlinePagePreparation {
       final trimmed = _input!.trimmedAtomIndices.contains(atom.index);
       final nativeTrimmed = _parent!.layout.isAtomTrimmed(atom.index);
       final visible =
-          atom.displayEndUtf16 > _window.coverageStartUtf16 &&
-          atom.displayStartUtf16 < _window.coverageEndUtf16 &&
+          atom.engineUtf16 >= _engineStart &&
+          atom.engineUtf16 < _engineEnd &&
           !trimmed;
       final nativeVisible =
           native.engineUtf16 >= _engineStart &&
           native.engineUtf16 < _engineEnd &&
           !nativeTrimmed;
       if (native.index != atom.index ||
+          native.isResource != atom.isResource ||
           native.isSoftSpace != atom.isSoftSpace ||
           trimmed != nativeTrimmed ||
           native.engineUtf16 != atom.engineUtf16 ||
@@ -515,8 +531,8 @@ final class ForumBodyInlinePagePreparation {
           native.displayEndUtf16 != atom.displayEndUtf16 ||
           visible != nativeVisible ||
           (visible &&
-              (atom.displayStartUtf16 < _window.coverageStartUtf16 ||
-                  atom.displayEndUtf16 > _window.coverageEndUtf16))) {
+              (atom.engineUtf16 < _engineStart ||
+                  atom.engineEndUtf16 > _engineEnd))) {
         throw const ForumBodyTextPageSurfaceException(
           ForumBodyTextPageSurfaceFailure.geometry,
         );
@@ -580,6 +596,7 @@ final class ForumBodyInlinePagePreparation {
             layout.width != _window.width ||
             layout.height != _window.height ||
             _window.sourceHint != null ||
+            _window.engineRange != null ||
             layout.projection.atoms.isNotEmpty) {
           throw const ForumBodyTextPageSurfaceException(
             ForumBodyTextPageSurfaceFailure.geometry,
@@ -593,6 +610,11 @@ final class ForumBodyInlinePagePreparation {
           view.height != _window.height ||
           view.coverageStartUtf16 != _window.coverageStartUtf16 ||
           view.coverageEndUtf16 != _window.coverageEndUtf16 ||
+          _window.engineRange !=
+              (
+                startUtf16: view.engineCoverageStartUtf16,
+                endUtf16: view.engineCoverageEndUtf16,
+              ) ||
           _window.sourceHint !=
               forumBodySourceHint(
                 content.projection.display,

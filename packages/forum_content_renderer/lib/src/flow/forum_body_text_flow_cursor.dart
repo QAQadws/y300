@@ -1,6 +1,7 @@
 import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../document/forum_body_document.dart';
+import '../inline/forum_body_inline_image_input.dart';
 import '../inline/forum_body_ruby_content.dart';
 import '../inline/forum_body_ruby_content_cursor.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
@@ -62,8 +63,8 @@ final class ForumBodyTextFlowBoundary extends ForumBodyTextFlowUnit {
 /// block stack and at most a before/after sequence around one deferred BR, plus
 /// the last confirmed break layout input. Each sequence uses the same input/run
 /// limits. Ruby exclusively borrows that same flow and remains an unmeasured
-/// mixed context. Inline resources still require their dedicated layout port
-/// and fail explicitly here. No HTML is sliced and no font is shaped here.
+/// mixed context. Frozen inline resources use their explicit resolver; other
+/// images retain the block resource path. No HTML is sliced or font shaped.
 /// Edit notices use a single-line source projection and their own following-BR
 /// normalization; ordinary text keeps its original whitespace policy.
 final class ForumBodyTextFlowCursor {
@@ -72,14 +73,17 @@ final class ForumBodyTextFlowCursor {
     required ForumBodyReaderStyle reader,
     this.paragraphBuilder = const ForumBodyParagraphContentBuilder(),
     this.rubyLimits = const ForumBodyRubyContentLimits(),
+    this.inlineImageResolver,
   }) : _flow = ForumBodyStyledFlowCursor(document: document, reader: reader);
-  static const revision = 8;
+  static const revision = 9;
+  final ForumBodyInlineImageResolver? inlineImageResolver;
   final ForumBodyParagraphContentBuilder paragraphBuilder;
   final ForumBodyRubyContentLimits rubyLimits;
   final ForumBodyStyledFlowCursor _flow;
   final _blocks = <ForumBodyStyledFlowEvent>[];
   final _startedBlocks = <ForumBodyStyledFlowEvent>{};
   ForumBodyTextFlowImage? _pendingImage;
+  String? _inlineImageClosePath;
   final _emptyListItems = <String, ForumBodyParagraphSequence>{};
   final _issues = <ForumBodyStyleIssue>[];
   ForumBodyTextFlowSequence? _before;
@@ -250,6 +254,44 @@ final class ForumBodyTextFlowCursor {
         _issues.addAll(issues);
         if (_skipFollowingEditStatus(event)) continue;
         if (event.style.hidden) continue;
+        if (event.phase == ForumBodyFlowPhase.close &&
+            event.node.path == _inlineImageClosePath) {
+          _inlineImageClosePath = null;
+          continue;
+        }
+        if (event.phase == ForumBodyFlowPhase.open &&
+            event.node is ForumBodyElement) {
+          final element = event.node as ForumBodyElement;
+          if (element.kind == ForumBodyElementKind.image &&
+              event.style.display == ForumBodyDisplay.inline &&
+              !event.style.visibilityHidden &&
+              !_insideEditStatus) {
+            final image = inlineImageResolver?.call(
+              identity,
+              element,
+              event.style,
+            );
+            if (_closed || _flow.isClosed) {
+              throw StateError('Inline image resolver retired its flow');
+            }
+            if (image != null) {
+              if (image.identity != identity ||
+                  !identical(image.element, element)) {
+                throw ForumBodyParagraphInputException(
+                  ForumBodyParagraphInputFailure.identity,
+                  element.path,
+                );
+              }
+              final target = _break == null
+                  ? (_before ??= _newSequence())
+                  : (_after ??= _newSequence(continuation: true));
+              target.issues.addAll(issues);
+              target.addImage(image);
+              _inlineImageClosePath = element.path;
+              continue;
+            }
+          }
+        }
         if (_isBlock(event)) {
           if (_insideEditStatus && event.phase != ForumBodyFlowPhase.close) {
             throw ForumBodyParagraphInputException(
@@ -348,7 +390,7 @@ final class ForumBodyTextFlowCursor {
       final preserve =
           _break!.style.whiteSpace == ForumBodyWhiteSpace.pre ||
           _blocks.any((block) => (block.node as ForumBodyElement).tag == 'pre');
-      if ((_after?.hasDisplayText ?? false) || preserve) {
+      if ((_after?.hasContent ?? false) || preserve) {
         final content = _confirmBreak();
         _before = _after;
         _after = null;
@@ -367,7 +409,7 @@ final class ForumBodyTextFlowCursor {
     final before = _before;
     _before = null;
     if (before != null) {
-      if (before.hasDisplayText) {
+      if (before.hasContent) {
         final content = before.finish();
         _lastConfirmed = null;
         _paragraph(content, ForumBodyParagraphWindow.full);
@@ -486,6 +528,7 @@ final class ForumBodyTextFlowCursor {
     _blocks.clear();
     _startedBlocks.clear();
     _pendingImage = null;
+    _inlineImageClosePath = null;
     for (final proof in _emptyListItems.values) {
       proof.close();
     }

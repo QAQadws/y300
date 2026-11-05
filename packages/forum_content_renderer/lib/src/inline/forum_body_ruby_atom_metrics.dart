@@ -20,6 +20,20 @@ sealed class ForumBodyRubyAtomMetrics {
   bool get participatesInRubyAlignment => true;
 }
 
+final class ForumBodyInlineImageAtomMetrics extends ForumBodyRubyAtomMetrics {
+  const ForumBodyInlineImageAtomMetrics(this.placeholderDimensions);
+  @override
+  final PlaceholderDimensions placeholderDimensions;
+  @override
+  Size get size => placeholderDimensions.size;
+  @override
+  double get baseline => placeholderDimensions.baselineOffset!;
+  @override
+  String get alignmentSignature => 'inline-image';
+  @override
+  bool get participatesInRubyAlignment => false;
+}
+
 final class ForumBodyIntrinsicInlineAtomMetrics
     extends ForumBodyRubyAtomMetrics {
   const ForumBodyIntrinsicInlineAtomMetrics(this.size, this.baseline);

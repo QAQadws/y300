@@ -226,6 +226,13 @@ final class ForumBodyInlineEmphasisChildBandsPreparation {
     double baseline;
     Size size;
     switch (source) {
+      case ForumBodyInlineImageAtomPlan(:final input):
+        _neutralFrame(
+          slot,
+          input.dimensions.size,
+          input.dimensions.baselineOffset!,
+        );
+        return;
       case ForumBodyTextBaselineAtomPlan(:final metrics):
         _neutralFrame(slot, metrics.size, metrics.baseline);
         return;
