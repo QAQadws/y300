@@ -1630,17 +1630,19 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
             padding: EdgeInsets.only(
               top: viewState.preferences.paragraphSpacing * 2,
             ),
-            child: NovelReaderNextChapterTransition(
-              nextEpisode: viewState.nextEpisode!,
-              onPressed: () {
-                if (_isCurrentReaderSurface(surfaceIdentity)) {
-                  _openDifferentEpisode(
-                    () => ref
-                        .read(novelReaderControllerProvider(_args).notifier)
-                        .goToNextEpisode(),
-                  );
-                }
-              },
+            child: SelectionContainer.disabled(
+              child: NovelReaderNextChapterTransition(
+                nextEpisode: viewState.nextEpisode!,
+                onPressed: () {
+                  if (_isCurrentReaderSurface(surfaceIdentity)) {
+                    _openDifferentEpisode(
+                      () => ref
+                          .read(novelReaderControllerProvider(_args).notifier)
+                          .goToNextEpisode(),
+                    );
+                  }
+                },
+              ),
             ),
           ),
         ),
@@ -1697,7 +1699,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
               NovelReaderSpacing.verticalPagePadding,
               (constraints.maxWidth - _safeContentMaxWidth(typography)) / 2,
             );
-            return CustomScrollView(
+            final scrollView = CustomScrollView(
               key: const Key('novel-reader-paragraph-list'),
               controller: _scrollController,
               slivers: [
@@ -1716,6 +1718,18 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                   ),
                 ),
               ],
+            );
+            if (!widget.nativePagination) return scrollView;
+            return ForumContentSelectionRegion(
+              nativeFlow: true,
+              selectionIdentity: (surfaceIdentity, viewState.document),
+              isCurrent: () =>
+                  _isReadingVisible &&
+                  _isCurrentVerticalSession(session) &&
+                  _nativeFlowKey.currentState?.isSelectionCurrent == true,
+              onSelectionStarted: _cancelPendingReaderTap,
+              clipboardTextWriter: ref.read(clipboardTextWriterProvider),
+              child: scrollView,
             );
           },
         ),

@@ -163,6 +163,11 @@ final class NovelReaderNativeFlowHostState
   bool _interactive(_FlowRun run) =>
       _current(run) && identical(_displayed, run) && run.ready;
 
+  bool get isSelectionCurrent {
+    final run = _displayed;
+    return run != null && _current(run) && _error == null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final documentKey = (
@@ -1026,6 +1031,7 @@ final class NovelReaderNativeFlowHostState
       layoutId: snapshot.layoutId,
       fragments: fragments,
       compactHeight: true,
+      selectionEnabled: _current(run) && identical(_displayed, run),
       imageHost: run.imageHost,
       collapseLabels: ForumHtmlCollapseLabels(
         fallbackTitle: l10n.threadHtmlCollapseContent,

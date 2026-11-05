@@ -7,8 +7,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/clipboard/clipboard_providers.dart';
 import 'package:y300/core/clipboard/clipboard_text_writer.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_preferences.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
 import 'package:y300/features/novel/presentation/novel_reader_page.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_native_flow_host.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/forum_content_selection_copy_page.dart';
 
@@ -34,7 +36,7 @@ void main() {
         .load();
   });
   testWidgets(
-    'actual reader selects in place, copies explicit annotation and retires stale actions',
+    'actual book and vertical readers select in place and retire stale actions',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       final writer = _Writer();
@@ -101,9 +103,11 @@ void main() {
         String text, {
         bool annotation = false,
       }) async {
-        final target = observe().nativeController!.viewForPage(
-          observe().page!,
-        )!;
+        final observation = observe();
+        final target = observation.page == null
+            ? null
+            : observation.nativeController?.viewForPage(observation.page!);
+        if (target == null) await tester.pumpAndSettle();
         ForumBodyInlineParagraphSurface? surface;
         void collect(Element e) {
           if (e.widget case final ForumBodyInlineParagraphSurface w
@@ -118,7 +122,9 @@ void main() {
         }
 
         void findTarget(Element e) {
-          if (e.widget.key case ObjectKey(value: final value)
+          if (target == null && e.widget is NovelReaderNativeFlowHost) {
+            collect(e);
+          } else if (e.widget.key case ObjectKey(value: final value)
               when identical(value, target)) {
             collect(e);
           } else {
@@ -144,6 +150,12 @@ void main() {
         final targetFinder = annotation
             ? find.byKey(const Key('novel-native-selection-copy-page'))
             : find.byType(AdaptiveTextSelectionToolbar);
+        if (target == null) {
+          final scope = tester.state<ForumBodyFlowSelectionScopeState>(
+            find.byType(ForumBodyFlowSelectionScope),
+          );
+          expect(scope.selectedText, text);
+        }
         await waitUntil(() => targetFinder.evaluate().isNotEmpty);
       }
 
@@ -260,12 +272,37 @@ void main() {
           'DOWN',
           'before BASE after.\n  code(); \nscript UP and DOWN.',
         ]);
+        final controller = c.read(novelReaderControllerProvider(args).notifier);
+        controller.previewPreferences(
+          c
+              .read(novelReaderControllerProvider(args))
+              .requireValue
+              .preferences
+              .copyWith(flowMode: NovelReaderFlowMode.vertical),
+        );
+        final flow = find.byType(NovelReaderNativeFlowHost);
+        await waitUntil(
+          () =>
+              flow.evaluate().isNotEmpty &&
+              tester
+                  .state<NovelReaderNativeFlowHostState>(flow)
+                  .isSelectionCurrent &&
+              find
+                  .byType(ForumBodyInlineParagraphSurface)
+                  .evaluate()
+                  .isNotEmpty,
+        );
+        await longPressInline('BASE');
+        expect(find.byType(ForumContentSelectionCopyPage), findsNothing);
+        copyButton()();
+        await tester.pumpAndSettle();
+        expect(writer.writes.last, 'BASE');
         final retired = await selectAll();
         navigator.currentState!.removeRoute(route);
         await tester.pumpAndSettle();
         retired();
         await tester.pumpAndSettle();
-        expect(writer.writes, hasLength(5));
+        expect(writer.writes, hasLength(6));
         expect(owner.isClosed, isTrue);
         expect(owner.activeCacheHandles, 0);
         expect(owner.retainedCacheGenerations, 0);

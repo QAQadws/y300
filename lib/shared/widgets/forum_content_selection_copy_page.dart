@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/core/clipboard/clipboard_text_writer.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart'
+    show ForumBodyFlowSelectionScope, ForumBodyFlowSelectionScopeState;
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 
@@ -87,6 +89,7 @@ class ForumContentSelectionRegion extends StatefulWidget {
     this.isCurrent,
     this.selectionIdentity,
     this.onSelectionStarted,
+    this.nativeFlow = false,
   }) : assert((resolveForumLink == null) == (onOpenForumLink == null));
 
   final Widget child;
@@ -96,6 +99,7 @@ class ForumContentSelectionRegion extends StatefulWidget {
   final bool Function()? isCurrent;
   final Object? selectionIdentity;
   final VoidCallback? onSelectionStarted;
+  final bool nativeFlow;
 
   @override
   State<ForumContentSelectionRegion> createState() =>
@@ -105,6 +109,7 @@ class ForumContentSelectionRegion extends StatefulWidget {
 class _ForumContentSelectionRegionState
     extends State<ForumContentSelectionRegion> {
   final _areaKey = GlobalKey<SelectionAreaState>();
+  final _flowKey = GlobalKey<ForumBodyFlowSelectionScopeState>();
   final _selectionDetails = SelectionListenerNotifier();
   final _toolbarRevision = ValueNotifier<int>(0);
   String? _selectedText;
@@ -118,6 +123,9 @@ class _ForumContentSelectionRegionState
       mounted &&
       (widget.isCurrent?.call() ?? true) &&
       ModalRoute.of(context)?.isCurrent != false;
+
+  String? get _liveText =>
+      widget.nativeFlow ? _flowKey.currentState?.selectedText : _selectedText;
 
   @override
   void initState() {
@@ -187,12 +195,12 @@ class _ForumContentSelectionRegionState
       ValueListenableBuilder<int>(
         valueListenable: _toolbarRevision,
         builder: (context, _, _) {
+          final selectedText = _liveText;
           if (!_canInteract ||
-              (widget.selectionIdentity != null && _selectedText == null)) {
+              (widget.selectionIdentity != null && selectedText == null)) {
             return const SizedBox.shrink();
           }
           final generation = _selectionGeneration;
-          final selectedText = _selectedText;
           final selectedUrl = selectedText == null || !_canInteract
               ? null
               : widget.resolveForumLink?.call(selectedText);
@@ -227,7 +235,7 @@ class _ForumContentSelectionRegionState
     int generation, {
     bool fromToolbar = true,
   }) async {
-    final text = _selectedText;
+    final text = _liveText;
     final writer = widget.clipboardTextWriter;
     if (!_menuCurrent(generation, region) ||
         text == null ||
@@ -269,7 +277,7 @@ class _ForumContentSelectionRegionState
   ) async {
     final open = widget.onOpenForumLink;
     if (!_menuCurrent(generation, region) ||
-        _selectedText != selectedText ||
+        _liveText != selectedText ||
         widget.resolveForumLink?.call(selectedText) != url ||
         open == null) {
       return;
@@ -291,6 +299,9 @@ class _ForumContentSelectionRegionState
   Widget build(BuildContext context) {
     final customMenu =
         widget.onOpenForumLink != null || widget.clipboardTextWriter != null;
+    final child = widget.nativeFlow
+        ? ForumBodyFlowSelectionScope(key: _flowKey, child: widget.child)
+        : widget.child;
     final region = SelectionArea(
       key: _areaKey,
       onSelectionChanged: customMenu ? _textChanged : null,
@@ -302,9 +313,9 @@ class _ForumContentSelectionRegionState
       child: customMenu
           ? SelectionListener(
               selectionNotifier: _selectionDetails,
-              child: widget.child,
+              child: child,
             )
-          : widget.child,
+          : child,
     );
     return Actions(
       actions: {
