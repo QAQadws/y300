@@ -255,6 +255,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     ForumBodyTextPageFragment fragment,
     ForumBodyPreparedTextFragment binding, {
     bool? excludeTextSemantics,
+    Map<int, double> imageSemanticsOrder = const {},
   }) {
     if (binding is ForumBodyPreparedListItemFragment) {
       return Stack(
@@ -265,6 +266,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
               fragment,
               binding.body,
               excludeTextSemantics: excludeTextSemantics,
+              imageSemanticsOrder: imageSemanticsOrder,
             ),
           ),
           Positioned.fill(
@@ -330,6 +332,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
             : (image) => _onInlineImageTap(binding, image),
         paintBackgrounds: false,
         excludeTextSemantics: excludeTextSemantics ?? false,
+        imageSemanticsOrder: imageSemanticsOrder,
         interactionIdentity: interaction,
         onSourceTap: tap,
       ),
@@ -371,17 +374,21 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     final pageSize = Size(_width, _height);
     final surface =
         fragment.kind != ForumBodyTextPageFragmentKind.image &&
-            ForumBodyTextPageSemantics.hasLink(binding, fragment)
+            ForumBodyTextPageSemantics.needsStructuredSemantics(
+              binding,
+              fragment,
+            )
         ? ForumBodyTextPageSemantics(
             binding: binding,
             fragment: fragment,
             pageSize: pageSize,
             identity: identity,
             onLinkTap: _onLinkTap,
-            buildSurface: (exclude) => _fragmentSurface(
+            buildSurface: (exclude, imageOrder) => _fragmentSurface(
               fragment,
               binding,
               excludeTextSemantics: exclude,
+              imageSemanticsOrder: imageOrder,
             ),
           )
         : _fragmentSurface(fragment, binding);

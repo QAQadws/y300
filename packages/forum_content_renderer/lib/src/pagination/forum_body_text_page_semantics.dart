@@ -9,8 +9,8 @@ import '../style/forum_body_style_options.dart';
 import 'forum_body_prepared_text_fragment.dart';
 import 'forum_body_text_page_composer.dart';
 
-/// Gives links their own native semantics and focus using the mounted text's
-/// geometry. The original Surface still owns painting and pointer gestures.
+/// Orders visible text and resources by display position and exposes link
+/// actions. The original Surface owns painting and pointer gestures.
 final class ForumBodyTextPageSemantics extends StatefulWidget {
   const ForumBodyTextPageSemantics({
     required this.binding,
@@ -27,13 +27,15 @@ final class ForumBodyTextPageSemantics extends StatefulWidget {
   final Size pageSize;
   final Object identity;
   final ValueChanged<String>? onLinkTap;
-  final Widget Function(bool excludeTextSemantics) buildSurface;
+  final Widget Function(bool excludeTextSemantics, Map<int, double> imageOrder)
+  buildSurface;
 
-  static bool hasLink(
+  static bool needsStructuredSemantics(
     ForumBodyPreparedTextFragment binding,
     ForumBodyTextPageFragment fragment,
   ) {
     if (!binding.isActive) return false;
+    if (binding.imageCount > 0) return true;
     final parts = binding.projection.parts;
     final end = fragment.coverageEndUtf16;
     for (
@@ -53,13 +55,35 @@ final class ForumBodyTextPageSemantics extends StatefulWidget {
 
 final class _TextPageSemanticsState extends State<ForumBodyTextPageSemantics> {
   late List<_TextSpan> _spans;
+  late Map<int, double> _imageOrder;
   late Object _generation;
 
   void _prepare() {
     _generation = Object();
-    _spans = widget.onLinkTap == null
+    final body = widget.binding;
+    final text = body is ForumBodyPreparedListItemFragment ? body.body : body;
+    final fences = <int>{};
+    _imageOrder = {};
+    if (text case ForumBodyPreparedInlineFragment(
+      :final view,
+    ) when text.isActive) {
+      final images = view.images.keys.toList()..sort();
+      for (final (index, atom) in images.indexed) {
+        final offset = view.content.projection.atoms[atom].displayStartUtf16;
+        fences.add(offset);
+        // Text beginning at the same fence follows all its image slots.
+        _imageOrder[atom] = offset + (index + 1) / (2 * (images.length + 1));
+      }
+    }
+    _spans = widget.onLinkTap == null && fences.isEmpty
         ? const []
-        : _linkSpans(widget.binding, widget.fragment, widget.pageSize);
+        : _textSpans(
+            body,
+            widget.fragment,
+            widget.pageSize,
+            fences.toList(),
+            linksEnabled: widget.onLinkTap != null,
+          );
   }
 
   @override
@@ -81,6 +105,7 @@ final class _TextPageSemanticsState extends State<ForumBodyTextPageSemantics> {
   @override
   Widget build(BuildContext context) {
     final generation = _generation;
+    final structured = _spans.isNotEmpty || _imageOrder.isNotEmpty;
     void activate(String target) {
       if (mounted &&
           identical(generation, _generation) &&
@@ -92,14 +117,16 @@ final class _TextPageSemanticsState extends State<ForumBodyTextPageSemantics> {
     // Keep the painted subtree in the same slot when interactivity changes.
     // A remount would dispose the prepared text lease still used by this view.
     return Semantics(
-      container: _spans.isNotEmpty,
-      explicitChildNodes: _spans.isNotEmpty,
+      container: structured,
+      explicitChildNodes: structured,
       child: FocusTraversalGroup(
         policy: WidgetOrderTraversalPolicy(),
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-            Positioned.fill(child: widget.buildSurface(_spans.isNotEmpty)),
+            Positioned.fill(
+              child: widget.buildSurface(structured, _imageOrder),
+            ),
             for (final span in _spans)
               Positioned.fromRect(
                 key: ValueKey((generation, span.start)),
@@ -110,7 +137,7 @@ final class _TextPageSemanticsState extends State<ForumBodyTextPageSemantics> {
                   textDirection: span.style.direction,
                   header: span.style.heading,
                   link: span.style.target != null,
-                  sortKey: OrdinalSortKey(span.start.toDouble()),
+                  sortKey: OrdinalSortKey(span.start + .5),
                   onTap: span.style.target == null
                       ? null
                       : () => activate(span.style.target!),
@@ -172,11 +199,13 @@ typedef _SpanStyle = ({
 
 typedef _TextSpan = ({int start, _SpanStyle style, Rect bounds, String label});
 
-List<_TextSpan> _linkSpans(
+List<_TextSpan> _textSpans(
   ForumBodyPreparedTextFragment binding,
   ForumBodyTextPageFragment fragment,
   Size pageSize,
-) {
+  List<int> fences, {
+  required bool linksEnabled,
+}) {
   if (!binding.isActive) return const [];
   final projection = binding.projection;
   final parts = projection.parts;
@@ -191,7 +220,7 @@ List<_TextSpan> _linkSpans(
     final part = parts[i];
     final run = binding.runs[part.runIndex];
     if (run.style.visibilityHidden) continue;
-    final target = _linkTarget(run.style);
+    final target = linksEnabled ? _linkTarget(run.style) : null;
     final style = (
       target: target,
       anchor: target == null ? null : run.style.linkPath ?? run.path,
@@ -216,23 +245,58 @@ List<_TextSpan> _linkSpans(
     ),
   );
   final spans = <_TextSpan>[];
-  for (final range in ranges) {
-    final label = projection.text.substring(range.start, range.end);
-    if (label.trim().isEmpty) continue;
+  void addVisibleSpan(int start, int end, _SpanStyle style) {
+    final label = projection.text.substring(start, end);
+    if (label.trim().isEmpty) return;
     Rect? bounds;
-    for (final box in binding.glyphBoxes(range.start, range.end)) {
+    for (final box in binding.glyphBoxes(start, end)) {
       final visible = box.toRect().intersect(clip);
       if (visible.isEmpty) continue;
       bounds = bounds?.expandToInclude(visible) ?? visible;
     }
     if (bounds != null) {
-      spans.add((
-        start: range.start,
-        style: range.style,
-        bounds: bounds,
-        label: label,
-      ));
+      spans.add((start: start, style: style, bounds: bounds, label: label));
     }
+  }
+
+  void addSpan(int start, int endOffset, _SpanStyle style) {
+    final from = projection.sourceAtUtf16(start).displayUtf16;
+    final to = projection
+        .sourceAtUtf16(endOffset, affinity: HtmlProjectionAffinity.upstream)
+        .displayUtf16;
+    if (from < to) addVisibleSpan(from, to, style);
+    if (to < from || to == endOffset) return;
+    final boundary = projection.sourceAtUtf16(endOffset).displayUtf16;
+    if (boundary > end) return;
+    // A style seam can bisect an extended grapheme. Announce it once as
+    // plain text, provided no part of that grapheme is hidden.
+    for (
+      var i = _partAt(parts, to);
+      i < parts.length && parts[i].utf16Start < boundary;
+      i++
+    ) {
+      if (binding.runs[parts[i].runIndex].style.visibilityHidden) return;
+    }
+    addVisibleSpan(to, boundary, (
+      target: null,
+      anchor: null,
+      direction: style.direction,
+      heading: style.heading,
+    ));
+  }
+
+  var fence = 0;
+  for (final range in ranges) {
+    var from = range.start;
+    while (fence < fences.length && fences[fence] <= from) {
+      fence++;
+    }
+    while (fence < fences.length && fences[fence] < range.end) {
+      final at = fences[fence++];
+      addSpan(from, at, range.style);
+      from = at;
+    }
+    addSpan(from, range.end, range.style);
   }
   return spans;
 }

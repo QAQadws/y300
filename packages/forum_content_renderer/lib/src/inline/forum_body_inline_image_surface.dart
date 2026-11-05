@@ -10,6 +10,7 @@ final class ForumBodyInlineImageSurface extends StatefulWidget {
     this.interactionIdentity,
     this.paintBackgrounds = true,
     this.excludeTextSemantics = false,
+    this.imageSemanticsOrder = const {},
     this.imageHost,
     this.imageAnchorController,
     this.onImageDisplayChanged,
@@ -23,6 +24,7 @@ final class ForumBodyInlineImageSurface extends StatefulWidget {
 
   /// A page with its own text semantics still uses the real image semantics.
   final bool excludeTextSemantics;
+  final Map<int, double> imageSemanticsOrder;
   final ForumHtmlImageHost? imageHost;
   final ForumHtmlImageAnchorController? imageAnchorController;
   final void Function(ForumBodyInlineImageBinding, bool)? onImageDisplayChanged;
@@ -156,9 +158,12 @@ final class _InlineSurfaceState extends State<ForumBodyInlineImageSurface> {
             }
           };
     final reference = binding.input.element.resource!;
+    final order = widget.imageSemanticsOrder[binding.atomIndex];
     final surface = Semantics(
+      container: order != null,
       image: true,
       label: reference.alt ?? reference.title ?? '',
+      sortKey: order == null ? null : OrdinalSortKey(order),
       onTap: tap,
       child: ExcludeSemantics(
         child: _InlineImageTapSurface(

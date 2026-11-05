@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart'
+    show DebugSemanticsDumpOrder, SemanticsAction;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'test_support/inline_image_fixture.dart';
@@ -442,7 +444,11 @@ void main() {
   testWidgets(
     'typed Page Surface forwards only the current inline resource delivery',
     (tester) async {
-      final f = InlineImageFixture(sticker: false),
+      final f = InlineImageFixture(
+            sticker: false,
+            before: '<a href="/read">Before</a>',
+            after: 'After',
+          ),
           host = _Host(f),
           input = f.content();
       final composer = ForumBodyTextPageComposer(
@@ -470,6 +476,8 @@ void main() {
           prepared = ForumBodyPreparedInlineFragment(view);
       final frames = <ForumBodyInlineImageBinding>[],
           taps = <ForumBodyInlineImageBinding>[];
+      final links = <String>[];
+      final semantics = tester.ensureSemantics();
       await tester.pumpWidget(
         _host(
           ForumBodyTextPageSurface.prepared(
@@ -478,6 +486,7 @@ void main() {
             layoutId: 'inline-images',
             fragments: [prepared],
             imageHost: host,
+            onLinkTap: links.add,
             onInlineImageDisplayChanged: (fragment, image, rendered) {
               expect(fragment, same(prepared));
               if (rendered) frames.add(image);
@@ -490,6 +499,28 @@ void main() {
         ),
       );
       await tester.pump();
+      try {
+        final before = tester.getSemantics(find.bySemanticsLabel('Before'));
+        final ordered = before.parent!.debugListChildrenInOrder(
+          DebugSemanticsDumpOrder.traversalOrder,
+        );
+        expect(ordered.map((node) => node.label), [
+          'Before',
+          'server image',
+          'server image',
+          'After',
+        ]);
+        expect(ordered[1].getSemanticsData().flagsCollection.isImage, isTrue);
+        before.owner!.performAction(before.id, SemanticsAction.tap);
+        expect(links, ['/read']);
+        for (final node in ordered.skip(1).take(2)) {
+          node.owner!.performAction(node.id, SemanticsAction.tap);
+        }
+        expect(taps, [view.images[0], view.images[1]]);
+        taps.clear();
+      } finally {
+        semantics.dispose();
+      }
       final pixels = tester.widgetList<_Pixels>(find.byType(_Pixels)).toList();
       pixels[1].frame!();
       expect(frames.single, same(view.images[1]));

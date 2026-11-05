@@ -122,6 +122,39 @@ Future<List<int>> _pagePixels(RenderRepaintBoundary boundary) async {
 }
 
 void main() {
+  testWidgets('a grapheme across a link seam is announced once as text', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    try {
+      final fixture = _Fixture(
+        html: '<p><a href="/read">Read e</a>\u0301 here</p>',
+      );
+      final plan = fixture.plan(width: 400, height: 40, befores: [0]);
+      await tester.pumpWidget(
+        _host(
+          ForumBodyTextPageSurface(
+            snapshot: plan,
+            pageIndex: 0,
+            layoutId: plan.layoutId,
+            leases: [fixture.lease(0, width: 400)],
+            onLinkTap: (_) {},
+          ),
+        ),
+      );
+      final link = tester.getSemantics(find.bySemanticsLabel('Read '));
+      final ordered = link.parent!.debugListChildrenInOrder(
+        DebugSemanticsDumpOrder.traversalOrder,
+      );
+      expect(ordered.map((node) => node.label), ['Read ', 'e\u0301', ' here']);
+      expect(ordered[0].getSemanticsData().flagsCollection.isLink, isTrue);
+      expect(ordered[1].getSemanticsData().flagsCollection.isLink, isFalse);
+      await tester.pumpWidget(const SizedBox.shrink());
+    } finally {
+      semantics.dispose();
+    }
+  });
+
   testWidgets('linked heading exposes logical roles, actions and focus', (
     tester,
   ) async {
