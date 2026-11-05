@@ -69,6 +69,36 @@ Matcher get _cancelled => throwsA(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test(
+    'a transferred table owns its generation before any cell is delivered',
+    () async {
+      final fixture = NativeReaderTestFixture(
+        '<table><tr><td>cell</td></tr></table>',
+        dedicatedTables: true,
+      );
+      final frames = _Frames();
+      final active = _job(fixture, frames);
+      addTearDown(active.close);
+      final running = active.run();
+      await frames.until(
+        () => active.state == NovelReaderNativeViewJobState.complete,
+      );
+      final view = await running;
+      expect(fixture.session.activeIssuedTablePages, 1);
+      expect(fixture.cache.activeLeases, 0);
+      expect(view.takeFragments, throwsStateError);
+      final mount = view.takeMount();
+      expect(mount.fragments, isEmpty);
+      view.close();
+      fixture.parent.cancel();
+      expect(mount.table!.isActive, isTrue);
+      expect(fixture.session.ownsTablePageLease(0, mount.table!), isTrue);
+      mount.table!.close();
+      expect(fixture.session.activeIssuedTablePages, 0);
+      expect(mount.table!.isActive, isFalse);
+    },
+  );
+
   test('work records describe the actual cold and warm delivery without owning its leases', () async {
     final fixture = NativeReaderTestFixture('<p><ruby>A<rt>x</rt></ruby></p>');
     for (final warm in [false, true]) {

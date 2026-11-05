@@ -8,7 +8,7 @@ import 'novel_reader_native_page_work.dart';
 
 enum NovelReaderNativePageViewState { owned, transferred, closed }
 
-/// Owns an unmounted, fully checked view. takeFragments transfers ownership to
+/// Owns an unmounted, fully checked view. takeMount transfers ownership to
 /// the caller/Surface exactly once; a later close never releases mounted views.
 final class NovelReaderNativePageView {
   factory NovelReaderNativePageView.own({
@@ -78,6 +78,7 @@ final class NovelReaderNativePageView {
       List.unmodifiable(fragments),
       coverage,
       work,
+      session.acquireTablePage(pageIndex),
     );
     view._bind(session, parent);
     return view;
@@ -89,12 +90,14 @@ final class NovelReaderNativePageView {
     this._fragments,
     this.coverage,
     this.work,
+    this._table,
   );
   final ForumBodyTextPageSnapshot snapshot;
   final int pageIndex;
   final NovelReaderNativePageCoverage coverage;
   final NovelReaderNativePageWork? work;
   List<ForumBodyPreparedTextFragment> _fragments;
+  ForumBodyTablePageLease? _table;
   NovelReaderNativePageViewState _state = NovelReaderNativePageViewState.owned;
   void Function()? _removeParent;
   StreamSubscription<void>? _retirement;
@@ -103,6 +106,7 @@ final class NovelReaderNativePageView {
   NovelReaderNativePageViewState get state => _state;
   bool get isReady =>
       _state == NovelReaderNativePageViewState.owned &&
+      (_table?.isActive ?? true) &&
       _fragments.every((fragment) => fragment.isActive);
 
   void _bind(
@@ -141,7 +145,17 @@ final class NovelReaderNativePageView {
   }
 
   List<ForumBodyPreparedTextFragment> takeFragments() {
-    if (_state != NovelReaderNativePageViewState.owned) {
+    if (_table != null) throw StateError('Native table requires a table mount');
+    return takeMount().fragments;
+  }
+
+  ({
+    List<ForumBodyPreparedTextFragment> fragments,
+    ForumBodyTablePageLease? table,
+  })
+  takeMount() {
+    if (_state != NovelReaderNativePageViewState.owned ||
+        (_table?.isActive == false)) {
       throw StateError('Native view leases already transferred or retired');
     }
     try {
@@ -151,11 +165,12 @@ final class NovelReaderNativePageView {
         layoutId: snapshot.layoutId,
         fragments: _fragments,
       );
-      final fragments = _fragments;
+      final mount = (fragments: _fragments, table: _table);
       _fragments = const [];
+      _table = null;
       _state = NovelReaderNativePageViewState.transferred;
       _unbind();
-      return fragments;
+      return mount;
     } catch (_) {
       close();
       rethrow;
@@ -177,6 +192,8 @@ final class NovelReaderNativePageView {
     if (_state == NovelReaderNativePageViewState.closed) return;
     _state = NovelReaderNativePageViewState.closed;
     _unbind();
+    _table?.close();
+    _table = null;
     for (final fragment in _fragments) {
       fragment.close();
     }

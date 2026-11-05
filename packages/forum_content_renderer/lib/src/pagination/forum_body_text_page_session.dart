@@ -139,6 +139,24 @@ final class ForumBodyTextPageSessionStep {
       isComplete;
 }
 
+/// A mounted or prepared outer table page keeps its cell sessions available
+/// even before the viewport has acquired its first visible body slice.
+final class ForumBodyTablePageLease {
+  ForumBodyTablePageLease._(this.layout, this._owner, this.pageIndex);
+
+  final ForumBodyTableLayout layout;
+  final int pageIndex;
+  ForumBodyTextPageSession? _owner;
+
+  bool get isActive => _owner != null && !layout.isClosed;
+
+  void close() {
+    final owner = _owner;
+    _owner = null;
+    owner?._issuedTables.remove(this);
+  }
+}
+
 /// One sequential text layout generation. It owns traversal, retained content,
 /// composition and issued view leases, but borrows the reading-owner native
 /// cache. Keep an old session alive while a replacement is prepared. Close the
@@ -283,6 +301,7 @@ final class ForumBodyTextPageSession {
   final _issued = <ForumBodyPreparedTextFragment>{};
   final _preparations = <ForumBodyTextPagePreparation>{};
   final _tables = <int, ForumBodyTableLayout>{};
+  final _issuedTables = <ForumBodyTablePageLease>{};
   int _reservedLeases = 0;
   int _reservedFragments = 0;
   int _reservedImages = 0;
@@ -331,6 +350,7 @@ final class ForumBodyTextPageSession {
       ? 0
       : _issued.where((fragment) => fragment.isActive).length;
   int get reservedViewFragments => _reservedFragments;
+  int get activeIssuedTablePages => _cache.isClosed ? 0 : _issuedTables.length;
   int get activeIssuedImages => _state == ForumBodyTextPageSessionState.closed
       ? 0
       : _issued
@@ -355,6 +375,19 @@ final class ForumBodyTextPageSession {
     RangeError.checkValidIndex(page, snapshot);
     return _tables[page];
   }
+
+  ForumBodyTablePageLease? acquireTablePage(int page) {
+    final layout = tableLayoutForPage(page);
+    if (layout == null) return null;
+    final lease = ForumBodyTablePageLease._(layout, this, page);
+    _issuedTables.add(lease);
+    return lease;
+  }
+
+  bool ownsTablePageLease(int page, ForumBodyTablePageLease lease) =>
+      lease.pageIndex == page &&
+      lease.isActive &&
+      _issuedTables.contains(lease);
 
   /// Each call handles at most one paragraph/padding input and publishes at
   /// most one page. Pinned-cache pressure retains the exact pending input; retry
@@ -1158,6 +1191,9 @@ final class ForumBodyTextPageSession {
     _pendingListItem = null;
     _pendingImage = null;
     _closePendingTable();
+    for (final lease in _issuedTables.toList()) {
+      lease.close();
+    }
     for (final table in _tables.values) {
       table.close();
     }
