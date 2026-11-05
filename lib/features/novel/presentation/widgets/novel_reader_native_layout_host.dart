@@ -194,6 +194,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
   late bool _lastActive;
   ForumBodyIdentity? _imageGeometryIdentity;
   final _imageLayouts = <String, ForumHtmlImageLayout>{};
+  final _stickerSizes = <String, Size>{};
   _LayoutRequest? _imageReflowRequest;
   bool _imageReflowScheduled = false;
 
@@ -668,6 +669,15 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         imageHost: imageHost,
         onImageLayoutResolved: (view, fragment, layout) =>
             _imageLayoutResolved(request, view, fragment, layout, imageHost),
+        onInlineImageLayoutResolved: (view, fragment, binding, layout) =>
+            _stickerLayoutResolved(
+              request,
+              view,
+              fragment,
+              binding,
+              layout,
+              imageHost,
+            ),
         onImageTap: widget.onImageTap == null
             ? null
             : (input, isCurrent) {
@@ -820,6 +830,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
       if (_imageGeometryIdentity != chapter.identity) {
         _imageGeometryIdentity = chapter.identity;
         _imageLayouts.clear();
+        _stickerSizes.clear();
         _imageReflowRequest = null;
       }
       final images =
@@ -833,6 +844,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
             cancellation: token,
             maxCodeUnits: config.sessionLimits.maxTextCodeUnits,
             resolvedLayouts: _imageLayouts,
+            resolvedStickerSizes: _stickerSizes,
             scheduler: config.scheduler,
           );
       if (!current()) return;
@@ -1055,6 +1067,44 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
     _scheduleImageReflow();
   }
 
+  void _stickerLayoutResolved(
+    _LayoutRequest request,
+    NovelReaderNativePageView view,
+    ForumBodyPreparedInlineFragment fragment,
+    ForumBodyInlineImageBinding binding,
+    ForumHtmlImageLayout layout,
+    ForumHtmlImageHost? host,
+  ) {
+    final input = binding.input;
+    final size = layout.displaySize;
+    final catalog = request.scope.images;
+    if (!_live(request) ||
+        !identical(host, widget.imageHost) ||
+        view.snapshot.layoutId != request.session.snapshot.layoutId ||
+        !fragment.isActive ||
+        !identical(fragment.view.images[binding.atomIndex], binding) ||
+        catalog == null ||
+        !catalog.ownsInline(input) ||
+        _imageGeometryIdentity != input.identity ||
+        !input.image.isSticker ||
+        input.image.htmlSize != null ||
+        size == null ||
+        !size.isFinite ||
+        size.isEmpty) {
+      return;
+    }
+    final key = input.image.cacheKey;
+    final current =
+        _stickerSizes[key] ??
+        catalog.layoutFor(input.identity, input.element)?.displaySize;
+    if (size == current) return;
+    // Every occurrence can reuse the intrinsic size, but each page still owns
+    // its own frozen frame and each occurrence keeps its own actual source.
+    _stickerSizes[key] = size;
+    _imageReflowRequest = request;
+    _scheduleImageReflow();
+  }
+
   void _scheduleImageReflow() {
     if (_imageReflowRequest == null || _imageReflowScheduled) return;
     _imageReflowScheduled = true;
@@ -1066,9 +1116,15 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         _imageReflowRequest = null;
         return;
       }
-      // First establish the actual visible source anchor. Batched metadata
-      // cannot replace an unacknowledged restored page with page zero.
-      if (request.confirmed == null) return;
+      // Reflow needs an actual visible anchor or a confirmed single-page body.
+      // A decorative-only page in a longer chapter has no persisted position
+      // to restore, so hold its sizes until a restorable page is confirmed.
+      final position = request.confirmed;
+      if (position == null ||
+          (!position.anchor.hasCanonicalTextOffset &&
+              (!position.isPageCountFinal || position.pageCount != 1))) {
+        return;
+      }
       _imageReflowRequest = null;
       setState(() {
         _selectionRevision++;
@@ -1158,6 +1214,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
   void _closeAll() {
     _imageGeometryIdentity = null;
     _imageLayouts.clear();
+    _stickerSizes.clear();
     _imageReflowRequest = null;
     _chapterHintChanged(null);
     _finishNavigation(NovelReaderNavigationOutcome.retired);

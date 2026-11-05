@@ -186,6 +186,96 @@ void main() {
   });
 
   testWidgets(
+    'decoded sticker size replaces frozen pages once and preserves author size and restore authority',
+    (tester) async {
+      const authored =
+          '<img src="static/image/smiley/test/01.gif" width="8" height="6">';
+      final reader = _Reader(html: '<p>A${_sticker}B${_sticker}C$authored</p>');
+      reader.snapshot = const NovelReaderProgressSnapshot(
+        novelId: 'novel',
+        episodeId: 'episode',
+        flowMode: NovelReaderFlowMode.pagedLtr,
+        scrollOffset: 0,
+        pageIndex: 0,
+        progressPercent: 0,
+        isProgressPercentValid: true,
+        anchorNodeId: 'node-0',
+        anchorTextOffset: -3,
+        anchorFormatVersion: 37,
+      );
+      final gate = Completer<void>();
+      var hold = false, waits = 0;
+      addTearDown(() {
+        if (!gate.isCompleted) gate.complete();
+      });
+      reader.scheduler = NovelReaderNativeWorkScheduler(
+        nextFrame: () {
+          if (!hold) return Future.value();
+          waits++;
+          return gate.future;
+        },
+      );
+      await tester.pumpWidget(reader.widget(beginning: false));
+      await _until(tester, () => reader.positions.isNotEmpty);
+      final before = reader.positions.last, controller = reader.controller;
+      final source = find.byType(ForumBodyInlineImageSurface);
+      List<Size> sizes() => tester
+          .widget<ForumBodyInlineImageSurface>(source)
+          .view
+          .images
+          .values
+          .map((binding) => binding.rect.size)
+          .toList();
+      const original = [Size(10, 10), Size(10, 10), Size(8, 6)];
+      const replacement = [Size(24, 16), Size(24, 16), Size(8, 6)];
+      expect(sizes(), original);
+      expect(before.isReadOnlyCompatibilityRestore, isTrue);
+      final retired = reader.host.callbacks
+          .where((callback) => callback.index == null)
+          .toList();
+      hold = true;
+      for (final callback in retired) {
+        callback.resolved?.call(const Size(24, 16));
+      }
+      await _until(tester, () => waits > 0);
+      expect(sizes(), original);
+      expect(reader.positions.last.paginationKey, before.paginationKey);
+      hold = false;
+      gate.complete();
+      await _until(
+        tester,
+        () => reader.positions.last.paginationKey != before.paginationKey,
+      );
+      expect(reader.controller, isNot(same(controller)));
+      expect(sizes(), replacement);
+      final restored = reader.positions.last.anchor;
+      expect(restored.nodeId, before.anchor.nodeId);
+      expect(restored.textOffset, before.anchor.textOffset);
+      expect(restored.textIdentity, before.anchor.textIdentity);
+      expect(restored.formatVersion, before.anchor.formatVersion);
+      expect(reader.positions.last.isReadOnlyCompatibilityRestore, isTrue);
+      expect(reader.positions.last.hasUserNavigated, isFalse);
+      expect(reader.build.calls, 1);
+      final settled = reader.controller;
+      for (final callback in retired) {
+        callback.resolved?.call(const Size(90, 80));
+      }
+      reader.host.callbacks
+          .lastWhere(
+            (callback) => !retired.contains(callback) && callback.index == null,
+          )
+          .resolved
+          ?.call(const Size(90, 80));
+      await tester.pumpAndSettle();
+      expect(reader.controller, same(settled));
+      expect(sizes(), replacement);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      expect(reader.owner.activeCacheHandles, 0);
+    },
+  );
+
+  testWidgets(
     'image taps identify the actual settled slot and survive only the opening suspension',
     (tester) async {
       final reader = _Reader();

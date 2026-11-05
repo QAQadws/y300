@@ -18,6 +18,12 @@ typedef NovelReaderNativeImageLayoutResolved = void Function(
   ForumBodyPreparedImageFragment,
   ForumHtmlImageLayout,
 );
+typedef NovelReaderNativeInlineImageLayoutResolved = void Function(
+  NovelReaderNativePageView,
+  ForumBodyPreparedInlineFragment,
+  ForumBodyInlineImageBinding,
+  ForumHtmlImageLayout,
+);
 typedef NovelReaderNativeImageTapHandler = void Function(
   ForumBodyImageInput,
   bool Function(),
@@ -53,6 +59,7 @@ class NovelReaderNativePagedViewport extends StatefulWidget {
     this.imageHost,
     this.onPageUnmounted,
     this.onImageLayoutResolved,
+    this.onInlineImageLayoutResolved,
     this.onImageTap,
   });
 
@@ -78,6 +85,7 @@ class NovelReaderNativePagedViewport extends StatefulWidget {
   final ForumHtmlImageHost? imageHost;
   final VoidCallback? onPageUnmounted;
   final NovelReaderNativeImageLayoutResolved? onImageLayoutResolved;
+  final NovelReaderNativeInlineImageLayoutResolved? onInlineImageLayoutResolved;
   final NovelReaderNativeImageTapHandler? onImageTap;
 
   @override
@@ -224,6 +232,7 @@ class _NovelReaderNativePagedViewportState
       imageHost: displayed.imageHost,
       onPageUnmounted: widget.onPageUnmounted,
       onImageLayoutResolved: widget.onImageLayoutResolved,
+      onInlineImageLayoutResolved: widget.onInlineImageLayoutResolved,
       onImageTap: widget.onImageTap == null
           ? null
           : (image, isCurrent) {
@@ -326,12 +335,14 @@ class _NativeLayoutViewport extends StatefulWidget {
     required this.imageHost,
     required this.onPageUnmounted,
     required this.onImageLayoutResolved,
+    required this.onInlineImageLayoutResolved,
     required this.onImageTap,
   });
   final NovelReaderNativePagedController controller;
   final ForumHtmlImageHost? imageHost;
   final VoidCallback? onPageUnmounted;
   final NovelReaderNativeImageLayoutResolved? onImageLayoutResolved;
+  final NovelReaderNativeInlineImageLayoutResolved? onInlineImageLayoutResolved;
   final NovelReaderNativeImageTapHandler? onImageTap;
   final double width;
   final double height;
@@ -925,6 +936,8 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
                           imageHost: widget.imageHost,
                           onImageDisplayChanged: _afterFrame,
                           onImageLayoutResolved: widget.onImageLayoutResolved,
+                          onInlineImageLayoutResolved:
+                              widget.onInlineImageLayoutResolved,
                           onImageTap: widget.onImageTap == null
                               ? null
                               : (fragment) {
@@ -1045,12 +1058,14 @@ class _NativeMountedPage extends StatefulWidget {
     required this.imageHost,
     required this.onImageDisplayChanged,
     required this.onImageLayoutResolved,
+    required this.onInlineImageLayoutResolved,
     required this.onImageTap,
   });
   final NovelReaderNativePageView view;
   final ForumHtmlImageHost? imageHost;
   final VoidCallback onImageDisplayChanged;
   final NovelReaderNativeImageLayoutResolved? onImageLayoutResolved;
+  final NovelReaderNativeInlineImageLayoutResolved? onInlineImageLayoutResolved;
   final ValueChanged<ForumBodyPreparedImageFragment>? onImageTap;
   final bool keepAlive;
   final void Function(
@@ -1103,6 +1118,10 @@ class _NativeMountedPageState extends State<_NativeMountedPage>
       onImageTap: widget.onImageTap,
       onImageLayoutResolved: (fragment, layout) =>
           widget.onImageLayoutResolved?.call(widget.view, fragment, layout),
+      onInlineImageLayoutResolved: widget.onInlineImageLayoutResolved == null
+          ? null
+          : (fragment, binding, layout) => widget.onInlineImageLayoutResolved
+                ?.call(widget.view, fragment, binding, layout),
       onSourceLongPress: widget.onTextSelection == null
           ? null
           : (_, selection) => widget.onTextSelection!(selection),

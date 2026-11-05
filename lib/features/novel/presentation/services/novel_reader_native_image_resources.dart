@@ -32,11 +32,13 @@ final class NovelReaderNativeImageResources {
     required NovelReaderPaginationCancellationToken cancellation,
     required int maxCodeUnits,
     Map<String, ForumHtmlImageLayout> resolvedLayouts = const {},
+    Map<String, Size> resolvedStickerSizes = const {},
     NovelReaderNativeWorkScheduler scheduler =
         const NovelReaderNativeWorkScheduler(),
   }) async {
     if (maxCodeUnits < 0) throw ArgumentError.value(maxCodeUnits);
     final layouts = Map<String, ForumHtmlImageLayout>.of(resolvedLayouts);
+    final stickerSizes = Map<String, Size>.of(resolvedStickerSizes);
     final inputs = <String, ForumBodyImageInput?>{};
     final sources = <String, ForumBodyInlineImageSource?>{};
     final frozenLayouts = <String, ForumHtmlImageLayout>{};
@@ -54,7 +56,13 @@ final class NovelReaderNativeImageResources {
       cancellation.throwIfCancelled();
       ForumBodyImageInput? input;
       if (original != null) {
-        final layout = layouts[path] ?? original.image.initialLayout;
+        final display = original.image;
+        final learned = display.isSticker && display.htmlSize == null
+            ? stickerSizes[display.cacheKey]
+            : null;
+        final layout = learned == null
+            ? layouts[path] ?? display.initialLayout
+            : ForumHtmlImageLayout(displaySize: learned);
         for (final size in [layout.displaySize, original.image.htmlSize]) {
           if (size != null &&
               (!size.width.isFinite ||

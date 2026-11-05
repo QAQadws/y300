@@ -15,6 +15,7 @@ import 'package:y300/features/novel/presentation/services/novel_reader_native_la
 import 'package:y300/features/novel/presentation/services/novel_reader_native_image_resources.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_preparation_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_render_environment.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_native_work_scheduler.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_native_paged_viewport.dart';
 
@@ -133,14 +134,17 @@ void main() {
         host: host,
         policy: host,
       );
+      final scheduler = NovelReaderNativeWorkScheduler(nextFrame: () async {});
       final before = await resources.capture(
         cancellation: NovelReaderPaginationCancellationToken(),
         maxCodeUnits: 10000,
+        scheduler: scheduler,
       );
       final after = await resources.capture(
         cancellation: NovelReaderPaginationCancellationToken(),
         maxCodeUnits: 10000,
         resolvedLayouts: {'0': const ForumHtmlImageLayout(aspectRatio: 4)},
+        scheduler: scheduler,
       );
       final environment = await _environment(tester);
       final first = await _scope(chapter, environment, images: before);
