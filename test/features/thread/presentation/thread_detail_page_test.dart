@@ -101,11 +101,27 @@ void main() {
 
   group('ThreadDetailPage', () {
     testWidgets(
-      'native body renders a flowing table and opens the second repeated image',
+      'native body selects text, scrolls a table and opens the second repeated image',
       (tester) async {
+        final copiedTexts = <String>[];
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          (call) async {
+            if (call.method == 'Clipboard.setData') {
+              final data = Map<String, dynamic>.from(call.arguments as Map);
+              copiedTexts.add(data['text'] as String);
+            }
+            return null;
+          },
+        );
+        addTearDown(() {
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            null,
+          );
+        });
         final observer = _ReadingLifecycleObserver();
-        const image =
-            '<img src="/images/fixture.png" width="800" height="48">';
+        const image = '<img src="/images/fixture.png" width="800" height="48">';
         final tail = List.filled(24, '<p>Following text.</p>').join();
         final repository = _FakeThreadRepository(
           (String tid, int page) async => ApiSuccess(
@@ -184,6 +200,33 @@ void main() {
         expect(sample.bodyReady, isTrue);
         expect(sample.finalBoundaryKnown, isTrue);
         expect(sample.bodyHeight, greaterThan(180));
+
+        final opening = find.byWidgetPredicate(
+          (widget) =>
+              widget is ForumBodyParagraphSurface &&
+              widget.lease.isActive &&
+              widget.lease.content.projection.text == 'Opening paragraph.',
+        );
+        final paragraph = tester.widget<ForumBodyParagraphSurface>(opening);
+        final glyph = paragraph.lease.layout.selectionBoxes(1, 2).first;
+        await tester.longPressAt(
+          tester.getTopLeft(opening) +
+              Offset(
+                (glyph.left + glyph.right) / 2,
+                (glyph.top + glyph.bottom) / 2,
+              ),
+        );
+        await tester.pumpAndSettle();
+        final toolbar = tester.widget<AdaptiveTextSelectionToolbar>(
+          find.byType(AdaptiveTextSelectionToolbar),
+        );
+        final copy = toolbar.buttonItems!
+            .singleWhere((item) => item.type == ContextMenuButtonType.copy)
+            .onPressed!;
+        copy();
+        await tester.pumpAndSettle();
+        expect(copiedTexts, ['Opening']);
+
         final viewport = tester.widget<ForumBodyTableFlowViewport>(table);
         expect(viewport.verticalController, isNull);
         expect(
@@ -214,12 +257,12 @@ void main() {
         final viewportTop = tester
             .getTopLeft(find.byKey(const Key('thread-detail-list')))
             .dy;
-        expect(
-          tester.getTopLeft(images.first).dy,
-          closeTo(viewportTop, 1),
-        );
+        expect(tester.getTopLeft(images.first).dy, closeTo(viewportTop, 1));
         final session = tester.widget<ForumBodyFlowBox>(body).session;
         await tester.pumpWidget(const SizedBox.shrink());
+        copy();
+        await tester.pump();
+        expect(copiedTexts, ['Opening']);
         expect(session.isClosed, isTrue);
         expect(session.activeIssuedFragments, 0);
         expect(tester.takeException(), isNull);

@@ -5,9 +5,11 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart'
     show GrowthDirection, RenderAbstractViewport, RenderSliver;
+import 'package:y300/core/clipboard/clipboard_text_writer.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/reader_shared/presentation/services/reader_layout_scroll_controller.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/widgets/forum_content_selection_copy_page.dart';
 
 import 'thread_native_body_images.dart';
 
@@ -27,6 +29,7 @@ final class ThreadPostNativeFlow extends StatefulWidget {
     required this.imageHost,
     required this.expansion,
     required this.callbacks,
+    required this.clipboardTextWriter,
     required this.onGeometry,
     required this.errorBuilder,
     this.imageAnchorController,
@@ -40,6 +43,7 @@ final class ThreadPostNativeFlow extends StatefulWidget {
   final ForumHtmlImageHost imageHost;
   final Map<String, bool> expansion;
   final ForumHtmlRenderCallbacks callbacks;
+  final ClipboardTextWriter clipboardTextWriter;
   final void Function(bool ready, bool complete) onGeometry;
   final WidgetBuilder errorBuilder;
   final ForumHtmlImageAnchorController? imageAnchorController;
@@ -182,34 +186,45 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (run != null)
-            ForumBodyFlowBox(
-              key: run.boundsKey,
-              session: run.session!,
-              prefix: run.prefix!,
-              isCurrentLayout: identical(run, _pending),
-              imageAnchorController: widget.imageAnchorController,
-              imagePathForIndex: run.images!.pathForIndex,
-              initialSlice: run.initialSlice,
-              initialTableSlice: table == null
-                  ? null
-                  : (index: table.index, slice: table.slice),
-              onTableWindowChanged: (index, window) {
-                run.recordTableWindow(index, run.prefix![index].table!, window);
-              },
-              onFloatedTableWindowChanged: run.recordTableWindow,
-              onReadyChanged: (ready) {
-                if (!_current(run)) return;
-                run.ready = ready;
-                widget.onGeometry(
-                  ready && _error == null,
-                  run.prefix!.isComplete && _error == null,
-                );
-              },
-              onFailure: (error, stack) {
-                if (_current(run)) _fail(error, stack);
-              },
-              buildSlice: (context, snapshot, index, fragments) =>
-                  _buildSlice(context, run, snapshot, index, fragments),
+            ForumContentSelectionRegion(
+              nativeFlow: true,
+              clipboardTextWriter: widget.clipboardTextWriter,
+              selectionIdentity: _pending,
+              isCurrent: () => _current(run) && _error == null,
+              onSelectionStarted: widget.callbacks.onInteraction,
+              child: ForumBodyFlowBox(
+                key: run.boundsKey,
+                session: run.session!,
+                prefix: run.prefix!,
+                isCurrentLayout: identical(run, _pending),
+                imageAnchorController: widget.imageAnchorController,
+                imagePathForIndex: run.images!.pathForIndex,
+                initialSlice: run.initialSlice,
+                initialTableSlice: table == null
+                    ? null
+                    : (index: table.index, slice: table.slice),
+                onTableWindowChanged: (index, window) {
+                  run.recordTableWindow(
+                    index,
+                    run.prefix![index].table!,
+                    window,
+                  );
+                },
+                onFloatedTableWindowChanged: run.recordTableWindow,
+                onReadyChanged: (ready) {
+                  if (!_current(run)) return;
+                  run.ready = ready;
+                  widget.onGeometry(
+                    ready && _error == null,
+                    run.prefix!.isComplete && _error == null,
+                  );
+                },
+                onFailure: (error, stack) {
+                  if (_current(run)) _fail(error, stack);
+                },
+                buildSlice: (context, snapshot, index, fragments) =>
+                    _buildSlice(context, run, snapshot, index, fragments),
+              ),
             )
           else if (error == null)
             const ForumHtmlPreparationPlaceholder(),
@@ -374,6 +389,7 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
       layoutId: snapshot.layoutId,
       fragments: fragments,
       compactHeight: true,
+      selectionEnabled: _current(run) && _error == null,
       imageHost: run.host,
       imageAnchorController: widget.imageAnchorController,
       collapseLabels: ForumHtmlCollapseLabels(

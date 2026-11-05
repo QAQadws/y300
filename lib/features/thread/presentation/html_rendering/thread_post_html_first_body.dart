@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/clipboard/clipboard_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
@@ -444,6 +445,7 @@ class _ThreadPostHtmlFirstBodyState
                 imageAnchorController: widget.imageAnchorController,
                 expansion: expansion ?? _readingExpansion,
                 callbacks: callbacks,
+                clipboardTextWriter: ref.read(clipboardTextWriterProvider),
                 errorBuilder: (_) =>
                     widget.fallback ?? const ThreadPostHtmlBodyError(),
                 onGeometry: (ready, complete) {
