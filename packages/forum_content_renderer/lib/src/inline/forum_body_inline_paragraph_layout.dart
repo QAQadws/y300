@@ -88,7 +88,7 @@ final class ForumBodyInlineParagraphLayout
        _paintOffset = paintOffset,
        _trimmedAtoms = trimmedAtoms,
        _spaceAllocations = spaceAllocations;
-  static const revision = 13;
+  static const revision = 14;
   final ForumBodyFirstLineIndentGeometry firstLineIndent;
   final double? rowIsolationPitch;
 
@@ -211,7 +211,9 @@ final class ForumBodyInlineParagraphLayout
         inline: projection,
       );
       if (indent > 0) {
-        if (lines.isNotEmpty && lines.first.coverageEndUtf16 == 0) {
+        if (lines.isNotEmpty &&
+            lines.first.engineCoverageEndUtf16 <=
+                projection.enginePrefix.length) {
           throw const ForumBodyParagraphLayoutException(
             ForumBodyParagraphLayoutFailure.indent,
           );
@@ -619,7 +621,10 @@ final class ForumBodyInlineParagraphLayout
       projection.display.text.length,
     );
     final start = projection.engineAtDisplayUtf16(startUtf16),
-        end = projection.engineAtDisplayUtf16(endUtf16);
+        end = projection.engineAtDisplayUtf16(
+          endUtf16,
+          affinity: HtmlProjectionAffinity.upstream,
+        );
     if (!start.isExact || !end.isExact) {
       throw const ForumBodyParagraphLayoutException(
         ForumBodyParagraphLayoutFailure.coverage,
@@ -831,7 +836,10 @@ final class ForumBodyInlineParagraphLayout
                       .engineAtDisplayUtf16(range.start)
                       .engineUtf16,
                   extentOffset: projection
-                      .engineAtDisplayUtf16(range.end)
+                      .engineAtDisplayUtf16(
+                        range.end,
+                        affinity: HtmlProjectionAffinity.upstream,
+                      )
                       .engineUtf16,
                 ),
               )
@@ -845,7 +853,7 @@ final class ForumBodyInlineParagraphLayout
       if (atom.displayEndUtf16 <= start) continue;
       if (atom.displayStartUtf16 >= end) break;
       text(cursor, atom.displayStartUtf16.clamp(start, end));
-      if (_trimmedAtoms?[atom.index] != 1) {
+      if (!atom.isResource && _trimmedAtoms?[atom.index] != 1) {
         selectedAtoms.add(
           ForumBodyInlineAtomSelection(
             atom.index,

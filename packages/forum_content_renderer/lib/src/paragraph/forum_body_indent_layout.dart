@@ -60,7 +60,9 @@ ForumBodyFirstLineIndentGeometry layoutForumBodyFirstLineIndentWithPainter({
         forumBodyIsDisplayLineBreak(projection.engineText.codeUnitAt(end))) {
       return false;
     }
-    return projection.displayOffsetAtEngineUtf16(end) == 0;
+    // An image-only first row has zero display text but still contains a real
+    // engine slot. Only the mechanical prefix itself is an empty indent row.
+    return end <= projection.enginePrefix.length;
   }
 
   bool needsFit() =>

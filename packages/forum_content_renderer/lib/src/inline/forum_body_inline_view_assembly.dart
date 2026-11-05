@@ -150,6 +150,9 @@ final class ForumBodyInlineViewAssembly {
           if (atom.engineUtf16 >= _fragment!.engineCoverageStartUtf16 &&
               atom.engineUtf16 < _fragment!.engineCoverageEndUtf16 &&
               !_parent!.layout.isAtomTrimmed(atom.index)) {
+            // Numeric resource slots are not proof of pixels or source-bound
+            // child text. They require their own resource delivery binding.
+            if (atom.isResource) _fail(ForumBodyInlineViewFailure.coverage);
             final group = _groups[atom.index];
             final baselineText = _baselines[atom.index];
             final inlineBox = _inlineBoxes[atom.index];

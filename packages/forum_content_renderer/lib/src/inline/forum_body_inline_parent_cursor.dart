@@ -17,7 +17,9 @@ final class _InlineParentCursor {
   _InlineParentCursor(this.projection);
   final HtmlInlineTextProjection projection;
   var _part = 0, _atom = 0, _offset = 0;
-  bool get isComplete => _offset == projection.display.text.length;
+  bool get isComplete =>
+      _offset == projection.display.text.length &&
+      _atom == projection.atoms.length;
 
   _InlineParentPiece? advance() {
     if (isComplete) throw StateError('Inline parent cursor is complete');

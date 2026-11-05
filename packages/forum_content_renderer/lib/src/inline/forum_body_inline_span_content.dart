@@ -31,6 +31,8 @@ final class ForumBodyInlineContext {
 ///
 /// Atom dimensions and paint/hit/selection stay with the parent's actual child
 /// layouts. This value holds no native leases, widgets, DOM or measurement job.
+/// Explicit resource atoms own only empty insertion fences. A numeric slot is
+/// not a readable resource binding and cannot enter the text-context cursor.
 final class ForumBodyInlineSpanContent {
   ForumBodyInlineSpanContent._({
     required this.identity,
@@ -78,7 +80,7 @@ final class ForumBodyInlineSpanContent {
       appliesFirstLineIndent = original.appliesFirstLineIndent,
       _sourceMapping = original;
 
-  static const revision = 10;
+  static const revision = 11;
 
   factory ForumBodyInlineSpanContent.compose({
     required ForumBodyIdentity identity,
@@ -89,6 +91,7 @@ final class ForumBodyInlineSpanContent {
     required List<ForumBodyParagraphContent> contexts,
     required List<({int startUtf16, int endUtf16})> atomicRanges,
     Set<int> softSpaceAtoms = const {},
+    Set<int> resourceAtoms = const {},
     bool appliesFirstLineIndent = true,
     // Complete original-source ordering of the display contexts, when their
     // visual placement differs. The pure projection validates every range.
@@ -185,6 +188,7 @@ final class ForumBodyInlineSpanContent {
         display: display,
         atomicRanges: atomicRanges,
         softSpaceAtoms: softSpaceAtoms,
+        resourceAtoms: resourceAtoms,
         maxAtoms: maxAtoms,
         maxDisplayCodeUnits: maxInputCodeUnits,
         maxEngineCodeUnits: maxInputCodeUnits,
@@ -210,10 +214,34 @@ final class ForumBodyInlineSpanContent {
   ForumBodyInlineSpanContent repartitionAtoms({
     required List<({int startUtf16, int endUtf16})> atomicRanges,
     required Set<int> softSpaceAtoms,
+    Set<int> resourceAtoms = const {},
   }) {
     if (_sourceMapping != null ||
         paintLayer != ForumBodyParagraphPaintLayer.all) {
       throw StateError('Only original inline input can repartition atoms');
+    }
+    final remapped = HtmlInlineTextProjection.build(
+      display: projection.display,
+      atomicRanges: atomicRanges,
+      softSpaceAtoms: softSpaceAtoms,
+      resourceAtoms: resourceAtoms,
+    );
+    if (projection.hasResources || remapped.hasResources) {
+      final previousResources = projection.atoms
+          .where((a) => a.isResource)
+          .iterator;
+      final nextResources = remapped.atoms.where((a) => a.isResource).iterator;
+      while (true) {
+        final previous = previousResources.moveNext(),
+            next = nextResources.moveNext();
+        if (previous != next ||
+            (previous &&
+                previousResources.current.displayStartUtf16 !=
+                    nextResources.current.displayStartUtf16)) {
+          throw ArgumentError('Repartitioning cannot change resource fences');
+        }
+        if (!previous) break;
+      }
     }
     return ForumBodyInlineSpanContent._(
       identity: identity,
@@ -221,11 +249,7 @@ final class ForumBodyInlineSpanContent {
       fontRevision: fontRevision,
       styleRevision: styleRevision,
       style: style,
-      projection: HtmlInlineTextProjection.build(
-        display: projection.display,
-        atomicRanges: atomicRanges,
-        softSpaceAtoms: softSpaceAtoms,
-      ),
+      projection: remapped,
       contexts: contexts,
       runs: runs,
       appliesFirstLineIndent: appliesFirstLineIndent,
@@ -252,6 +276,7 @@ final class ForumBodyInlineSpanContent {
       (forumBodyHasFirstLineIndent(
             style: style,
             displayText: projection.display.text,
+            startsWithResource: _startsWithResource,
             appliesFirstLineIndent: appliesFirstLineIndent,
             layoutMode: layoutMode,
           )
@@ -268,6 +293,10 @@ final class ForumBodyInlineSpanContent {
       for (final atom in projection.atoms)
         if (atom.isSoftSpace) atom.index,
     },
+    resourceAtoms: {
+      for (final atom in projection.atoms)
+        if (atom.isResource) atom.index,
+    },
     enginePrefix: ForumBodyNativeSpaceSpan.nonBreakingText,
     maxAtoms: projection.atoms.length,
     maxDisplayCodeUnits: projection.display.text.length,
@@ -283,11 +312,17 @@ final class ForumBodyInlineSpanContent {
   ) => resolveForumBodyFirstLineIndentValue(
     style: style,
     displayText: projection.display.text,
+    startsWithResource: _startsWithResource,
     appliesFirstLineIndent: appliesFirstLineIndent,
     layoutMode: layoutMode,
     width: width,
     scales: scales,
   );
+
+  bool get _startsWithResource =>
+      projection.atoms.isNotEmpty &&
+      projection.atoms.first.isResource &&
+      projection.atoms.first.displayStartUtf16 == 0;
 
   final _contextIndex =
       Map<ForumBodyParagraphContent, ForumBodyInlineContext?>.identity();
@@ -462,6 +497,9 @@ final class ForumBodyInlineAtomicContextCursor {
       throw StateError('Inline context index is incomplete');
     }
     final atom = content.projection.atoms[index];
+    if (atom.isResource) {
+      throw ArgumentError('Resource slots have no text contexts');
+    }
     _offset = atom.displayStartUtf16;
     _end = atom.displayEndUtf16;
   }

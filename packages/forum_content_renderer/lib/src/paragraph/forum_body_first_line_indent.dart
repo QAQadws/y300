@@ -25,18 +25,22 @@ double resolveForumBodyFirstLineIndent(
 bool forumBodyHasFirstLineIndent({
   required ForumBodyResolvedStyle style,
   required String displayText,
+  bool startsWithResource = false,
   required bool appliesFirstLineIndent,
   required ForumBodyParagraphLayoutMode layoutMode,
 }) =>
     appliesFirstLineIndent &&
     layoutMode == ForumBodyParagraphLayoutMode.wrap &&
-    displayText.isNotEmpty &&
+    (displayText.isNotEmpty || startsWithResource) &&
     style.indent.value > 0 &&
-    !(style.indentFromReader && _leadingSpace.hasMatch(displayText));
+    !(style.indentFromReader &&
+        !startsWithResource &&
+        _leadingSpace.hasMatch(displayText));
 
 double resolveForumBodyFirstLineIndentValue({
   required ForumBodyResolvedStyle style,
   required String displayText,
+  bool startsWithResource = false,
   required bool appliesFirstLineIndent,
   required ForumBodyParagraphLayoutMode layoutMode,
   required double width,
@@ -44,7 +48,7 @@ double resolveForumBodyFirstLineIndentValue({
 }) {
   if (!appliesFirstLineIndent ||
       layoutMode == ForumBodyParagraphLayoutMode.intrinsicSingleLine ||
-      displayText.isEmpty ||
+      (displayText.isEmpty && !startsWithResource) ||
       style.indent.value == 0) {
     return 0;
   }
@@ -60,7 +64,9 @@ double resolveForumBodyFirstLineIndentValue({
   }
   // Respect a real preserved horizontal indent without deleting or rewriting
   // it. Explicit author CSS remains its own intent, even before such spaces.
-  if (style.indentFromReader && _leadingSpace.hasMatch(displayText)) {
+  if (style.indentFromReader &&
+      !startsWithResource &&
+      _leadingSpace.hasMatch(displayText)) {
     return 0;
   }
   final size = style.textStyle.fontSize!;
