@@ -34,6 +34,7 @@ import 'package:y300/features/thread/presentation/services/thread_body_reading_c
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_render_context.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
+import 'package:y300/shared/widgets/forum_content_selection_copy_page.dart';
 import 'package:y300/shared/widgets/forum_content_spacing.dart';
 import 'package:y300/shared/widgets/forum_metric_pill.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
@@ -75,6 +76,7 @@ class ThreadDetailContent extends ConsumerStatefulWidget {
     required this.onOpenCommentAuthorProfile,
     required this.onCopyActionUrl,
     required this.onOpenPostLink,
+    this.onOpenSelectedPostLink,
     this.onOpenPostImages,
     required this.onOpenPostActions,
     this.htmlImagePrecacheService,
@@ -109,6 +111,7 @@ class ThreadDetailContent extends ConsumerStatefulWidget {
   final ValueChanged<ThreadPostCommentEntry> onOpenCommentAuthorProfile;
   final void Function(String label, String url) onCopyActionUrl;
   final ValueChanged<String> onOpenPostLink;
+  final ForumSelectionLinkOpener? onOpenSelectedPostLink;
   final void Function(ThreadPost post, ThreadImageOpenRequest request)?
   onOpenPostImages;
   final ValueChanged<ThreadPost> onOpenPostActions;
@@ -881,6 +884,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
             palette: palette,
             onOpenAuthorProfile: widget.onOpenAuthorProfile,
             onOpenPostLink: widget.onOpenPostLink,
+            onOpenSelectedPostLink: widget.onOpenSelectedPostLink,
             onOpenPostImages: widget.onOpenPostImages,
             onHtmlFirstImageFallback: _copyHtmlFirstImageUrl,
             onHtmlFirstImageLayoutShift: stabilizeImageLayout
@@ -962,6 +966,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
             imageReferer: widget.imageReferer,
             palette: palette,
             onOpenPostLink: widget.onOpenPostLink,
+            onOpenSelectedPostLink: widget.onOpenSelectedPostLink,
             onOpenPostImages: widget.onOpenPostImages,
             onHtmlFirstImageFallback: _copyHtmlFirstImageUrl,
             onHtmlFirstImageLayoutShift: stabilizeImageLayout

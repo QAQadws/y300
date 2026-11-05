@@ -544,6 +544,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage>
                           onOpenCommentAuthorProfile: _openCommentAuthorProfile,
                           onCopyActionUrl: _copyActionUrl,
                           onOpenPostLink: _openForumLink,
+                          onOpenSelectedPostLink: _openSelectedForumLink,
                           onOpenPostImages: _openPostImages,
                           onOpenPostActions: (post) {
                             final postProjection = projection.findByPid(
@@ -921,6 +922,9 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage>
   }
 
   void _openForumLink(String url) => _postNavigation.openLink(url);
+
+  Future<void> _openSelectedForumLink(String url, bool Function() isCurrent) =>
+      _postNavigation.openSelectedLink(url, isCurrent);
   Future<void> _copyUrl(String label, String url) =>
       _postNavigation.copyUrl(label, url);
 

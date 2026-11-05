@@ -102,6 +102,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
     required this.imageReferer,
     required this.palette,
     required this.onOpenPostLink,
+    this.onOpenSelectedPostLink,
     required this.onOpenPostImages,
     required this.onHtmlFirstImageFallback,
     required this.onHtmlFirstImageLayoutShift,
@@ -131,6 +132,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
   final String imageReferer;
   final ThreadDetailNativePalette palette;
   final ValueChanged<String> onOpenPostLink;
+  final ForumSelectionLinkOpener? onOpenSelectedPostLink;
   final void Function(ThreadPost post, ThreadImageOpenRequest request)?
   onOpenPostImages;
   final ThreadPostHtmlFirstImageFallback onHtmlFirstImageFallback;
@@ -230,6 +232,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
                   threadId: threadId,
                   imageReferer: imageReferer,
                   onOpenPostLink: onOpenPostLink,
+                  onOpenSelectedPostLink: onOpenSelectedPostLink,
                   onOpenPostImage: onOpenPostImages == null
                       ? null
                       : (_, request) =>
@@ -471,6 +474,7 @@ class _ThreadPostCardEntry extends StatefulWidget {
     required this.palette,
     required this.onOpenAuthorProfile,
     required this.onOpenPostLink,
+    this.onOpenSelectedPostLink,
     required this.onOpenPostImages,
     required this.onHtmlFirstImageFallback,
     required this.onHtmlFirstImageLayoutShift,
@@ -509,6 +513,7 @@ class _ThreadPostCardEntry extends StatefulWidget {
   final ThreadDetailNativePalette palette;
   final ValueChanged<ThreadPost> onOpenAuthorProfile;
   final ValueChanged<String> onOpenPostLink;
+  final ForumSelectionLinkOpener? onOpenSelectedPostLink;
   final void Function(ThreadPost post, ThreadImageOpenRequest request)?
   onOpenPostImages;
   final ThreadPostHtmlFirstImageFallback onHtmlFirstImageFallback;
@@ -599,6 +604,7 @@ class _ThreadPostCardEntryState extends State<_ThreadPostCardEntry>
           imageReferer: widget.imageReferer,
           palette: widget.palette,
           onOpenPostLink: widget.onOpenPostLink,
+          onOpenSelectedPostLink: widget.onOpenSelectedPostLink,
           onOpenPostImages: widget.onOpenPostImages,
           onHtmlFirstImageFallback: widget.onHtmlFirstImageFallback,
           onHtmlFirstImageLayoutShift: widget.onHtmlFirstImageLayoutShift,

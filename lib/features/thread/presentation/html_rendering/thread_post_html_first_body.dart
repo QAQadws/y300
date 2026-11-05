@@ -10,6 +10,7 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_html_image_reader_bridge.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/widgets/forum_content_selection_copy_page.dart';
 import 'package:y300/features/thread/presentation/services/thread_body_reading_coordinator.dart';
 import 'package:y300/features/thread/presentation/services/thread_body_reading_image_host.dart';
 import 'package:y300/features/thread/presentation/services/thread_body_presentation.dart';
@@ -43,6 +44,7 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
     required this.threadId,
     required this.imageReferer,
     required this.onOpenPostLink,
+    this.onOpenSelectedPostLink,
     required this.onOpenPostImage,
     required this.theme,
     this.onImageFallback,
@@ -70,6 +72,7 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
   final String threadId;
   final String imageReferer;
   final ValueChanged<String> onOpenPostLink;
+  final ForumSelectionLinkOpener? onOpenSelectedPostLink;
   final void Function(ThreadPost post, ThreadImageOpenRequest request)?
   onOpenPostImage;
   final ForumHtmlThemeContext theme;
@@ -446,6 +449,7 @@ class _ThreadPostHtmlFirstBodyState
                 expansion: expansion ?? _readingExpansion,
                 callbacks: callbacks,
                 clipboardTextWriter: ref.read(clipboardTextWriterProvider),
+                onOpenSelectedLink: widget.onOpenSelectedPostLink,
                 errorBuilder: (_) =>
                     widget.fallback ?? const ThreadPostHtmlBodyError(),
                 onGeometry: (ready, complete) {
@@ -637,6 +641,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
     required this.threadId,
     required this.imageReferer,
     required this.onOpenPostLink,
+    this.onOpenSelectedPostLink,
     required this.onOpenPostImage,
     required this.theme,
     this.onImageFallback,
@@ -663,6 +668,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
   final String threadId;
   final String imageReferer;
   final ValueChanged<String> onOpenPostLink;
+  final ForumSelectionLinkOpener? onOpenSelectedPostLink;
   final void Function(ThreadPost post, ThreadImageOpenRequest request)?
   onOpenPostImage;
   final ForumHtmlThemeContext theme;
@@ -698,6 +704,7 @@ class ThreadPostHtmlBody extends StatelessWidget {
       threadId: threadId,
       imageReferer: imageReferer,
       onOpenPostLink: onOpenPostLink,
+      onOpenSelectedPostLink: onOpenSelectedPostLink,
       onOpenPostImage: onOpenPostImage,
       theme: theme,
       onImageFallback: onImageFallback,

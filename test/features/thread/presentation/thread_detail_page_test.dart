@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/misc.dart' as riverpod_misc;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
+import 'package:y300/app/navigation/forum_link_routes.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
@@ -101,9 +102,12 @@ void main() {
 
   group('ThreadDetailPage', () {
     testWidgets(
-      'native body selects text, scrolls a table and opens the second repeated image',
+      'native body copies text, opens a selected link and preserves table and image interaction',
       (tester) async {
         final copiedTexts = <String>[];
+        final openedThreads = <String?>[];
+        const forumUrl =
+            'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=456';
         tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
           SystemChannels.platform,
           (call) async {
@@ -140,7 +144,8 @@ void main() {
                   author: 'Author',
                   authorId: '10',
                   message:
-                      '<p>Opening paragraph.</p><table width="1600" cellpadding="0"><tr height="180">'
+                      '<p>Opening paragraph.</p><p>$forumUrl</p>'
+                      '<table width="1600" cellpadding="0"><tr height="180">'
                       '<td width="900">Left</td><td width="700"><ruby>書<rt>しょ</rt></ruby></td>'
                       '</tr></table>$image$image$tail',
                   number: 1,
@@ -155,6 +160,15 @@ void main() {
           _buildTestApp(
             repository,
             imageCacheService: _NoopImageCacheService(),
+            additionalOverrides: [
+              nativeForumLinkPageFactoryProvider.overrideWithValue((
+                destination, {
+                bool isActive = true,
+              }) {
+                openedThreads.add(destination.tid);
+                return const Scaffold(body: Text('Selected thread fixture'));
+              }),
+            ],
             home: ThreadDetailPage(
               tid: '100',
               nativeBody: true,
@@ -227,6 +241,30 @@ void main() {
         await tester.pumpAndSettle();
         expect(copiedTexts, ['Opening']);
 
+        final region = tester.state<SelectableRegionState>(
+          find.byType(SelectableRegion),
+        );
+        region.selectAll(SelectionChangedCause.toolbar);
+        await tester.pumpAndSettle();
+        final openLink = tester
+            .widget<AdaptiveTextSelectionToolbar>(
+              find.byType(AdaptiveTextSelectionToolbar),
+            )
+            .buttonItems!
+            .singleWhere(
+              (item) =>
+                  item.label ==
+                  AppLocalizations.of(region.context).selectionOpenForumLink,
+            )
+            .onPressed!;
+        openLink();
+        openLink();
+        await tester.pumpAndSettle();
+        expect(openedThreads, ['456']);
+        expect(find.text('Selected thread fixture'), findsOneWidget);
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+
         final viewport = tester.widget<ForumBodyTableFlowViewport>(table);
         expect(viewport.verticalController, isNull);
         expect(
@@ -261,8 +299,10 @@ void main() {
         final session = tester.widget<ForumBodyFlowBox>(body).session;
         await tester.pumpWidget(const SizedBox.shrink());
         copy();
+        openLink();
         await tester.pump();
         expect(copiedTexts, ['Opening']);
+        expect(openedThreads, ['456']);
         expect(session.isClosed, isTrue);
         expect(session.activeIssuedFragments, 0);
         expect(tester.takeException(), isNull);

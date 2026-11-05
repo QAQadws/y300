@@ -30,6 +30,7 @@ final class ThreadPostNativeFlow extends StatefulWidget {
     required this.expansion,
     required this.callbacks,
     required this.clipboardTextWriter,
+    this.onOpenSelectedLink,
     required this.onGeometry,
     required this.errorBuilder,
     this.imageAnchorController,
@@ -44,6 +45,7 @@ final class ThreadPostNativeFlow extends StatefulWidget {
   final Map<String, bool> expansion;
   final ForumHtmlRenderCallbacks callbacks;
   final ClipboardTextWriter clipboardTextWriter;
+  final ForumSelectionLinkOpener? onOpenSelectedLink;
   final void Function(bool ready, bool complete) onGeometry;
   final WidgetBuilder errorBuilder;
   final ForumHtmlImageAnchorController? imageAnchorController;
@@ -189,6 +191,7 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
             ForumContentSelectionRegion(
               nativeFlow: true,
               clipboardTextWriter: widget.clipboardTextWriter,
+              onOpenForumLink: widget.onOpenSelectedLink,
               selectionIdentity: _pending,
               isCurrent: () => _current(run) && _error == null,
               onSelectionStarted: widget.callbacks.onInteraction,
