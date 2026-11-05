@@ -17,6 +17,7 @@ export 'src/inline/forum_body_inline_span_content.dart'
         ForumBodyInlineEmphasisGlyphInput,
         ForumBodyInlineEmphasisGlyphPreparation;
 export 'src/inline/forum_body_inline_paragraph_layout.dart';
+export 'src/inline/forum_body_inline_image_input.dart';
 export 'src/inline/forum_body_inline_emphasis_child_bands.dart';
 export 'src/inline/forum_body_inline_emphasis_row_placement.dart';
 export 'src/inline/forum_body_inline_emphasis_children_plan.dart';
@@ -41,6 +42,7 @@ export 'src/pagination/forum_body_inline_page_preparation.dart'
 export 'src/inline/forum_body_inline_paragraph_view.dart'
     show
         ForumBodyInlineParagraphView,
+        ForumBodyInlineImageBinding,
         ForumBodyInlineFontFrameViewPreparation,
         ForumBodyInlineViewFailure,
         ForumBodyInlineViewException;

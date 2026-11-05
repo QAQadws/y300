@@ -37,6 +37,11 @@ final class ForumBodyInlineFontFrameViewPreparation {
        endLine = endLine ?? measurement.plan.lines.length {
     try {
       _guard();
+      if (measurement.natural.content.projection.hasResources) {
+        throw const ForumBodyInlineViewException(
+          ForumBodyInlineViewFailure.coverage,
+        );
+      }
       measurement.plan.fragment(startLine, this.endLine);
       _childWork = ForumBodyInlineEmphasisChildPreparation(
         allocation: measurement.plan.allocation,

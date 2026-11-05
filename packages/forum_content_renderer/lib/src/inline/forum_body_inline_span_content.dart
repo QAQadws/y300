@@ -11,6 +11,7 @@ import '../paragraph/forum_body_paragraph_content.dart';
 import '../style/forum_body_native_text_paint.dart';
 import '../style/forum_body_style_options.dart';
 import 'forum_body_native_space_span.dart';
+import 'forum_body_inline_image_input.dart';
 
 part 'forum_body_inline_emphasis_glyph_input.dart';
 part 'forum_body_inline_parent_cursor.dart';
@@ -41,11 +42,13 @@ final class ForumBodyInlineSpanContent {
     required this.styleRevision,
     required this.style,
     required this.projection,
+    Map<int, ForumBodyInlineImageInput> images = const {},
     required List<ForumBodyInlineContext> contexts,
     required List<ForumBodyParagraphRun> runs,
     required this.appliesFirstLineIndent,
   }) : _sourceMapping = null,
        paintLayer = ForumBodyParagraphPaintLayer.all,
+       images = images.isEmpty ? const {} : Map.unmodifiable(images),
        contexts = List.unmodifiable(contexts),
        runs = List.unmodifiable(runs);
 
@@ -60,6 +63,7 @@ final class ForumBodyInlineSpanContent {
       fontRevision = original.fontRevision,
       styleRevision = original.styleRevision,
       projection = original.projection,
+      images = original.images,
       contexts = original.contexts,
       runs = UnmodifiableListView(runs),
       paintLayer = original.paintLayer,
@@ -75,12 +79,13 @@ final class ForumBodyInlineSpanContent {
       styleRevision = original.styleRevision,
       style = original.style,
       projection = original.projection,
+      images = original.images,
       contexts = original.contexts,
       runs = original.runs,
       appliesFirstLineIndent = original.appliesFirstLineIndent,
       _sourceMapping = original;
 
-  static const revision = 11;
+  static const revision = 12;
 
   factory ForumBodyInlineSpanContent.compose({
     required ForumBodyIdentity identity,
@@ -92,6 +97,7 @@ final class ForumBodyInlineSpanContent {
     required List<({int startUtf16, int endUtf16})> atomicRanges,
     Set<int> softSpaceAtoms = const {},
     Set<int> resourceAtoms = const {},
+    Map<int, ForumBodyInlineImageInput> images = const {},
     bool appliesFirstLineIndent = true,
     // Complete original-source ordering of the display contexts, when their
     // visual placement differs. The pure projection validates every range.
@@ -176,6 +182,27 @@ final class ForumBodyInlineSpanContent {
       maxOutputCodeUnits: maxInputCodeUnits,
       maxSegments: maxContexts,
     );
+    if (images.isNotEmpty) {
+      final sourceImages = Set<ForumBodyElement>.identity();
+      for (final entry in images.entries) {
+        RangeError.checkValidIndex(entry.key, atomicRanges, 'images');
+        final image = entry.value;
+        if (!resourceAtoms.contains(entry.key) ||
+            image.identity != identity ||
+            !sourceImages.add(image.element)) {
+          throw ArgumentError(
+            'Inline images require distinct source resource slots',
+          );
+        }
+        inputLength += image.retainedCodeUnits;
+        if (inputLength > maxInputCodeUnits) {
+          throw ForumBodyParagraphInputException(
+            ForumBodyParagraphInputFailure.inputLimit,
+            path,
+          );
+        }
+      }
+    }
     return ForumBodyInlineSpanContent._(
       identity: identity,
       path: path,
@@ -183,6 +210,7 @@ final class ForumBodyInlineSpanContent {
       styleRevision: styleRevision,
       style: style,
       appliesFirstLineIndent: appliesFirstLineIndent,
+      images: images,
       contexts: retainedContexts,
       projection: HtmlInlineTextProjection.build(
         display: display,
@@ -206,6 +234,7 @@ final class ForumBodyInlineSpanContent {
   final ForumBodyParagraphPaintLayer paintLayer;
   final ForumBodyInlineSpanContent? _sourceMapping;
   final HtmlInlineTextProjection projection;
+  final Map<int, ForumBodyInlineImageInput> images;
   final List<ForumBodyParagraphRun> runs;
   final List<ForumBodyInlineContext> contexts;
 
@@ -226,6 +255,7 @@ final class ForumBodyInlineSpanContent {
       softSpaceAtoms: softSpaceAtoms,
       resourceAtoms: resourceAtoms,
     );
+    final remappedImages = <int, ForumBodyInlineImageInput>{};
     if (projection.hasResources || remapped.hasResources) {
       final previousResources = projection.atoms
           .where((a) => a.isResource)
@@ -241,6 +271,8 @@ final class ForumBodyInlineSpanContent {
           throw ArgumentError('Repartitioning cannot change resource fences');
         }
         if (!previous) break;
+        final image = images[previousResources.current.index];
+        if (image != null) remappedImages[nextResources.current.index] = image;
       }
     }
     return ForumBodyInlineSpanContent._(
@@ -250,6 +282,7 @@ final class ForumBodyInlineSpanContent {
       styleRevision: styleRevision,
       style: style,
       projection: remapped,
+      images: remappedImages,
       contexts: contexts,
       runs: runs,
       appliesFirstLineIndent: appliesFirstLineIndent,

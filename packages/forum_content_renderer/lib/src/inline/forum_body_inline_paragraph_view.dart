@@ -7,6 +7,7 @@ import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import 'forum_body_inline_paragraph_layout.dart';
 import 'forum_body_inline_span_content.dart';
+import 'forum_body_inline_image_input.dart';
 import '../paragraph/forum_body_paragraph_layout.dart'
     show ForumBodyParagraphLine;
 import 'forum_body_ruby_group_layout.dart';
@@ -23,6 +24,7 @@ import 'forum_body_inline_font_frame_plan.dart';
 import '../pagination/forum_body_inline_page_preparation.dart';
 
 part 'forum_body_inline_ruby_binding.dart';
+part 'forum_body_inline_image_binding.dart';
 part 'forum_body_inline_view_assembly.dart';
 part 'forum_body_inline_ruby_binding_work.dart';
 part 'forum_body_inline_background_regions.dart';
@@ -49,6 +51,7 @@ final class ForumBodyInlineParagraphView {
     this._children,
     this._backgrounds,
     this._backgroundRows,
+    this._images,
   ) : _fragment = fragment,
       width = fragment.layout.width,
       height = fragment.height,
@@ -63,6 +66,7 @@ final class ForumBodyInlineParagraphView {
       _children = const {},
       _backgrounds = const [],
       _backgroundRows = const [],
+      _images = const {},
       width = parent.layout.width,
       height = parent.layout.height,
       startLine = 0,
@@ -79,6 +83,7 @@ final class ForumBodyInlineParagraphView {
       _children = source._children,
       _backgrounds = backgrounds,
       _backgroundRows = source._backgroundRows,
+      _images = const {},
       _fontFrames = frames,
       width = source.width,
       height = frames.window.height,
@@ -125,6 +130,7 @@ final class ForumBodyInlineParagraphView {
   ForumBodyInlineParagraphLease? _parent;
   ForumBodyInlineParagraphFragment? _fragment;
   Map<int, _RubyBinding> _children;
+  Map<int, ForumBodyInlineImageBinding> _images;
   List<({Rect rect, ForumBodyRubyContainerFontBox font})> _backgrounds;
   List<int> _backgroundRows;
   _InlineFontFrameBinding? _fontFrames;
@@ -185,6 +191,7 @@ final class ForumBodyInlineParagraphView {
     bool paintBackgrounds = true,
   }) sync* {
     _ensureCommandOwner(offset);
+    if (_images.isNotEmpty) _fail(ForumBodyInlineViewFailure.coverage);
     if (_fragment == null) return;
     if (paintBackgrounds) {
       for (final surface in _backgrounds) {
@@ -272,7 +279,27 @@ final class ForumBodyInlineParagraphView {
     return _parent!.content;
   }
 
+  /// Text-bearing atoms only. Image bindings have independent source and
+  /// pixel readiness, and must not enter a native glyph/source traversal.
   Iterable<int> get atomIndices => _children.keys;
+  Map<int, ForumBodyInlineImageBinding> get images {
+    _ensureActive();
+    return _images;
+  }
+
+  bool get hasRenderedImages =>
+      isActive && _images.values.every((image) => image.hasRenderedFrame);
+  ForumBodyInlineImageBinding? imageAt(Offset point) {
+    _ensureActive();
+    if (!point.dx.isFinite || !point.dy.isFinite) {
+      throw ArgumentError.value(point);
+    }
+    if (!(Offset.zero & Size(width, height)).contains(point)) return null;
+    for (final image in _images.values) {
+      if (image.rect.contains(point)) return image;
+    }
+    return null;
+  }
 
   /// Actual visible native rows in this view's physical coordinates. Returning
   /// immutable row values neither borrows paint ownership nor proves coverage.
@@ -303,6 +330,17 @@ final class ForumBodyInlineParagraphView {
   }
 
   void paint(Canvas canvas, Offset offset, {bool paintBackgrounds = true}) {
+    if (_images.isNotEmpty) _fail(ForumBodyInlineViewFailure.coverage);
+    paintTextLayer(canvas, offset, paintBackgrounds: paintBackgrounds);
+  }
+
+  /// The native plane only. A resource-aware Surface must separately mount
+  /// every bound image at its fixed rect using the current image Host.
+  void paintTextLayer(
+    Canvas canvas,
+    Offset offset, {
+    bool paintBackgrounds = true,
+  }) {
     _ensureActive();
     if (_fragment == null) return;
     if (paintBackgrounds) paintContainerBackgrounds(canvas, offset);
@@ -367,6 +405,18 @@ final class ForumBodyInlineParagraphView {
     HtmlProjectedSourcePosition position;
     ForumBodyInlineContext? window;
     if (hit is ForumBodyInlineAtomHit) {
+      if (_images.containsKey(hit.index)) {
+        final fence = content.projection.atoms[hit.index].displayStartUtf16;
+        final source = display.sourceAtUtf16(fence);
+        return (
+          window: null,
+          position: HtmlProjectedSourcePosition(
+            sourceRune: source.sourceRune,
+            displayUtf16: fence,
+            isExact: false,
+          ),
+        );
+      }
       final binding = _children[hit.index];
       if (binding == null) _fail(ForumBodyInlineViewFailure.coverage);
       final child = binding.sourceAt(hit.offset);
@@ -582,6 +632,10 @@ final class ForumBodyInlineParagraphView {
     final parent = _parent;
     if (parent == null) return;
     _parent = null;
+    for (final image in _images.values) {
+      image._retire();
+    }
+    _images = const {};
     for (final binding in _children.values) {
       binding.close();
     }

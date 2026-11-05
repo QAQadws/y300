@@ -67,6 +67,11 @@ final class _RubyBindingWork {
     while (work < maxParts && !isComplete) {
       if (_intrinsicBox != null) {
         final box = _intrinsicBox!;
+        if (box.images.isNotEmpty) {
+          throw const ForumBodyInlineViewException(
+            ForumBodyInlineViewFailure.coverage,
+          );
+        }
         if (!_boxLeasesDone) {
           if (_boxLeases!.moveNext()) {
             _own!(_boxLeases!.current);

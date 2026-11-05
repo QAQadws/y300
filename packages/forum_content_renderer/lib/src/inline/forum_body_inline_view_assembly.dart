@@ -50,6 +50,7 @@ final class ForumBodyInlineViewAssembly {
   final int endLine;
   ForumBodyInlineParagraphFragment? _fragment;
   Map<int, _RubyBinding> _bindings = {};
+  Map<int, ForumBodyInlineImageBinding> _images = const {};
   final _checked = Set<ForumBodyNativeParagraphLease>.identity();
   _RubyBindingWork? _binding;
   ForumBodyRubyAtomFrame? _bindingFrame;
@@ -150,9 +151,13 @@ final class ForumBodyInlineViewAssembly {
           if (atom.engineUtf16 >= _fragment!.engineCoverageStartUtf16 &&
               atom.engineUtf16 < _fragment!.engineCoverageEndUtf16 &&
               !_parent!.layout.isAtomTrimmed(atom.index)) {
-            // Numeric resource slots are not proof of pixels or source-bound
-            // child text. They require their own resource delivery binding.
-            if (atom.isResource) _fail(ForumBodyInlineViewFailure.coverage);
+            if (atom.isResource) {
+              _bindImage(atom.index);
+              _preparedAtoms++;
+              work++;
+              _guard();
+              continue;
+            }
             final group = _groups[atom.index];
             final baselineText = _baselines[atom.index];
             final inlineBox = _inlineBoxes[atom.index];
@@ -297,6 +302,47 @@ final class ForumBodyInlineViewAssembly {
     );
   }
 
+  void _bindImage(int index) {
+    if (_groups.containsKey(index) ||
+        _baselines.containsKey(index) ||
+        _inlineBoxes.containsKey(index) ||
+        _segments.containsKey(index) ||
+        _spaces.containsKey(index) ||
+        _trees.containsKey(index) ||
+        _emphasisTrees.containsKey(index) ||
+        _rootFonts.containsKey(index) ||
+        _backgroundFonts.containsKey(index)) {
+      _fail(ForumBodyInlineViewFailure.coverage);
+    }
+    final input = _parent!.content.images[index];
+    if (input == null || input.identity != _parent!.content.identity) {
+      _fail(ForumBodyInlineViewFailure.coverage);
+    }
+    final dimension = _parent!.layout.dimensions[index];
+    if (dimension.size != input.dimensions.size ||
+        dimension.baselineOffset != input.dimensions.baselineOffset) {
+      _fail(ForumBodyInlineViewFailure.geometry);
+    }
+    final rect = _parent!.layout.atomBoxes[index].toRect().shift(
+      Offset(0, -_fragment!.top),
+    );
+    if (rect.isEmpty ||
+        rect.left < 0 ||
+        rect.top < 0 ||
+        rect.right > _parent!.layout.width ||
+        rect.bottom > _fragment!.height) {
+      _fail(ForumBodyInlineViewFailure.geometry);
+    }
+    if (_images.isEmpty) _images = {};
+    _images[index] = ForumBodyInlineImageBinding._(
+      input,
+      index,
+      _rowOfAtom(index),
+      rect,
+      _parent!,
+    );
+  }
+
   void _appendBackground(int index, _RubyBinding binding) {
     final font = _backgroundFonts[index];
     if (font == null) return;
@@ -377,6 +423,7 @@ final class ForumBodyInlineViewAssembly {
             UnmodifiableMapView(_bindings),
             backgrounds.surfaces,
             backgrounds.rows,
+            UnmodifiableMapView(_images),
           );
     _parent = null;
     _groups = const {};
@@ -387,6 +434,7 @@ final class ForumBodyInlineViewAssembly {
     _trees = const {};
     _emphasisTrees = const {};
     _bindings = {};
+    _images = const {};
     _state = _ViewAssemblyState.transferred;
     _dropOwner();
     return result;
@@ -471,6 +519,10 @@ final class ForumBodyInlineViewAssembly {
     _trees = const {};
     _emphasisTrees = const {};
     _bindings = {};
+    for (final image in _images.values) {
+      image._retire();
+    }
+    _images = const {};
     _parent?.release();
     _parent = null;
     _dropOwner();
