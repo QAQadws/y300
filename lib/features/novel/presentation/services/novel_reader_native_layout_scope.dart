@@ -9,6 +9,7 @@ import 'package:y300/features/novel/domain/models/novel_reader_source_provenance
 import '../models/novel_reader_native_prepared_chapter.dart';
 import 'novel_reader_background_work.dart';
 import 'novel_reader_native_render_environment.dart';
+import 'novel_reader_native_image_resources.dart';
 import 'novel_reader_pagination_cancellation.dart';
 
 enum NovelReaderNativeLayoutInputFailure {
@@ -40,13 +41,14 @@ final class NovelReaderNativeLayoutScope {
     required this.maxNativeHandlesPerPage,
     required this.maxNativeEntriesPerPage,
     required this.maxNativeEstimatedBytesPerPage,
+    required this.images,
     required int fontCollectionGeneration,
     required String paragraphInputs,
     required bool usesQuoteTheme,
   }) : _fontCollectionGeneration = fontCollectionGeneration,
        _paragraphInputs = paragraphInputs,
        _usesQuoteTheme = usesQuoteTheme;
-  static const fingerprintRevision = 11;
+  static const fingerprintRevision = 12;
   final NovelReaderNativePreparedChapter chapter;
   final ForumBodyReaderStyle reader;
   final TextScaler textScaler;
@@ -59,6 +61,7 @@ final class NovelReaderNativeLayoutScope {
   final int maxNativeHandlesPerPage;
   final int? maxNativeEntriesPerPage;
   final int? maxNativeEstimatedBytesPerPage;
+  final NovelReaderNativeImageCatalog? images;
   final int _fontCollectionGeneration;
   final String _paragraphInputs;
   final bool _usesQuoteTheme;
@@ -74,8 +77,12 @@ final class NovelReaderNativeLayoutScope {
     int maxIssuedLeases = 512,
     int? maxParagraphCacheEntries,
     int? maxParagraphCacheEstimatedBytes,
+    NovelReaderNativeImageCatalog? images,
   }) async {
     cancellation.throwIfCancelled();
+    if (images != null && images.identity != chapter.identity) {
+      throw StateError('Native image geometry source changed');
+    }
     final pageHandleLimit = _pageHandleLimit(maxIssuedLeases);
     if (maxParagraphCacheEntries != null && maxParagraphCacheEntries <= 0) {
       throw ArgumentError.value(
@@ -161,6 +168,7 @@ final class NovelReaderNativeLayoutScope {
       pageHandleLimit,
       pageEntryLimit,
       pageByteLimit,
+      images?.geometryIdentity,
       ...readerValues,
       // The canvas is painted outside native paragraphs. Text/inline colors
       // above remain part of this signature and still replace painted inputs.
@@ -176,6 +184,7 @@ final class NovelReaderNativeLayoutScope {
       maxNativeHandlesPerPage: pageHandleLimit,
       maxNativeEntriesPerPage: pageEntryLimit,
       maxNativeEstimatedBytesPerPage: pageByteLimit,
+      images: images,
       fontCollectionGeneration: fontCollectionGeneration,
       paragraphInputs: jsonEncode([...revisions, ...readerValues]),
       usesQuoteTheme: inputs.usesQuoteTheme,
@@ -230,6 +239,7 @@ final class NovelReaderNativeLayoutScope {
       maxNativeHandlesPerPage: maxNativeHandlesPerPage,
       maxNativeEntriesPerPage: maxNativeEntriesPerPage,
       maxNativeEstimatedBytesPerPage: maxNativeEstimatedBytesPerPage,
+      images: images,
       fontCollectionGeneration: fontCollectionGeneration,
       paragraphInputs: _paragraphInputs,
       usesQuoteTheme: _usesQuoteTheme,
@@ -241,7 +251,6 @@ final class NovelReaderNativeLayoutScope {
     required ForumBodyParagraphCache cache,
     required String layoutId,
     required ForumBodyTextPageSessionLimits limits,
-    ForumBodyImageResolver? imageResolver,
   }) {
     if (_pageHandleLimit(limits.maxIssuedLeases) != maxNativeHandlesPerPage) {
       throw ArgumentError(
@@ -257,7 +266,7 @@ final class NovelReaderNativeLayoutScope {
       cache: cache,
       layoutId: layoutId,
       limits: limits,
-      imageResolver: imageResolver,
+      imageResolver: images?.resolve,
       // Current and target pages coexist during a real PageView turn. Reserve
       // their shared issued-handle budget before publishing legal physical rows.
       maxNativeHandlesPerPage: maxNativeHandlesPerPage,

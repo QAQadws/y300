@@ -12,10 +12,13 @@ import 'package:y300/features/novel/presentation/models/novel_reader_native_prep
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_exception.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_layout_scope.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_native_image_resources.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_preparation_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_render_environment.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_native_paged_viewport.dart';
+
+import '../test_support/native_reader_image_test_host.dart';
 
 Future<NovelReaderNativePreparedChapter> _chapter([
   String html = '<p>ab<span style="font-size:40px">cd</span>ef</p>',
@@ -96,6 +99,7 @@ Future<NovelReaderNativeLayoutScope> _scope(
   int maxIssuedLeases = 128,
   int? cacheEntries,
   int? cacheBytes,
+  NovelReaderNativeImageCatalog? images,
 }) => NovelReaderNativeLayoutScope.prepare(
   chapter: chapter,
   environment: environment,
@@ -106,6 +110,7 @@ Future<NovelReaderNativeLayoutScope> _scope(
   maxParagraphCacheEstimatedBytes: cacheBytes,
   cancellation: cancellation ?? NovelReaderPaginationCancellationToken(),
   maxScaledFontSizes: maxSizes,
+  images: images,
 );
 
 const _limits = ForumBodyTextPageSessionLimits(
@@ -118,6 +123,43 @@ const _limits = ForumBodyTextPageSessionLimits(
 );
 
 void main() {
+  testWidgets(
+    'image geometry enters the layout key independently of font and IR',
+    (tester) async {
+      final chapter = await _chapter('<img src="https://x/a.png">');
+      final host = NativeReaderImageTestHost();
+      final resources = NovelReaderNativeImageResources(
+        chapter: chapter,
+        host: host,
+        policy: host,
+      );
+      final before = await resources.capture(
+        cancellation: NovelReaderPaginationCancellationToken(),
+        maxCodeUnits: 10000,
+      );
+      final after = await resources.capture(
+        cancellation: NovelReaderPaginationCancellationToken(),
+        maxCodeUnits: 10000,
+        resolvedLayouts: {'0': const ForumHtmlImageLayout(aspectRatio: 4)},
+      );
+      final environment = await _environment(tester);
+      final first = await _scope(chapter, environment, images: before);
+      final next = await _scope(chapter, environment, images: after);
+      expect(next.paginationKey, isNot(first.paginationKey));
+      expect(next.chapter, same(first.chapter));
+      expect(next.reader.fontRevision, first.reader.fontRevision);
+      final canvas = next.tryUpdateCanvas(
+        environment: environment,
+        width: 200,
+        height: 200,
+        fontCollectionGeneration: 0,
+        isCurrent: () => true,
+      )!;
+      expect(canvas.images, same(after));
+      expect(canvas.paginationKey, next.paginationKey);
+    },
+  );
+
   testWidgets(
     'script displacement captures a parent font with no visible glyph run',
     (tester) async {

@@ -10,6 +10,7 @@ import 'package:y300/features/novel/domain/services/novel_reader_document_parser
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_native_paged_controller.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_native_host_status.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_native_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_owner.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_preparation_service.dart';
@@ -24,6 +25,17 @@ const _html =
     '<img src="https://bbs.yamibo.com/data/attachment/forum/a.png">';
 Future<void> _idle() async {}
 
+final class _Build implements NovelReaderNativeChapterBuildExecutor {
+  int calls = 0;
+  @override
+  Future<NovelReaderNativeChapterPreparation> build(
+    NovelReaderNativeChapterBuildRequest request,
+  ) {
+    calls++;
+    return const AdaptiveNovelReaderNativeChapterBuildExecutor().build(request);
+  }
+}
+
 final class _Reader {
   _Reader({this.html = _html}) {
     semantic = const DiscuzNovelReaderDocumentParser(
@@ -35,8 +47,15 @@ final class _Reader {
       host.completeDimensions();
     });
   }
-  late final NovelReaderDocument semantic;
-  final String html;
+  late NovelReaderDocument semantic;
+  String html;
+  void replaceHtml(String value) {
+    html = value;
+    semantic = const DiscuzNovelReaderDocumentParser(
+      captureSourceProvenance: true,
+    ).parse(episodeId: 'episode', rawHtml: html, fallbackParagraphs: const []);
+  }
+
   final fonts = ChangeNotifier();
   late final owner = NovelReaderNativeOwner(fontChanges: fonts);
   final authority = Object();
@@ -44,6 +63,10 @@ final class _Reader {
   final policy = NativeReaderImageTestHost();
   final positions = <NovelReaderPaginationPosition>[];
   final statuses = <NovelReaderNativeHostStatus>[];
+  final build = _Build();
+  late final preparation = DefaultNovelReaderNativePreparationService(
+    executor: build,
+  );
   var preferences = NovelReaderPreferences.defaults().copyWith(
     fontSize: 10,
     lineHeight: 1,
@@ -77,8 +100,7 @@ final class _Reader {
           resolvedFont: ResolvedFont.system,
           progressSnapshot: snapshot,
           readingAuthorityIdentity: authority,
-          preparationService:
-              const DefaultNovelReaderNativePreparationService(),
+          preparationService: preparation,
           imageHost: host,
           imagePolicy: policy,
           imageThreadId: '521519',
@@ -107,6 +129,157 @@ Future<void> _until(WidgetTester tester, bool Function() done) async {
 }
 
 void main() {
+  testWidgets(
+    'new source at the same image path cannot inherit old resolved geometry',
+    (tester) async {
+      final reader = _Reader();
+      await tester.pumpWidget(reader.widget());
+      await _until(tester, () => reader.positions.isNotEmpty);
+      final first = reader.controller;
+      reader.host.callback(0).resolved?.call(const Size(400, 100));
+      await _until(
+        tester,
+        () =>
+            reader.statuses.last.controller != null &&
+            !identical(reader.controller, first) &&
+            reader.controller.visiblePageIndex != null,
+      );
+      expect(
+        reader.controller.visibleView!.coverage.images.single.rect.height,
+        25,
+      );
+      final old = reader.controller, retired = reader.host.callback(0);
+      final oldIdentity = old.snapshot!.identity;
+      reader.replaceHtml(reader.html.replaceAll('/a.png', '/b.png'));
+      await tester.pumpWidget(reader.widget());
+      await _until(
+        tester,
+        () =>
+            reader.statuses.last.controller != null &&
+            !identical(reader.controller, old) &&
+            reader.controller.visiblePageIndex != null,
+      );
+      expect(reader.controller.snapshot!.identity, isNot(oldIdentity));
+      expect(
+        reader.controller.visibleView!.coverage.images.single.rect.height,
+        100,
+      );
+      final current = reader.controller;
+      retired.resolved?.call(const Size(999, 1));
+      await tester.pumpAndSettle();
+      expect(reader.controller, same(current));
+      expect(reader.build.calls, 2);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      expect(reader.owner.activeCacheHandles, 0);
+    },
+  );
+
+  testWidgets(
+    'accepted decoded dimensions create a new layout and restore the actual image slot without reparsing',
+    (tester) async {
+      final reader = _Reader(html: '<p>A</p>$_html');
+      await tester.pumpWidget(reader.widget());
+      await _until(tester, () => reader.positions.isNotEmpty);
+      expect(reader.controller.requestPage(1), isTrue);
+      await _until(tester, () => reader.controller.visiblePageIndex == 1);
+      final old = reader.controller;
+      final oldSnapshot = old.snapshot!;
+      final anchor = reader.positions.last.anchor;
+      final fonts = reader.owner.fontGeneration;
+      final sourceCacheBytes =
+          reader.owner.preparationCache.estimatedRetainedBytes;
+      final retired = reader.host.callback(0);
+      retired.resolved?.call(const Size(400, 100));
+      // The published old rectangle remains immutable before replacement.
+      expect(oldSnapshot[1].fragments.single.imageFrame!.height, 100);
+      await _until(
+        tester,
+        () =>
+            reader.statuses.last.controller != null &&
+            !identical(reader.controller, old) &&
+            reader.controller.visiblePageIndex != null,
+      );
+      final next = reader.controller;
+      expect(next.paginationKey, isNot(old.paginationKey));
+      expect(next.snapshot!.identity, oldSnapshot.identity);
+      expect(reader.positions.last.anchor.nodeId, anchor.nodeId);
+      expect(reader.positions.last.anchor.textIdentity, anchor.textIdentity);
+      expect(reader.positions.last.hasUserNavigated, isFalse);
+      expect(reader.positions.last.pageIndex, 0);
+      expect(next.visibleView!.coverage.images.single.rect.height, 25);
+      expect(next.visibleView!.coverage.points, isNotEmpty);
+      expect(oldSnapshot[1].fragments.single.imageFrame!.height, 100);
+      expect(reader.owner.fontGeneration, fonts);
+      expect(reader.build.calls, 1);
+      expect(
+        reader.owner.preparationCache.estimatedRetainedBytes,
+        sourceCacheBytes,
+      );
+      final stable = next;
+      reader.host.callback(0).resolved?.call(const Size(800, 200));
+      retired.resolved?.call(const Size(999, 1));
+      await tester.pumpAndSettle();
+      expect(reader.controller, same(stable));
+      // A newer decoded size still supersedes a previously resolved hint;
+      // becoming non-fallback must not freeze all subsequent dimensions.
+      reader.host.callback(0).resolved?.call(const Size(800, 400));
+      await _until(
+        tester,
+        () =>
+            reader.statuses.last.controller != null &&
+            !identical(reader.controller, stable) &&
+            reader.controller.visiblePageIndex != null,
+      );
+      expect(
+        reader.controller.visibleView!.coverage.images.single.rect.height,
+        50,
+      );
+      expect(reader.positions.last.anchor.nodeId, anchor.nodeId);
+      expect(reader.build.calls, 1);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      expect(reader.owner.activeCacheHandles, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'cached dimension hints reflow geometry without confirming any image pixels',
+    (tester) async {
+      final reader = _Reader();
+      await tester.pumpWidget(reader.widget());
+      await _until(tester, () => reader.positions.isNotEmpty);
+      final old = reader.controller;
+      reader.host.dimensions.first.complete((
+        size: const Size(400, 100),
+        layout: const ForumHtmlImageLayout(aspectRatio: 4),
+      ));
+      await _until(
+        tester,
+        () =>
+            reader.statuses.last.controller != null &&
+            !identical(reader.controller, old) &&
+            reader.controller.visiblePageIndex != null,
+      );
+      expect(
+        reader.controller.visibleView!.coverage.images.single.rect.height,
+        25,
+      );
+      expect(reader.positions.last.isBodyEndVisible, isFalse);
+      expect(reader.positions.last.hasUserNavigated, isFalse);
+      expect(reader.build.calls, 1);
+      final current = reader.controller;
+      reader.host.callback(0).resolved?.call(const Size(double.nan, 10));
+      await tester.pumpAndSettle();
+      expect(reader.controller, same(current));
+      expect(reader.positions.last.isBodyEndVisible, isFalse);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      expect(reader.owner.activeCacheHandles, 0);
+    },
+  );
+
   testWidgets(
     'actual image Reader confirms resource positions separately from decoded dimensions and pixels',
     (tester) async {
@@ -268,6 +441,21 @@ void main() {
           version != 1,
         );
         expect(reader.positions.last.hasUserNavigated, isFalse);
+        final beforeReflow = reader.controller;
+        reader.host.callback(1).resolved?.call(const Size(400, 100));
+        await _until(
+          tester,
+          () =>
+              reader.statuses.last.controller != null &&
+              !identical(reader.controller, beforeReflow) &&
+              reader.controller.visiblePageIndex != null,
+        );
+        expect(reader.positions.last.anchor.nodeId, saved.anchor.nodeId);
+        expect(
+          reader.positions.last.isReadOnlyCompatibilityRestore,
+          version != 1,
+        );
+        expect(reader.positions.last.hasUserNavigated, isFalse);
         expect(reader.controller.requestPage(0), isTrue);
         await _until(tester, () => reader.controller.visiblePageIndex == 0);
         expect(reader.positions.last.hasUserNavigated, isTrue);
@@ -281,36 +469,44 @@ void main() {
   );
 
   testWidgets(
-    'zero-native image delivery stays painted until a replacement actually mounts',
+    'automatic dimension reflow keeps zero-native page 45 painted until a replacement mounts',
     (tester) async {
-      final reader = _Reader(html: List.filled(25, _html).join());
+      final reader = _Reader(html: List.filled(65, _html).join());
+      var held = false, waits = 0;
+      final gate = Completer<void>();
+      addTearDown(() {
+        if (!gate.isCompleted) gate.complete();
+      });
+      reader.scheduler = NovelReaderNativeWorkScheduler(
+        nextFrame: () {
+          if (held) {
+            waits++;
+            return gate.future;
+          }
+          return Future.value();
+        },
+      );
       await tester.pumpWidget(reader.widget());
       await _until(tester, () => reader.positions.isNotEmpty);
       expect(reader.controller.requestPage(45), isTrue);
       await _until(tester, () => reader.controller.visiblePageIndex == 45);
       final oldController = reader.controller;
       final oldView = oldController.visibleView!;
-      final gate = Completer<void>();
-      var waits = 0;
-      reader.preferences = reader.preferences.copyWith(fontSize: 12);
-      reader.scheduler = NovelReaderNativeWorkScheduler(
-        nextFrame: () {
-          waits++;
-          return gate.future;
-        },
-      );
-      await tester.pumpWidget(reader.widget());
+      held = true;
+      final fonts = reader.owner.fontGeneration;
+      reader.host.callback(45).resolved?.call(const Size(400, 100));
       await _until(
         tester,
-        () => waits > 0 && !identical(reader.controller, oldController),
+        () =>
+            waits > 0 &&
+            reader.statuses.last.phase == NovelReaderNativeHostPhase.preparing,
       );
       await tester.pump();
-      expect(reader.controller.visiblePageIndex, isNull);
       expect(
         find.byKey(const ValueKey('native-test-image-45')),
         findsOneWidget,
       );
-      expect(reader.owner.retainedCacheGenerations, 2);
+      expect(reader.owner.retainedCacheGenerations, inInclusiveRange(1, 2));
       expect(find.byType(ForumHtmlImageView), findsWidgets);
       expect(oldView.coverage.images, isNotEmpty);
       expect(tester.takeException(), isNull);
@@ -318,11 +514,18 @@ void main() {
       await _until(
         tester,
         () =>
+            reader.statuses.last.controller != null &&
             !identical(reader.controller, oldController) &&
             reader.controller.visiblePageIndex == 45,
       );
       await tester.pump();
       expect(reader.owner.retainedCacheGenerations, 1);
+      expect(reader.owner.fontGeneration, fonts);
+      expect(reader.build.calls, 1);
+      expect(
+        reader.controller.visibleView!.coverage.images.single.rect.height,
+        25,
+      );
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
       expect(reader.owner.activeCacheHandles, 0);

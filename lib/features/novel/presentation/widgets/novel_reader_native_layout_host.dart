@@ -16,6 +16,7 @@ import '../controllers/novel_reader_paged_navigation_controller.dart';
 import '../models/novel_reader_chapter_turn.dart';
 import '../models/novel_reader_anchor_navigation_request.dart';
 import '../models/novel_reader_native_host_status.dart';
+import '../models/novel_reader_native_page_view.dart';
 import '../models/novel_reader_native_prepared_chapter.dart';
 import '../models/novel_reader_pagination_position.dart';
 import '../models/novel_reader_native_text_selection.dart';
@@ -188,6 +189,10 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
   bool _selectAnchorNavigation = false;
   int _navigationFrameRevision = 0;
   late bool _lastActive;
+  ForumBodyIdentity? _imageGeometryIdentity;
+  final _imageLayouts = <String, ForumHtmlImageLayout>{};
+  _LayoutRequest? _imageReflowRequest;
+  bool _imageReflowScheduled = false;
 
   bool get _active => widget.active && (widget.activity?.value ?? true);
 
@@ -305,6 +310,11 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         !identical(oldWidget.performance, widget.performance) ||
         !identical(oldWidget.scheduler, widget.scheduler) ||
         oldWidget.idleScheduler != widget.idleScheduler;
+    final imageBindingChanged =
+        !identical(oldWidget.imageHost, widget.imageHost) ||
+        !identical(oldWidget.imagePolicy, widget.imagePolicy) ||
+        oldWidget.imageThreadId != widget.imageThreadId ||
+        oldWidget.imageCacheOwnerId != widget.imageCacheOwnerId;
     if (retry ||
         entryChanged ||
         !identical(
@@ -336,6 +346,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         !identical(oldWidget.stylePolicy, widget.stylePolicy) ||
         hintChanged ||
         resourcesChanged ||
+        imageBindingChanged ||
         beginningChanged;
     if (inputsChanged || oldWidget.preferences != widget.preferences) {
       _selectionRevision++;
@@ -637,6 +648,12 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         return widget.placeholderBuilder?.call(context, _status) ??
             const SizedBox.shrink();
       }
+      final imageHost =
+          request.scope.chapter.identity.sourceId == widget.sourceId &&
+              request.scope.chapter.episodeId ==
+                  widget.semanticDocument.episodeId
+          ? widget.imageHost
+          : request.imageHost;
       return NovelReaderNativePagedViewport(
         key: ObjectKey(widget.owner),
         controller: request.controller,
@@ -645,12 +662,9 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         active: _live(request),
         reverse: request.reverse,
         backgroundColor: request.scope.backgroundColor,
-        imageHost:
-            request.scope.chapter.identity.sourceId == widget.sourceId &&
-                request.scope.chapter.episodeId ==
-                    widget.semanticDocument.episodeId
-            ? widget.imageHost
-            : request.imageHost,
+        imageHost: imageHost,
+        onImageLayoutResolved: (view, fragment, layout) =>
+            _imageLayoutResolved(request, view, fragment, layout, imageHost),
         onPageUnmounted: () {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && !_disposed) _reap();
@@ -765,9 +779,30 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         _scheduleNavigation();
         return;
       }
+      final chapter = prepared as NovelReaderNativePreparedChapter;
+      if (_imageGeometryIdentity != chapter.identity) {
+        _imageGeometryIdentity = chapter.identity;
+        _imageLayouts.clear();
+        _imageReflowRequest = null;
+      }
+      final images =
+          await NovelReaderNativeImageResources(
+            chapter: chapter,
+            host: config.imageHost,
+            policy: config.imagePolicy,
+            threadId: config.imageThreadId,
+            cacheOwnerId: config.imageCacheOwnerId,
+          ).capture(
+            cancellation: token,
+            maxCodeUnits: config.sessionLimits.maxTextCodeUnits,
+            resolvedLayouts: _imageLayouts,
+            scheduler: config.scheduler,
+          );
+      if (!current()) return;
       handle = config.owner.acquireCache();
       final scope = await NovelReaderNativeLayoutScope.prepare(
-        chapter: prepared as NovelReaderNativePreparedChapter,
+        chapter: chapter,
+        images: images,
         environment: environment!,
         width: box.width,
         height: box.height,
@@ -860,13 +895,6 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         cache: handle.cache,
         layoutId: 'native-host-$epoch',
         limits: config.sessionLimits,
-        imageResolver: NovelReaderNativeImageResources(
-          chapter: scope.chapter,
-          host: config.imageHost,
-          policy: config.imagePolicy,
-          threadId: config.imageThreadId,
-          cacheOwnerId: config.imageCacheOwnerId,
-        ).resolve,
       );
       if (old != null) _rememberPrefix(old);
       final previous =
@@ -952,12 +980,67 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
     }
   }
 
+  void _imageLayoutResolved(
+    _LayoutRequest request,
+    NovelReaderNativePageView view,
+    ForumBodyPreparedImageFragment fragment,
+    ForumHtmlImageLayout layout,
+    ForumHtmlImageHost? host,
+  ) {
+    final input = fragment.content.input;
+    final ratio = layout.aspectRatio ?? layout.displaySize?.aspectRatio;
+    if (!_live(request) ||
+        !identical(host, widget.imageHost) ||
+        !fragment.isActive ||
+        request.scope.images?.owns(input) != true ||
+        view.snapshot.layoutId != request.session.snapshot.layoutId ||
+        _imageGeometryIdentity != input.identity ||
+        ratio == null ||
+        !ratio.isFinite ||
+        ratio <= 0) {
+      return;
+    }
+    final path = input.element.path;
+    if (ratio == (_imageLayouts[path]?.aspectRatio ?? input.aspectRatio)) {
+      return;
+    }
+    _imageLayouts[path] = ForumHtmlImageLayout(aspectRatio: ratio);
+    _imageReflowRequest = request;
+    _scheduleImageReflow();
+  }
+
+  void _scheduleImageReflow() {
+    if (_imageReflowRequest == null || _imageReflowScheduled) return;
+    _imageReflowScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _imageReflowScheduled = false;
+      final request = _imageReflowRequest;
+      if (!mounted || _disposed || request == null) return;
+      if (!_live(request)) {
+        _imageReflowRequest = null;
+        return;
+      }
+      // First establish the actual visible source anchor. Batched metadata
+      // cannot replace an unacknowledged restored page with page zero.
+      if (request.confirmed == null) return;
+      _imageReflowRequest = null;
+      setState(() {
+        _selectionRevision++;
+        _paintOnlyCandidate = false;
+        _needsLayout = true;
+        _busy = true;
+      });
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
   void _confirmed(
     _LayoutRequest request,
     NovelReaderPaginationPosition position,
   ) {
     if (!_live(request)) return;
     request.confirmed = position;
+    _scheduleImageReflow();
     _closeRetired();
     if (_readyEpoch != _epoch) {
       _readyEpoch = _epoch;
@@ -1027,6 +1110,9 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
   }
 
   void _closeAll() {
+    _imageGeometryIdentity = null;
+    _imageLayouts.clear();
+    _imageReflowRequest = null;
     _chapterHintChanged(null);
     _finishNavigation(NovelReaderNavigationOutcome.retired);
     _navigationFrameRevision++;

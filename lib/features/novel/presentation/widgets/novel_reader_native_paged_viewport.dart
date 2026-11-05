@@ -13,6 +13,12 @@ import '../models/novel_reader_native_page_view.dart';
 import '../models/novel_reader_pagination_position.dart';
 import '../models/novel_reader_native_text_selection.dart';
 
+typedef NovelReaderNativeImageLayoutResolved = void Function(
+  NovelReaderNativePageView,
+  ForumBodyPreparedImageFragment,
+  ForumHtmlImageLayout,
+);
+
 /// Native page mounting and gesture boundary. The Host owns controllers,
 /// sessions and the paragraph cache, and supplies loading/recovery chrome.
 ///
@@ -42,6 +48,7 @@ class NovelReaderNativePagedViewport extends StatefulWidget {
     this.onTextSelection,
     this.imageHost,
     this.onPageUnmounted,
+    this.onImageLayoutResolved,
   });
 
   final NovelReaderNativePagedController controller;
@@ -65,6 +72,7 @@ class NovelReaderNativePagedViewport extends StatefulWidget {
   final ValueChanged<NovelReaderNativeTextSelection>? onTextSelection;
   final ForumHtmlImageHost? imageHost;
   final VoidCallback? onPageUnmounted;
+  final NovelReaderNativeImageLayoutResolved? onImageLayoutResolved;
 
   @override
   State<NovelReaderNativePagedViewport> createState() =>
@@ -209,6 +217,7 @@ class _NovelReaderNativePagedViewportState
       backgroundColor: displayed.background,
       imageHost: displayed.imageHost,
       onPageUnmounted: widget.onPageUnmounted,
+      onImageLayoutResolved: widget.onImageLayoutResolved,
       frozen: frozen,
       reverse: widget.reverse,
       navigationController: widget.navigationController,
@@ -291,10 +300,12 @@ class _NativeLayoutViewport extends StatefulWidget {
     required this.onTextSelection,
     required this.imageHost,
     required this.onPageUnmounted,
+    required this.onImageLayoutResolved,
   });
   final NovelReaderNativePagedController controller;
   final ForumHtmlImageHost? imageHost;
   final VoidCallback? onPageUnmounted;
+  final NovelReaderNativeImageLayoutResolved? onImageLayoutResolved;
   final double width;
   final double height;
   final int initialPage;
@@ -886,6 +897,7 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
                         return _NativeMountedPage(
                           imageHost: widget.imageHost,
                           onImageDisplayChanged: _afterFrame,
+                          onImageLayoutResolved: widget.onImageLayoutResolved,
                           key: ObjectKey(view),
                           view: view,
                           // Retain the confirmed origin through cancellation
@@ -973,10 +985,12 @@ class _NativeMountedPage extends StatefulWidget {
     required this.onTextSelection,
     required this.imageHost,
     required this.onImageDisplayChanged,
+    required this.onImageLayoutResolved,
   });
   final NovelReaderNativePageView view;
   final ForumHtmlImageHost? imageHost;
   final VoidCallback onImageDisplayChanged;
+  final NovelReaderNativeImageLayoutResolved? onImageLayoutResolved;
   final bool keepAlive;
   final void Function(
     NovelReaderNativePageView,
@@ -1024,6 +1038,8 @@ class _NativeMountedPageState extends State<_NativeMountedPage>
       fragments: _fragments,
       imageHost: widget.imageHost,
       onImageDisplayChanged: (_, _) => widget.onImageDisplayChanged(),
+      onImageLayoutResolved: (fragment, layout) =>
+          widget.onImageLayoutResolved?.call(widget.view, fragment, layout),
       onSourceLongPress: widget.onTextSelection == null
           ? null
           : (_, selection) => widget.onTextSelection!(selection),
