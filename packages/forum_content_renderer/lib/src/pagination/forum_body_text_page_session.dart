@@ -6,6 +6,7 @@ import 'package:flutter/painting.dart';
 import '../block/forum_body_block_flow_cursor.dart';
 import '../document/forum_body_collapse_layout.dart';
 import '../document/forum_body_document.dart';
+import '../flow/forum_body_inline_flow_content.dart';
 import '../flow/forum_body_text_flow_cursor.dart';
 import '../inline/forum_body_inline_plan_input.dart';
 import '../inline/forum_body_inline_image_input.dart';
@@ -26,6 +27,9 @@ import '../inline/forum_body_inline_font_frame_plan.dart';
 import 'forum_body_emphasis_page_admission.dart';
 import 'forum_body_list_marker_plan.dart';
 import 'forum_body_image_frame.dart';
+import 'forum_body_float_body_preparation.dart';
+
+part 'forum_body_float_session.dart';
 
 enum ForumBodyTextPageSessionState { active, complete, failed, closed }
 
@@ -41,6 +45,7 @@ enum ForumBodyTextPageSessionFailure {
   imageResource,
   imageStructure,
   imageLimit,
+  floatLineLayout,
 }
 
 final class ForumBodyTextPageSessionException implements Exception {
@@ -195,6 +200,8 @@ final class ForumBodyTextPageSession {
     double? intrinsicAvailableWidth,
     int? maxImagesPerPage,
     bool dedicatedTables = false,
+    bool captureFloats = false,
+    bool captureNativeUsage = false,
     // A flowing host consumes a table's actual occupied height as one slice.
     ForumBodyTableExtent tableExtent = ForumBodyTableExtent.bookPage,
   }) {
@@ -226,6 +233,7 @@ final class ForumBodyTextPageSession {
       maxPages: limits.maxPages,
       maxFragments: limits.maxFragments,
       flowing: tableExtent == ForumBodyTableExtent.natural,
+      captureNativeUsage: captureNativeUsage,
       maxNativeHandlesPerPage: maxNativeHandlesPerPage,
       maxNativeEntriesPerPage: maxNativeEntriesPerPage,
       maxNativeEstimatedBytesPerPage: maxNativeEstimatedBytesPerPage,
@@ -248,6 +256,7 @@ final class ForumBodyTextPageSession {
           collapses: collapses,
           contentRoot: contentRoot,
           dedicatedTables: composeTables,
+          captureFloats: captureFloats,
         ),
         composer,
         cache,
@@ -274,6 +283,29 @@ final class ForumBodyTextPageSession {
                 inlineImageResolver: inlineImageResolver,
               )
             : null,
+        captureFloats
+            ? (source, containingWidth, remaining) =>
+                  ForumBodyFloatBodyPreparation(
+                    document: document,
+                    source: source,
+                    reader: reader,
+                    cache: cache,
+                    containingWidth: containingWidth,
+                    layoutId: '$layoutId/float',
+                    limits: remaining,
+                    textScaler: textScaler,
+                    collapses: collapses,
+                    imageResolver: imageResolver,
+                    inlineImageResolver: inlineImageResolver,
+                    paragraphBuilder: paragraphBuilder,
+                    rubyLimits: rubyLimits,
+                    maxNativeHandlesPerPage: maxNativeHandlesPerPage,
+                    maxNativeEntriesPerPage: maxNativeEntriesPerPage,
+                    maxNativeEstimatedBytesPerPage:
+                        maxNativeEstimatedBytesPerPage,
+                    maxImagesPerPage: maxImagesPerPage,
+                  )
+            : null,
       );
     } catch (_) {
       composer.close();
@@ -292,6 +324,7 @@ final class ForumBodyTextPageSession {
     this._intrinsic,
     this._tableExtent,
     this._openTable,
+    this._openFloat,
   ) : _content = _RetainedParagraphs(limits);
   final ForumBodyBlockFlowCursor _flow;
   final ForumBodyTextPageComposer _composer;
@@ -306,6 +339,12 @@ final class ForumBodyTextPageSession {
     ForumBodyTextPageSessionLimits remaining,
   )?
   _openTable;
+  final ForumBodyFloatBodyPreparation Function(
+    ForumBodyInlineFlowFloat source,
+    double containingWidth,
+    ForumBodyTextPageSessionLimits remaining,
+  )?
+  _openFloat;
   final ForumBodyTextPageSessionLimits limits;
   final _RetainedParagraphs _content;
   final _issued = <ForumBodyPreparedTextFragment>{};
@@ -328,10 +367,13 @@ final class ForumBodyTextPageSession {
   ForumBodyBlockFlowListItemStart? _pendingListItem;
   ForumBodyEmphasisPageAdmission? _paragraphAdmission;
   ForumBodyBlockFlowInline? _pendingInline;
+  ForumBodyInlineFlowContent? _inlineContinuation;
   ForumBodyInlinePageAdmission? _inlinePreparation;
   ({ForumBodyInlinePageContent content, ForumBodyInlineParagraphLease lease})?
   _readyInline;
   ForumBodyInlineNativeEntriesPreparation? _entryPreparation;
+  _FloatFlowAdmission? _floatFlow;
+  int _nextFlowIndex = 0;
   double _margin = 0;
   int _publishedPageCount = 0;
   int _publishedParagraphCount = 0;
@@ -456,6 +498,19 @@ final class ForumBodyTextPageSession {
 
     try {
       while (true) {
+        if (_floatFlow case final admission?) {
+          _waiting = admission.advance(
+            maxEvents: maxEvents,
+            maxLines: maxLines,
+            maxFormatParts: maxFormatParts,
+          );
+          if (!_waiting) formatUnits++;
+          if (admission.isComplete) {
+            admission.close();
+            _floatFlow = null;
+          }
+          return result();
+        }
         final item = _pendingListItem;
         if (item != null) {
           var gutter = 0.0;
@@ -544,7 +599,7 @@ final class ForumBodyTextPageSession {
               }
               _composer.append(
                 lease: lease,
-                paragraphIndex: pending.paragraph.index,
+                paragraphIndex: _content.items.length,
                 left: pending.contentLeft,
                 spaceBefore: _margin,
                 spaceAtPageStart: 0,
@@ -566,7 +621,7 @@ final class ForumBodyTextPageSession {
             _composer.appendFittedEmphasis(
               plan: fitted.plan,
               ensureOwner: _ensureActivePlan,
-              paragraphIndex: pending.paragraph.index,
+              paragraphIndex: _content.items.length,
               left: pending.contentLeft,
               spaceBefore: _margin,
               spaceAtPageStart: 0,
@@ -583,7 +638,7 @@ final class ForumBodyTextPageSession {
             _composer.appendEmphasis(
               entries: ready.entries,
               ensureOwner: _ensureActivePlan,
-              paragraphIndex: pending.paragraph.index,
+              paragraphIndex: _content.items.length,
               left: pending.contentLeft,
               spaceBefore: _margin,
               spaceAtPageStart: 0,
@@ -639,7 +694,7 @@ final class ForumBodyTextPageSession {
             }
             _composer.appendInline(
               lease: ready.lease,
-              paragraphIndex: mixed.paragraph.index,
+              paragraphIndex: _content.items.length,
               left: mixed.contentLeft,
               spaceBefore: _margin,
               spaceAtPageStart: 0,
@@ -658,6 +713,7 @@ final class ForumBodyTextPageSession {
           _readyInline = null;
           _content.add(input);
           _pendingInline = null;
+          _inlineContinuation = null;
           _listPlan = null;
           _markersReady = false;
           _margin = 0;
@@ -701,7 +757,7 @@ final class ForumBodyTextPageSession {
           if (_composer.sealBeforeTable()) return result();
           final preparation = _tablePreparation ??= _openTable!(
             table,
-            _remainingTableLimits(),
+            _remainingSubtreeLimits(),
           );
           final step = preparation.advance(
             maxEvents: maxEvents,
@@ -730,9 +786,8 @@ final class ForumBodyTextPageSession {
           case ForumBodyBlockFlowTable():
             _pendingTable = unit;
           case ForumBodyBlockFlowImage():
-            if (unit.image.index != _content.items.length) {
-              throw StateError('Unordered image input');
-            }
+            _consumeFlowIndex(unit.image.index);
+            _ensureFloatLineAvailable();
             _pendingImage = unit;
           case ForumBodyBlockFlowListItemStart():
             _pendingListItem = unit;
@@ -751,16 +806,23 @@ final class ForumBodyTextPageSession {
               _margin = 0;
             }
           case ForumBodyBlockFlowParagraph():
-            if (unit.paragraph.index != _content.items.length) {
-              throw StateError('Unordered paragraph input');
-            }
+            _consumeFlowIndex(unit.paragraph.index);
+            _ensureFloatLineAvailable();
             _pendingParagraph = unit;
           case ForumBodyBlockFlowInline():
-            if (unit.paragraph.index != _content.items.length) {
-              throw StateError('Unordered inline input');
+            _consumeFlowIndex(unit.paragraph.index);
+            if (_openFloat != null &&
+                unit.paragraph.content.parts.any(
+                  (part) => part is ForumBodyInlineFlowExclusion,
+                )) {
+              _floatFlow = _FloatFlowAdmission(this, unit);
+              return result();
+            } else {
+              _ensureFloatLineAvailable();
+              _pendingInline = unit;
             }
-            _pendingInline = unit;
           case ForumBodyBlockFlowRule():
+            _ensureFloatLineAvailable();
             _composer.appendRule(
               path: unit.path,
               left: unit.left,
@@ -1024,7 +1086,7 @@ final class ForumBodyTextPageSession {
 
   ForumBodyInlinePageAdmission _openInlinePlan(ForumBodyBlockFlowInline mixed) {
     return ForumBodyInlinePageAdmission(
-      input: mixed.paragraph.content,
+      input: _inlineContinuation ?? mixed.paragraph.content,
       width: mixed.contentWidth,
       cache: _cache,
       textScaler: _textScaler,
@@ -1105,7 +1167,7 @@ final class ForumBodyTextPageSession {
     _composer.appendImage(
       input: input,
       frame: frame,
-      inputIndex: unit.image.index,
+      inputIndex: _content.items.length,
       fontRevision: _flow.fontRevision,
       styleRevision: _flow.styleRevision,
       left: unit.contentLeft,
@@ -1130,7 +1192,7 @@ final class ForumBodyTextPageSession {
     _readyInline = null;
   }
 
-  ForumBodyTextPageSessionLimits _remainingTableLimits() {
+  ForumBodyTextPageSessionLimits _remainingSubtreeLimits() {
     if (snapshot.length >= limits.maxPages) {
       throw const ForumBodyTextPageException(
         ForumBodyTextPageFailure.pageLimit,
@@ -1192,6 +1254,19 @@ final class ForumBodyTextPageSession {
     _tablePreparation = null;
   }
 
+  void _consumeFlowIndex(int index) {
+    if (index != _nextFlowIndex) throw StateError('Unordered body flow input');
+    _nextFlowIndex++;
+  }
+
+  void _ensureFloatLineAvailable() {
+    if (_openFloat != null && _composer.hasFloatExclusion(_margin)) {
+      throw const ForumBodyTextPageSessionException(
+        ForumBodyTextPageSessionFailure.floatLineLayout,
+      );
+    }
+  }
+
   void _fail() {
     if (isClosed) return;
     _recordPublished();
@@ -1199,6 +1274,8 @@ final class ForumBodyTextPageSession {
     _pendingListItem = null;
     _pendingImage = null;
     _closePendingTable();
+    _floatFlow?.close();
+    _floatFlow = null;
     _listPreparation?.close();
     _listPreparation = null;
     _listPlan = null;
@@ -1211,6 +1288,7 @@ final class ForumBodyTextPageSession {
     _inlinePreparation?.close();
     _inlinePreparation = null;
     _pendingInline = null;
+    _inlineContinuation = null;
     _margin = 0;
     _waiting = false;
     _content.retain(_publishedParagraphCount);
@@ -1224,6 +1302,8 @@ final class ForumBodyTextPageSession {
     _pendingListItem = null;
     _pendingImage = null;
     _closePendingTable();
+    _floatFlow?.close();
+    _floatFlow = null;
     for (final lease in _issuedTables.toList()) {
       lease.close();
     }
@@ -1256,6 +1336,7 @@ final class ForumBodyTextPageSession {
     _inlinePreparation?.close();
     _inlinePreparation = null;
     _pendingInline = null;
+    _inlineContinuation = null;
     _margin = 0;
     _waiting = false;
     _issues.clear();

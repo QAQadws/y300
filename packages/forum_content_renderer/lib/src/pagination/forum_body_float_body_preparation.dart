@@ -15,6 +15,7 @@ import '../style/forum_body_style_options.dart';
 import 'forum_body_frozen_images.dart';
 import 'forum_body_image_frame.dart';
 import 'forum_body_text_page_composer.dart';
+import 'forum_body_text_page_content.dart';
 import 'forum_body_text_page_preparation.dart';
 import 'forum_body_text_page_session.dart';
 
@@ -38,6 +39,7 @@ final class ForumBodyFloatBodyLayout {
     this.margin,
     this.borderBoxSize,
     this.contentBounds,
+    this.background,
     this._body,
     List<double> pageTops,
   ) : _pageTops = List.unmodifiable(pageTops);
@@ -46,6 +48,7 @@ final class ForumBodyFloatBodyLayout {
   final EdgeInsets margin;
   final Size borderBoxSize;
   final Rect contentBounds;
+  final Color? background;
   final ForumBodyTextPageSession _body;
   final List<double> _pageTops;
 
@@ -54,6 +57,8 @@ final class ForumBodyFloatBodyLayout {
     borderBoxSize.height + margin.vertical,
   );
   ForumBodyTextPageSnapshot get snapshot => _body.snapshot;
+  List<ForumBodyTextPageContent> borrowInputs() =>
+      borrowForumBodyFloatInputs(_body);
   bool get isClosed => _body.isClosed || _body.isLayoutOwnerRetired;
   double pageTop(int index) => _pageTops[index];
   ForumBodyTextPagePreparation openPagePreparation(int index) =>
@@ -80,6 +85,10 @@ final class ForumBodyFloatBodyPreparation {
     ForumBodyInlineImageResolver? inlineImageResolver,
     this.paragraphBuilder = const ForumBodyParagraphContentBuilder(),
     this.rubyLimits = const ForumBodyRubyContentLimits(),
+    this.maxNativeHandlesPerPage,
+    this.maxNativeEntriesPerPage,
+    this.maxNativeEstimatedBytesPerPage,
+    this.maxImagesPerPage,
   }) : _document = document,
        _reader = reader,
        _cache = cache,
@@ -118,6 +127,10 @@ final class ForumBodyFloatBodyPreparation {
   final TextScaler textScaler;
   final ForumBodyParagraphContentBuilder paragraphBuilder;
   final ForumBodyRubyContentLimits rubyLimits;
+  final int? maxNativeHandlesPerPage;
+  final int? maxNativeEntriesPerPage;
+  final int? maxNativeEstimatedBytesPerPage;
+  final int? maxImagesPerPage;
   final ForumBodyDocument _document;
   final ForumBodyReaderStyle _reader;
   final ForumBodyParagraphCache _cache;
@@ -210,6 +223,13 @@ final class ForumBodyFloatBodyPreparation {
         collapses: _collapses,
         contentRoot: source.element,
         intrinsicAvailableWidth: probe ? containingWidth : null,
+        captureNativeUsage: !probe,
+        maxNativeHandlesPerPage: probe ? null : maxNativeHandlesPerPage,
+        maxNativeEntriesPerPage: probe ? null : maxNativeEntriesPerPage,
+        maxNativeEstimatedBytesPerPage: probe
+            ? null
+            : maxNativeEstimatedBytesPerPage,
+        maxImagesPerPage: maxImagesPerPage,
         imageResolver: _images.block,
         inlineImageResolver: _images.inline,
         tableExtent: ForumBodyTableExtent.natural,
@@ -251,6 +271,9 @@ final class ForumBodyFloatBodyPreparation {
       _margin,
       Size(width + _padding.horizontal, height),
       Rect.fromLTWH(_padding.left, _padding.top, width, _height),
+      session.contentRootStyle.visibilityHidden
+          ? null
+          : session.contentRootStyle.boxBackground,
       session,
       _pageTops,
     );

@@ -7,7 +7,7 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../contracts/forum_collapse_header_metrics.dart';
 import '../document/forum_body_document.dart';
-import '../style/forum_body_quote_decoration.dart';
+import '../style/forum_body_style_options.dart';
 import '../inline/forum_body_inline_paragraph_layout.dart';
 import '../inline/forum_body_emphasis_paragraph_metrics.dart';
 import '../inline/forum_body_fitted_emphasis_plan.dart';
@@ -17,9 +17,11 @@ import '../paragraph/forum_body_paragraph_layout.dart';
 import 'forum_body_source_hint.dart';
 import 'forum_body_list_marker_plan.dart';
 import 'forum_body_image_frame.dart';
+import 'forum_body_float_body_preparation.dart';
 
 part 'forum_body_emphasis_scene_reservation.dart';
 part 'forum_body_text_page_background.dart';
+part 'forum_body_float_placement.dart';
 
 enum ForumBodyTextPageFailure {
   oversizedGroup,
@@ -162,6 +164,7 @@ final class ForumBodyTextPage {
     List<ForumBodyTextPageBackground> backgrounds,
     this.usedHeight, {
     this.table,
+    this.nativeUsage,
   }) : fragments = List.unmodifiable(fragments),
        rules = List.unmodifiable(rules),
        backgrounds = List.unmodifiable(backgrounds);
@@ -170,6 +173,7 @@ final class ForumBodyTextPage {
   final List<ForumBodyTextPageRule> rules;
   final List<ForumBodyTextPageBackground> backgrounds;
   final ForumBodyTextPageTable? table;
+  final ({int handles, int entries, int bytes, int images})? nativeUsage;
   int get itemCount =>
       fragments.length +
       rules.length +
@@ -243,12 +247,14 @@ final class ForumBodyTextPageComposer {
     required this.maxPages,
     required this.maxFragments,
     bool flowing = false,
+    bool captureNativeUsage = false,
     this.maxNativeHandlesPerPage,
     this.maxNativeEntriesPerPage,
     this.maxNativeEstimatedBytesPerPage,
     this.maxDeliveriesPerPage,
     this.maxImagesPerPage,
-  }) : _flowing = flowing {
+  }) : _flowing = flowing,
+       _captureNativeUsage = captureNativeUsage {
     if (layoutId.isEmpty ||
         !width.isFinite ||
         width <= 0 ||
@@ -265,12 +271,13 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 28;
+  static const revision = 29;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;
   final double height;
   final bool _flowing;
+  final bool _captureNativeUsage;
 
   /// Explicit metadata budgets, not measured native/GPU memory.
   final int maxPages;
@@ -293,6 +300,8 @@ final class ForumBodyTextPageComposer {
   final _draft = <ForumBodyTextPageFragment>[];
   final _rules = <ForumBodyTextPageRule>[];
   final _backgrounds = _PageBackgrounds();
+  final _floatBackgrounds = <ForumBodyTextPageBackground>[];
+  final _floats = <({ForumBodyFloatSide side, Rect bounds})>[];
   _OpenCollapseHeader? _collapseHeader;
   ForumBodyTextPageSnapshot? _snapshot;
   _ActiveParagraph? _active;
@@ -1356,20 +1365,33 @@ final class ForumBodyTextPageComposer {
 
   void _seal({ForumBodyTextPageTable? table}) {
     if (_pages.length >= maxPages) _fail(ForumBodyTextPageFailure.pageLimit);
+    final backgrounds = _backgrounds.seal(
+      _flowing ? _usedHeight : table?.bounds.bottom ?? height,
+    );
     _pages.add(
       ForumBodyTextPage._(
         _pages.length,
         _draft,
         _rules,
-        _backgrounds.seal(
-          _flowing ? _usedHeight : table?.bounds.bottom ?? height,
-        ),
+        _floatBackgrounds.isEmpty
+            ? backgrounds
+            : [...backgrounds, ..._floatBackgrounds],
         _usedHeight,
         table: table,
+        nativeUsage: _captureNativeUsage
+            ? (
+                handles: _usedNativeHandles,
+                entries: _nativeEntries.length + _sceneEntries,
+                bytes: _nativeBytes + _sceneBytes,
+                images: _usedImages,
+              )
+            : null,
       ),
     );
     _draft.clear();
     _rules.clear();
+    _floatBackgrounds.clear();
+    _floats.clear();
     _usedNativeHandles = 0;
     _nativeEntries.clear();
     _nativeBytes = 0;
@@ -1399,10 +1421,16 @@ final class ForumBodyTextPageComposer {
     _padding = null;
     _rule = null;
     _image = null;
-    _fragmentCount -= _draft.length + _rules.length + _backgrounds.itemCount;
+    _fragmentCount -=
+        _draft.length +
+        _rules.length +
+        _backgrounds.itemCount +
+        _floatBackgrounds.length;
     _draft.clear();
     _rules.clear();
     _backgrounds.clear();
+    _floatBackgrounds.clear();
+    _floats.clear();
     _collapseHeader = null;
     _usedNativeHandles = 0;
     _nativeEntries.clear();

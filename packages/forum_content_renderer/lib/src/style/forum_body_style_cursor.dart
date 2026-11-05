@@ -151,6 +151,7 @@ final class ForumBodyStyleCursor {
           context.author,
           parentKind: context.kind,
           cellPadding: context.cellPadding,
+          scopedRoot: identical(node, _contentRoot),
         ) ??
         context.author;
     final parent = _authorBuilder == null
@@ -166,6 +167,7 @@ final class ForumBodyStyleCursor {
         parent,
         parentKind: context.kind,
         cellPadding: context.cellPadding,
+        scopedRoot: identical(node, _contentRoot),
       ),
       author: author,
       kind: node.kind,

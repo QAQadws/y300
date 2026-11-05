@@ -10,7 +10,7 @@ import 'forum_body_style_options.dart';
 import 'forum_body_text_emphasis_resolver.dart';
 import 'forum_body_list_style_resolver.dart';
 
-const forumBodyStyleRevision = 24;
+const forumBodyStyleRevision = 25;
 ForumBodyLength forumBodyReaderIndent(
   ForumBodyReaderStyle reader,
   double size,
@@ -97,6 +97,7 @@ final class ForumBodyStyleBuilder {
     ForumBodyResolvedStyle parent, {
     ForumBodyElementKind? parentKind,
     required ForumBodyLength cellPadding,
+    bool scopedRoot = false,
   }) {
     final role = _role(node.kind, parent.role);
     final quoteClass =
@@ -138,6 +139,13 @@ final class ForumBodyStyleBuilder {
     }
     String? value(String property) =>
         declarations.value(property)?.toLowerCase();
+    final floatSide = switch (value('float')) {
+      null || 'none' || 'initial' || 'unset' => ForumBodyFloatSide.none,
+      'left' => ForumBodyFloatSide.left,
+      'right' => ForumBodyFloatSide.right,
+      'inherit' => parent.floatSide,
+      _ => ForumBodyFloatSide.unsupported,
+    };
     final authorSize = value('font-size');
     if (authorSize != null) {
       size =
@@ -316,7 +324,11 @@ final class ForumBodyStyleBuilder {
       ownBackground = color;
       // RB/RT own inline text contexts. Highlights must reach native text
       // paint rather than remaining on metadata for an unpainted block box.
-      if (node.kind == ForumBodyElementKind.inline ||
+      final floatedBox =
+          scopedRoot &&
+          (floatSide == ForumBodyFloatSide.left ||
+              floatSide == ForumBodyFloatSide.right);
+      if ((node.kind == ForumBodyElementKind.inline && !floatedBox) ||
           node.kind == ForumBodyElementKind.rubyBase ||
           node.kind == ForumBodyElementKind.rubyText) {
         inlineBackground = color == null
@@ -590,13 +602,7 @@ final class ForumBodyStyleBuilder {
         rootFontSize: reader.textStyle.fontSize!,
         onUnsupported: (property, value) => _issue(node, property, value),
       ),
-      floatSide: switch (value('float')) {
-        null || 'none' || 'initial' || 'unset' => ForumBodyFloatSide.none,
-        'left' => ForumBodyFloatSide.left,
-        'right' => ForumBodyFloatSide.right,
-        'inherit' => parent.floatSide,
-        _ => ForumBodyFloatSide.unsupported,
-      },
+      floatSide: floatSide,
       clear: switch (value('clear')) {
         null || 'none' || 'initial' || 'unset' => ForumBodyClear.none,
         'left' => ForumBodyClear.left,
