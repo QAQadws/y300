@@ -67,6 +67,71 @@ Widget _host(Widget child) => MaterialApp(
 );
 
 void main() {
+  testWidgets('mounted inline anchors reveal the exact repeated image slot', (
+    tester,
+  ) async {
+    final fixture = InlineImageFixture(
+      sticker: false,
+      size: const Size(70, 20),
+    );
+    final view = fixture.view();
+    final controller = ForumHtmlImageAnchorController();
+    final scroll = ScrollController();
+    addTearDown(controller.dispose);
+    addTearDown(scroll.dispose);
+    final entries = fixture.images.values.map((image) => image.entry!).toList();
+    controller.bindSequence(
+      ForumHtmlReadableImageSequence(
+        sourceId: fixture.document.identity.sourceId,
+        entries: entries,
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SingleChildScrollView(
+          controller: scroll,
+          child: Column(
+            children: [
+              const SizedBox(height: 100),
+              ForumBodyInlineImageSurface(
+                view: view,
+                imageHost: _Host(fixture),
+                imageAnchorController: controller,
+              ),
+              const SizedBox(height: 900),
+            ],
+          ),
+        ),
+      ),
+    );
+    final images = find.byType(ForumHtmlImageView);
+    final target = tester.getTopLeft(images.last).dy;
+    expect(target, greaterThan(tester.getTopLeft(images.first).dy));
+    final entry = entries.last;
+    Future<bool> reveal() => controller.revealImage(
+      index: entry.index,
+      cacheKey: entry.cacheKey,
+      url: entry.url,
+      scrollController: scroll,
+      isCurrent: () => true,
+    );
+    final result = reveal();
+    await tester.pump();
+    expect(await result, isTrue);
+    expect(scroll.offset, closeTo(target, 0.5));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SingleChildScrollView(
+          controller: scroll,
+          child: const SizedBox(height: 1000),
+        ),
+      ),
+    );
+    expect(await reveal(), isFalse);
+    expect(fixture.cache.activeLeases, 0);
+  });
+
   for (final changeHost in [false, true]) {
     testWidgets(
       'a pending image tap retires without remounting pixels: Host=$changeHost',

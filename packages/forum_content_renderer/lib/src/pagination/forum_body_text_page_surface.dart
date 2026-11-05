@@ -14,6 +14,7 @@ import '../paragraph/forum_body_paragraph_surface.dart';
 import '../inline/forum_body_inline_paragraph_surface.dart';
 import '../inline/forum_body_inline_paragraph_view.dart';
 import '../inline/forum_body_emphasis_fragment_surface.dart';
+import '../services/forum_html_image_anchor_controller.dart';
 import 'forum_body_prepared_text_fragment.dart';
 import 'forum_body_text_page_composer.dart';
 import 'forum_body_text_page_binding.dart';
@@ -82,6 +83,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     // occupied box when placing that already published slice in a table.
     bool compactHeight = false,
     ForumHtmlImageHost? imageHost,
+    ForumHtmlImageAnchorController? imageAnchorController,
     ForumHtmlCollapseLabels? collapseLabels,
     ValueChanged<ForumBodyTextPageFragment>? onCollapseToggle,
     void Function(ForumBodyPreparedImageFragment, bool)? onImageDisplayChanged,
@@ -154,6 +156,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
       onSourceTap,
       onSourceLongPress,
       imageHost,
+      imageAnchorController,
       Map.unmodifiable(images),
       onImageDisplayChanged,
       onImageLayoutResolved,
@@ -176,6 +179,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     this._onSourceTap,
     this._onSourceLongPress,
     this._imageHost,
+    this._imageAnchorController,
     this._images,
     this._onImageDisplayChanged,
     this._onImageLayoutResolved,
@@ -199,6 +203,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
   )?
   _onSourceLongPress;
   final ForumHtmlImageHost? _imageHost;
+  final ForumHtmlImageAnchorController? _imageAnchorController;
   final Map<ForumBodyPreparedImageFragment, ForumHtmlDisplayImage> _images;
   final void Function(ForumBodyPreparedImageFragment, bool)?
   _onImageDisplayChanged;
@@ -271,6 +276,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
         binding: binding,
         host: _imageHost!,
         image: _images[binding]!,
+        anchorController: _imageAnchorController,
         onDisplayChanged: _onImageDisplayChanged,
         onLayoutResolved: _onImageLayoutResolved,
         onTap: _onImageTap,
@@ -295,6 +301,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
       ForumBodyPreparedInlineFragment() => ForumBodyInlineImageSurface(
         view: binding.view,
         imageHost: _imageHost,
+        imageAnchorController: _imageAnchorController,
         onImageDisplayChanged: _onInlineImageDisplayChanged == null
             ? null
             : (image, rendered) =>
@@ -476,6 +483,7 @@ final class _ImageFragmentSurface extends StatefulWidget {
     required this.binding,
     required this.host,
     required this.image,
+    this.anchorController,
     this.onDisplayChanged,
     this.onLayoutResolved,
     this.onTap,
@@ -483,6 +491,7 @@ final class _ImageFragmentSurface extends StatefulWidget {
   final ForumBodyPreparedImageFragment binding;
   final ForumHtmlImageHost host;
   final ForumHtmlDisplayImage image;
+  final ForumHtmlImageAnchorController? anchorController;
   final void Function(ForumBodyPreparedImageFragment, bool)? onDisplayChanged;
   final void Function(ForumBodyPreparedImageFragment, ForumHtmlImageLayout)?
   onLayoutResolved;
@@ -499,40 +508,53 @@ final class _ImageFragmentSurfaceState extends State<_ImageFragmentSurface> {
         ForumBodyTextPageSurfaceFailure.leases,
       );
     }
+    final input = widget.binding.content.input;
+    final image = Semantics(
+      image: true,
+      label:
+          widget.binding.content.input.entry.alt ??
+          widget.binding.content.input.entry.title,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap == null
+            ? null
+            : () {
+                if (!mounted || !widget.binding.isActive) return;
+                widget.onTap?.call(widget.binding);
+              },
+        child: ForumHtmlImageView(
+          host: widget.host,
+          image: widget.image,
+          fit: BoxFit.contain,
+          onImageLayoutResolved: (layout) {
+            if (!mounted || !widget.binding.isActive) return;
+            widget.onLayoutResolved?.call(widget.binding, layout);
+          },
+          onImageDisplayChanged: (ready) {
+            if (!mounted || !widget.binding.isActive) return;
+            widget.binding.reportDisplayFrame(ready);
+            widget.onDisplayChanged?.call(widget.binding, ready);
+          },
+        ),
+      ),
+    );
+    final entry = input.entry;
+    final controller = widget.anchorController;
     return Stack(
       clipBehavior: Clip.hardEdge,
       children: [
         Positioned.fromRect(
           rect: widget.binding.content.frame.imageRect,
-          child: Semantics(
-            image: true,
-            label:
-                widget.binding.content.input.entry.alt ??
-                widget.binding.content.input.entry.title,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: widget.onTap == null
-                  ? null
-                  : () {
-                      if (!mounted || !widget.binding.isActive) return;
-                      widget.onTap?.call(widget.binding);
-                    },
-              child: ForumHtmlImageView(
-                host: widget.host,
-                image: widget.image,
-                fit: BoxFit.contain,
-                onImageLayoutResolved: (layout) {
-                  if (!mounted || !widget.binding.isActive) return;
-                  widget.onLayoutResolved?.call(widget.binding, layout);
-                },
-                onImageDisplayChanged: (ready) {
-                  if (!mounted || !widget.binding.isActive) return;
-                  widget.binding.reportDisplayFrame(ready);
-                  widget.onDisplayChanged?.call(widget.binding, ready);
-                },
-              ),
-            ),
-          ),
+          child: controller == null
+              ? image
+              : ForumHtmlImageAnchor(
+                  controller: controller,
+                  sourceId: input.identity.sourceId,
+                  index: entry.index,
+                  cacheKey: entry.cacheKey,
+                  url: entry.url,
+                  child: image,
+                ),
         ),
       ],
     );

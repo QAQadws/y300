@@ -8,6 +8,7 @@ import '../style/forum_body_style_options.dart';
 import '../contracts/forum_html_display_image.dart';
 import '../contracts/forum_html_image_host.dart';
 import '../html_rendering/widgets/forum_html_image_view.dart';
+import '../services/forum_html_image_anchor_controller.dart';
 import 'forum_body_inline_paragraph_view.dart';
 
 part 'forum_body_inline_image_surface.dart';

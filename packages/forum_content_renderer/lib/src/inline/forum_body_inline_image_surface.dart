@@ -10,6 +10,7 @@ final class ForumBodyInlineImageSurface extends StatefulWidget {
     this.interactionIdentity,
     this.paintBackgrounds = true,
     this.imageHost,
+    this.imageAnchorController,
     this.onImageDisplayChanged,
     this.onImageLayoutResolved,
     this.onImageTap,
@@ -19,6 +20,7 @@ final class ForumBodyInlineImageSurface extends StatefulWidget {
   final Object? interactionIdentity;
   final bool paintBackgrounds;
   final ForumHtmlImageHost? imageHost;
+  final ForumHtmlImageAnchorController? imageAnchorController;
   final void Function(ForumBodyInlineImageBinding, bool)? onImageDisplayChanged;
   final void Function(ForumBodyInlineImageBinding, ForumHtmlImageLayout)?
   onImageLayoutResolved;
@@ -147,7 +149,7 @@ final class _InlineSurfaceState extends State<ForumBodyInlineImageSurface> {
             }
           };
     final reference = binding.input.element.resource!;
-    return Semantics(
+    final surface = Semantics(
       image: true,
       label: reference.alt ?? reference.title ?? '',
       onTap: tap,
@@ -174,6 +176,17 @@ final class _InlineSurfaceState extends State<ForumBodyInlineImageSurface> {
           ),
         ),
       ),
+    );
+    final controller = widget.imageAnchorController;
+    final entry = binding.input.entry;
+    if (controller == null || entry == null) return surface;
+    return ForumHtmlImageAnchor(
+      controller: controller,
+      sourceId: binding.input.identity.sourceId,
+      index: entry.index,
+      cacheKey: entry.cacheKey,
+      url: entry.url,
+      child: surface,
     );
   }
 
