@@ -22,6 +22,8 @@ enum ForumBodyTableFailure {
   cellLimit,
   workLimit,
   overlap,
+  invalidGeometry,
+  extentLimit,
 }
 
 final class ForumBodyTableException implements Exception {
