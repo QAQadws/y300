@@ -203,9 +203,41 @@ final class ForumBodyDocument {
   /// Actual image occurrences in source order, indexed during parsing.
   final List<ForumBodyElement> imageElements;
   final List<ForumBodyElement> collapseElements;
+
+  /// Postorder by repaired child path. Descendant tables are contiguous.
   final List<ForumBodyElement> tableElements;
   final int parsedNodeCount;
   final int uniqueStyleCount;
+
+  Iterable<ForumBodyElement> tablesBelow(ForumBodyElement container) sync* {
+    if (tableElements.isEmpty) return;
+    final prefix = '${container.path}/';
+    final parent = container.path.split('/').map(int.parse).toList();
+    var low = 0, high = tableElements.length;
+    // Ancestors occur after their descendants in the parser's index. Only
+    // paths in a preceding sibling subtree sort before the whole container.
+    bool precedes(String path) {
+      final child = path.split('/');
+      for (var i = 0; i < child.length && i < parent.length; i++) {
+        final index = int.parse(child[i]);
+        if (index != parent[i]) return index < parent[i];
+      }
+      return false;
+    }
+
+    while (low < high) {
+      final middle = (low + high) >> 1;
+      if (precedes(tableElements[middle].path)) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    while (low < tableElements.length &&
+        tableElements[low].path.startsWith(prefix)) {
+      yield tableElements[low++];
+    }
+  }
 
   /// Resolves a repaired child-node path without building an index of the whole
   /// document. Parser output retains increasing source child indices, including

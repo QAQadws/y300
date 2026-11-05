@@ -264,6 +264,22 @@ void main() {
     },
   );
 
+  test('a mixed book float keeps the text on both sides of its table', () {
+    final document = _parse(
+      '<span style="float:right">Before <b>bold</b>'
+      '<div><table><tr><td>cell</td></tr></table></div>'
+      'After <i>italic</i></span>',
+    );
+    final session = _book(document, _cache(), captureFloats: true);
+    _advanceBook(session, 3);
+    expect(session.snapshot[1].table?.path, document.tableElements.single.path);
+    for (final (index, text) in [(0, 'Before bold'), (2, 'After italic')]) {
+      final delivery = session.preparePageFragments(index).single;
+      expect(delivery.projection.text, text);
+      delivery.close();
+    }
+  });
+
   test('a failure discards an unpublished floated table and its budget', () {
     final cache = _cache();
     final session = _book(
