@@ -33,6 +33,7 @@ final class NovelReaderNativeViewJobLimits {
     this.maxStepsPerFrame = 64,
     this.preparationFragments = 8,
     this.coverageGraphemes = 64,
+    this.coverageResources = 32,
     this.coverageFragments = 4,
     this.coverage = const NovelReaderNativeCoverageLimits(),
   });
@@ -40,6 +41,7 @@ final class NovelReaderNativeViewJobLimits {
   final int maxStepsPerFrame;
   final int preparationFragments;
   final int coverageGraphemes;
+  final int coverageResources;
   final int coverageFragments;
   final NovelReaderNativeCoverageLimits coverage;
 }
@@ -65,10 +67,12 @@ final class NovelReaderNativePageViewJob {
         limits.maxStepsPerFrame <= 0 ||
         limits.preparationFragments <= 0 ||
         limits.coverageGraphemes <= 0 ||
+        limits.coverageResources <= 0 ||
         limits.coverageFragments <= 0 ||
         limits.coverage.maxFragments < 0 ||
         limits.coverage.maxGraphemes < 0 ||
-        limits.coverage.maxPoints < 0) {
+        limits.coverage.maxPoints < 0 ||
+        limits.coverage.maxResources < 0) {
       throw ArgumentError('Invalid native page-view work limits');
     }
     if (anchors.identity != session.snapshot.identity) {
@@ -247,6 +251,7 @@ final class NovelReaderNativePageViewJob {
         await _beforeStep();
         final start = elapsed.elapsedMicroseconds;
         coverage.advance(
+          maxResources: limits.coverageResources,
           maxGraphemes: limits.coverageGraphemes,
           maxFragments: limits.coverageFragments,
         );

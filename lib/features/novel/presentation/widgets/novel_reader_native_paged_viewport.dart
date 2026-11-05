@@ -1099,6 +1099,7 @@ class _NativeMountedPageState extends State<_NativeMountedPage>
       fragments: _fragments,
       imageHost: widget.imageHost,
       onImageDisplayChanged: (_, _) => widget.onImageDisplayChanged(),
+      onInlineImageDisplayChanged: (_, _, _) => widget.onImageDisplayChanged(),
       onImageTap: widget.onImageTap,
       onImageLayoutResolved: (fragment, layout) =>
           widget.onImageLayoutResolved?.call(widget.view, fragment, layout),

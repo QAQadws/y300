@@ -1,12 +1,22 @@
-import 'package:flutter/painting.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_native_prepared_chapter.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_native_page_coverage.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_anchor_binder.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_image_resources.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_page_coverage_cursor.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_prefix_verifier.dart';
+import 'package:y300/features/novel/presentation/controllers/novel_reader_native_paged_controller.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_native_work_scheduler.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_native_view_window.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_preferences.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_performance_policy.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_native_paged_viewport.dart';
+import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
 
 import '../test_support/native_reader_image_test_host.dart';
 
@@ -38,8 +48,15 @@ final class _Fixture {
     maxEntries: 16,
     maxEstimatedBytes: 1 << 22,
   );
-  ForumBodyTextPageSession session({double ratio = 1, double height = 100}) {
-    final host = NativeReaderImageTestHost(aspectRatio: ratio);
+  ForumBodyTextPageSession session({
+    double ratio = 1,
+    double height = 100,
+    double width = 100,
+    bool inline = false,
+    Size imageSize = const Size(20, 10),
+    NativeReaderImageTestHost? imageHost,
+  }) {
+    final host = imageHost ?? NativeReaderImageTestHost(aspectRatio: ratio);
     final resources = NovelReaderNativeImageResources(
       chapter: chapter,
       host: host,
@@ -55,7 +72,7 @@ final class _Fixture {
       ),
       cache: cache,
       layoutId: 'images-$ratio',
-      width: 100,
+      width: width,
       height: height,
       limits: const ForumBodyTextPageSessionLimits(
         maxPages: 100,
@@ -66,6 +83,34 @@ final class _Fixture {
         maxIssuedLeases: 32,
       ),
       imageResolver: resources.resolve,
+      inlineImageResolver: !inline
+          ? null
+          : (identity, element, style) {
+              final input = resources.resolve(identity, element);
+              if (input == null) return null;
+              final image = host.resolveImage(
+                url: Uri.parse(input.entry.url),
+                imageIndex: input.entry.index,
+                isSticker: false,
+                htmlSize:
+                    element.resource!.width != null &&
+                        element.resource!.height != null
+                    ? Size(element.resource!.width!, element.resource!.height!)
+                    : null,
+              )!;
+              return ForumBodyInlineImageInput(
+                document: chapter.document,
+                element: element,
+                image: image,
+                entry: input.entry,
+                dimensions: PlaceholderDimensions(
+                  size: imageSize,
+                  alignment: PlaceholderAlignment.baseline,
+                  baseline: TextBaseline.alphabetic,
+                  baselineOffset: imageSize.height,
+                ),
+              );
+            },
     );
     addTearDown(session.close);
     while (!session.isComplete) {
@@ -75,9 +120,10 @@ final class _Fixture {
   }
 
   List<ForumBodyPreparedTextFragment> prepare(
-    ForumBodyTextPageSession session,
-  ) {
-    final job = session.openPagePreparation(0);
+    ForumBodyTextPageSession session, {
+    int page = 0,
+  }) {
+    final job = session.openPagePreparation(page);
     while (!job.isReady) {
       job.advance(maxFragments: 1, maxParts: 1);
     }
@@ -87,8 +133,378 @@ final class _Fixture {
   }
 }
 
+NovelReaderNativePageCoverage _coverage(
+  _Fixture f,
+  ForumBodyTextPageSession session,
+  List<ForumBodyPreparedTextFragment> values, {
+  int page = 0,
+  NovelReaderNativeCoverageLimits limits =
+      const NovelReaderNativeCoverageLimits(),
+}) {
+  final cursor = NovelReaderNativePageCoverageCursor.prepared(
+    anchors: f.chapter.anchors,
+    snapshot: session.snapshot,
+    pageIndex: page,
+    layoutId: session.snapshot.layoutId,
+    fragments: values,
+    limits: limits,
+  );
+  addTearDown(cursor.close);
+  for (
+    var i = 0;
+    cursor.state == NovelReaderNativeCoverageState.active && i < 10000;
+    i++
+  ) {
+    final step = cursor.advance(
+      maxGraphemes: 1,
+      maxFragments: 1,
+      maxResources: 1,
+    );
+    expect(step.graphemesChecked, lessThanOrEqualTo(1));
+    expect(step.resourcesChecked, lessThanOrEqualTo(1));
+    expect(step.fragmentsCompleted, lessThanOrEqualTo(1));
+    expect(step.madeProgress, isTrue);
+  }
+  return cursor.result;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('a mixed text page waits for every current inline image frame', (
+    tester,
+  ) async {
+    final f = _Fixture(
+      '<p>A<img src="https://x/a.png">B<img src="https://x/a.png">C</p>',
+    );
+    final host = NativeReaderImageTestHost();
+    addTearDown(host.completeDimensions);
+    final session = f.session(inline: true, imageHost: host);
+    final lifetime = NovelReaderPaginationCancellationToken();
+    addTearDown(lifetime.cancel);
+    final controller = NovelReaderNativePagedController(
+      session: session,
+      anchors: f.chapter.anchors,
+      paginationKey: 'mixed-inline-frames',
+      parent: lifetime,
+      position: const NovelReaderProgressSnapshot(
+        novelId: 'novel',
+        episodeId: 'episode',
+        flowMode: NovelReaderFlowMode.pagedLtr,
+        scrollOffset: 0,
+        pageIndex: 0,
+        progressPercent: 0,
+        isProgressPercentValid: true,
+      ),
+      scheduler: NovelReaderNativeWorkScheduler(nextFrame: () async {}),
+      performance: const NovelReaderPaginationPerformancePolicy(
+        enforceBudgets: false,
+      ),
+      idleScheduler: () async {},
+    );
+    addTearDown(controller.close);
+    final reports = <NovelReaderPaginationPosition>[];
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            width: 100,
+            height: 100,
+            child: NovelReaderNativePagedViewport(
+              controller: controller,
+              ownerIdentity: Object(),
+              readingAuthorityIdentity: Object(),
+              imageHost: host,
+              onPositionChanged: reports.add,
+            ),
+          ),
+        ),
+      ),
+    );
+    for (var i = 0; reports.isEmpty && i < 200; i++) {
+      await tester.pump(const Duration(milliseconds: 10));
+    }
+    expect(reports.last.isBodyEndVisible, isFalse);
+    final initial = reports.last.anchor;
+    host.callback(0).frame?.call();
+    await tester.pump(const Duration(milliseconds: 20));
+    expect(reports.last.isBodyEndVisible, isFalse);
+    host.callback(1).frame?.call();
+    for (var i = 0; !reports.last.isBodyEndVisible && i < 20; i++) {
+      await tester.pump(const Duration(milliseconds: 10));
+    }
+    expect(reports.last.isBodyEndVisible, isTrue);
+    expect(reports.last.anchor.nodeId, initial.nodeId);
+    expect(reports.last.anchor.textOffset, initial.textOffset);
+    expect(reports.last.hasUserNavigated, isFalse);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    expect(session.activeIssuedImages, 0);
+    expect(f.cache.activeLeases, 0);
+  });
+
+  for (final version in [1, 37]) {
+    testWidgets(
+      'inline image restore and current frames keep authority format=$version',
+      (tester) async {
+        final f = _Fixture(
+          '<p><img src="https://x/a.png"><img src="https://x/a.png"><img src="https://x/a.png"></p>',
+        );
+        final host = NativeReaderImageTestHost();
+        addTearDown(host.completeDimensions);
+        final session = f.session(
+          inline: true,
+          width: 30,
+          height: 20,
+          imageHost: host,
+        );
+        final source = f.chapter.anchors.images.last.anchor;
+        final lifetime = NovelReaderPaginationCancellationToken();
+        addTearDown(lifetime.cancel);
+        final controller = NovelReaderNativePagedController(
+          session: session,
+          anchors: f.chapter.anchors,
+          paginationKey: 'inline-restore',
+          parent: lifetime,
+          position: NovelReaderProgressSnapshot(
+            novelId: 'novel',
+            episodeId: 'episode',
+            flowMode: NovelReaderFlowMode.pagedLtr,
+            scrollOffset: 0,
+            pageIndex: 99,
+            pageCount: 200,
+            progressPercent: .8,
+            isProgressPercentValid: true,
+            anchorNodeId: source.nodeId,
+            anchorTextOffset: version == 1 ? 0 : -3,
+            anchorFormatVersion: version,
+            anchorTextIdentity: source.textIdentity,
+          ),
+          scheduler: NovelReaderNativeWorkScheduler(nextFrame: () async {}),
+          performance: const NovelReaderPaginationPerformancePolicy(
+            enforceBudgets: false,
+          ),
+          windowLimits: const NovelReaderNativeViewWindowLimits(radius: 0),
+          idleScheduler: () async {},
+        );
+        addTearDown(controller.close);
+        final reports = <NovelReaderPaginationPosition>[];
+        final owner = Object(), authority = Object();
+        Widget widget(NativeReaderImageTestHost imageHost) => Directionality(
+          textDirection: TextDirection.ltr,
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 30,
+              height: 20,
+              child: NovelReaderNativePagedViewport(
+                controller: controller,
+                ownerIdentity: owner,
+                readingAuthorityIdentity: authority,
+                imageHost: imageHost,
+                onPositionChanged: reports.add,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpWidget(widget(host));
+        for (var i = 0; reports.isEmpty && i < 200; i++) {
+          await tester.pump(const Duration(milliseconds: 10));
+        }
+        expect(controller.error, isNull);
+        expect(reports.last.pageIndex, 2);
+        expect(reports.last.anchor.nodeId, source.nodeId);
+        expect(reports.last.isReadOnlyCompatibilityRestore, version != 1);
+        expect(reports.last.hasUserNavigated, isFalse);
+        expect(reports.last.isBodyEndVisible, isFalse);
+        final initial = reports.last;
+        final old = host.callback(2);
+        old.frame?.call();
+        for (var i = 0; !reports.last.isBodyEndVisible && i < 20; i++) {
+          await tester.pump(const Duration(milliseconds: 10));
+        }
+        expect(reports.last.isBodyEndVisible, isTrue);
+        expect(reports.last.isReadOnlyCompatibilityRestore, version != 1);
+        expect(reports.last.hasUserNavigated, isFalse);
+        expect(reports.last.anchor.nodeId, initial.anchor.nodeId);
+        final next = NativeReaderImageTestHost();
+        addTearDown(next.completeDimensions);
+        await tester.pumpWidget(widget(next));
+        await tester.pump(const Duration(milliseconds: 20));
+        expect(reports.last.isBodyEndVisible, isFalse);
+        old.frame?.call();
+        await tester.pump(const Duration(milliseconds: 20));
+        expect(reports.last.isBodyEndVisible, isFalse);
+        next.callback(2).frame?.call();
+        for (var i = 0; !reports.last.isBodyEndVisible && i < 20; i++) {
+          await tester.pump(const Duration(milliseconds: 10));
+        }
+        expect(reports.last.isBodyEndVisible, isTrue);
+        expect(reports.last.hasUserNavigated, isFalse);
+        expect(reports.last.isReadOnlyCompatibilityRestore, version != 1);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+        expect(session.activeIssuedImages, 0);
+        expect(f.cache.activeLeases, 0);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  test('inline coverage merges actual image fences with adjacent text in source order', () {
+    final f = _Fixture(
+      '<p><img src="https://x/a.png">A<img src="https://x/a.png">B<img src="https://x/a.png"></p>',
+    );
+    final session = f.session(inline: true);
+    final values = f.prepare(session);
+    final coverage = _coverage(f, session, values);
+    expect(coverage.images.map((i) => i.inlineAtomIndex), [0, 1, 2]);
+    expect(coverage.images.map((i) => i.parentDisplayFenceUtf16), [0, 1, 2]);
+    expect(
+      coverage.locations.map(
+        (location) => location is NovelReaderNativeImageCoverage
+            ? 'I${location.imageIndex}'
+            : 'T${location.displayUtf16}:${location.affinity.name}',
+      ),
+      [
+        'I0',
+        'T0:downstream',
+        'T1:upstream',
+        'I1',
+        'T1:downstream',
+        'T2:upstream',
+        'I2',
+      ],
+    );
+    expect(coverage.hasClippedResources, isFalse);
+    for (final image in f.chapter.anchors.images) {
+      final location =
+          coverage.locate(image.anchor)! as NovelReaderNativeImageCoverage;
+      expect(location.sourceRune, isNull);
+      expect(location.displayUtf16, isNull);
+      expect(
+        location.rect,
+        (values.single as ForumBodyPreparedInlineFragment)
+            .view
+            .images[location.inlineAtomIndex]!
+            .rect,
+      );
+    }
+    values.single.close();
+    expect(f.cache.activeLeases, 0);
+  });
+
+  test('resource-only inline pages identify only their actual image node', () {
+    final f = _Fixture(
+      '<p><img src="https://x/a.png"><img src="https://x/a.png"><img src="https://x/a.png"></p>',
+    );
+    final session = f.session(inline: true, width: 30, height: 20);
+    expect(session.snapshot, hasLength(3));
+    for (var i = 0; i < 3; i++) {
+      final values = f.prepare(session, page: i);
+      final coverage = _coverage(
+        f,
+        session,
+        values,
+        page: i,
+        limits: const NovelReaderNativeCoverageLimits(
+          maxGraphemes: 0,
+          maxResources: 1,
+        ),
+      );
+      expect(coverage.points, isEmpty);
+      expect(coverage.images.single.imageIndex, i);
+      expect(coverage.images.single.parentDisplayFenceUtf16, 0);
+      for (var other = 0; other < 3; other++) {
+        expect(
+          coverage.locate(f.chapter.anchors.images[other].anchor) != null,
+          other == i,
+        );
+      }
+      values.single.close();
+    }
+    expect(f.cache.activeLeases, 0);
+  });
+
+  test('inline resource work has independent per-step and total budgets', () {
+    final f = _Fixture(
+      '<p><img src="https://x/a.png"><img src="https://x/a.png"><img src="https://x/a.png"></p>',
+    );
+    final session = f.session(inline: true);
+    final values = f.prepare(session);
+    final cursor = NovelReaderNativePageCoverageCursor.prepared(
+      anchors: f.chapter.anchors,
+      snapshot: session.snapshot,
+      pageIndex: 0,
+      layoutId: session.snapshot.layoutId,
+      fragments: values,
+      limits: const NovelReaderNativeCoverageLimits(
+        maxGraphemes: 0,
+        maxResources: 2,
+      ),
+    );
+    addTearDown(cursor.close);
+    for (var i = 0; i < 2; i++) {
+      final step = cursor.advance(
+        maxGraphemes: 1,
+        maxFragments: 1,
+        maxResources: 1,
+      );
+      expect(step.resourcesChecked, 1);
+      expect(step.graphemesChecked, 0);
+      expect(step.fragmentsCompleted, 0);
+      expect(step.madeProgress, isTrue);
+    }
+    expect(
+      () => cursor.advance(maxGraphemes: 1, maxFragments: 1, maxResources: 1),
+      throwsA(
+        isA<NovelReaderNativeCoverageException>().having(
+          (e) => e.failure,
+          'failure',
+          NovelReaderNativeCoverageFailure.budget,
+        ),
+      ),
+    );
+    expect(cursor.state, NovelReaderNativeCoverageState.failed);
+    expect(values.single.isActive, isTrue);
+    values.single.close();
+  });
+
+  test('retirement between cooperative resource steps never publishes partial proof', () {
+    final f = _Fixture(
+      '<p><img src="https://x/a.png"><img src="https://x/a.png"></p>',
+    );
+    final session = f.session(inline: true);
+    final values = f.prepare(session);
+    final cursor = NovelReaderNativePageCoverageCursor.prepared(
+      anchors: f.chapter.anchors,
+      snapshot: session.snapshot,
+      pageIndex: 0,
+      layoutId: session.snapshot.layoutId,
+      fragments: values,
+    );
+    addTearDown(cursor.close);
+    expect(
+      cursor
+          .advance(maxGraphemes: 1, maxFragments: 1, maxResources: 1)
+          .resourcesChecked,
+      1,
+    );
+    values.single.close();
+    expect(
+      () => cursor.advance(maxGraphemes: 1, maxFragments: 1, maxResources: 1),
+      throwsA(
+        isA<NovelReaderNativeCoverageException>().having(
+          (e) => e.failure,
+          'failure',
+          NovelReaderNativeCoverageFailure.retired,
+        ),
+      ),
+    );
+    expect(() => cursor.result, throwsStateError);
+  });
   test(
     'real image coverage uses fragment budget and no glyph/source coordinates',
     () {

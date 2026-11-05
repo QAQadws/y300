@@ -1,4 +1,5 @@
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 
 enum NovelReaderNativePrefixState {
   active,
@@ -220,6 +221,7 @@ final class NovelReaderNativePrefixVerifier {
       old.coverageEndUtf16 == next.coverageEndUtf16 &&
       old.engineRange == next.engineRange &&
       old.imageCount == next.imageCount &&
+      listEquals(old.imagePaths, next.imagePaths) &&
       old.sourceHint == next.sourceHint &&
       old.left == next.left &&
       old.top == next.top &&

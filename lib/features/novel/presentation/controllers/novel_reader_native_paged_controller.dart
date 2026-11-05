@@ -810,11 +810,7 @@ final class NovelReaderNativePagedController {
     final snapshot = delivery.view.snapshot;
     if (delivery.view.coverage.hasClippedGlyphs ||
         delivery.view.coverage.hasClippedResources ||
-        fragments.any(
-          (fragment) =>
-              fragment is ForumBodyPreparedImageFragment &&
-              !fragment.hasRenderedImage,
-        )) {
+        fragments.any((fragment) => !fragment.hasRenderedImages)) {
       return false;
     }
     // Coverage already checked actual visible glyphs against both clips.

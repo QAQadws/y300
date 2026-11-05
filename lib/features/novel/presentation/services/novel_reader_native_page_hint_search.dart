@@ -135,8 +135,7 @@ final class NovelReaderNativePageHintSearch {
         final fragment = page.fragments[_fragmentIndex++];
         final hint = fragment.sourceHint;
         fragments++;
-        if (fragment.kind == ForumBodyTextPageFragmentKind.image &&
-            _imagePaths.contains(fragment.path)) {
+        if (fragment.imagePaths.any(_imagePaths.contains)) {
           _rank = 2;
           _fragmentIndex = page.fragments.length;
         }

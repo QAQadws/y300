@@ -22,23 +22,30 @@ final class NovelReaderNativeCoverageLimits {
     this.maxFragments = 256,
     this.maxGraphemes = 16384,
     this.maxPoints = 8192,
+    this.maxResources = 1024,
   });
   final int maxFragments;
   final int maxGraphemes;
   final int maxPoints;
+  final int maxResources;
 }
 
 final class NovelReaderNativeCoverageStep {
   const NovelReaderNativeCoverageStep(
     this.graphemesChecked,
     this.fragmentsCompleted,
-    this.isComplete,
-  );
+    this.isComplete, {
+    this.resourcesChecked = 0,
+  });
   final int graphemesChecked;
   final int fragmentsCompleted;
   final bool isComplete;
+  final int resourcesChecked;
   bool get madeProgress =>
-      graphemesChecked > 0 || fragmentsCompleted > 0 || isComplete;
+      graphemesChecked > 0 ||
+      resourcesChecked > 0 ||
+      fragmentsCompleted > 0 ||
+      isComplete;
 }
 
 /// Borrows a prepared page's live leases; never shapes, acquires or releases
@@ -88,7 +95,8 @@ final class NovelReaderNativePageCoverageCursor {
   }) {
     if (limits.maxFragments < 0 ||
         limits.maxGraphemes < 0 ||
-        limits.maxPoints < 0) {
+        limits.maxPoints < 0 ||
+        limits.maxResources < 0) {
       throw ArgumentError('Invalid native coverage limits');
     }
     if (anchors.identity != snapshot.identity) {
@@ -134,6 +142,9 @@ final class NovelReaderNativePageCoverageCursor {
   NovelReaderNativePageCoverage? _result;
   int _fragmentIndex = 0;
   int _graphemes = 0;
+  int _resourceCount = 0;
+  Iterator<_ImageCoverageInput>? _resources;
+  bool _resourcesComplete = false;
   bool _hasClippedGlyphs = false;
   bool _hasClippedResources = false;
   Iterator<({int startUtf16, int endUtf16})>? _ranges;
@@ -152,15 +163,17 @@ final class NovelReaderNativePageCoverageCursor {
   NovelReaderNativeCoverageStep advance({
     required int maxGraphemes,
     required int maxFragments,
+    int maxResources = 32,
   }) {
     if (_state != NovelReaderNativeCoverageState.active) {
       throw StateError('Native coverage cursor is retired');
     }
-    if (maxGraphemes <= 0 || maxFragments <= 0) {
+    if (maxGraphemes <= 0 || maxFragments <= 0 || maxResources <= 0) {
       throw ArgumentError('Native coverage work budgets must be positive');
     }
     var checked = 0;
     var fragments = 0;
+    var resources = 0;
     try {
       _ensureLive();
       final page = _snapshot![pageIndex];
@@ -170,6 +183,20 @@ final class NovelReaderNativePageCoverageCursor {
           break;
         }
         _ranges ??= _openFragment(page.fragments[_fragmentIndex]);
+        if (!_resourcesComplete) {
+          if (resources >= maxResources) break;
+          if (_resources!.moveNext()) {
+            if (_resourceCount >= limits.maxResources) {
+              _fail(NovelReaderNativeCoverageFailure.budget);
+            }
+            _resourceCount++;
+            resources++;
+            _includeImage(_resources!.current);
+            continue;
+          }
+          _resources = null;
+          _resourcesComplete = true;
+        }
         if (!_ranges!.moveNext()) {
           _fragmentIndex++;
           fragments++;
@@ -195,6 +222,7 @@ final class NovelReaderNativePageCoverageCursor {
         checked,
         fragments,
         _state == NovelReaderNativeCoverageState.complete,
+        resourcesChecked: resources,
       );
     } catch (_) {
       _state = NovelReaderNativeCoverageState.failed;
@@ -208,6 +236,8 @@ final class NovelReaderNativePageCoverageCursor {
   ) {
     final prepared = _fragments[_fragmentIndex];
     _fragment = prepared;
+    _resourcesComplete = fragment.imageCount == 0;
+    _resources = _resourcesComplete ? null : _imageInputs(prepared).iterator;
     // These inputs are immutable for this delivery. Re-reading mixed fragment
     // getters per grapheme repeatedly scans every child lease. Native geometry
     // and the per-step lifetime guard still validate the current ownership.
@@ -237,7 +267,6 @@ final class NovelReaderNativePageCoverageCursor {
       ),
     );
     if (prepared is ForumBodyPreparedImageFragment) {
-      _includeImage(prepared);
       return const <({int startUtf16, int endUtf16})>[].iterator;
     }
     if (_clip.isEmpty) {
@@ -318,16 +347,16 @@ final class NovelReaderNativePageCoverageCursor {
     );
   }
 
-  void _includeImage(ForumBodyPreparedImageFragment image) {
-    final input = image.content.input, frame = image.content.frame;
-    final source = _anchors!.imageAtPath(input.element.path);
+  void _includeImage(_ImageCoverageInput image) {
+    final source = _anchors!.imageAtPath(image.path), entry = image.entry;
     if (source == null ||
-        source.rawSource != input.entry.rawSrc ||
-        source.url != input.entry.url ||
-        source.imageIndex != input.entry.index) {
+        entry == null ||
+        source.rawSource != entry.rawSrc ||
+        source.url != entry.url ||
+        source.imageIndex != entry.index) {
       _fail(NovelReaderNativeCoverageFailure.identity);
     }
-    if (!_contains(frame.imageRect)) {
+    if (!_contains(image.rect)) {
       _hasClippedResources = true;
       return;
     }
@@ -340,7 +369,9 @@ final class NovelReaderNativePageCoverageCursor {
         fragmentIndex: _fragmentIndex,
         path: source.path,
         imageIndex: source.imageIndex,
-        rect: frame.imageRect,
+        rect: image.rect,
+        inlineAtomIndex: image.atomIndex,
+        parentDisplayFenceUtf16: image.fence,
       ),
     );
   }
@@ -373,6 +404,7 @@ final class NovelReaderNativePageCoverageCursor {
     _snapshot = null;
     _fragments = const [];
     _ranges = null;
+    _resources = null;
     _fragment = null;
     _projection = null;
     _runs = const [];
@@ -383,6 +415,43 @@ final class NovelReaderNativePageCoverageCursor {
     _state = NovelReaderNativeCoverageState.closed;
     _result = null;
     _dropBorrowed();
+  }
+}
+
+typedef _ImageCoverageInput = ({
+  String path,
+  ForumHtmlReadableImageEntry? entry,
+  Rect rect,
+  int? atomIndex,
+  int? fence,
+});
+
+Iterable<_ImageCoverageInput> _imageInputs(
+  ForumBodyPreparedTextFragment prepared,
+) sync* {
+  final body = prepared is ForumBodyPreparedListItemFragment
+      ? prepared.body
+      : prepared;
+  if (body is ForumBodyPreparedImageFragment) {
+    yield (
+      path: body.content.input.element.path,
+      entry: body.content.input.entry,
+      rect: body.content.frame.imageRect,
+      atomIndex: null,
+      fence: null,
+    );
+  } else if (body is ForumBodyPreparedInlineFragment) {
+    final view = body.view;
+    for (final image in view.images.values) {
+      final atom = view.content.projection.atoms[image.atomIndex];
+      yield (
+        path: image.input.element.path,
+        entry: image.input.entry,
+        rect: image.rect,
+        atomIndex: image.atomIndex,
+        fence: atom.displayStartUtf16,
+      );
+    }
   }
 }
 

@@ -35,7 +35,8 @@ final class NovelReaderNativeCoveragePoint
 }
 
 /// Proof of the actual visible resource frame, not of loaded pixels or text.
-/// Source and UTF-16 coordinates are deliberately absent.
+/// Images own no text/source range; the parent's insertion fence only orders
+/// them among text points and cannot prove a resource's semantic position.
 final class NovelReaderNativeImageCoverage
     extends NovelReaderNativeCoverageLocation {
   const NovelReaderNativeImageCoverage({
@@ -44,6 +45,8 @@ final class NovelReaderNativeImageCoverage
     required this.path,
     required this.imageIndex,
     required this.rect,
+    this.inlineAtomIndex,
+    this.parentDisplayFenceUtf16,
   });
   @override
   final NovelReaderTextAnchor anchor;
@@ -52,6 +55,11 @@ final class NovelReaderNativeImageCoverage
   final String path;
   final int imageIndex;
   final Rect rect;
+  final int? inlineAtomIndex;
+
+  /// The actual parent's empty insertion fence, used only to merge reading
+  /// order. This is not image text coverage, a source cursor or a saved anchor.
+  final int? parentDisplayFenceUtf16;
 }
 
 /// Pure geometry proof for one fully checked page. Text points require a
@@ -85,12 +93,26 @@ final class NovelReaderNativePageCoverage {
     while (text < points.length || image < images.length) {
       if (image == images.length ||
           (text < points.length &&
-              points[text].fragmentIndex <= images[image].fragmentIndex)) {
+              _textBeforeImage(points[text], images[image]))) {
         yield points[text++];
       } else {
         yield images[image++];
       }
     }
+  }
+
+  static bool _textBeforeImage(
+    NovelReaderNativeCoveragePoint point,
+    NovelReaderNativeImageCoverage image,
+  ) {
+    if (point.fragmentIndex != image.fragmentIndex) {
+      return point.fragmentIndex < image.fragmentIndex;
+    }
+    final fence = image.parentDisplayFenceUtf16;
+    return fence == null ||
+        point.displayUtf16 < fence ||
+        (point.displayUtf16 == fence &&
+            point.affinity == HtmlProjectionAffinity.upstream);
   }
 
   /// A visible-style glyph extends outside the actual fragment/page clip.
