@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart' show RenderBox, ScrollDirection;
 import 'package:flutter/widgets.dart';
 
 import '../pagination/forum_body_prepared_text_fragment.dart';
+import '../pagination/forum_body_text_page_binding.dart';
 import '../pagination/forum_body_text_page_preparation.dart';
 import '../services/forum_body_scroll_geometry.dart';
 import 'forum_body_table_preparation.dart';
@@ -45,6 +46,48 @@ final class ForumBodyTableVisibleWindow {
   bool get isCurrent => !layout.isClosed && _isCurrent();
 }
 
+/// A measured cell slice transfers to its first mounted table viewport.
+final class ForumBodyTablePreparedSlice {
+  ForumBodyTablePreparedSlice({
+    required this.area,
+    required this.page,
+    required List<ForumBodyPreparedTextFragment> fragments,
+  }) : _fragments = List.unmodifiable(fragments);
+
+  final ForumBodyTableAreaLayout area;
+  final int page;
+  List<ForumBodyPreparedTextFragment>? _fragments;
+  bool get isPending => _fragments != null;
+
+  List<ForumBodyPreparedTextFragment>? _take(ForumBodyTableLayout layout) {
+    final fragments = _fragments;
+    if (fragments == null) return null;
+    if (layout.isClosed ||
+        (!layout.cells.contains(area) && !layout.captions.contains(area)) ||
+        !area.ownsPreparedFragments(fragments)) {
+      throw StateError('Prepared table slice belongs to a different layout');
+    }
+    final snapshot = area.snapshot;
+    validateForumBodyPreparedTextPageBinding(
+      snapshot: snapshot,
+      pageIndex: page,
+      layoutId: snapshot.layoutId,
+      fragments: fragments,
+    );
+    _fragments = null;
+    return fragments;
+  }
+
+  void close() {
+    final fragments = _fragments;
+    _fragments = null;
+    if (fragments == null) return;
+    for (final fragment in fragments) {
+      fragment.close();
+    }
+  }
+}
+
 /// A book-page viewport over one already composed table. Controllers are
 /// borrowed from the mounted page. Visible slices are owned here, including
 /// during preparation; a builder borrows them to paint the same source pages.
@@ -75,7 +118,21 @@ final class ForumBodyTableFlowViewport extends _ForumBodyTableViewport {
     required super.onFailure,
     super.onReadyChanged,
     super.onWindowChanged,
+    this.initialSlice,
   });
+
+  final ForumBodyTablePreparedSlice? initialSlice;
+
+  /// The mounted portion of a settled viewport, even while other cells
+  /// prepare. It may contain only the slice transferred for restoration.
+  static ForumBodyTableVisibleWindow? borrowPaintedWindow(
+    BuildContext viewport,
+  ) {
+    if (viewport is! StatefulElement) return null;
+    final state = viewport.state;
+    if (state is! _TableViewportState) return null;
+    return state._borrowPaintedWindow();
+  }
 
   @override
   ScrollController? get verticalController => null;
@@ -136,6 +193,7 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
   @override
   void initState() {
     super.initState();
+    _adoptInitialSlice();
     _listen();
   }
 
@@ -160,7 +218,18 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
         oldWidget.verticalController != widget.verticalController) {
       _unlisten(oldWidget);
       _clear();
+      _adoptInitialSlice();
       _listen();
+    }
+  }
+
+  void _adoptInitialSlice() {
+    final table = widget;
+    if (table is! ForumBodyTableFlowViewport) return;
+    final seed = table.initialSlice;
+    final fragments = seed?._take(table.layout);
+    if (fragments != null) {
+      _ready[(area: seed!.area, page: seed.page)] = fragments;
     }
   }
 
@@ -293,6 +362,44 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
     final vertical = v?.hasClients == true ? v!.position : _outerPosition;
     return (h.hasClients && h.position.isScrollingNotifier.value) ||
         (vertical?.isScrollingNotifier.value ?? false);
+  }
+
+  ForumBodyTableVisibleWindow? _borrowPaintedWindow() {
+    final published = _publishedWindow;
+    if (published?.isCurrent == true) return published;
+    final bounds = _currentBounds();
+    if (bounds == null || bounds.isEmpty || _scrolling) return null;
+    final revision = _scrollRevision;
+    final layout = widget.layout;
+    final slices = <ForumBodyTableVisibleSlice>[
+      for (final slice in _slicesIn(bounds))
+        if (_ready[slice] case final fragments?)
+          (
+            area: slice.area,
+            page: slice.page,
+            bounds: _sliceBounds(slice),
+            fragments: fragments,
+          ),
+    ];
+    if (slices.isEmpty) return null;
+    return ForumBodyTableVisibleWindow._(
+      layout,
+      bounds,
+      List.unmodifiable(slices),
+      false,
+      () =>
+          mounted &&
+          identical(widget.layout, layout) &&
+          revision == _scrollRevision &&
+          _currentBounds() == bounds &&
+          !_scrolling &&
+          slices.every(
+            (slice) => identical(
+              _ready[(area: slice.area, page: slice.page)],
+              slice.fragments,
+            ),
+          ),
+    );
   }
 
   void _publishWindow(Rect? bounds) {

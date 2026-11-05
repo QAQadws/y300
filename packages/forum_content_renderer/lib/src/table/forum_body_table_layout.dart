@@ -21,6 +21,9 @@ final class ForumBodyTableAreaLayout {
 
   ForumBodyTextPagePreparation openPagePreparation(int page) =>
       _body.session.openPagePreparation(page);
+
+  bool ownsPreparedFragments(List<ForumBodyPreparedTextFragment> fragments) =>
+      _body.session.ownsPreparedFragments(fragments);
 }
 
 /// One frozen layout with source-bound, lazily materialized bodies. The table

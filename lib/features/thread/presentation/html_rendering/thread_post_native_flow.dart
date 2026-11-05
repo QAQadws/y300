@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:isolate';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart'
@@ -11,7 +12,7 @@ import 'package:y300/l10n/app_localizations.dart';
 import 'thread_native_body_images.dart';
 
 part 'thread_native_block_reflow.dart';
-part 'thread_native_inline_reflow.dart';
+part 'thread_native_text_reflow.dart';
 
 /// Thread adapter for the same natural flow used by the novel reader. The
 /// outer floor list owns scroll and reading authority.
@@ -175,6 +176,7 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
         });
       }
       final run = _shown;
+      final table = run?.initialTable;
       final error = _error;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -188,6 +190,19 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
               imageAnchorController: widget.imageAnchorController,
               imagePathForIndex: run.images!.pathForIndex,
               initialSlice: run.initialSlice,
+              initialTableOffset: table == null
+                  ? null
+                  : (slice: table.index, offset: table.offset),
+              initialTableSlice: table == null
+                  ? null
+                  : (index: table.index, slice: table.slice),
+              onTableWindowChanged: (index, window) {
+                if (window?.isCurrent == true) {
+                  run.tableWindows[index] = window!;
+                } else {
+                  run.tableWindows.remove(index);
+                }
+              },
               onReadyChanged: (ready) {
                 if (!_current(run)) return;
                 run.ready = ready;
@@ -335,7 +350,7 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
     }
     if (previous != null &&
         !identical(previous, run) &&
-        (run.blockChanges.isNotEmpty || run.preserveInline) &&
+        (run.blockChanges.isNotEmpty || run.preserveText) &&
         !_preserveImageReflow(previous, run)) {
       return;
     }
@@ -529,18 +544,21 @@ final class _ThreadFlowRun {
           changes.values.every((change) => change == _ThreadImageChange.block)
           ? changes.keys.toSet()
           : const {},
-      preserveInline =
-          changes.containsValue(_ThreadImageChange.inline) &&
-          !changes.containsValue(_ThreadImageChange.table);
+      preserveText =
+          changes.containsValue(_ThreadImageChange.inline) ||
+          changes.containsValue(_ThreadImageChange.table),
+      preserveTable = changes.containsValue(_ThreadImageChange.table);
 
   final Object inputs;
   final Set<String> blockChanges;
-  final bool preserveInline;
+  final bool preserveText, preserveTable;
   final boundsKey = GlobalKey();
   final blockImages = <String, ({double top, double height})>{};
   final pageTops = <double>[];
-  _ThreadInlineProbe? inlineProbe;
+  final tableWindows = <int, ForumBodyTableVisibleWindow>{};
+  _ThreadTextReflowProbe? textProbe;
   ForumBodyFlowPreparedSlice? initialSlice;
+  _ThreadTableTextResult? initialTable;
 
   ForumBodyTextPageSession? session;
   ForumBodyTextPageSnapshot? prefix;
@@ -568,14 +586,16 @@ final class _ThreadFlowRun {
   void close() {
     _ThreadFlowQueue.remove(step);
     unawaited(budget?.cancel());
-    cancelInlineProbe();
+    cancelTextProbe();
     initialSlice?.close();
+    initialTable?.slice.close();
+    tableWindows.clear();
     session?.close();
   }
 
-  void cancelInlineProbe() {
-    inlineProbe?.close();
-    inlineProbe = null;
+  void cancelTextProbe() {
+    textProbe?.close();
+    textProbe = null;
   }
 }
 
