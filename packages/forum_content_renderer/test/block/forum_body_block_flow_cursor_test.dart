@@ -141,6 +141,7 @@ void main() {
             'text:${unit.paragraph.content.projection.text}',
           ForumBodyBlockFlowInline() => 'inline:${unit.paragraph.index}',
           ForumBodyBlockFlowImage() => 'image:${unit.image.index}',
+          ForumBodyBlockFlowTable() => 'table:${unit.table.element.path}',
           ForumBodyBlockFlowRule() => 'rule:${unit.path}',
           ForumBodyBlockFlowListItemStart() => 'list:${unit.marker.itemPath}',
           ForumBodyBlockFlowBoundary() =>
@@ -257,6 +258,7 @@ void main() {
                 '${unit.paragraph.index}:${unit.paragraph.content.projection.text}:${unit.paragraph.window}:${unit.contentLeft}:${unit.contentWidth}',
               ForumBodyBlockFlowInline() => 'inline:${unit.paragraph.index}',
               ForumBodyBlockFlowImage() => 'image:${unit.image.index}',
+              ForumBodyBlockFlowTable() => 'table:${unit.table.element.path}',
               ForumBodyBlockFlowRule() => 'rule:${unit.path}',
               ForumBodyBlockFlowListItemStart() =>
                 'list:${unit.marker.itemPath}',

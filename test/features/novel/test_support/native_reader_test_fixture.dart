@@ -18,6 +18,7 @@ final class NativeReaderTestFixture {
     double height = 100,
     TextScaler textScaler = TextScaler.noScaling,
     ForumBodyReaderStyle? reader,
+    bool dedicatedTables = false,
     bool complete = true,
     String layoutId = 'generation-a',
     ForumBodyParagraphCache? cacheOwner,
@@ -60,6 +61,7 @@ final class NativeReaderTestFixture {
       height: height,
       textScaler: textScaler,
       imageResolver: imageResolver,
+      dedicatedTables: dedicatedTables,
     );
     addTearDown(() {
       parent.cancel();

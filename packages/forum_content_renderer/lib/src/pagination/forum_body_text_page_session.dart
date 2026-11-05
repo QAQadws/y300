@@ -14,6 +14,7 @@ import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../style/forum_body_style_options.dart';
 import '../style/forum_body_length.dart';
+import '../table/forum_body_table_preparation.dart';
 import 'forum_body_flow_width_measure.dart';
 import 'forum_body_text_page_composer.dart';
 import 'forum_body_text_page_preparation.dart';
@@ -172,6 +173,7 @@ final class ForumBodyTextPageSession {
     ForumBodyElement? contentRoot,
     double? intrinsicAvailableWidth,
     int? maxImagesPerPage,
+    bool dedicatedTables = false,
   }) {
     limits._validate();
     if (intrinsicAvailableWidth != null &&
@@ -219,6 +221,7 @@ final class ForumBodyTextPageSession {
           inlineImageResolver: inlineImageResolver,
           collapses: collapses,
           contentRoot: contentRoot,
+          dedicatedTables: dedicatedTables,
         ),
         composer,
         cache,
@@ -230,6 +233,21 @@ final class ForumBodyTextPageSession {
         intrinsicAvailableWidth == null
             ? null
             : ForumBodyFlowWidthMeasure(intrinsicAvailableWidth),
+        dedicatedTables
+            ? (table, remaining) => ForumBodyTablePreparation(
+                document: document,
+                table: table.table.element,
+                reader: reader,
+                cache: cache,
+                availableWidth: table.width,
+                layoutId: '$layoutId/table/${table.table.element.path}',
+                limits: remaining,
+                textScaler: textScaler,
+                collapses: collapses,
+                imageResolver: imageResolver,
+                inlineImageResolver: inlineImageResolver,
+              )
+            : null,
       );
     } catch (_) {
       composer.close();
@@ -246,6 +264,7 @@ final class ForumBodyTextPageSession {
     this._imageResolver,
     this._tableBody,
     this._intrinsic,
+    this._openTable,
   ) : _content = _RetainedParagraphs(limits);
   final ForumBodyBlockFlowCursor _flow;
   final ForumBodyTextPageComposer _composer;
@@ -254,10 +273,16 @@ final class ForumBodyTextPageSession {
   final ForumBodyImageResolver? _imageResolver;
   final bool _tableBody;
   final ForumBodyFlowWidthMeasure? _intrinsic;
+  final ForumBodyTablePreparation Function(
+    ForumBodyBlockFlowTable table,
+    ForumBodyTextPageSessionLimits remaining,
+  )?
+  _openTable;
   final ForumBodyTextPageSessionLimits limits;
   final _RetainedParagraphs _content;
   final _issued = <ForumBodyPreparedTextFragment>{};
   final _preparations = <ForumBodyTextPagePreparation>{};
+  final _tables = <int, ForumBodyTableLayout>{};
   int _reservedLeases = 0;
   int _reservedFragments = 0;
   int _reservedImages = 0;
@@ -266,6 +291,8 @@ final class ForumBodyTextPageSession {
   ForumBodyTextPageSessionState _state = ForumBodyTextPageSessionState.active;
   ForumBodyBlockFlowParagraph? _pendingParagraph;
   ForumBodyBlockFlowImage? _pendingImage;
+  ForumBodyBlockFlowTable? _pendingTable;
+  ForumBodyTablePreparation? _tablePreparation;
   ForumBodyListMarkerPlanPreparation? _listPreparation;
   ForumBodyListMarkerPlan? _listPlan;
   bool _markersReady = false;
@@ -291,7 +318,7 @@ final class ForumBodyTextPageSession {
   bool get waitingForLayoutBudget => _waiting;
   ForumBodyTextPageSnapshot get snapshot => _composer.snapshot;
   int get resolvedNodeCount => _flow.resolvedNodeCount;
-  int get retainedParagraphCount => _content.items.length;
+  int get retainedParagraphCount => _content.paragraphCount;
   int get retainedTextCodeUnits => _content.textCodeUnits;
   int get retainedRuns => _content.runs;
   int get activeIssuedLeases => _issued
@@ -320,6 +347,14 @@ final class ForumBodyTextPageSession {
       ? const Stream<void>.empty()
       : (_retirementEvents ??= StreamController<void>.broadcast()).stream;
   int get droppedStyleIssueCount => _droppedIssues;
+
+  /// Borrow a published table while this session is alive. The session owns
+  /// the table's cell bodies even when the published prefix survives a failure.
+  ForumBodyTableLayout? tableLayoutForPage(int page) {
+    _ensureUsable();
+    RangeError.checkValidIndex(page, snapshot);
+    return _tables[page];
+  }
 
   /// Each call handles at most one paragraph/padding input and publishes at
   /// most one page. Pinned-cache pressure retains the exact pending input; retry
@@ -613,6 +648,27 @@ final class ForumBodyTextPageSession {
             completed: step.paragraphCompleted,
           );
         }
+        if (_pendingTable case final table?) {
+          if (_composer.sealBeforeTable()) return result();
+          final preparation = _tablePreparation ??= _openTable!(
+            table,
+            _remainingTableLimits(),
+          );
+          final step = preparation.advance(
+            maxEvents: maxEvents,
+            maxLines: maxLines,
+            maxFormatParts: maxFormatParts,
+          );
+          _waiting = step.waitingForLayoutBudget;
+          if (!_waiting) formatUnits++;
+          if (!step.isReady) return result();
+          final layout = preparation.takeLayout();
+          _tablePreparation = null;
+          _publishTable(table, layout);
+          _pendingTable = null;
+          _margin = 0;
+          return result(completed: true);
+        }
         if (work >= maxEvents) return result();
         final step = _flow.advance(maxEvents: maxEvents - work);
         events += step.eventsRead;
@@ -622,6 +678,8 @@ final class ForumBodyTextPageSession {
         if (unit == null) continue;
         units++;
         switch (unit) {
+          case ForumBodyBlockFlowTable():
+            _pendingTable = unit;
           case ForumBodyBlockFlowImage():
             if (unit.image.index != _content.items.length) {
               throw StateError('Unordered image input');
@@ -1014,12 +1072,67 @@ final class ForumBodyTextPageSession {
     _readyInline = null;
   }
 
+  ForumBodyTextPageSessionLimits _remainingTableLimits() {
+    if (snapshot.length >= limits.maxPages) {
+      throw const ForumBodyTextPageException(
+        ForumBodyTextPageFailure.pageLimit,
+      );
+    }
+    final items = limits.maxFragments - _composer.retainedFragmentCount - 1;
+    return ForumBodyTextPageSessionLimits(
+      maxPages: math.max(1, items),
+      maxFragments: math.max(1, items),
+      maxParagraphs: math.max(1, limits.maxParagraphs - retainedParagraphCount),
+      maxTextCodeUnits: limits.maxTextCodeUnits - retainedTextCodeUnits,
+      maxRuns: limits.maxRuns - retainedRuns,
+      maxIssuedLeases: limits.maxIssuedLeases,
+      maxIssuedImages: limits.maxIssuedImages,
+      maxPagePreparations: limits.maxPagePreparations,
+      maxStyleIssues: limits.maxStyleIssues,
+    );
+  }
+
+  void _publishTable(
+    ForumBodyBlockFlowTable table,
+    ForumBodyTableLayout layout,
+  ) {
+    try {
+      final usage = layout.usage;
+      _content.checkCounts(
+        usage.textCodeUnits,
+        usage.runs,
+        paragraphs: usage.paragraphs,
+      );
+      final index = snapshot.length;
+      final left = math.max(0.0, table.left);
+      final right = math.min(snapshot.width, table.left + table.width);
+      _composer.publishTable((
+        path: table.table.element.path,
+        bounds: Rect.fromLTRB(left, 0, right, snapshot.height),
+        contentSize: layout.size,
+        fingerprint: layout.fingerprint,
+      ), retainedItems: usage.items + usage.pages);
+      _tables[index] = layout;
+      _content.addTable(usage.paragraphs, usage.textCodeUnits, usage.runs);
+    } catch (_) {
+      layout.close();
+      rethrow;
+    }
+  }
+
+  void _closePendingTable() {
+    _pendingTable = null;
+    _tablePreparation?.close();
+    _tablePreparation = null;
+  }
+
   void _fail() {
     if (isClosed) return;
     _recordPublished();
     _flow.close();
     _pendingListItem = null;
     _pendingImage = null;
+    _closePendingTable();
     _listPreparation?.close();
     _listPreparation = null;
     _listPlan = null;
@@ -1044,6 +1157,12 @@ final class ForumBodyTextPageSession {
     _flow.close();
     _pendingListItem = null;
     _pendingImage = null;
+    _closePendingTable();
+    for (final table in _tables.values) {
+      table.close();
+    }
+    _tables.clear();
+    _content.clearTables();
     _listPreparation?.close();
     _listPreparation = null;
     _listPlan = null;
@@ -1083,12 +1202,14 @@ final class _RetainedParagraphs {
   _RetainedParagraphs(this.limits);
   final ForumBodyTextPageSessionLimits limits;
   final items = <ForumBodyTextPageContent>[];
+  int _tableParagraphs = 0, _tableText = 0, _tableRuns = 0;
+  int get paragraphCount => items.length + _tableParagraphs;
   int textCodeUnits = 0;
   int runs = 0;
   void check(ForumBodyTextPageContent content) =>
       checkCounts(content.retainedTextCodeUnits, content.retainedRuns);
-  void checkCounts(int text, int runCount) {
-    if (items.length >= limits.maxParagraphs) {
+  void checkCounts(int text, int runCount, {int paragraphs = 1}) {
+    if (paragraphs > limits.maxParagraphs - paragraphCount) {
       throw const ForumBodyTextPageSessionException(
         ForumBodyTextPageSessionFailure.paragraphLimit,
       );
@@ -1109,6 +1230,20 @@ final class _RetainedParagraphs {
     items.add(content);
     textCodeUnits += content.retainedTextCodeUnits;
     runs += content.retainedRuns;
+  }
+
+  void addTable(int paragraphs, int text, int runCount) {
+    _tableParagraphs += paragraphs;
+    _tableText += text;
+    _tableRuns += runCount;
+    textCodeUnits += text;
+    runs += runCount;
+  }
+
+  void clearTables() {
+    textCodeUnits -= _tableText;
+    runs -= _tableRuns;
+    _tableParagraphs = _tableText = _tableRuns = 0;
   }
 
   void retain(int count) {

@@ -43,6 +43,13 @@ final class ForumBodyTextFlowImage extends ForumBodyTextFlowUnit {
   final ForumBodyStyledFlowEvent event;
 }
 
+/// A real table whose descendants are consumed by the dedicated layout.
+final class ForumBodyTextFlowTable extends ForumBodyTextFlowUnit {
+  const ForumBodyTextFlowTable._(super.identity, this.event) : super._();
+  final ForumBodyStyledFlowEvent event;
+  ForumBodyElement get element => event.node as ForumBodyElement;
+}
+
 enum ForumBodyTextFlowBoundaryKind { openBlock, closeBlock, endDocument }
 
 /// Block structure remains explicit for the block renderer. A terminal BR
@@ -77,13 +84,15 @@ final class ForumBodyTextFlowCursor {
     this.inlineImageResolver,
     ForumBodyCollapseLayout? collapses,
     ForumBodyElement? contentRoot,
+    this.dedicatedTables = false,
   }) : _flow = ForumBodyStyledFlowCursor(
          document: document,
          reader: reader,
          collapses: collapses,
          contentRoot: contentRoot,
        );
-  static const revision = 10;
+  static const revision = 11;
+  final bool dedicatedTables;
   final ForumBodyInlineImageResolver? inlineImageResolver;
   final ForumBodyParagraphContentBuilder paragraphBuilder;
   final ForumBodyRubyContentLimits rubyLimits;
@@ -91,6 +100,7 @@ final class ForumBodyTextFlowCursor {
   final _blocks = <ForumBodyStyledFlowEvent>[];
   final _startedBlocks = <ForumBodyStyledFlowEvent>{};
   ForumBodyTextFlowImage? _pendingImage;
+  String? _delegatedTable;
   String? _inlineImageClosePath;
   final _emptyListItems = <String, ForumBodyParagraphSequence>{};
   final _issues = <ForumBodyStyleIssue>[];
@@ -148,9 +158,11 @@ final class ForumBodyTextFlowCursor {
         if (_boundaryPending) {
           if (_flushContext()) return _step(read, work);
           final event = _boundary;
+          final table = event != null && event.node.path == _delegatedTable;
           if (event?.phase == ForumBodyFlowPhase.open &&
-              (event!.node as ForumBodyElement).kind ==
-                  ForumBodyElementKind.rule &&
+              (table ||
+                  (event!.node as ForumBodyElement).kind ==
+                      ForumBodyElementKind.rule) &&
               _emptyListItems.isNotEmpty) {
             final entry = _emptyListItems.entries.last;
             _emptyListItems.remove(entry.key);
@@ -174,6 +186,12 @@ final class ForumBodyTextFlowCursor {
           }
           _boundary = null;
           _boundaryPending = false;
+          if (table) {
+            _markContent();
+            _current = ForumBodyTextFlowTable._(identity, event);
+            _trimmedBreak = null;
+            return _step(read, work);
+          }
           final kind = event == null
               ? ForumBodyTextFlowBoundaryKind.endDocument
               : event.phase == ForumBodyFlowPhase.open
@@ -264,6 +282,11 @@ final class ForumBodyTextFlowCursor {
         if (_skipFollowingEditStatus(event)) continue;
         if (event.style.hidden) continue;
         if (event.phase == ForumBodyFlowPhase.close &&
+            event.node.path == _delegatedTable) {
+          _delegatedTable = null;
+          continue;
+        }
+        if (event.phase == ForumBodyFlowPhase.close &&
             event.node.path == _inlineImageClosePath) {
           _inlineImageClosePath = null;
           continue;
@@ -271,6 +294,16 @@ final class ForumBodyTextFlowCursor {
         if (event.phase == ForumBodyFlowPhase.open &&
             event.node is ForumBodyElement) {
           final element = event.node as ForumBodyElement;
+          if (dedicatedTables &&
+              !_insideEditStatus &&
+              element.kind == ForumBodyElementKind.table &&
+              event.style.display == ForumBodyDisplay.table) {
+            _flow.skipCurrentSubtree(event);
+            _delegatedTable = element.path;
+            _boundaryPending = true;
+            _boundary = event;
+            continue;
+          }
           if (element.kind == ForumBodyElementKind.image &&
               (event.style.display == ForumBodyDisplay.inline ||
                   event.style.display == ForumBodyDisplay.inlineBlock) &&

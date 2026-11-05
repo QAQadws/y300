@@ -73,6 +73,18 @@ final class ForumBodyStyledFlowCursor {
   bool isOpenElement(ForumBodyStyledFlowEvent event) =>
       !_closed && _open.any((opened) => identical(opened, event));
 
+  void skipCurrentSubtree(ForumBodyStyledFlowEvent event) {
+    final node = event.node;
+    if (_closed ||
+        _nextNode != null ||
+        !identical(_current, event) ||
+        !identical(_open.lastOrNull, event) ||
+        node is! ForumBodyElement) {
+      throw StateError('Expected the current open styled element');
+    }
+    _styles.skipChildren(node);
+  }
+
   bool moveNext() {
     if (_closed) throw StateError('Styled flow cursor is closed');
     try {

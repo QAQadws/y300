@@ -126,6 +126,7 @@ final class NovelReaderNativePrefixVerifier {
       final incoming = _incoming![_page];
       if (old.index != incoming.index ||
           old.usedHeight != incoming.usedHeight ||
+          old.table != incoming.table ||
           old.fragments.length != incoming.fragments.length ||
           old.rules.length != incoming.rules.length ||
           old.backgrounds.length != incoming.backgrounds.length) {

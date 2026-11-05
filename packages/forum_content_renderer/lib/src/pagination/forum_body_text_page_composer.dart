@@ -1,6 +1,6 @@
 import 'dart:collection';
 import 'dart:math' as math;
-import 'dart:ui' show Color, Offset, Rect, TextDirection;
+import 'dart:ui' show Color, Offset, Rect, Size, TextDirection;
 
 import 'package:flutter/foundation.dart' show precisionErrorTolerance;
 import 'package:html_pagination_core/html_pagination_core.dart';
@@ -142,21 +142,35 @@ final class ForumBodyTextPageRule {
   final Color color;
 }
 
+/// Source identity and frozen viewport geometry for a dedicated table page.
+typedef ForumBodyTextPageTable = ({
+  String path,
+  Rect bounds,
+  Size contentSize,
+  String fingerprint,
+});
+
 final class ForumBodyTextPage {
   ForumBodyTextPage._(
     this.index,
     List<ForumBodyTextPageFragment> fragments,
     List<ForumBodyTextPageRule> rules,
     List<ForumBodyTextPageBackground> backgrounds,
-    this.usedHeight,
-  ) : fragments = List.unmodifiable(fragments),
-      rules = List.unmodifiable(rules),
-      backgrounds = List.unmodifiable(backgrounds);
+    this.usedHeight, {
+    this.table,
+  }) : fragments = List.unmodifiable(fragments),
+       rules = List.unmodifiable(rules),
+       backgrounds = List.unmodifiable(backgrounds);
   final int index;
   final List<ForumBodyTextPageFragment> fragments;
   final List<ForumBodyTextPageRule> rules;
   final List<ForumBodyTextPageBackground> backgrounds;
-  int get itemCount => fragments.length + rules.length + backgrounds.length;
+  final ForumBodyTextPageTable? table;
+  int get itemCount =>
+      fragments.length +
+      rules.length +
+      backgrounds.length +
+      (table == null ? 0 : 1);
   final double usedHeight;
 }
 
@@ -246,7 +260,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 23;
+  static const revision = 24;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;
@@ -344,6 +358,50 @@ final class ForumBodyTextPageComposer {
 
   void _touchBackgrounds(double top) {
     _fragmentCount += _backgrounds.touch(top, maxFragments - _fragmentCount);
+  }
+
+  bool sealBeforeTable() {
+    _ensureTableBoundary();
+    if (_usedHeight == 0 && _draft.isEmpty && _rules.isEmpty) return false;
+    _seal();
+    return true;
+  }
+
+  void publishTable(
+    ForumBodyTextPageTable table, {
+    required int retainedItems,
+  }) {
+    _ensureTableBoundary();
+    if (_usedHeight != 0 || _draft.isNotEmpty || _rules.isNotEmpty) {
+      throw StateError('Table requires an empty page');
+    }
+    final bounds = table.bounds;
+    if (!bounds.isFinite ||
+        bounds.left < 0 ||
+        bounds.top != 0 ||
+        bounds.width <= 0 ||
+        bounds.right > width + precisionErrorTolerance ||
+        bounds.height != height) {
+      _fail(ForumBodyTextPageFailure.invalidGeometry);
+    }
+    if (_pages.length >= maxPages) _fail(ForumBodyTextPageFailure.pageLimit);
+    if (retainedItems < 0 || retainedItems >= maxFragments - _fragmentCount) {
+      _fail(ForumBodyTextPageFailure.fragmentLimit);
+    }
+    _touchBackgrounds(0);
+    if (retainedItems >= maxFragments - _fragmentCount) {
+      _fail(ForumBodyTextPageFailure.fragmentLimit);
+    }
+    _fragmentCount += 1 + retainedItems;
+    _usedHeight = _flowHeight = height;
+    _seal(table: table);
+  }
+
+  void _ensureTableBoundary() {
+    _ensureOpen();
+    if (!needsInput || _collapseHeader != null) {
+      throw StateError('Table requires a block boundary');
+    }
   }
 
   void openCollapseTitle({
@@ -1274,7 +1332,7 @@ final class ForumBodyTextPageComposer {
     }
   }
 
-  void _seal() {
+  void _seal({ForumBodyTextPageTable? table}) {
     if (_pages.length >= maxPages) _fail(ForumBodyTextPageFailure.pageLimit);
     _pages.add(
       ForumBodyTextPage._(
@@ -1283,6 +1341,7 @@ final class ForumBodyTextPageComposer {
         _rules,
         _backgrounds.seal(height),
         _usedHeight,
+        table: table,
       ),
     );
     _draft.clear();

@@ -103,6 +103,13 @@ final class ForumBodyBlockFlowImage extends ForumBodyBlockFlowUnit {
   final List<ForumBodyListItemMarker> listMarkers;
 }
 
+final class ForumBodyBlockFlowTable extends ForumBodyBlockFlowUnit {
+  ForumBodyBlockFlowTable._(this.table, this.left, this.width)
+    : super._(table.identity);
+  final ForumBodyTextFlowTable table;
+  final double left, width;
+}
+
 /// A first-content marker specification tied to the actual owning item.
 /// It has no paragraph projection, source coordinate or measured glyph box.
 final class ForumBodyListItemMarker {
@@ -177,6 +184,7 @@ final class ForumBodyBlockFlowCursor {
     ForumBodyInlineImageResolver? inlineImageResolver,
     ForumBodyCollapseLayout? collapses,
     ForumBodyElement? contentRoot,
+    bool dedicatedTables = false,
   }) : _flow = ForumBodyTextFlowCursor(
          document: document,
          reader: reader,
@@ -185,6 +193,7 @@ final class ForumBodyBlockFlowCursor {
          inlineImageResolver: inlineImageResolver,
          collapses: collapses,
          contentRoot: contentRoot,
+         dedicatedTables: dedicatedTables,
        ),
        _collapses = collapses,
        _rootFontSize = reader.textStyle.fontSize! {
@@ -193,7 +202,7 @@ final class ForumBodyBlockFlowCursor {
       throw ArgumentError.value(width, 'width');
     }
   }
-  static const revision = 12;
+  static const revision = 13;
   final double width;
   final ForumBodyBlockEdgeMargins edgeMargins;
   final double _rootFontSize;
@@ -255,6 +264,16 @@ final class ForumBodyBlockFlowCursor {
         final unit = _flow.current;
         if (unit == null) continue;
         switch (unit) {
+          case ForumBodyTextFlowTable():
+            _flushMargins();
+            _hasFlowContent = true;
+            _pending.add(
+              ForumBodyBlockFlowTable._(
+                unit,
+                _frames.lastOrNull?.contentLeft ?? 0,
+                _frames.lastOrNull?.contentWidth ?? width,
+              ),
+            );
           case ForumBodyTextFlowImage():
             _flushMargins();
             _hasFlowContent = true;

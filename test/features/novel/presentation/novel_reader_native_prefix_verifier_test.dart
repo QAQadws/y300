@@ -54,6 +54,37 @@ void main() {
   );
   const html = '<p>ab</p><p>cd</p><p>ef</p>';
 
+  test('identical outer table geometry still verifies cell paint on retry', () {
+    const source =
+        '<table width="100" height="80">'
+        '<tr><td><hr style="margin:0;color:currentColor"></td></tr></table>';
+    NativeReaderTestFixture book(Color color, String layoutId) =>
+        NativeReaderTestFixture(
+          source,
+          layoutId: layoutId,
+          dedicatedTables: true,
+          reader: ForumBodyReaderStyle(
+            textStyle: TextStyle(fontSize: 10, color: color),
+            fontRevision: 'same',
+            linkColor: color,
+          ),
+        );
+    final previous = book(const Color(0xffff0000), 'first').session.snapshot;
+    final same = book(const Color(0xffff0000), 'retry').session.snapshot;
+    final changed = book(const Color(0xff0000ff), 'changed').session.snapshot;
+    expect(previous.single.table!.bounds, changed.single.table!.bounds);
+    expect(
+      previous.single.table!.contentSize,
+      changed.single.table!.contentSize,
+    );
+    final matching = _verifier(previous, same);
+    final stale = _verifier(previous, changed);
+    _compareAvailable(matching);
+    _compareAvailable(stale);
+    expect(matching.state, NovelReaderNativePrefixState.matched);
+    expect(stale.mismatch, NovelReaderNativePrefixMismatch.page);
+  });
+
   test('quote border paint is checked even when text, source and fill geometry are identical', () {
     const source = '<blockquote><p>quote</p></blockquote>';
     ForumBodyReaderStyle reader(Color border) => ForumBodyReaderStyle(

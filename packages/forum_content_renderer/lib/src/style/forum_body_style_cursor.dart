@@ -83,6 +83,7 @@ final class ForumBodyStyleCursor {
   int _resolvedNodeCount = 0;
   bool _complete = false;
   bool _closed = false;
+  bool _childrenPending = false;
 
   ForumBodyResolvedStyle get root => _root;
   ForumBodyElement? get contentRoot => _contentRoot;
@@ -103,6 +104,7 @@ final class ForumBodyStyleCursor {
   }
 
   bool _moveNext() {
+    _childrenPending = false;
     if (_complete) return false;
     while (_frames.isNotEmpty) {
       final frame = _frames.last;
@@ -117,6 +119,7 @@ final class ForumBodyStyleCursor {
         _currentNode = node;
         _currentStyle = context.effective;
         _frames.add((nodes: node.children.iterator, context: context));
+        _childrenPending = true;
         _collectIssues();
       } else {
         _currentNode = node;
@@ -129,6 +132,16 @@ final class ForumBodyStyleCursor {
     _currentNode = null;
     _currentStyle = null;
     return false;
+  }
+
+  /// Delegate the current element's descendants to a source-scoped consumer.
+  /// This is only legal before any of those descendants have been visited.
+  void skipChildren(ForumBodyElement element) {
+    if (_closed || !_childrenPending || !identical(_currentNode, element)) {
+      throw StateError('Style subtree has already advanced');
+    }
+    _frames.removeLast();
+    _childrenPending = false;
   }
 
   _StyleContext _resolve(ForumBodyElement node, _StyleContext context) {

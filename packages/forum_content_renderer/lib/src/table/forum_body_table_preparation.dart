@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/painting.dart';
 
 import '../document/forum_body_collapse_layout.dart';
@@ -99,6 +101,7 @@ final class ForumBodyTablePreparation {
   final _rowBackgrounds = <Color?>[];
   final _measured = <_MeasuredArea>[];
   final _bodies = <_MeasuredBody>[];
+  final _fingerprint = _TableFingerprint();
   ForumBodyTableColumns? _columns;
   ForumBodyTextPageSession? _active;
   ForumBodyTableLayout? _ready;
@@ -147,6 +150,9 @@ final class ForumBodyTablePreparation {
           _guard();
           built = step.layoutsBuilt;
           waiting = step.waitingForLayoutBudget;
+          if (!probe && step.pagesPublished != 0) {
+            _fingerprint.addPage(session.snapshot.last);
+          }
           if (session.isComplete) {
             if (probe) {
               _measured.add(_measureArea(session));
@@ -470,22 +476,45 @@ final class ForumBodyTablePreparation {
         grid.table.path,
       );
     }
+    final cells = [
+      for (var i = 0; i < grid.cells.length; i++)
+        _placeArea(
+          i + _captionCount,
+          geometry.cellBounds(i).shift(Offset(0, top)),
+        ),
+    ];
+    final background = _tableStyle.visibilityHidden
+        ? null
+        : _tableStyle.boxBackground;
     return ForumBodyTableLayout._(
       geometry: geometry,
       gridTop: top,
       size: Size(geometry.size.width, end),
-      background: _tableStyle.visibilityHidden
-          ? null
-          : _tableStyle.boxBackground,
-      cells: [
-        for (var i = 0; i < grid.cells.length; i++)
-          _placeArea(
-            i + _captionCount,
-            geometry.cellBounds(i).shift(Offset(0, top)),
-          ),
-      ],
+      background: background,
+      cells: cells,
       captions: captions,
       rowBackgrounds: _rowBackgrounds,
+      fingerprint: _fingerprint.finish([
+        top,
+        end,
+        geometry.size.width,
+        _TableFingerprint.color(background),
+        for (final row in _rowBackgrounds) _TableFingerprint.color(row),
+        for (final area in captions.followedBy(cells))
+          [
+            area.element.path,
+            _TableFingerprint.rect(area.bounds),
+            _TableFingerprint.rect(area.contentBounds),
+            _TableFingerprint.color(area.background),
+          ],
+      ]),
+      usage: (
+        pages: _pages,
+        items: _fragments,
+        paragraphs: _paragraphs,
+        textCodeUnits: _text,
+        runs: _runs,
+      ),
     );
   }
 
@@ -535,6 +564,83 @@ final class ForumBodyTablePreparation {
     _ready?.close();
     _ready = null;
   }
+}
+
+/// Compare a retry's cells without holding native geometry or comparing the
+/// entire table in the outer page verifier. Only one sealed body slice at a time
+/// enters the digest.
+final class _TableFingerprint implements Sink<Digest> {
+  late final _input = sha256.startChunkedConversion(this);
+  late Digest _digest;
+
+  void addPage(ForumBodyTextPage page) => _write([
+    page.index,
+    page.usedHeight,
+    for (final f in page.fragments)
+      [
+        f.path,
+        f.fontRevision,
+        f.styleRevision,
+        f.kind.index,
+        f.startLine,
+        f.endLine,
+        f.coverageStartUtf16,
+        f.coverageEndUtf16,
+        f.sourceHint?.runeStart,
+        f.sourceHint?.runeEnd,
+        f.left,
+        f.top,
+        f.width,
+        f.height,
+        f.imageCount,
+        f.imagePaths,
+        rect(f.imageFrame?.imageRect),
+        f.engineRange?.startUtf16,
+        f.engineRange?.endUtf16,
+        f.listMarker?.baseline,
+        rect(f.listMarker?.bounds),
+        f.collapseHeader?.id,
+        f.collapseHeader?.titlePath,
+        f.collapseHeader?.expanded,
+        f.collapseHeader?.direction.index,
+        rect(f.collapseHeader?.bounds),
+      ],
+    for (final r in page.rules)
+      [r.path, r.left, r.top, r.width, r.thickness, color(r.color)],
+    for (final b in page.backgrounds)
+      [
+        b.path,
+        b.left,
+        b.top,
+        b.width,
+        b.height,
+        color(b.color),
+        color(b.quoteDecoration?.borderColor),
+        b.startsBox,
+        b.endsBox,
+      ],
+  ]);
+
+  String finish(List<Object?> geometry) {
+    _write(geometry);
+    _input.close();
+    return _digest.toString();
+  }
+
+  void _write(List<Object?> value) =>
+      _input.add(utf8.encode(jsonEncode(value)));
+
+  static List<double>? rect(Rect? rect) =>
+      rect == null ? null : [rect.left, rect.top, rect.width, rect.height];
+
+  static List<num>? color(Color? color) => color == null
+      ? null
+      : [color.a, color.r, color.g, color.b, color.colorSpace.index];
+
+  @override
+  void add(Digest data) => _digest = data;
+  @override
+  void close() {}
 }
 
 typedef _MeasuredArea = ({

@@ -34,6 +34,8 @@ final class ForumBodyTableLayout {
     required List<ForumBodyTableAreaLayout> cells,
     required List<ForumBodyTableAreaLayout> captions,
     required List<Color?> rowBackgrounds,
+    required this.fingerprint,
+    required this.usage,
   }) : cells = List.unmodifiable(cells),
        captions = List.unmodifiable(captions),
        rowBackgrounds = List.unmodifiable(rowBackgrounds);
@@ -44,6 +46,9 @@ final class ForumBodyTableLayout {
   final Color? background;
   final List<ForumBodyTableAreaLayout> cells, captions;
   final List<Color?> rowBackgrounds;
+  final String fingerprint;
+  final ({int pages, int items, int paragraphs, int textCodeUnits, int runs})
+  usage;
   bool _closed = false;
   bool get isClosed => _closed;
 

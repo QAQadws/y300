@@ -171,6 +171,7 @@ void main() {
               'text:${unit.content.projection.text}',
             ForumBodyTextFlowInline() => 'inline:${unit.index}',
             ForumBodyTextFlowImage() => 'image:${unit.index}',
+            ForumBodyTextFlowTable() => 'table:${unit.element.path}',
             ForumBodyTextFlowBoundary() =>
               '${unit.kind.name}:${unit.event?.node.path}',
           },

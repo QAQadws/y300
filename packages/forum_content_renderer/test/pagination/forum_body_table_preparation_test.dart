@@ -84,8 +84,123 @@ final class _Resource implements ForumHtmlPreparedImageResource {
   String get cacheKey => 'table-cell-image';
 }
 
+ForumBodyTextPageSession _book(
+  ForumBodyDocument document,
+  ForumBodyParagraphCache cache, {
+  String layoutId = 'table-book',
+  ForumBodyTextPageSessionLimits limits = _limits,
+}) {
+  final session = ForumBodyTextPageSession(
+    document: document,
+    reader: _reader,
+    cache: cache,
+    limits: limits,
+    layoutId: layoutId,
+    width: 100,
+    height: 45,
+    dedicatedTables: true,
+  );
+  addTearDown(session.close);
+  return session;
+}
+
+void _advanceBook(ForumBodyTextPageSession session, int pageCount) {
+  for (var i = 0; i < 2000 && session.snapshot.length < pageCount; i++) {
+    final step = session.advance(maxEvents: 1, maxLines: 1, maxFormatParts: 1);
+    expect(step.waitingForLayoutBudget, isFalse);
+    expect(step.pagesPublished, lessThanOrEqualTo(1));
+    expect(step.layoutsBuilt, lessThanOrEqualTo(1));
+  }
+  expect(session.snapshot, hasLength(pageCount));
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('a whole native table publishes as one ordered book page', () {
+    final document = _parse(
+      '<p>before</p><table width="190" height="100"><caption>cap</caption>'
+      '<tr><td rowspan="2"><ruby>A<rt>aa</rt></ruby></td><td>top</td></tr>'
+      '<tr><td>bottom</td></tr></table><p>after</p>',
+    );
+    final cache = _cache();
+    final session = _book(document, cache);
+    _advanceBook(session, 1);
+    final prefix = session.snapshot;
+    expect(prefix.single.table, isNull);
+    expect(prefix.single.fragments.single.paragraphIndex, 0);
+
+    _advanceBook(session, 2);
+    final page = session.snapshot[1];
+    final layout = session.tableLayoutForPage(1)!;
+    expect(prefix, hasLength(1));
+    expect(page.table!.path, document.tableElements.single.path);
+    expect(page.table!.bounds, const Rect.fromLTWH(0, 0, 100, 45));
+    expect(page.table!.contentSize.width, 190);
+    expect(page.table!.contentSize.height, greaterThan(100));
+    expect(page.fragments, isEmpty);
+    expect(layout.cells, hasLength(3));
+    expect(layout.geometry.grid.cells.first.rowSpan, 2);
+    final ruby = _open(layout.cells.first).single;
+    expect(ruby.projection.text, 'Aaa');
+    ruby.close();
+
+    _advanceBook(session, 3);
+    expect(session.isComplete, isTrue);
+    expect(session.snapshot.last.fragments.single.paragraphIndex, 1);
+    expect(session.retainedParagraphCount, 6);
+    expect(cache.activeLeases, 0);
+
+    final retry = _book(document, cache, layoutId: 'retry');
+    _advanceBook(retry, 3);
+    expect(retry.snapshot[1].table, page.table);
+    session.close();
+    expect(layout.isClosed, isTrue);
+    expect(() => session.tableLayoutForPage(1), throwsStateError);
+  });
+
+  test('table content counts towards the chapter budget across pages', () {
+    final cache = _cache();
+    final session = _book(
+      _parse(
+        '<p>start</p><table><tr><td>one</td></tr></table>'
+        '<table><tr><td>two</td></tr></table>',
+      ),
+      cache,
+      limits: const ForumBodyTextPageSessionLimits(
+        maxPages: 3,
+        maxFragments: 128,
+        maxParagraphs: 2,
+        maxTextCodeUnits: 4096,
+        maxRuns: 256,
+        maxIssuedLeases: 16,
+      ),
+    );
+    _advanceBook(session, 2);
+    final prefix = session.snapshot;
+    final layout = session.tableLayoutForPage(1)!;
+    expect(
+      () {
+        for (var i = 0; i < 2000 && !session.isComplete; i++) {
+          session.advance(maxEvents: 1, maxLines: 1, maxFormatParts: 1);
+        }
+      },
+      throwsA(
+        isA<ForumBodyTextPageSessionException>().having(
+          (error) => error.failure,
+          'failure',
+          ForumBodyTextPageSessionFailure.paragraphLimit,
+        ),
+      ),
+    );
+    expect(session.snapshot, same(prefix));
+    expect(session.state, ForumBodyTextPageSessionState.failed);
+    expect(session.tableLayoutForPage(1), same(layout));
+    final fragment = _open(layout.cells.single).single;
+    expect(fragment.projection.text, 'one');
+    fragment.close();
+    expect(cache.activeLeases, 0);
+  });
 
   testWidgets('a measured table body paints at its occupied height', (
     tester,
