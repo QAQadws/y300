@@ -16,6 +16,7 @@ import '../models/novel_reader_native_image_tap.dart';
 import '../models/novel_reader_native_prepared_chapter.dart';
 import '../models/novel_reader_native_text_selection.dart';
 import '../services/novel_reader_native_image_resources.dart';
+import '../services/novel_reader_native_flow_text_position.dart';
 import '../services/novel_reader_native_layout_scope.dart';
 import '../services/novel_reader_native_owner.dart';
 import '../services/novel_reader_native_preparation_service.dart';
@@ -117,7 +118,6 @@ final class _NovelReaderNativeFlowHostState
   Object? _error;
   bool _emptyBody = false;
   int _revision = 0;
-  bool _reflowScheduled = false;
   double? _lastScrollOffset;
 
   @override
@@ -183,7 +183,7 @@ final class _NovelReaderNativeFlowHostState
     if (_layoutKey != key && widget.width > 0 && !widget.owner.isClosed) {
       _layoutKey = key;
       final sameDocument = _documentKey == documentKey;
-      final tablePosition = sameDocument ? _positionForReflow() : null;
+      final position = sameDocument ? _positionForReflow() : null;
       if (!sameDocument) {
         _documentKey = documentKey;
         _expansion.clear();
@@ -195,7 +195,7 @@ final class _NovelReaderNativeFlowHostState
       _request?.stop();
       if (!identical(_request, _displayed)) _retire(_request);
       final run = _request = _FlowRun(widget.idleScheduler);
-      if (tablePosition != null) run.reflow = _FlowTableReflow(tablePosition);
+      if (position != null) run.reflow = _FlowReflow(position);
       _error = null;
       _emptyBody = false;
       final config = widget;
@@ -354,7 +354,7 @@ final class _NovelReaderNativeFlowHostState
           }
           final reflow = run.reflow;
           if (reflow != null && !identical(_displayed, run)) {
-            if (await _publishAtTable(run, reflow, start)) return;
+            if (await _publishAtSource(run, reflow, start)) return;
             if (!_current(run)) return;
           }
           final scroll = config.scrollController;
@@ -389,6 +389,16 @@ final class _NovelReaderNativeFlowHostState
   void _reportReady(_FlowRun run) {
     if (!_current(run) || !identical(_displayed, run)) return;
     _reportImages(run);
+    final reflow = run.reflow;
+    if (run.ready &&
+        reflow != null &&
+        reflow.source.tablePath == null &&
+        reflow.offsetApplied &&
+        !reflow.verifying) {
+      reflow.verifying = true;
+      unawaited(_verifyTextReflow(run, reflow));
+      WidgetsBinding.instance.ensureVisualUpdate();
+    }
     if (run.ready && run.reflow == null && !run.reportedReady) {
       run.reportedReady = true;
       widget.onContentReady();
@@ -406,30 +416,43 @@ final class _NovelReaderNativeFlowHostState
     if (_lastScrollOffset == offset) return;
     _lastScrollOffset = offset;
     _displayed?.tablePosition = null;
+    _displayed?.textPosition = null;
+    _displayed?.imageSample?.cancel();
     _cancelReflow();
   }
 
-  _FlowTablePosition? _positionForReflow() {
+  _FlowSourcePosition? _positionForReflow() {
     final scroll = widget.scrollController;
     if (widget.restoreReflowOffset == null ||
         !scroll.hasClients ||
         scroll.position.isScrollingNotifier.value) {
       return null;
     }
-    final position = _displayed?.tablePosition ?? _request?.reflow?.source;
-    return position != null &&
-            identical(position.scroll, scroll.position) &&
-            position.pixels == scroll.offset
-        ? position
+    _FlowSourcePosition? position;
+    for (final candidate in [
+      _displayed?.tablePosition,
+      _displayed?.textPosition,
+      _request?.reflow?.source,
+    ]) {
+      if (candidate != null &&
+          identical(candidate.scroll, scroll.position) &&
+          candidate.pixels == scroll.offset &&
+          (position == null || candidate.inset.dy < position.inset.dy)) {
+        position = candidate;
+      }
+    }
+    return position;
+  }
+
+  RenderForumBodyFlowBoundary? _bodyBoundary(_FlowRun run) {
+    final render = run.bodyKey.currentContext?.findRenderObject();
+    return render is RenderForumBodyFlowBoundary && render.attached
+        ? render
         : null;
   }
 
-  double? _bodyTop(_FlowRun run) {
-    final render = run.bodyKey.currentContext?.findRenderObject();
-    return render is RenderForumBodyFlowBoundary && render.attached
-        ? render.constraints.precedingScrollExtent
-        : null;
-  }
+  double? _bodyTop(_FlowRun run) =>
+      _bodyBoundary(run)?.constraints.precedingScrollExtent;
 
   double _readableHeight(ScrollPosition position) =>
       position.viewportDimension - widget.viewportInsets.vertical;
@@ -441,7 +464,10 @@ final class _NovelReaderNativeFlowHostState
   ) {
     if (!_current(run) || widget.restoreReflowOffset == null) return;
     final reflow = run.reflow;
-    if (reflow != null && reflow.target?.slice != index) return;
+    if (reflow != null &&
+        (reflow.source.tablePath == null || reflow.target?.slice != index)) {
+      return;
+    }
     if (window == null) {
       if (run.tablePosition?.slice == index) run.tablePosition = null;
       if (run.tableProofSlice == index) run.cancelTableProof();
@@ -498,7 +524,7 @@ final class _NovelReaderNativeFlowHostState
           run.tablePosition = (
             identity: run.scope!.chapter.identity,
             slice: index,
-            path: table.path,
+            tablePath: table.path,
             anchor: anchor,
             inset: bounds.topLeft - Offset(window.bounds.left, readableTop),
             scroll: position,
@@ -518,11 +544,11 @@ final class _NovelReaderNativeFlowHostState
     WidgetsBinding.instance.ensureVisualUpdate();
   }
 
-  /// Wait for a replacement prefix containing the same actual table and enough
-  /// following extent for its viewport. The mounted result must then prove it.
-  Future<bool> _publishAtTable(
+  /// Retain the old view until the new source and its following viewport have
+  /// been measured. The mounted result must then prove the actual coverage.
+  Future<bool> _publishAtSource(
     _FlowRun run,
-    _FlowTableReflow reflow,
+    _FlowReflow reflow,
     int start,
   ) async {
     final prefix = run.prefix!;
@@ -539,53 +565,51 @@ final class _NovelReaderNativeFlowHostState
       return false;
     }
     if (reflow.target == null) {
-      for (var index = start; index < prefix.length; index++) {
+      final NovelReaderNativeFlowPoint? candidate;
+      try {
+        candidate = await _probeReflow(run, reflow, start);
+      } on Object {
+        if (current()) _finishReflow(run, reflow);
+        return false;
+      }
+      if (!current()) return false;
+      if (candidate != null) {
+        final index = candidate.slice;
         final table = prefix[index].table;
-        if (table == null || table.path != source.path) continue;
-        NovelReaderNativeTableAnchor? candidate;
-        try {
-          candidate = await probeNovelReaderNativeTableAnchor(
-            session: run.session!,
-            anchors: scope.chapter.anchors,
-            pageIndex: index,
-            target: source.anchor,
-            allowNodeCompatibility: false,
-            scheduler: const NovelReaderNativeWorkScheduler(),
-            token: reflow.token,
-          );
-        } on Object {
-          // Losing an optional reflow target leaves the ordinary restore path.
-        }
-        if (!current()) return false;
         final previous = _displayed;
         final top = previous == null ? null : _bodyTop(previous);
-        final focus = candidate?.bounds;
+        final bounds = candidate.bounds;
         final height = _readableHeight(scroll.position);
-        if (top == null || focus == null || focus.height > height) {
+        if (top == null || bounds.height > height) {
           _finishReflow(run, reflow);
           return false;
         }
-        final x =
-            focus.left -
-            source.inset.dx.clamp(0.0, table.bounds.width - focus.width);
+        final focus = table == null
+            ? bounds
+            : bounds.shift(table.bounds.topLeft);
         final y = focus.top - source.inset.dy.clamp(0.0, height - focus.height);
         reflow.target = (
           slice: index,
           outer: math.max(
             0.0,
-            top +
-                run.extentBefore(index) +
-                table.bounds.top +
-                y -
-                widget.viewportInsets.top,
+            top + run.extentBefore(index) + y - widget.viewportInsets.top,
           ),
-          horizontal: x.clamp(
-            0.0,
-            math.max(0.0, table.contentSize.width - table.bounds.width),
-          ),
+          horizontal: table == null
+              ? null
+              : (bounds.left -
+                        source.inset.dx.clamp(
+                          0.0,
+                          table.bounds.width - bounds.width,
+                        ))
+                    .clamp(
+                      0.0,
+                      math.max(
+                        0.0,
+                        table.contentSize.width - table.bounds.width,
+                      ),
+                    ),
           focus: focus,
         );
-        break;
       }
     }
     final target = reflow.target;
@@ -607,7 +631,9 @@ final class _NovelReaderNativeFlowHostState
     setState(() {
       _retire(_displayed);
       _displayed = run;
-      run.initialTableOffset = (slice: target.slice, offset: target.horizontal);
+      if (target.horizontal case final offset?) {
+        run.initialTableOffset = (slice: target.slice, offset: offset);
+      }
     });
     final bool applied;
     try {
@@ -621,9 +647,9 @@ final class _NovelReaderNativeFlowHostState
     if (!current()) return true;
     _lastScrollOffset = scroll.offset;
     final bodyTop = _bodyTop(run);
-    final tableTop =
-        run.extentBefore(target.slice) + prefix[target.slice].table!.bounds.top;
-    final y = bodyTop == null ? null : bodyTop + tableTop + target.focus.top;
+    final y = bodyTop == null
+        ? null
+        : bodyTop + run.extentBefore(target.slice) + target.focus.top;
     final readableTop = scroll.offset + widget.viewportInsets.top;
     final readableBottom = readableTop + _readableHeight(scroll.position);
     if (!applied ||
@@ -631,8 +657,108 @@ final class _NovelReaderNativeFlowHostState
         y < readableTop - .5 ||
         y + target.focus.height > readableBottom + .5) {
       _finishReflow(run, reflow);
+    } else {
+      reflow.offsetApplied = true;
+      _reportReady(run);
     }
     return true;
+  }
+
+  Future<NovelReaderNativeFlowPoint?> _probeReflow(
+    _FlowRun run,
+    _FlowReflow reflow,
+    int start,
+  ) async {
+    final prefix = run.prefix!;
+    final session = run.session!;
+    final anchors = run.scope!.chapter.anchors;
+    final source = reflow.source;
+    final path = source.tablePath;
+    if (path == null) {
+      return probeNovelReaderFlowText(
+        session: session,
+        prefix: prefix,
+        anchors: anchors,
+        target: source.anchor,
+        start: start,
+        token: reflow.token,
+      );
+    }
+    for (var index = start; index < prefix.length; index++) {
+      if (prefix[index].table?.path != path) continue;
+      final candidate = await probeNovelReaderNativeTableAnchor(
+        session: session,
+        anchors: anchors,
+        pageIndex: index,
+        target: source.anchor,
+        allowNodeCompatibility: false,
+        scheduler: const NovelReaderNativeWorkScheduler(),
+        token: reflow.token,
+      );
+      if (candidate != null) {
+        return (
+          slice: index,
+          anchor: candidate.anchor,
+          bounds: candidate.bounds,
+        );
+      }
+    }
+    return null;
+  }
+
+  Future<void> _verifyTextReflow(_FlowRun run, _FlowReflow reflow) async {
+    final scroll = widget.scrollController;
+    if (!scroll.hasClients) {
+      _finishReflow(run, reflow);
+      return;
+    }
+    final position = scroll.position;
+    final pixels = position.pixels;
+    NovelReaderNativeFlowPoint? point;
+    try {
+      point = await _sampleText(
+        run,
+        position,
+        reflow.token,
+        preferred: reflow.source.anchor,
+        slice: reflow.target!.slice,
+      );
+    } on Object {
+      // An unreadable or retired window cannot confirm a source restore.
+    }
+    if (_current(run) && identical(run.reflow, reflow)) {
+      final stillThere =
+          scroll.hasClients &&
+          identical(scroll.position, position) &&
+          position.pixels == pixels;
+      _finishReflow(run, reflow, stillThere ? point?.anchor : null);
+    }
+  }
+
+  Future<NovelReaderNativeFlowPoint?> _sampleText(
+    _FlowRun run,
+    ScrollPosition position,
+    NovelReaderPaginationCancellationToken token, {
+    NovelReaderTextAnchor? preferred,
+    int? slice,
+  }) async {
+    final boundary = _bodyBoundary(run);
+    final window = boundary?.borrowTextWindow();
+    if (window == null) return null;
+    final top = boundary!.constraints.precedingScrollExtent;
+    return sampleNovelReaderFlowText(
+      window: window,
+      anchors: run.scope!.chapter.anchors,
+      readable: Rect.fromLTWH(
+        0,
+        position.pixels + widget.viewportInsets.top - top,
+        window.bounds.width,
+        _readableHeight(position),
+      ),
+      token: token,
+      preferred: preferred,
+      targetSlice: slice,
+    );
   }
 
   void _cancelReflow() {
@@ -642,7 +768,7 @@ final class _NovelReaderNativeFlowHostState
 
   void _finishReflow(
     _FlowRun run,
-    _FlowTableReflow reflow, [
+    _FlowReflow reflow, [
     NovelReaderTextAnchor? restored,
   ]) {
     if (!identical(run.reflow, reflow)) return;
@@ -819,13 +945,64 @@ final class _NovelReaderNativeFlowHostState
   }
 
   void _scheduleReflow(_FlowRun run) {
-    if (_reflowScheduled) return;
-    _reflowScheduled = true;
+    if (run.imageSample != null) return;
+    final token = run.imageSample = NovelReaderPaginationCancellationToken();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _reflowScheduled = false;
-      if (_current(run)) setState(() => _revision++);
+      unawaited(_reflowAfterImage(run, token));
+      WidgetsBinding.instance.ensureVisualUpdate();
     });
     WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  Future<void> _reflowAfterImage(
+    _FlowRun run,
+    NovelReaderPaginationCancellationToken token,
+  ) async {
+    try {
+      if (!_current(run)) return;
+      final scroll = widget.scrollController;
+      final top = _bodyTop(run);
+      if (widget.restoreReflowOffset != null &&
+          run.reportedReady &&
+          top != null &&
+          scroll.hasClients &&
+          scroll.offset > .5 &&
+          !scroll.position.isScrollingNotifier.value &&
+          !token.isCancelled) {
+        final position = scroll.position;
+        final pixels = position.pixels;
+        final point = await _sampleText(run, position, token);
+        if (_current(run) &&
+            !token.isCancelled &&
+            scroll.hasClients &&
+            identical(scroll.position, position) &&
+            position.pixels == pixels &&
+            point != null) {
+          run.textPosition = (
+            identity: run.scope!.chapter.identity,
+            slice: point.slice,
+            tablePath: null,
+            anchor: point.anchor,
+            inset: Offset(
+              0,
+              top +
+                  run.extentBefore(point.slice) +
+                  point.bounds.top -
+                  pixels -
+                  widget.viewportInsets.top,
+            ),
+            scroll: position,
+            pixels: pixels,
+          );
+        }
+      }
+    } on Object {
+      // Apply accepted dimensions even when reading moved during sampling.
+    } finally {
+      if (identical(run.imageSample, token)) run.imageSample = null;
+      token.cancel();
+      if (_current(run)) setState(() => _revision++);
+    }
   }
 
   void _retire(_FlowRun? run) {
@@ -851,22 +1028,24 @@ final class _NovelReaderNativeFlowHostState
   }
 }
 
-typedef _FlowTablePosition = ({
+typedef _FlowSourcePosition = ({
   ForumBodyIdentity identity,
   int slice,
-  String path,
+  String? tablePath,
   NovelReaderTextAnchor anchor,
   Offset inset,
   ScrollPosition scroll,
   double pixels,
 });
 
-final class _FlowTableReflow {
-  _FlowTableReflow(this.source);
+final class _FlowReflow {
+  _FlowReflow(this.source);
 
-  final _FlowTablePosition source;
+  final _FlowSourcePosition source;
   final token = NovelReaderPaginationCancellationToken();
-  ({int slice, double outer, double horizontal, Rect focus})? target;
+  ({int slice, double outer, double? horizontal, Rect focus})? target;
+  bool offsetApplied = false;
+  bool verifying = false;
 }
 
 /// The shared surface has already validated the display binding before it
@@ -936,8 +1115,10 @@ final class _FlowRun {
   NovelReadingImageTracker? imageTracker;
   ForumHtmlImageHost? imageHost;
   final _ends = <double>[];
-  _FlowTablePosition? tablePosition;
-  _FlowTableReflow? reflow;
+  _FlowSourcePosition? tablePosition;
+  _FlowSourcePosition? textPosition;
+  _FlowReflow? reflow;
+  NovelReaderPaginationCancellationToken? imageSample;
   NovelReaderPaginationCancellationToken? tableProof;
   int? tableProofSlice;
   ({int slice, double offset})? initialTableOffset;
@@ -963,6 +1144,7 @@ final class _FlowRun {
 
   void stop() {
     cancelTableProof();
+    imageSample?.cancel();
     reflow?.token.cancel();
     token.cancel();
     source?.close();
