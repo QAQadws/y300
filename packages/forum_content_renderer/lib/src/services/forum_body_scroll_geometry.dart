@@ -2,7 +2,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
 /// Finds the viewport owned by [position], past any nested table scroll views.
-RenderAbstractViewport? forumHtmlImageViewportFor(
+RenderAbstractViewport? forumBodyViewportForPosition(
   RenderObject target,
   ScrollPosition position,
 ) {

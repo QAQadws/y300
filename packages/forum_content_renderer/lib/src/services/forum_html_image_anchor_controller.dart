@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../html_rendering/forum_html_prepared_render_document.dart';
-import 'forum_html_image_viewport_geometry.dart';
+import 'forum_body_scroll_geometry.dart';
 
 typedef _ImageIdentity = ({int index, String cacheKey, String url});
 
@@ -116,7 +116,7 @@ final class ForumHtmlImageAnchorController {
     }
     final box = anchor.context.findRenderObject();
     if (box is! RenderBox || !box.attached || !box.hasSize) return null;
-    final viewport = forumHtmlImageViewportFor(box, position);
+    final viewport = forumBodyViewportForPosition(box, position);
     if (viewport == null) return null;
     final target = viewport.getOffsetToReveal(box, 0).offset;
     if (!target.isFinite) return null;

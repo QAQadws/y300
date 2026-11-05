@@ -2,7 +2,7 @@ import 'package:flutter/widgets.dart';
 import '../contracts/forum_html_display_image.dart';
 import '../contracts/forum_html_image_predecode_host.dart';
 import 'forum_html_image_predecode_policy.dart';
-import 'forum_html_image_viewport_geometry.dart';
+import 'forum_body_scroll_geometry.dart';
 
 enum ForumHtmlImageViewportMode {
   dormant,
@@ -357,7 +357,7 @@ final class ForumHtmlImageViewportCoordinator {
     // Pair the viewport with the same vertical ScrollPosition we listen to.
     // The nearest viewport may belong to a horizontally scrolling table, and
     // SingleChildScrollView's viewport does not expose a public axis property.
-    final viewport = forumHtmlImageViewportFor(
+    final viewport = forumBodyViewportForPosition(
       renderObject,
       scrollable.position,
     );

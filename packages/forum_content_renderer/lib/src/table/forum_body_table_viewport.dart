@@ -1,11 +1,19 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/rendering.dart' show ScrollDirection;
+import 'package:flutter/rendering.dart'
+    show
+        MatrixUtils,
+        PaintingContext,
+        RenderBox,
+        RenderObject,
+        RenderProxyBox,
+        ScrollDirection;
 import 'package:flutter/widgets.dart';
 
 import '../pagination/forum_body_prepared_text_fragment.dart';
 import '../pagination/forum_body_text_page_preparation.dart';
+import '../services/forum_body_scroll_geometry.dart';
 import 'forum_body_table_preparation.dart';
 
 typedef ForumBodyTableSliceBuilder =
@@ -46,12 +54,44 @@ final class ForumBodyTableVisibleWindow {
 /// A book-page viewport over one already composed table. Controllers are
 /// borrowed from the mounted page. Visible slices are owned here, including
 /// during preparation; a builder borrows them to paint the same source pages.
-final class ForumBodyTableBookViewport extends StatefulWidget {
+final class ForumBodyTableBookViewport extends _ForumBodyTableViewport {
   const ForumBodyTableBookViewport({
+    super.key,
+    required super.layout,
+    required super.horizontalController,
+    required this.verticalController,
+    required super.buildSlice,
+    required super.onFailure,
+    super.onReadyChanged,
+    super.onWindowChanged,
+  });
+
+  @override
+  final ScrollController verticalController;
+}
+
+/// A table in a continuous document. The enclosing viewport owns vertical
+/// scrolling; the table borrows a horizontal controller only when it overflows.
+final class ForumBodyTableFlowViewport extends _ForumBodyTableViewport {
+  const ForumBodyTableFlowViewport({
+    super.key,
+    required super.layout,
+    required super.horizontalController,
+    required super.buildSlice,
+    required super.onFailure,
+    super.onReadyChanged,
+    super.onWindowChanged,
+  });
+
+  @override
+  ScrollController? get verticalController => null;
+}
+
+abstract class _ForumBodyTableViewport extends StatefulWidget {
+  const _ForumBodyTableViewport({
     super.key,
     required this.layout,
     required this.horizontalController,
-    required this.verticalController,
     required this.buildSlice,
     required this.onFailure,
     this.onReadyChanged,
@@ -60,7 +100,7 @@ final class ForumBodyTableBookViewport extends StatefulWidget {
 
   final ForumBodyTableLayout layout;
   final ScrollController horizontalController;
-  final ScrollController verticalController;
+  ScrollController? get verticalController;
   final ForumBodyTableSliceBuilder buildSlice;
   final void Function(Object error, StackTrace stackTrace) onFailure;
 
@@ -73,12 +113,12 @@ final class ForumBodyTableBookViewport extends StatefulWidget {
   final ValueChanged<ForumBodyTableVisibleWindow?>? onWindowChanged;
 
   @override
-  State<ForumBodyTableBookViewport> createState() => _TableBookViewportState();
+  State<_ForumBodyTableViewport> createState() => _TableViewportState();
 }
 
 typedef _Slice = ({ForumBodyTableAreaLayout area, int page});
 
-final class _TableBookViewportState extends State<ForumBodyTableBookViewport> {
+final class _TableViewportState extends State<_ForumBodyTableViewport> {
   static const _physics = AlwaysScrollableScrollPhysics(
     parent: ClampingScrollPhysics(),
   );
@@ -96,6 +136,8 @@ final class _TableBookViewportState extends State<ForumBodyTableBookViewport> {
   bool _waiting = false;
   bool _scheduled = false;
   bool _reportedReady = false;
+  GlobalKey? _flowBoxKey;
+  ScrollPosition? _outerPosition;
 
   @override
   void initState() {
@@ -104,7 +146,20 @@ final class _TableBookViewportState extends State<ForumBodyTableBookViewport> {
   }
 
   @override
-  void didUpdateWidget(covariant ForumBodyTableBookViewport oldWidget) {
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (widget.verticalController != null) return;
+    final position = Scrollable.maybeOf(context, axis: Axis.vertical)?.position;
+    if (identical(position, _outerPosition)) return;
+    _unlistenOuter();
+    _outerPosition = position;
+    position?.addListener(_scrollChanged);
+    position?.isScrollingNotifier.addListener(_scrollChanged);
+    _scrollChanged();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ForumBodyTableViewport oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.layout != widget.layout ||
         oldWidget.horizontalController != widget.horizontalController ||
@@ -117,7 +172,7 @@ final class _TableBookViewportState extends State<ForumBodyTableBookViewport> {
 
   void _listen() {
     widget.horizontalController.addListener(_scrollChanged);
-    widget.verticalController.addListener(_scrollChanged);
+    widget.verticalController?.addListener(_scrollChanged);
     _budget = widget.layout.layoutBudgetChanges.listen((_) {
       if (_waiting || widget.layout.isClosed) {
         _waiting = false;
@@ -127,10 +182,15 @@ final class _TableBookViewportState extends State<ForumBodyTableBookViewport> {
     _schedule();
   }
 
-  void _unlisten(ForumBodyTableBookViewport config) {
+  void _unlisten(_ForumBodyTableViewport config) {
     config.horizontalController.removeListener(_scrollChanged);
-    config.verticalController.removeListener(_scrollChanged);
+    config.verticalController?.removeListener(_scrollChanged);
     unawaited(_budget?.cancel());
+  }
+
+  void _unlistenOuter() {
+    _outerPosition?.removeListener(_scrollChanged);
+    _outerPosition?.isScrollingNotifier.removeListener(_scrollChanged);
   }
 
   void _scrollChanged() {
@@ -173,10 +233,9 @@ final class _TableBookViewportState extends State<ForumBodyTableBookViewport> {
       _publishWindow(null);
       return;
     }
-    final window = _currentBounds();
-    if (window == null) return;
+    final window = _currentBounds() ?? Rect.zero;
     if (window != _window) _updateWindow(window);
-    final ready = _visible.every(_ready.containsKey);
+    final ready = !window.isEmpty && _visible.every(_ready.containsKey);
     _reportReady(ready);
     _publishWindow(ready && !_scrolling ? window : null);
     if (!mounted || _waiting) return;
@@ -208,6 +267,7 @@ final class _TableBookViewportState extends State<ForumBodyTableBookViewport> {
   Rect? _currentBounds() {
     final h = widget.horizontalController;
     final v = widget.verticalController;
+    if (v == null) return _flowBounds();
     if (!h.hasClients ||
         !v.hasClients ||
         !h.position.hasContentDimensions ||
@@ -222,9 +282,39 @@ final class _TableBookViewportState extends State<ForumBodyTableBookViewport> {
     );
   }
 
-  bool get _scrolling =>
-      widget.horizontalController.position.isScrollingNotifier.value ||
-      widget.verticalController.position.isScrollingNotifier.value;
+  Rect? _flowBounds() {
+    final box = _flowBoxKey?.currentContext?.findRenderObject();
+    if (box is! RenderBox || !box.attached || !box.hasSize) return null;
+    final position = _outerPosition;
+    RenderObject? viewport;
+    if (position == null) {
+      viewport = box;
+      while (viewport?.parent != null) {
+        viewport = viewport!.parent;
+      }
+    } else {
+      viewport = forumBodyViewportForPosition(box, position);
+    }
+    if (viewport == null || !viewport.attached) return null;
+    final outerClip = MatrixUtils.transformRect(
+      viewport.getTransformTo(box),
+      viewport.paintBounds,
+    );
+    final clip = outerClip.intersect(Offset.zero & box.size);
+    if (!clip.isFinite || clip.isEmpty) return Rect.zero;
+    final horizontal = widget.horizontalController;
+    return horizontal.hasClients
+        ? clip.shift(Offset(horizontal.offset, 0))
+        : clip;
+  }
+
+  bool get _scrolling {
+    final h = widget.horizontalController;
+    final v = widget.verticalController;
+    final vertical = v?.hasClients == true ? v!.position : _outerPosition;
+    return (h.hasClients && h.position.isScrollingNotifier.value) ||
+        (vertical?.isScrollingNotifier.value ?? false);
+  }
 
   void _publishWindow(Rect? bounds) {
     final onChanged = widget.onWindowChanged;
@@ -253,7 +343,10 @@ final class _TableBookViewportState extends State<ForumBodyTableBookViewport> {
             fragments: _ready[slice]!,
           ),
       ]),
-      userOrigin != null && userOrigin.topLeft != bounds.topLeft,
+      userOrigin != null &&
+          (widget.verticalController == null
+              ? userOrigin.left != bounds.left
+              : userOrigin.topLeft != bounds.topLeft),
       () =>
           mounted &&
           identical(widget.layout, layout) &&
@@ -281,7 +374,7 @@ final class _TableBookViewportState extends State<ForumBodyTableBookViewport> {
 
   void _updateWindow(Rect window) {
     _window = window;
-    _visible = _slicesIn(window).toSet();
+    _visible = window.isEmpty ? const {} : _slicesIn(window).toSet();
     if (!_visible.contains(_working)) _stopWork();
     _failed.retainAll(_visible);
     final offscreen = _ready.keys.where((s) => !_visible.contains(s)).toList();
@@ -353,50 +446,82 @@ final class _TableBookViewportState extends State<ForumBodyTableBookViewport> {
     if (layout.isClosed) return const SizedBox.shrink();
     return LayoutBuilder(
       builder: (context, constraints) {
-        assert(constraints.hasBoundedWidth && constraints.hasBoundedHeight);
+        assert(constraints.hasBoundedWidth);
         _schedule();
-        return NotificationListener<ScrollNotification>(
-          onNotification: _onScroll,
-          child: SingleChildScrollView(
-            controller: widget.horizontalController,
-            primary: false,
-            scrollDirection: Axis.horizontal,
-            reverse: Directionality.of(context) == TextDirection.rtl,
-            physics: _physics,
-            child: SizedBox(
-              width: math.max(constraints.maxWidth, layout.size.width),
-              child: SingleChildScrollView(
-                controller: widget.verticalController,
-                primary: false,
-                physics: _physics,
-                child: SizedBox(
-                  height: math.max(constraints.maxHeight, layout.size.height),
-                  child: CustomPaint(
-                    painter: _TableBackgrounds(layout),
-                    child: Stack(
-                      children: [
-                        for (final entry in _ready.entries)
-                          Positioned.fromRect(
-                            key: ValueKey(entry.key),
-                            rect: _sliceBounds(entry.key),
-                            child: widget.buildSlice(
-                              context,
-                              entry.key.area,
-                              entry.key.page,
-                              entry.value,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
+        final vertical = widget.verticalController;
+        if (vertical == null) {
+          final content = SizedBox(
+            width: math.max(constraints.maxWidth, layout.size.width),
+            height: layout.size.height,
+            child: _tableSurface(),
+          );
+          return _FlowTableCompositionObserver(
+            key: _flowBoxKey ??= GlobalKey(),
+            onComposited: () {
+              if (mounted && (_flowBounds() ?? Rect.zero) != _window) {
+                _schedule();
+              }
+            },
+            child: layout.size.width <= constraints.maxWidth
+                ? content
+                : _horizontal(context, content, const ClampingScrollPhysics()),
+          );
+        }
+        assert(constraints.hasBoundedHeight);
+        return _horizontal(
+          context,
+          SizedBox(
+            width: math.max(constraints.maxWidth, layout.size.width),
+            child: SingleChildScrollView(
+              controller: vertical,
+              primary: false,
+              physics: _physics,
+              child: SizedBox(
+                height: math.max(constraints.maxHeight, layout.size.height),
+                child: _tableSurface(),
               ),
             ),
           ),
+          _physics,
         );
       },
     );
   }
+
+  Widget _horizontal(
+    BuildContext context,
+    Widget child,
+    ScrollPhysics physics,
+  ) => NotificationListener<ScrollNotification>(
+    onNotification: _onScroll,
+    child: SingleChildScrollView(
+      controller: widget.horizontalController,
+      primary: false,
+      scrollDirection: Axis.horizontal,
+      reverse: Directionality.of(context) == TextDirection.rtl,
+      physics: physics,
+      child: child,
+    ),
+  );
+
+  Widget _tableSurface() => CustomPaint(
+    painter: _TableBackgrounds(widget.layout),
+    child: Stack(
+      children: [
+        for (final entry in _ready.entries)
+          Positioned.fromRect(
+            key: ValueKey(entry.key),
+            rect: _sliceBounds(entry.key),
+            child: widget.buildSlice(
+              context,
+              entry.key.area,
+              entry.key.page,
+              entry.value,
+            ),
+          ),
+      ],
+    ),
+  );
 
   Rect _sliceBounds(_Slice slice) {
     final area = slice.area;
@@ -410,9 +535,54 @@ final class _TableBookViewportState extends State<ForumBodyTableBookViewport> {
 
   @override
   void dispose() {
+    _unlistenOuter();
     _unlisten(widget);
     _clear();
     super.dispose();
+  }
+}
+
+/// Preceding content can move a retained table without moving scroll pixels.
+/// Observe its current composed placement without forcing it to repaint.
+final class _FlowTableCompositionObserver
+    extends SingleChildRenderObjectWidget {
+  const _FlowTableCompositionObserver({
+    super.key,
+    required this.onComposited,
+    required super.child,
+  });
+
+  final VoidCallback onComposited;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderFlowTableCompositionObserver(onComposited);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    covariant _RenderFlowTableCompositionObserver renderObject,
+  ) => renderObject.onComposited = onComposited;
+}
+
+final class _RenderFlowTableCompositionObserver extends RenderProxyBox {
+  _RenderFlowTableCompositionObserver(this.onComposited);
+
+  VoidCallback onComposited;
+  VoidCallback? _removeCallback;
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    _removeCallback?.call();
+    _removeCallback = context.addCompositionCallback((_) => onComposited());
+    super.paint(context, offset);
+  }
+
+  @override
+  void detach() {
+    _removeCallback?.call();
+    _removeCallback = null;
+    super.detach();
   }
 }
 

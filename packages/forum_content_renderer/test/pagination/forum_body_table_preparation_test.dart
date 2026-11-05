@@ -360,6 +360,165 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets(
+    'flowing table follows outer vertical clip through scroll and reflow',
+    (tester) async {
+      final cache = _cache();
+      final layout = _layout(
+        _start(
+          _parse(
+            '<table width="240" cellspacing="0" cellpadding="0"><tr height="240">'
+            '<td width="140"><ruby>A<rt>aa</rt></ruby></td><td width="100">right</td></tr>'
+            '<tr><td colspan="2">tail</td></tr></table>',
+          ),
+          cache,
+          availableWidth: 100,
+        ),
+      );
+      final horizontal = ScrollController();
+      final outer = ScrollController();
+      final prefix = ValueNotifier(0.0);
+      addTearDown(horizontal.dispose);
+      addTearDown(outer.dispose);
+      addTearDown(prefix.dispose);
+      final windows = <ForumBodyTableVisibleWindow?>[];
+      final errors = <Object>[];
+      final table = ForumBodyTableFlowViewport(
+        layout: layout,
+        horizontalController: horizontal,
+        onFailure: (error, _) => errors.add(error),
+        onWindowChanged: windows.add,
+        buildSlice: (context, area, page, fragments) =>
+            ForumBodyTextPageSurface.prepared(
+              snapshot: area.snapshot,
+              pageIndex: page,
+              layoutId: area.snapshot.layoutId,
+              fragments: fragments,
+              compactHeight: true,
+            ),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Align(
+            child: SizedBox(
+              width: 100,
+              height: 70,
+              child: SingleChildScrollView(
+                controller: outer,
+                child: ValueListenableBuilder(
+                  valueListenable: prefix,
+                  child: RepaintBoundary(child: table),
+                  builder: (context, height, child) => Column(
+                    children: [
+                      SizedBox(height: height),
+                      child!,
+                      const SizedBox(height: 120),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester.getSize(find.byWidget(table)),
+        Size(100, layout.size.height),
+      );
+      expect(find.byType(Scrollable), findsNWidgets(2));
+      expect(horizontal.position.maxScrollExtent, 140);
+      final origin = windows.last!;
+      expect(origin.bounds, const Rect.fromLTWH(0, 0, 100, 70));
+      expect(origin.slices.single.area, same(layout.cells.first));
+      final ruby = origin.slices.single.fragments.single;
+      expect(ruby.projection.text, 'Aaa');
+
+      await tester.dragFrom(
+        tester.getCenter(find.byWidget(table)) -
+            Offset(0, layout.size.height / 2 - 35),
+        const Offset(-170, 0),
+      );
+      await tester.pumpAndSettle();
+      expect(outer.offset, 0);
+      expect(horizontal.offset, horizontal.position.maxScrollExtent);
+      expect(origin.isCurrent, isFalse);
+      expect(ruby.isActive, isFalse);
+      expect(windows.last!.slices.single.area, same(layout.cells[1]));
+      expect(windows.last!.hasUserScrolled, isTrue);
+
+      outer.jumpTo(layout.size.height - 40);
+      await tester.pumpAndSettle();
+      expect(windows.last!.slices.single.area, same(layout.cells.last));
+      expect(windows.last!.hasUserScrolled, isFalse);
+      final y = outer.offset;
+      await tester.dragFrom(const Offset(400, 300), const Offset(0, 45));
+      await tester.pumpAndSettle();
+      expect(outer.offset, lessThan(y));
+      expect(horizontal.offset, 140);
+
+      outer.jumpTo(0);
+      horizontal.jumpTo(0);
+      await tester.pumpAndSettle();
+      final retained = windows.last!;
+      prefix.value = 150;
+      await tester.pumpAndSettle();
+      expect(outer.offset, 0);
+      expect(retained.isCurrent, isFalse);
+      expect(windows.last, isNull);
+      expect(cache.activeLeases, 0);
+      prefix.value = 0;
+      await tester.pumpAndSettle();
+      expect(windows.last!.slices.single.area, same(layout.cells.first));
+      expect(errors, isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(cache.activeLeases, 0);
+    },
+  );
+
+  testWidgets('a flowing table that fits creates no inner scrollable', (
+    tester,
+  ) async {
+    final layout = _layout(
+      _start(
+        _parse('<table width="55"><tr height="120"><td>fits</td></tr></table>'),
+        _cache(),
+        availableWidth: 100,
+      ),
+    );
+    final horizontal = ScrollController();
+    addTearDown(horizontal.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Align(
+          child: SizedBox(
+            width: 100,
+            height: 45,
+            child: SingleChildScrollView(
+              child: ForumBodyTableFlowViewport(
+                layout: layout,
+                horizontalController: horizontal,
+                onFailure: (error, _) => fail(error.toString()),
+                buildSlice: (context, area, page, fragments) =>
+                    ForumBodyTextPageSurface.prepared(
+                      snapshot: area.snapshot,
+                      pageIndex: page,
+                      layoutId: area.snapshot.layoutId,
+                      fragments: fragments,
+                      compactHeight: true,
+                    ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(Scrollable), findsOneWidget);
+    expect(horizontal.hasClients, isFalse);
+    expect(find.byType(ForumBodyTextPageSurface), findsOneWidget);
+  });
+
   test('real width probes feed columns and wrapping feeds height', () {
     final document = _parse(
       '<table cellspacing="0" cellpadding="3" style="max-width:300px">'
