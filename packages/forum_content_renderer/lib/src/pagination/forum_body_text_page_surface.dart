@@ -9,6 +9,7 @@ import '../contracts/forum_html_image_host.dart';
 import '../html_rendering/widgets/forum_html_image_view.dart';
 import '../paragraph/forum_body_paragraph_surface.dart';
 import '../inline/forum_body_inline_paragraph_surface.dart';
+import '../inline/forum_body_inline_paragraph_view.dart';
 import '../inline/forum_body_emphasis_fragment_surface.dart';
 import 'forum_body_prepared_text_fragment.dart';
 import 'forum_body_text_page_composer.dart';
@@ -79,6 +80,20 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     void Function(ForumBodyPreparedImageFragment, ForumHtmlImageLayout)?
     onImageLayoutResolved,
     ValueChanged<ForumBodyPreparedImageFragment>? onImageTap,
+    void Function(
+      ForumBodyPreparedInlineFragment,
+      ForumBodyInlineImageBinding,
+      bool,
+    )?
+    onInlineImageDisplayChanged,
+    void Function(
+      ForumBodyPreparedInlineFragment,
+      ForumBodyInlineImageBinding,
+      ForumHtmlImageLayout,
+    )?
+    onInlineImageLayoutResolved,
+    void Function(ForumBodyPreparedInlineFragment, ForumBodyInlineImageBinding)?
+    onInlineImageTap,
     void Function(ForumBodyTextPageFragment, HtmlProjectedSourcePosition)?
     onSourceTap,
     void Function(ForumBodyTextPageFragment, ForumBodyTextSelectionSnapshot)?
@@ -91,6 +106,16 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
       fragments: fragments,
     );
     final images = <ForumBodyPreparedImageFragment, ForumHtmlDisplayImage>{};
+    for (final fragment in fragments) {
+      final body = fragment is ForumBodyPreparedListItemFragment
+          ? fragment.body
+          : fragment;
+      if (body is ForumBodyPreparedInlineFragment &&
+          body.view.images.isNotEmpty &&
+          imageHost == null) {
+        _fail(ForumBodyTextPageSurfaceFailure.leases);
+      }
+    }
     for (final binding
         in fragments.whereType<ForumBodyPreparedImageFragment>()) {
       if (imageHost == null) _fail(ForumBodyTextPageSurfaceFailure.leases);
@@ -127,6 +152,9 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
       onImageDisplayChanged,
       onImageLayoutResolved,
       onImageTap,
+      onInlineImageDisplayChanged,
+      onInlineImageLayoutResolved,
+      onInlineImageTap,
     );
   }
 
@@ -144,6 +172,9 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     this._onImageDisplayChanged,
     this._onImageLayoutResolved,
     this._onImageTap,
+    this._onInlineImageDisplayChanged,
+    this._onInlineImageLayoutResolved,
+    this._onInlineImageTap,
   ) : super(key: key);
   final ForumBodyTextPage _page;
   final String _layoutId;
@@ -164,6 +195,23 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
   final void Function(ForumBodyPreparedImageFragment, ForumHtmlImageLayout)?
   _onImageLayoutResolved;
   final ValueChanged<ForumBodyPreparedImageFragment>? _onImageTap;
+  final void Function(
+    ForumBodyPreparedInlineFragment,
+    ForumBodyInlineImageBinding,
+    bool,
+  )?
+  _onInlineImageDisplayChanged;
+  final void Function(
+    ForumBodyPreparedInlineFragment,
+    ForumBodyInlineImageBinding,
+    ForumHtmlImageLayout,
+  )?
+  _onInlineImageLayoutResolved;
+  final void Function(
+    ForumBodyPreparedInlineFragment,
+    ForumBodyInlineImageBinding,
+  )?
+  _onInlineImageTap;
 
   static Never _fail(ForumBodyTextPageSurfaceFailure failure) =>
       throw ForumBodyTextPageSurfaceException(failure);
@@ -225,8 +273,27 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
         interactionIdentity: interaction,
         onSourceTap: tap,
       ),
-      ForumBodyPreparedInlineFragment() => ForumBodyInlineParagraphSurface(
+      ForumBodyPreparedInlineFragment() when binding.view.images.isEmpty =>
+        ForumBodyInlineParagraphSurface(
+          view: binding.view,
+          paintBackgrounds: false,
+          interactionIdentity: interaction,
+          onSourceTap: tap,
+        ),
+      ForumBodyPreparedInlineFragment() => ForumBodyInlineImageSurface(
         view: binding.view,
+        imageHost: _imageHost,
+        onImageDisplayChanged: _onInlineImageDisplayChanged == null
+            ? null
+            : (image, rendered) =>
+                  _onInlineImageDisplayChanged(binding, image, rendered),
+        onImageLayoutResolved: _onInlineImageLayoutResolved == null
+            ? null
+            : (image, layout) =>
+                  _onInlineImageLayoutResolved(binding, image, layout),
+        onImageTap: _onInlineImageTap == null
+            ? null
+            : (image) => _onInlineImageTap(binding, image),
         paintBackgrounds: false,
         interactionIdentity: interaction,
         onSourceTap: tap,
