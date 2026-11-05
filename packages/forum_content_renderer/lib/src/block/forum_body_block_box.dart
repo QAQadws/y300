@@ -36,6 +36,7 @@ final class ForumBodyBlockBox {
     required TextDirection containingDirection,
     required double rootFontSize,
     bool blockifyInline = false,
+    EdgeInsets extraPadding = EdgeInsets.zero,
   }) {
     if (style.display != ForumBodyDisplay.block &&
         style.display != ForumBodyDisplay.listItem &&
@@ -74,10 +75,10 @@ final class ForumBodyBlockBox {
     double verticalMargin(ForumBodyLength value) =>
         value.unit == ForumBodyLengthUnit.auto ? 0 : length(value);
     final padding = EdgeInsets.fromLTRB(
-      length(style.padding.left),
-      length(style.padding.top),
-      length(style.padding.right),
-      length(style.padding.bottom),
+      length(style.padding.left) + extraPadding.left,
+      length(style.padding.top) + extraPadding.top,
+      length(style.padding.right) + extraPadding.right,
+      length(style.padding.bottom) + extraPadding.bottom,
     );
     if (!padding.isNonNegative ||
         !padding.horizontal.isFinite ||

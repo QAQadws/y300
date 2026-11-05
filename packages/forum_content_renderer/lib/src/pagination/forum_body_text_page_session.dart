@@ -620,6 +620,23 @@ final class ForumBodyTextPageSession {
               return result(completed: true);
             }
             final event = unit.boundary.event!;
+            final opens =
+                unit.boundary.kind == ForumBodyTextFlowBoundaryKind.openBlock;
+            if (unit.collapseTitle case final section?) {
+              if (opens) {
+                final box = unit.box!;
+                _composer.openCollapseTitle(
+                  id: section.id,
+                  titlePath: section.title.path,
+                  expanded: section.expanded,
+                  direction: event.style.textDirection,
+                  left: unit.contentLeft - box.padding.left - box.leftBorder,
+                  width: box.borderBoxWidth,
+                );
+              } else {
+                _composer.closeCollapseTitle(section.title.path);
+              }
+            }
             final background = event.style.visibilityHidden
                 ? null
                 : event.style.boxBackground;
@@ -627,8 +644,7 @@ final class ForumBodyTextPageSession {
                 ? null
                 : event.style.quoteDecoration;
             if ((background?.a ?? 0) > 0 || quote != null) {
-              if (unit.boundary.kind ==
-                  ForumBodyTextFlowBoundaryKind.openBlock) {
+              if (opens) {
                 _composer.openBackground(
                   path: event.node.path,
                   left:

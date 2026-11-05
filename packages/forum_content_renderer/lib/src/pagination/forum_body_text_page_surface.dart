@@ -1,4 +1,4 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:html_pagination_core/html_pagination_core.dart';
 
@@ -6,6 +6,9 @@ import '../paragraph/forum_body_paragraph_cache.dart';
 import '../style/forum_body_quote_decoration.dart';
 import '../contracts/forum_html_display_image.dart';
 import '../contracts/forum_html_image_host.dart';
+import '../contracts/forum_collapse_header_metrics.dart';
+import '../contracts/forum_html_collapse_labels.dart';
+import '../helpers/forum_collapse_chrome.dart';
 import '../html_rendering/widgets/forum_html_image_view.dart';
 import '../paragraph/forum_body_paragraph_surface.dart';
 import '../inline/forum_body_inline_paragraph_surface.dart';
@@ -76,6 +79,8 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     required String layoutId,
     required List<ForumBodyPreparedTextFragment> fragments,
     ForumHtmlImageHost? imageHost,
+    ForumHtmlCollapseLabels? collapseLabels,
+    ValueChanged<ForumBodyTextPageFragment>? onCollapseToggle,
     void Function(ForumBodyPreparedImageFragment, bool)? onImageDisplayChanged,
     void Function(ForumBodyPreparedImageFragment, ForumHtmlImageLayout)?
     onImageLayoutResolved,
@@ -153,6 +158,8 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
       onInlineImageDisplayChanged,
       onInlineImageLayoutResolved,
       onInlineImageTap,
+      collapseLabels,
+      onCollapseToggle,
     );
   }
 
@@ -173,6 +180,8 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     this._onInlineImageDisplayChanged,
     this._onInlineImageLayoutResolved,
     this._onInlineImageTap,
+    this._collapseLabels,
+    this._onCollapseToggle,
   ) : super(key: key);
   final ForumBodyTextPage _page;
   final String _layoutId;
@@ -210,6 +219,8 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     ForumBodyInlineImageBinding,
   )?
   _onInlineImageTap;
+  final ForumHtmlCollapseLabels? _collapseLabels;
+  final ValueChanged<ForumBodyTextPageFragment>? _onCollapseToggle;
 
   static Never _fail(ForumBodyTextPageSurfaceFailure failure) =>
       throw ForumBodyTextPageSurfaceException(failure);
@@ -309,6 +320,107 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     };
   }
 
+  Widget _placedFragment(
+    BuildContext context,
+    ForumBodyTextPageFragment fragment,
+    ForumBodyPreparedTextFragment binding,
+  ) {
+    final key = ObjectKey(_bindingKey(binding));
+    final surface = _fragmentSurface(fragment, binding);
+    final body = fragment.kind == ForumBodyTextPageFragmentKind.image
+        ? surface
+        : _TextLongPressSurface(
+            identity: (
+              _layoutId,
+              _page.index,
+              fragment.paragraphIndex,
+              fragment.startLine,
+              fragment.endLine,
+              fragment.left,
+              fragment.top,
+              fragment.width,
+              fragment.height,
+            ),
+            onLongPress: _onSourceLongPress == null
+                ? null
+                : (point) {
+                    final selected = forumBodyTextSelectionAt(
+                      binding: binding,
+                      fragment: fragment,
+                      pageSize: Size(_width, _height),
+                      point: point,
+                    );
+                    if (selected != null) {
+                      _onSourceLongPress(fragment, selected);
+                    }
+                  },
+            child: surface,
+          );
+    final header = fragment.collapseHeader;
+    if (header == null) {
+      return Positioned(
+        key: key,
+        left: fragment.left,
+        top: fragment.top,
+        width: fragment.width,
+        height: fragment.height,
+        child: body,
+      );
+    }
+    final bounds = header.bounds;
+    return Positioned.fromRect(
+      key: key,
+      rect: bounds,
+      child: Directionality(
+        textDirection: header.direction,
+        child: Material(
+          type: MaterialType.transparency,
+          child: DecoratedBox(
+            decoration: forumCollapseOutline(
+              Theme.of(context).colorScheme.outlineVariant,
+            ),
+            child: ForumCollapseHeaderControl(
+              toggleKey: ValueKey(
+                'forum-native-collapse-toggle-${header.id}-${fragment.paragraphIndex}',
+              ),
+              expanded: header.expanded,
+              label: header.expanded
+                  ? _collapseLabels?.expandedSemanticsLabel
+                  : _collapseLabels?.collapsedSemanticsLabel,
+              onTap: _onCollapseToggle == null
+                  ? null
+                  : () {
+                      if (binding.isActive) _onCollapseToggle(fragment);
+                    },
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  PositionedDirectional(
+                    start: ForumCollapseHeaderMetrics.inset,
+                    top: 0,
+                    bottom: 0,
+                    child: IgnorePointer(
+                      child: Center(
+                        child: ForumCollapseChevron(expanded: header.expanded),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: fragment.left - bounds.left,
+                    top: fragment.top - bounds.top,
+                    width: fragment.width,
+                    height: fragment.height,
+                    child: body,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
@@ -345,42 +457,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
                 ),
               ),
             for (final (index, fragment) in _page.fragments.indexed)
-              Positioned(
-                key: ObjectKey(_bindingKey(_bindings[index])),
-                left: fragment.left,
-                top: fragment.top,
-                width: fragment.width,
-                height: fragment.height,
-                child: fragment.kind == ForumBodyTextPageFragmentKind.image
-                    ? _fragmentSurface(fragment, _bindings[index])
-                    : _TextLongPressSurface(
-                        identity: (
-                          _layoutId,
-                          _page.index,
-                          fragment.paragraphIndex,
-                          fragment.startLine,
-                          fragment.endLine,
-                          fragment.left,
-                          fragment.top,
-                          fragment.width,
-                          fragment.height,
-                        ),
-                        onLongPress: _onSourceLongPress == null
-                            ? null
-                            : (point) {
-                                final selected = forumBodyTextSelectionAt(
-                                  binding: _bindings[index],
-                                  fragment: fragment,
-                                  pageSize: Size(_width, _height),
-                                  point: point,
-                                );
-                                if (selected != null) {
-                                  _onSourceLongPress(fragment, selected);
-                                }
-                              },
-                        child: _fragmentSurface(fragment, _bindings[index]),
-                      ),
-              ),
+              _placedFragment(context, fragment, _bindings[index]),
           ],
         ),
       );

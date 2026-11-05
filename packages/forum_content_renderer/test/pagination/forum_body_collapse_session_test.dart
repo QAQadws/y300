@@ -1,4 +1,4 @@
-import 'package:flutter/painting.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
@@ -159,6 +159,28 @@ void main() {
         try {
           expect(_renderedText(session), expected[index]);
           final fragments = session.snapshot.expand((page) => page.fragments);
+          final headers = [
+            for (final page in session.snapshot)
+              for (final fragment in page.fragments)
+                if (fragment.collapseHeader case final header?)
+                  (page: page, fragment: fragment, header: header),
+          ];
+          expect(headers.map((item) => item.header.id), [
+            outer.id,
+            if (index != 0) inner.id,
+          ]);
+          for (final item in headers) {
+            final section = layout.sections[item.header.id]!;
+            expect(item.header.titlePath, section.title.path);
+            expect(item.header.expanded, section.expanded);
+            expect(item.header.bounds.height, greaterThanOrEqualTo(40));
+            expect(
+              item.header.bounds.bottom,
+              lessThanOrEqualTo(item.page.usedHeight),
+            );
+            expect(item.fragment.left, greaterThan(item.header.bounds.left));
+            expect(item.fragment.sourceHint, isNotNull);
+          }
           tailHints.add(
             fragments
                 .singleWhere((fragment) => fragment.path == '2')
@@ -192,6 +214,58 @@ void main() {
       () => _session(other, cache, ForumBodyCollapseLayout(document), []),
       throwsArgumentError,
     );
+    expect(cache.activeLeases, 0);
+  });
+
+  testWidgets('the prepared header toggles its actual fragment and retires', (
+    tester,
+  ) async {
+    final document = _parse();
+    final cache = ForumBodyParagraphCache(
+      maxEntries: 8,
+      maxEstimatedBytes: 1 << 20,
+    );
+    addTearDown(cache.close);
+    final layout = ForumBodyCollapseLayout(document);
+    final session = _session(document, cache, layout, []);
+    addTearDown(session.close);
+    expect(_renderedText(session), ['before', 'same title', 'after']);
+    final page = session.snapshot.first;
+    final title = page.fragments.singleWhere(
+      (item) => item.collapseHeader != null,
+    );
+    final prepared = session.preparePageFragments(0);
+    final toggled = <ForumBodyTextPageFragment>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Align(
+          child: ForumBodyTextPageSurface.prepared(
+            snapshot: session.snapshot,
+            pageIndex: 0,
+            layoutId: 'collapse-session',
+            fragments: prepared,
+            collapseLabels: const ForumHtmlCollapseLabels(
+              fallbackTitle: 'Fold',
+              expandedSemanticsLabel: 'Close fold',
+              collapsedSemanticsLabel: 'Open fold',
+            ),
+            onCollapseToggle: toggled.add,
+          ),
+        ),
+      ),
+    );
+    final toggle = find.byKey(
+      ValueKey(
+        'forum-native-collapse-toggle-${title.collapseHeader!.id}-${title.paragraphIndex}',
+      ),
+    );
+    expect(tester.getSize(toggle), title.collapseHeader!.bounds.size);
+    final onTap = tester.widget<InkWell>(toggle).onTap!;
+    await tester.tap(toggle);
+    expect(toggled.single, same(title));
+    await tester.pumpWidget(const SizedBox.shrink());
+    onTap();
+    expect(toggled, hasLength(1));
     expect(cache.activeLeases, 0);
   });
 }

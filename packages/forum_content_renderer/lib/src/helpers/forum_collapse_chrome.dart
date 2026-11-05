@@ -1,5 +1,53 @@
 import 'package:flutter/material.dart';
 
+import '../contracts/forum_collapse_header_metrics.dart';
+
+BoxDecoration forumCollapseOutline(Color outline) => BoxDecoration(
+  border: Border.all(color: outline),
+  borderRadius: BorderRadius.circular(8),
+);
+
+class ForumCollapseHeaderControl extends StatelessWidget {
+  const ForumCollapseHeaderControl({
+    super.key,
+    required this.toggleKey,
+    required this.expanded,
+    required this.label,
+    required this.onTap,
+    required this.child,
+  });
+
+  final Key toggleKey;
+  final bool expanded;
+  final String? label;
+  final VoidCallback? onTap;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    toggled: expanded,
+    label: label,
+    child: InkWell(key: toggleKey, onTap: onTap, child: child),
+  );
+}
+
+class ForumCollapseChevron extends StatelessWidget {
+  const ForumCollapseChevron({super.key, required this.expanded});
+
+  final bool expanded;
+
+  @override
+  Widget build(BuildContext context) => AnimatedRotation(
+    turns: expanded ? 0.25 : 0,
+    duration: const Duration(milliseconds: 160),
+    child: const Icon(
+      Icons.chevron_right,
+      size: ForumCollapseHeaderMetrics.iconSize,
+    ),
+  );
+}
+
 /// Shared visual/interaction chrome for Discuz-style collapse blocks.
 ///
 /// Thread HTML and composer previews both supply rendered title/content
@@ -86,33 +134,28 @@ class _ForumCollapseChromeState extends State<ForumCollapseChrome>
     final header = Row(
       children: [
         Expanded(
-          child: Semantics(
-            button: true,
-            toggled: expanded,
+          child: ForumCollapseHeaderControl(
+            toggleKey: Key(toggleKey),
+            expanded: expanded,
             label: expanded
                 ? widget.expandedSemanticsLabel
                 : widget.collapsedSemanticsLabel,
-            child: InkWell(
-              key: Key(toggleKey),
-              onTap: _toggleExpanded,
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(
-                  12,
-                  10,
-                  widget.headerTrailing == null ? 12 : 6,
-                  10,
-                ),
-                child: Row(
-                  children: [
-                    AnimatedRotation(
-                      turns: expanded ? 0.25 : 0,
-                      duration: const Duration(milliseconds: 160),
-                      child: const Icon(Icons.chevron_right, size: 20),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(child: widget.title),
-                  ],
-                ),
+            onTap: _toggleExpanded,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                ForumCollapseHeaderMetrics.inset,
+                ForumCollapseHeaderMetrics.verticalInset,
+                widget.headerTrailing == null
+                    ? ForumCollapseHeaderMetrics.inset
+                    : ForumCollapseHeaderMetrics.iconGap,
+                ForumCollapseHeaderMetrics.verticalInset,
+              ),
+              child: Row(
+                children: [
+                  ForumCollapseChevron(expanded: expanded),
+                  const SizedBox(width: ForumCollapseHeaderMetrics.iconGap),
+                  Expanded(child: widget.title),
+                ],
               ),
             ),
           ),
@@ -123,10 +166,7 @@ class _ForumCollapseChromeState extends State<ForumCollapseChrome>
     );
     return DecoratedBox(
       key: Key(baseKey),
-      decoration: BoxDecoration(
-        border: Border.all(color: colorScheme.outlineVariant),
-        borderRadius: BorderRadius.circular(8),
-      ),
+      decoration: forumCollapseOutline(colorScheme.outlineVariant),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
@@ -145,7 +185,9 @@ class _ForumCollapseChromeState extends State<ForumCollapseChrome>
                       ),
                     ),
                     child: Padding(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(
+                        ForumCollapseHeaderMetrics.inset,
+                      ),
                       child: widget.contentBuilder(context),
                     ),
                   )

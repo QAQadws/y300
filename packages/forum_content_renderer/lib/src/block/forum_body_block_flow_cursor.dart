@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/painting.dart';
 
+import '../contracts/forum_collapse_header_metrics.dart';
 import '../document/forum_body_collapse_layout.dart';
 import '../document/forum_body_document.dart';
 import '../inline/forum_body_ruby_content.dart';
@@ -143,11 +144,16 @@ final class ForumBodyBlockFlowRule extends ForumBodyBlockFlowUnit {
 /// rectangle. Adjoining child margins can still move a parent's first content;
 /// the page composer resolves its actual background start and continuation.
 final class ForumBodyBlockFlowBoundary extends ForumBodyBlockFlowUnit {
-  ForumBodyBlockFlowBoundary._(this.boundary, this.box, this.contentLeft)
-    : super._(boundary.identity);
+  ForumBodyBlockFlowBoundary._(
+    this.boundary,
+    this.box,
+    this.contentLeft, {
+    this.collapseTitle,
+  }) : super._(boundary.identity);
   final ForumBodyTextFlowBoundary boundary;
   final ForumBodyBlockBox? box;
   final double contentLeft;
+  final ForumBodyCollapseSection? collapseTitle;
 }
 
 /// Normal-flow geometry over the sole text cursor. Adjoining signed margins
@@ -186,7 +192,7 @@ final class ForumBodyBlockFlowCursor {
       throw ArgumentError.value(width, 'width');
     }
   }
-  static const revision = 11;
+  static const revision = 12;
   final double width;
   final ForumBodyBlockEdgeMargins edgeMargins;
   final double _rootFontSize;
@@ -295,6 +301,8 @@ final class ForumBodyBlockFlowCursor {
     switch (unit.kind) {
       case ForumBodyTextFlowBoundaryKind.openBlock:
         final node = event!.node as ForumBodyElement;
+        final section = _collapses?.sectionFor(node);
+        final title = identical(section?.title, node) ? section : null;
         if (!const {
               ForumBodyElementKind.container,
               ForumBodyElementKind.paragraph,
@@ -309,7 +317,7 @@ final class ForumBodyBlockFlowCursor {
               ForumBodyElementKind.inline,
               ForumBodyElementKind.unknown,
             }.contains(node.kind) &&
-            _collapses?.sectionFor(node) == null) {
+            section == null) {
           throw ForumBodyBlockFlowException(
             ForumBodyBlockFlowFailure.structure,
             node.path,
@@ -317,6 +325,17 @@ final class ForumBodyBlockFlowCursor {
         }
         _validateNormalFlow(node);
         final parent = _frames.lastOrNull;
+        const leading = ForumCollapseHeaderMetrics.titleStart;
+        const trailing = ForumCollapseHeaderMetrics.inset;
+        final ltr = event.style.textDirection == TextDirection.ltr;
+        final chromePadding = title != null
+            ? EdgeInsets.only(
+                left: ltr ? leading : trailing,
+                right: ltr ? trailing : leading,
+              )
+            : identical(section?.body, node)
+            ? const EdgeInsets.symmetric(horizontal: trailing)
+            : EdgeInsets.zero;
         final box = ForumBodyBlockBox.resolve(
           style: event.style,
           containingWidth: parent?.contentWidth ?? width,
@@ -324,6 +343,7 @@ final class ForumBodyBlockFlowCursor {
               parent?.event.style.textDirection ?? _rootDirection,
           rootFontSize: _rootFontSize,
           blockifyInline: node.kind == ForumBodyElementKind.image,
+          extraPadding: chromePadding,
         );
         final left = (parent?.contentLeft ?? 0) + box.contentLeft;
         if (!left.isFinite) {
@@ -374,7 +394,9 @@ final class ForumBodyBlockFlowCursor {
           );
         }
         _frames.add(frame);
-        _pending.add(ForumBodyBlockFlowBoundary._(unit, box, left));
+        _pending.add(
+          ForumBodyBlockFlowBoundary._(unit, box, left, collapseTitle: title),
+        );
         if (frame.marker case final marker?) {
           final owner = _frames.reversed
               .skip(1)
@@ -432,6 +454,7 @@ final class ForumBodyBlockFlowCursor {
           throw StateError('Unbalanced block flow');
         }
         final frame = _frames.removeLast();
+        final section = _collapses?.sectionFor(event.node as ForumBodyElement);
         _padding(
           frame.box.padding.bottom,
           ForumBodyBlockSpaceKind.paddingBottom,
@@ -439,7 +462,14 @@ final class ForumBodyBlockFlowCursor {
         );
         _margin(frame.box.margin.bottom);
         _pending.add(
-          ForumBodyBlockFlowBoundary._(unit, frame.box, frame.contentLeft),
+          ForumBodyBlockFlowBoundary._(
+            unit,
+            frame.box,
+            frame.contentLeft,
+            collapseTitle: identical(section?.title, event.node)
+                ? section
+                : null,
+          ),
         );
       case ForumBodyTextFlowBoundaryKind.endDocument:
         if (_frames.isNotEmpty) throw StateError('Unclosed block flow');

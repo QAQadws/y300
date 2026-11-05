@@ -212,6 +212,7 @@ final class NovelReaderNativePrefixVerifier {
       old.imageFrame == next.imageFrame &&
       old.listMarker?.baseline == next.listMarker?.baseline &&
       old.listMarker?.bounds == next.listMarker?.bounds &&
+      old.collapseHeader == next.collapseHeader &&
       old.path == next.path &&
       old.fontRevision == next.fontRevision &&
       old.styleRevision == next.styleRevision &&

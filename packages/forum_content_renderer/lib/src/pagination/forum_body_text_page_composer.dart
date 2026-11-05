@@ -1,10 +1,11 @@
 import 'dart:collection';
 import 'dart:math' as math;
-import 'dart:ui' show Color, Offset, Rect;
+import 'dart:ui' show Color, Offset, Rect, TextDirection;
 
 import 'package:flutter/foundation.dart' show precisionErrorTolerance;
 import 'package:html_pagination_core/html_pagination_core.dart';
 
+import '../contracts/forum_collapse_header_metrics.dart';
 import '../document/forum_body_document.dart';
 import '../style/forum_body_quote_decoration.dart';
 import '../inline/forum_body_inline_paragraph_layout.dart';
@@ -67,6 +68,7 @@ final class ForumBodyTextPageFragment {
     required this.height,
     required this.kind,
     this.listMarker,
+    this.collapseHeader,
     this.imageFrame,
     this.engineRange,
     this.imageCount = 0,
@@ -97,12 +99,22 @@ final class ForumBodyTextPageFragment {
   final double height;
   final ForumBodyTextPageFragmentKind kind;
   final ForumBodyTextPageListMarker? listMarker;
+  final ForumBodyTextPageCollapseHeader? collapseHeader;
   final ForumBodyImageFrame? imageFrame;
 
   /// Actual inline engine window, including source-free resource slots and
   /// mechanical prefixes. It is never a display/source or semantic interval.
   final ({int startUtf16, int endUtf16})? engineRange;
 }
+
+/// Actual title placement and state in one fixed page slice.
+typedef ForumBodyTextPageCollapseHeader = ({
+  String id,
+  String titlePath,
+  bool expanded,
+  TextDirection direction,
+  Rect bounds,
+});
 
 /// Numeric decoration envelope only; no font input or source position.
 final class ForumBodyTextPageListMarker {
@@ -234,7 +246,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 22;
+  static const revision = 23;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;
@@ -261,6 +273,7 @@ final class ForumBodyTextPageComposer {
   final _draft = <ForumBodyTextPageFragment>[];
   final _rules = <ForumBodyTextPageRule>[];
   final _backgrounds = _PageBackgrounds();
+  _OpenCollapseHeader? _collapseHeader;
   ForumBodyTextPageSnapshot? _snapshot;
   _ActiveParagraph? _active;
   _ActivePadding? _padding;
@@ -333,6 +346,50 @@ final class ForumBodyTextPageComposer {
     _fragmentCount += _backgrounds.touch(top, maxFragments - _fragmentCount);
   }
 
+  void openCollapseTitle({
+    required String id,
+    required String titlePath,
+    required bool expanded,
+    required TextDirection direction,
+    required double left,
+    required double width,
+  }) {
+    _ensureOpen();
+    if (!needsInput || _collapseHeader != null) {
+      throw StateError('Cannot open nested or pending collapse title');
+    }
+    if (!left.isFinite ||
+        !width.isFinite ||
+        width <= 0 ||
+        left < -precisionErrorTolerance ||
+        left + width > this.width + precisionErrorTolerance) {
+      _fail(ForumBodyTextPageFailure.invalidGeometry);
+    }
+    _collapseHeader = _OpenCollapseHeader(
+      id,
+      titlePath,
+      expanded,
+      direction,
+      left,
+      width,
+    );
+  }
+
+  void closeCollapseTitle(String titlePath) {
+    _ensureOpen();
+    if (!needsInput || _collapseHeader?.titlePath != titlePath) {
+      throw StateError('Unbalanced collapse title');
+    }
+    _collapseHeader = null;
+  }
+
+  double get _headerInset =>
+      _collapseHeader == null ? 0 : ForumCollapseHeaderMetrics.verticalInset;
+
+  double _headerBodyHeight(double height) => _collapseHeader == null
+      ? height
+      : math.max(height, ForumCollapseHeaderMetrics.iconSize);
+
   ({int entries, int bytes}) _nativeCostIncrease(Map<Object, int> additions) {
     var entries = 0, bytes = 0;
     for (final cost in additions.entries) {
@@ -403,10 +460,10 @@ final class ForumBodyTextPageComposer {
         return (pagesPublished: 1, isComplete: false);
       }
       final atStart = _draft.isEmpty && _rules.isEmpty && _usedHeight == 0;
-      final top = math.max(
-        0.0,
-        _flowHeight + (atStart ? 0 : active.spaceBefore),
-      );
+      final inset = _headerInset;
+      final top =
+          math.max(0.0, _flowHeight + (atStart ? 0 : active.spaceBefore)) +
+          inset;
       final plan = active.listMarkers;
       final marker = plan == null
           ? null
@@ -421,7 +478,11 @@ final class ForumBodyTextPageComposer {
         _fail(ForumBodyTextPageFailure.invalidGeometry);
       }
       final bottom =
-          top + math.max(active.frame.height, marker?.bounds.bottom ?? 0);
+          top +
+          _headerBodyHeight(
+            math.max(active.frame.height, marker?.bounds.bottom ?? 0),
+          ) +
+          inset;
       if (!bottom.isFinite) _fail(ForumBodyTextPageFailure.invalidGeometry);
       if (bottom > height) {
         if (atStart) _fail(ForumBodyTextPageFailure.oversizedGroup);
@@ -461,7 +522,7 @@ final class ForumBodyTextPageComposer {
         _seal();
         return (pagesPublished: 1, isComplete: false);
       }
-      _touchBackgrounds(top);
+      _touchBackgrounds(top - inset);
       if (_fragmentCount >= maxFragments) {
         _fail(ForumBodyTextPageFailure.fragmentLimit);
       }
@@ -482,6 +543,7 @@ final class ForumBodyTextPageComposer {
           height: active.frame.height,
           kind: ForumBodyTextPageFragmentKind.image,
           listMarker: marker,
+          collapseHeader: _collapseHeader?.place(top - inset, bottom),
           imageFrame: active.frame,
           imageCount: 1,
           imagePaths: List.unmodifiable([active.path]),
@@ -866,10 +928,12 @@ final class ForumBodyTextPageComposer {
                 ),
               )
             : null;
+        final inset = _headerInset;
         final top = continuation
             ? _draft.last.top
             : math.max(0.0, _flowHeight + gap) +
-                  math.max(0.0, -(marker?.bounds.top ?? 0));
+                  math.max(0.0, -(marker?.bounds.top ?? 0)) +
+                  inset;
         final view = layout.lines.isEmpty
             ? null
             : layout.fragment(firstLine, end);
@@ -885,7 +949,11 @@ final class ForumBodyTextPageComposer {
         }
         final fragmentHeight = view?.height ?? layout.height;
         final bottom =
-            top + math.max(fragmentHeight, marker?.bounds.bottom ?? 0);
+            top +
+            _headerBodyHeight(
+              math.max(fragmentHeight, marker?.bounds.bottom ?? 0),
+            ) +
+            inset;
         if (marker != null &&
             (active.left + marker.bounds.left < -precisionErrorTolerance ||
                 active.left + marker.bounds.right >
@@ -1118,6 +1186,7 @@ final class ForumBodyTextPageComposer {
           height: fragmentHeight,
           kind: layout.kind,
           listMarker: marker,
+          collapseHeader: _collapseHeader?.place(top - inset, bottom),
           imageCount: images,
           imagePaths: layout.imagePaths(firstLine, end),
           engineRange:
@@ -1129,7 +1198,7 @@ final class ForumBodyTextPageComposer {
                 )
               : null,
         );
-        _touchBackgrounds(top + math.min(0, marker?.bounds.top ?? 0));
+        _touchBackgrounds(top + math.min(0, marker?.bounds.top ?? 0) - inset);
         if (!continuation && _fragmentCount >= maxFragments) {
           _fail(ForumBodyTextPageFailure.fragmentLimit);
         }
@@ -1194,6 +1263,7 @@ final class ForumBodyTextPageComposer {
     _ensureOpen();
     if (!needsInput) throw StateError('Composition input is still pending');
     if (!_backgrounds.isBalanced) throw StateError('Unclosed page background');
+    if (_collapseHeader != null) throw StateError('Unclosed collapse title');
     try {
       if (_draft.isNotEmpty || _usedHeight > 0) _seal();
       _complete = true;
@@ -1250,6 +1320,7 @@ final class ForumBodyTextPageComposer {
     _draft.clear();
     _rules.clear();
     _backgrounds.clear();
+    _collapseHeader = null;
     _usedNativeHandles = 0;
     _nativeEntries.clear();
     _nativeBytes = 0;
@@ -1260,6 +1331,29 @@ final class ForumBodyTextPageComposer {
     _usedHeight = 0;
     _flowHeight = 0;
   }
+}
+
+final class _OpenCollapseHeader {
+  const _OpenCollapseHeader(
+    this.id,
+    this.titlePath,
+    this.expanded,
+    this.direction,
+    this.left,
+    this.width,
+  );
+  final String id, titlePath;
+  final bool expanded;
+  final TextDirection direction;
+  final double left, width;
+
+  ForumBodyTextPageCollapseHeader place(double top, double bottom) => (
+    id: id,
+    titlePath: titlePath,
+    expanded: expanded,
+    direction: direction,
+    bounds: Rect.fromLTRB(left, top, left + width, bottom),
+  );
 }
 
 final class _ActiveImage {
