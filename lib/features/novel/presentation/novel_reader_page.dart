@@ -23,6 +23,7 @@ import 'package:y300/features/library_shared/presentation/reader/reader_corner_d
 import 'package:y300/features/novel/application/novel_reader_display_preferences_coordinator.dart';
 import 'package:y300/features/novel/application/novel_reader_vertical_session_coordinator.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_spacing.dart';
 import 'package:y300/features/novel/domain/models/novel_episode_open_policy.dart';
 import 'package:y300/features/novel/domain/models/novel_source_reading_context.dart';
@@ -51,6 +52,7 @@ import 'package:y300/features/novel/presentation/services/novel_reader_prepared_
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_session_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_owner.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_demand.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_shared_preferences_bridge.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_scroll_controller.dart';
 import 'package:y300/features/novel/presentation/services/novel_forum_html_render_theme_factory.dart';
@@ -127,6 +129,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       NovelReaderPaginationSessionCache();
   NovelReaderController? _paginationSessionController;
   NovelReaderNativeOwner? _nativeOwner;
+  final _nativeFlowKey = GlobalKey<NovelReaderNativeFlowHostState>();
+  ({NovelReaderDocument document, NovelReaderTextAnchor anchor})?
+  _nativePagedEntry;
   Object? _nativeImageBindingKey;
   ForumHtmlImageHost? _nativeImageHost;
   ForumHtmlPreparationImagePolicy? _nativeImagePolicy;
@@ -362,6 +367,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         // A source route/reset supplied a newer public position. A visible
         // hint from before that handoff must not override its restore target.
         _conversionPosition = null;
+        _nativePagedEntry = null;
       }
       if (next.isLoading) {
         _retireDisplayPreferencesCoordinator();
@@ -1030,6 +1036,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       _paginationSessionController = controller;
     } else if (!identical(_paginationSessionController, controller)) {
       _conversionPosition = null;
+      _nativePagedEntry = null;
       _paginationSessionCache.dispose();
       _paginationSessionCache = NovelReaderPaginationSessionCache();
       _nativeOwner?.dispose();
@@ -1151,6 +1158,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   ) {
     _bindNativeImageHost(viewState);
     final tid = viewState.currentEpisode.sourceTid;
+    final entry = _nativePagedEntry;
+    final anchor = identical(entry?.document, viewState.document)
+        ? entry?.anchor
+        : null;
     return NovelReaderNativePagedSurface(
       owner: _nativeOwner!,
       readingAuthorityIdentity: viewState.readingAuthorityRevision,
@@ -1168,9 +1179,13 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         viewState.renderPreferences.sharedConversionMode,
       ),
       progressSnapshot: viewState.progressSnapshot,
-      startsAtBeginning: ref
-          .read(novelReaderControllerProvider(_args).notifier)
-          .startsPagedAtBeginning,
+      conversionAnchor: anchor,
+      startsAtBeginning:
+          anchor == null &&
+          _pagedPosition == null &&
+          ref
+              .read(novelReaderControllerProvider(_args).notifier)
+              .startsPagedAtBeginning,
       chromeInsets: chromeInsets,
       semanticDocument: viewState.document,
       activity: _nativeActivity,
@@ -1228,6 +1243,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           return;
         }
         setState(() {
+          if (position.hasUserNavigated) _nativePagedEntry = null;
           _pagedPosition = position;
           _nativeUnpublishedPosition = position;
         });
@@ -1453,6 +1469,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         },
         sliver: widget.nativePagination
             ? NovelReaderNativeFlowHost(
+                key: _nativeFlowKey,
                 owner: _nativeOwner!,
                 readingAuthority: viewState.readingAuthorityRevision,
                 sourceId: viewState.currentEpisode.episodeId,
@@ -2818,6 +2835,61 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       preferences: viewState.editablePreferences,
       persistedPreferences: viewState.persistedPreferences,
     );
+    NovelReaderPaginationCancellationToken? capture;
+    Future<void>? pendingChange;
+    void change(NovelReaderPreferences next) {
+      capture?.cancel();
+      final flow = _nativeFlowKey.currentState;
+      final current = ref
+          .read(novelReaderControllerProvider(_args))
+          .asData
+          ?.value;
+      if (next.flowMode == NovelReaderFlowMode.vertical) {
+        _nativePagedEntry = null;
+      }
+      if (flow == null ||
+          current == null ||
+          current.preferences.flowMode != NovelReaderFlowMode.vertical ||
+          next.flowMode == NovelReaderFlowMode.vertical) {
+        coordinator.change(next);
+        return;
+      }
+      final token = capture = NovelReaderPaginationCancellationToken();
+      pendingChange = () async {
+        NovelReaderTextAnchor? anchor;
+        try {
+          anchor = await flow.captureVisibleAnchor(token);
+        } on Object {
+          // The existing saved position remains usable without a visible hint.
+        }
+        if (token.isCancelled ||
+            !mounted ||
+            !identical(_displayPreferencesOwner, controller)) {
+          return;
+        }
+        final latest = ref
+            .read(novelReaderControllerProvider(_args))
+            .asData
+            ?.value;
+        if (latest == null ||
+            latest.transition != null ||
+            latest.readingAuthorityRevision !=
+                current.readingAuthorityRevision ||
+            latest.readingSurfaceRevision != current.readingSurfaceRevision ||
+            latest.currentEpisode.episodeId !=
+                current.currentEpisode.episodeId) {
+          return;
+        }
+        _nativePagedEntry =
+            anchor == null ||
+                !identical(latest.document, current.document) ||
+                latest.preferences.flowMode != NovelReaderFlowMode.vertical
+            ? null
+            : (document: current.document, anchor: anchor);
+        coordinator.change(next);
+      }();
+    }
+
     await _runWithReaderSemanticsSuspended(() async {
       await showModalBottomSheet<void>(
         context: context,
@@ -2825,7 +2897,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         builder: (context) => NovelReaderDisplaySettingsSheet(
           nativeTypography: widget.nativePagination,
           initialPreferences: viewState.editablePreferences,
-          onPreferencesChanged: coordinator.change,
+          onPreferencesChanged: change,
           fontPreviewStyle: _typographyResolver
               .resolve(
                 preferences: viewState.preferences,
@@ -2840,8 +2912,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         ),
       );
       if (!mounted) {
+        capture?.cancel();
         return;
       }
+      await pendingChange;
       await coordinator.flush();
     });
   }

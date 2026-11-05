@@ -62,6 +62,155 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
+  for (final table in [false, true]) {
+    testWidgets(
+      'scroll to paged uses the visible source without saving it (table: $table)',
+      (tester) async {
+        final rows = List.generate(
+          18,
+          (i) =>
+              '<tr height="88"><td width="850">左列 $i</td>'
+              '<td width="810">右列 $i，继续阅读同一个格子的文字。</td></tr>',
+        ).join();
+        final repository = _ReadingRepository(
+          table
+              ? '<p>表格前</p><table width="1660" cellpadding="0">$rows</table>$_nativeLongBody'
+              : _nativeLongBody,
+        );
+        final saved = NovelReadingProgress(
+          novelId: _work,
+          episodeId: _chapter,
+          scrollOffset: 0,
+          updatedAt: DateTime(2026, 10, 1),
+        );
+        repository.progress[_chapter] = saved;
+        repository.recent = _chapter;
+        await tester.pumpWidget(
+          _app(
+            repository,
+            nativePagination: true,
+            preferences: NovelReaderPreferences.defaults().copyWith(
+              flowMode: NovelReaderFlowMode.vertical,
+            ),
+          ),
+        );
+        final flow = find.byType(ForumBodyFlowSliver);
+        for (var frame = 0; frame < 200; frame++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 2)),
+          );
+          await tester.pump();
+          if (flow.evaluate().isNotEmpty &&
+              tester
+                  .renderObject<RenderForumBodyFlowBoundary>(flow)
+                  .finalBoundaryKnown) {
+            break;
+          }
+        }
+        await tester.pumpAndSettle();
+        final host = tester.widget<NovelReaderNativeFlowHost>(
+          find.byType(NovelReaderNativeFlowHost),
+        );
+        final outer = host.scrollController;
+        outer.jumpTo(table ? 450 : outer.position.maxScrollExtent * .45);
+        await tester.pumpAndSettle();
+        if (table) {
+          tester
+              .widget<ForumBodyTableFlowViewport>(
+                find.byType(ForumBodyTableFlowViewport),
+              )
+              .horizontalController
+              .jumpTo(820);
+          await tester.pumpAndSettle();
+        }
+        final token = NovelReaderPaginationCancellationToken();
+        addTearDown(token.cancel);
+        NovelReaderTextAnchor? expected;
+        final state = (host.key! as GlobalKey<NovelReaderNativeFlowHostState>)
+            .currentState!;
+        unawaited(
+          state.captureVisibleAnchor(token).then((anchor) => expected = anchor),
+        );
+        for (var frame = 0; frame < 50 && expected == null; frame++) {
+          await tester.pump();
+        }
+        expect(expected?.hasCanonicalTextOffset, isTrue);
+        expect(repository.progress[_chapter], same(saved));
+
+        final overlay = tester
+            .widget<ReaderOverlayScaffold>(find.byType(ReaderOverlayScaffold))
+            .controller!;
+        overlay.showMenu();
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const Key('shared-reader-bottom-action-display')),
+        );
+        await tester.pumpAndSettle();
+        final mode = find.byKey(const Key('novel-reader-flow-mode-control'));
+        final control = tester
+            .widget<ReaderSegmentControl<NovelReaderFlowMode>>(mode);
+        final paged = find.descendant(
+          of: mode,
+          matching: find.text(
+            control.labelBuilder(NovelReaderFlowMode.pagedLtr),
+          ),
+        );
+        await tester.ensureVisible(paged);
+        await tester.pumpAndSettle();
+        await tester.tap(paged);
+        await tester.pumpAndSettle();
+        Navigator.of(tester.element(mode)).pop();
+        await _pumpNativeReady(tester, advanceTime: true);
+
+        final surface = tester.widget<NovelReaderNativePagedSurface>(
+          find.byType(NovelReaderNativePagedSurface),
+        );
+        final controller = _nativeController(tester);
+        expect(surface.owner, same(host.owner));
+        expect(surface.conversionAnchor?.nodeId, expected!.nodeId);
+        expect(surface.conversionAnchor?.textOffset, expected!.textOffset);
+        expect(controller.visiblePageIndex, greaterThan(0));
+        if (table) {
+          final book = tester.widget<ForumBodyTableBookViewport>(
+            find.byType(ForumBodyTableBookViewport),
+          );
+          final horizontal = book.horizontalController.position;
+          final vertical = book.verticalController.position;
+          expect(horizontal.pixels, greaterThan(400));
+          expect(
+            horizontal.pixels + horizontal.viewportDimension,
+            greaterThan(850),
+          );
+          expect(vertical.pixels, greaterThan(100));
+          expect(
+            vertical.pixels + vertical.viewportDimension,
+            greaterThan(450),
+          );
+        } else {
+          expect(controller.visibleView!.coverage.locate(expected!), isNotNull);
+        }
+        expect(repository.progress[_chapter], same(saved));
+        expect(repository.committed, isEmpty);
+        expect(repository.completed, isEmpty);
+
+        final page = controller.visiblePageIndex!;
+        if (table) {
+          surface.navigationController!.turnNext();
+        } else {
+          await tester.tapAt(const Offset(744, 300));
+        }
+        await _pumpNativeReady(tester, page: page + 1, advanceTime: true);
+        await tester.pump(const Duration(milliseconds: 350));
+        expect(repository.progress[_chapter]!.pageIndex, page + 1);
+        expect(repository.progress[_chapter]!.anchorFormatVersion, 1);
+        expect(controller.isClosed, isFalse);
+        await tester.pumpWidget(const SizedBox.shrink());
+        expect(host.owner.isClosed, isTrue);
+        expect(host.owner.activeCacheHandles, 0);
+      },
+    );
+  }
+
   testWidgets(
     'scrolling table reflow keeps the visible source without saving',
     (tester) async {

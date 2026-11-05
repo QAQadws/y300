@@ -91,11 +91,11 @@ final class NovelReaderNativeFlowHost extends StatefulWidget {
   final ValueChanged<NovelReaderTextAnchor>? onReflowRestored;
 
   @override
-  State<NovelReaderNativeFlowHost> createState() =>
-      _NovelReaderNativeFlowHostState();
+  NovelReaderNativeFlowHostState createState() =>
+      NovelReaderNativeFlowHostState();
 }
 
-final class _NovelReaderNativeFlowHostState
+final class NovelReaderNativeFlowHostState
     extends State<NovelReaderNativeFlowHost> {
   static const _sliceHeight = 1024.0;
   static const _limits = ForumBodyTextPageSessionLimits(
@@ -456,6 +456,44 @@ final class _NovelReaderNativeFlowHostState
 
   double _readableHeight(ScrollPosition position) =>
       position.viewportDimension - widget.viewportInsets.vertical;
+
+  /// Capture the settled source before replacing the scrolling surface.
+  Future<NovelReaderTextAnchor?> captureVisibleAnchor(
+    NovelReaderPaginationCancellationToken token,
+  ) async {
+    final run = _displayed;
+    final scroll = widget.scrollController;
+    if (run == null || !_interactive(run) || !scroll.hasClients) return null;
+    final position = scroll.position;
+    final pixels = position.pixels;
+    if (position.isScrollingNotifier.value) return null;
+    final table = run.tablePosition;
+    final top = _bodyTop(run);
+    final point = await _sampleText(run, position, token);
+    if (token.isCancelled ||
+        !_interactive(run) ||
+        !scroll.hasClients ||
+        !identical(scroll.position, position) ||
+        position.pixels != pixels ||
+        position.isScrollingNotifier.value) {
+      return null;
+    }
+    if (table != null &&
+        identical(run.tablePosition, table) &&
+        identical(table.scroll, position) &&
+        table.pixels == pixels &&
+        (point == null ||
+            (top != null &&
+                table.inset.dy <=
+                    top +
+                        run.extentBefore(point.slice) +
+                        point.bounds.top -
+                        pixels -
+                        widget.viewportInsets.top))) {
+      return table.anchor;
+    }
+    return point?.anchor;
+  }
 
   void _tableWindowChanged(
     _FlowRun run,
