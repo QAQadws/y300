@@ -12,7 +12,7 @@ import 'package:y300/l10n/app_localizations.dart';
 import 'thread_native_body_images.dart';
 
 part 'thread_native_block_reflow.dart';
-part 'thread_native_text_reflow.dart';
+part 'thread_native_source_reflow.dart';
 
 /// Thread adapter for the same natural flow used by the novel reader. The
 /// outer floor list owns scroll and reading authority.
@@ -350,7 +350,7 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
     }
     if (previous != null &&
         !identical(previous, run) &&
-        (run.blockChanges.isNotEmpty || run.preserveText) &&
+        (run.blockChanges.isNotEmpty || run.preserveSource) &&
         !_preserveImageReflow(previous, run)) {
       return;
     }
@@ -544,21 +544,21 @@ final class _ThreadFlowRun {
           changes.values.every((change) => change == _ThreadImageChange.block)
           ? changes.keys.toSet()
           : const {},
-      preserveText =
+      preserveSource =
           changes.containsValue(_ThreadImageChange.inline) ||
           changes.containsValue(_ThreadImageChange.table),
       preserveTable = changes.containsValue(_ThreadImageChange.table);
 
   final Object inputs;
   final Set<String> blockChanges;
-  final bool preserveText, preserveTable;
+  final bool preserveSource, preserveTable;
   final boundsKey = GlobalKey();
   final blockImages = <String, ({double top, double height})>{};
   final pageTops = <double>[];
   final tableWindows = <int, ForumBodyTableVisibleWindow>{};
-  _ThreadTextReflowProbe? textProbe;
+  _ThreadSourceReflowProbe? sourceProbe;
   ForumBodyFlowPreparedSlice? initialSlice;
-  _ThreadTableTextResult? initialTable;
+  _ThreadTableResult? initialTable;
 
   ForumBodyTextPageSession? session;
   ForumBodyTextPageSnapshot? prefix;
@@ -586,16 +586,16 @@ final class _ThreadFlowRun {
   void close() {
     _ThreadFlowQueue.remove(step);
     unawaited(budget?.cancel());
-    cancelTextProbe();
+    cancelSourceProbe();
     initialSlice?.close();
     initialTable?.slice.close();
     tableWindows.clear();
     session?.close();
   }
 
-  void cancelTextProbe() {
-    textProbe?.close();
-    textProbe = null;
+  void cancelSourceProbe() {
+    sourceProbe?.close();
+    sourceProbe = null;
   }
 }
 

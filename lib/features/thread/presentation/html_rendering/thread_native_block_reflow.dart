@@ -14,12 +14,12 @@ extension on _ThreadPostNativeFlowState {
         !box.attached ||
         !box.hasSize ||
         ModalRoute.of(context)?.isCurrent == false) {
-      next.cancelTextProbe();
+      next.cancelSourceProbe();
       return true;
     }
     final viewport = RenderAbstractViewport.maybeOf(box);
     if (viewport == null || position.axisDirection != AxisDirection.down) {
-      next.cancelTextProbe();
+      next.cancelSourceProbe();
       return true;
     }
     RenderObject? parent = box.parent;
@@ -27,7 +27,7 @@ extension on _ThreadPostNativeFlowState {
       parent = parent.parent;
     }
     if (parent is! RenderSliver) {
-      next.cancelTextProbe();
+      next.cancelSourceProbe();
       return true;
     }
     final reversed =
@@ -37,7 +37,7 @@ extension on _ThreadPostNativeFlowState {
       viewport.paintBounds,
     );
     if (!clip.isFinite || clip.width <= 0 || clip.height <= 0) {
-      next.cancelTextProbe();
+      next.cancelSourceProbe();
       return true;
     }
 
@@ -48,14 +48,14 @@ extension on _ThreadPostNativeFlowState {
       return false;
     }
     final double? after;
-    if (next.preserveText &&
+    if (next.preserveSource &&
         (before > 0 || next.preserveTable && clip.bottom > 0) &&
         before < old.height) {
-      final probe = next.textProbe ?? _beginTextProbe(old, next, position);
+      final probe = next.sourceProbe ?? _beginSourceProbe(old, next, position);
       if (probe == null ||
           !probe.isAt(position) ||
           probe.before.intersect(clip.inflate(.001)) != probe.before) {
-        next.cancelTextProbe();
+        next.cancelSourceProbe();
         return true;
       }
       if (!probe.done) return false;
@@ -65,7 +65,7 @@ extension on _ThreadPostNativeFlowState {
       after = _afterBlockReflow(old, next, before);
     }
     if (after == null) {
-      next.cancelTextProbe();
+      next.cancelSourceProbe();
       return true;
     }
     final visibleHeight = clip.bottom.clamp(before, old.height) - before;
@@ -78,9 +78,9 @@ extension on _ThreadPostNativeFlowState {
       delta: delta,
       isCurrent: () => _current(next) && identical(_shown, next),
     );
-    next.initialSlice = next.textProbe?.takeSlice();
-    next.initialTable = next.textProbe?.takeTable();
-    next.cancelTextProbe();
+    next.initialSlice = next.sourceProbe?.takeSlice();
+    next.initialTable = next.sourceProbe?.takeTable();
+    next.cancelSourceProbe();
     return true;
   }
 }

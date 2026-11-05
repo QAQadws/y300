@@ -12,6 +12,7 @@ export 'src/table/forum_body_table_geometry.dart';
 export 'src/table/forum_body_table_preparation.dart';
 export 'src/table/forum_body_table_viewport.dart';
 export 'src/flow/forum_body_flow_sliver.dart';
+export 'src/flow/forum_body_flow_image_anchor.dart';
 export 'src/flow/forum_body_flow_text_anchor.dart';
 export 'src/flow/forum_body_styled_flow_cursor.dart';
 export 'src/flow/forum_body_text_flow_cursor.dart';

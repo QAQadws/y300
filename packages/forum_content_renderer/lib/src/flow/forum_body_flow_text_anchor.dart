@@ -9,9 +9,21 @@ import '../pagination/forum_body_text_page_composer.dart';
 import '../table/forum_body_table_viewport.dart';
 import 'forum_body_flow_sliver.dart';
 
+/// A transient source whose position can be measured in a replacement page.
+/// Glyphs have a visible rectangle, while an image can supply a point.
+abstract interface class ForumBodyFlowSourceAnchor {
+  bool matchesHint(ForumBodyTextPageFragment fragment);
+
+  Rect? locate({
+    required ForumBodyTextPageSnapshot snapshot,
+    required int page,
+    required List<ForumBodyPreparedTextFragment> fragments,
+  });
+}
+
 /// One grapheme in a single prepared document. Display offsets only narrow
 /// the search. The destination must also prove both source boundaries.
-final class ForumBodyFlowTextAnchor {
+final class ForumBodyFlowTextAnchor implements ForumBodyFlowSourceAnchor {
   const ForumBodyFlowTextAnchor._(
     this.identity,
     this.path,
@@ -27,6 +39,7 @@ final class ForumBodyFlowTextAnchor {
   final int start, end, sourceStart, sourceEnd;
   final String text;
 
+  @override
   bool matchesHint(ForumBodyTextPageFragment fragment) {
     final hint = fragment.sourceHint;
     return fragment.path == path &&
@@ -38,6 +51,7 @@ final class ForumBodyFlowTextAnchor {
   }
 
   /// Actual glyph bounds in page coordinates, after verifying the source.
+  @override
   Rect? locate({
     required ForumBodyTextPageSnapshot snapshot,
     required int page,

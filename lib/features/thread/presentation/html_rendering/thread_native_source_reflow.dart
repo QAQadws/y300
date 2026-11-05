@@ -1,41 +1,41 @@
 part of 'thread_post_native_flow.dart';
 
-typedef _ThreadTableTextSource = ({
+typedef _ThreadTableSource = ({
   String path,
   String areaPath,
   ForumBodyTableVisibleWindow window,
   double insetX,
 });
 
-typedef _ThreadTableTextResult = ({
+typedef _ThreadTableResult = ({
   int index,
   double offset,
   ForumBodyTablePreparedSlice slice,
 });
 
-typedef _ThreadTextCandidate = ({
+typedef _ThreadSourceCandidate = ({
   ForumBodyTextPageSnapshot snapshot,
   int page,
   ForumBodyTableAreaLayout? area,
 });
 
-final class _ThreadTextReflowProbe {
-  _ThreadTextReflowProbe(this.anchor, this.before, this.position, this.table)
+final class _ThreadSourceReflowProbe {
+  _ThreadSourceReflowProbe(this.anchor, this.before, this.position, this.table)
     : pixels = position.pixels {
     position.addListener(_cancel);
     position.isScrollingNotifier.addListener(_scrolling);
   }
 
-  final ForumBodyFlowTextAnchor anchor;
+  final ForumBodyFlowSourceAnchor anchor;
   final Rect before;
   final ScrollPosition position;
   final double pixels;
-  final _ThreadTableTextSource? table;
+  final _ThreadTableSource? table;
   bool done = false;
   bool _cancelled = false;
   double? newTop;
   ForumBodyFlowPreparedSlice? slice;
-  _ThreadTableTextResult? tableResult;
+  _ThreadTableResult? tableResult;
 
   bool isAt(ScrollPosition candidate) =>
       !_cancelled &&
@@ -50,7 +50,7 @@ final class _ThreadTextReflowProbe {
     return result;
   }
 
-  _ThreadTableTextResult? takeTable() {
+  _ThreadTableResult? takeTable() {
     final result = tableResult;
     tableResult = null;
     return result;
@@ -72,21 +72,24 @@ final class _ThreadTextReflowProbe {
 }
 
 extension on _ThreadPostNativeFlowState {
-  _ThreadTextReflowProbe? _beginTextProbe(
+  _ThreadSourceReflowProbe? _beginSourceProbe(
     _ThreadFlowRun old,
     _ThreadFlowRun next,
     ScrollPosition position,
   ) {
     final window = ForumBodyFlowBox.borrowPaintedTextWindow(old.boundsKey);
-    var point = window == null
+    ({ForumBodyFlowSourceAnchor anchor, Rect bounds})? point = window == null
         ? null
         : ForumBodyFlowTextAnchor.firstVisible(window);
-    _ThreadTableTextSource? table;
+    _ThreadTableSource? table;
     for (final entry in old.tableWindows.entries) {
       final frame = old.prefix![entry.key].table!;
       final tableTop = old.pageTops[entry.key] + frame.bounds.top;
       if (point != null && tableTop >= point.bounds.top) continue;
-      final hit = ForumBodyFlowTextAnchor.firstVisibleInTable(entry.value);
+      final ({ForumBodyFlowSourceAnchor anchor, Rect bounds, String areaPath})?
+      hit =
+          ForumBodyFlowTextAnchor.firstVisibleInTable(entry.value) ??
+          ForumBodyFlowImageAnchor.firstVisibleInTable(entry.value);
       if (hit == null) continue;
       final bounds = hit.bounds.shift(
         Offset(frame.bounds.left - entry.value.bounds.left, tableTop),
@@ -101,26 +104,26 @@ extension on _ThreadPostNativeFlowState {
       );
     }
     if (point == null) return null;
-    final probe = next.textProbe = _ThreadTextReflowProbe(
+    final probe = next.sourceProbe = _ThreadSourceReflowProbe(
       point.anchor,
       point.bounds,
       position,
       table,
     );
-    unawaited(_measureTextProbe(old, next, probe));
+    unawaited(_measureSourceProbe(old, next, probe));
     return probe;
   }
 
-  Future<void> _measureTextProbe(
+  Future<void> _measureSourceProbe(
     _ThreadFlowRun old,
     _ThreadFlowRun next,
-    _ThreadTextReflowProbe probe,
+    _ThreadSourceReflowProbe probe,
   ) async {
     final session = next.session!;
     bool current() =>
         _current(next) &&
         identical(_shown, old) &&
-        identical(next.textProbe, probe) &&
+        identical(next.sourceProbe, probe) &&
         !session.isClosed &&
         !session.isLayoutOwnerRetired &&
         probe.isAt(probe.position);
@@ -143,7 +146,7 @@ extension on _ThreadPostNativeFlowState {
           await nextFrame();
           continue;
         }
-        for (final target in _textCandidates(session, prefix, index, probe)) {
+        for (final target in _sourceCandidates(session, prefix, index, probe)) {
           if (clock.elapsedMicroseconds >= 2200) await nextFrame();
           if (!current() || frames >= 48) return;
           if (target == null) continue;
@@ -215,7 +218,7 @@ extension on _ThreadPostNativeFlowState {
     } on Object {
       // A view-budget or owner change cannot make the sealed body unreadable.
     } finally {
-      if (_current(next) && identical(next.textProbe, probe)) {
+      if (_current(next) && identical(next.sourceProbe, probe)) {
         probe.done = true;
         _present(next);
       } else {
@@ -225,11 +228,11 @@ extension on _ThreadPostNativeFlowState {
   }
 }
 
-Iterable<_ThreadTextCandidate?> _textCandidates(
+Iterable<_ThreadSourceCandidate?> _sourceCandidates(
   ForumBodyTextPageSession session,
   ForumBodyTextPageSnapshot prefix,
   int index,
-  _ThreadTextReflowProbe probe,
+  _ThreadSourceReflowProbe probe,
 ) sync* {
   final page = prefix[index];
   final source = probe.table;
