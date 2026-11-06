@@ -4,6 +4,7 @@ param(
     [string]$Device,
     [switch]$Baseline,
     [switch]$MainPage,
+    [switch]$Memory,
     [switch]$InlineSoftSpace,
     [switch]$WarmReturn,
     [ValidateSet('native', 'legacy', 'both')]
@@ -33,6 +34,12 @@ if ($WarmReturn -and -not $MainPage) {
 }
 if ($Corpus -ne 'baseline' -and -not $MainPage) {
     throw "-Corpus $Corpus requires -MainPage."
+}
+if ($Memory) {
+    if (-not $MainPage -or $Backend -eq 'both' -or $Baseline -or $InlineSoftSpace -or $WarmReturn) {
+        throw '-Memory requires -MainPage and one backend and runs separately from timing and layout diagnostics.'
+    }
+    . (Join-Path $PSScriptRoot 'novel_profile_android_memory.ps1')
 }
 
 function Read-Utf8([string]$Path) {
@@ -147,25 +154,64 @@ flutter:
             "--dart-define=PROFILE_REVISION=$revision", "--dart-define=PROFILE_DEVICE=$Device",
             '--dart-define=PROFILE_AUTO_EXIT=true')
         if ($Baseline) { $runArguments += '--dart-define=PROFILE_BASELINE=true' }
+        if ($Memory) { $runArguments += '--dart-define=PROFILE_MEMORY=true' }
         if ($MainPage) { $runArguments += "--dart-define=PROFILE_BACKEND=$Backend" }
         if ($MainPage) { $runArguments += "--dart-define=PROFILE_CORPUS=$Corpus" }
         if ($InlineSoftSpace) { $runArguments += '--dart-define=PROFILE_INLINE_SOFT_SPACE=true' }
         if ($WarmReturn) { $runArguments += '--dart-define=PROFILE_WARM_RETURN=true' }
         $script:profileSuiteResult = $null
         $script:profileFrameReports = 0
+        $script:profileMemoryService = $null
+        $script:profileMemoryCheckpoint = $null
+        $script:profileMemorySamples = 0
+        $memoryPath = Join-Path $logRoot "novel-profile-$stamp.meminfo.txt"
         & flutter @runArguments 2>&1 | ForEach-Object {
             $line = $_.ToString()
             $line | Out-File -LiteralPath $logPath -Append -Encoding utf8
             Write-Host $line
+            if ($Memory -and $line.StartsWith('[{')) {
+                foreach ($event in ($line | ConvertFrom-Json -ErrorAction SilentlyContinue)) {
+                    if ($event.event -eq 'app.debugPort') {
+                        $script:profileMemoryService = Get-ProfileMemoryServiceUri $event.params.wsUri
+                    }
+                }
+            }
             $index = $line.IndexOf('NOVEL_PROFILE ')
             if ($index -ge 0) {
                 try {
-                    $record = $line.Substring($index + 14) | ConvertFrom-Json
+                    $record = $line.Substring($index + 14) | ConvertFrom-Json -AsHashtable
                     if ($record.event -eq 'suite_done') { $script:profileSuiteResult = $record }
                     if ($record.event -in @('phase_frames', 'phase_frame_over_50ms')) {
                         $script:profileFrameReports++
                     }
+                    if ($Memory -and $record.event -eq 'memory_checkpoint') {
+                        $script:profileMemoryCheckpoint = $record
+                    }
                 } catch { }
+            }
+            if ($script:profileMemoryService -and $script:profileMemoryCheckpoint) {
+                $checkpoint = $script:profileMemoryCheckpoint
+                $script:profileMemoryCheckpoint = $null
+                $sampled = $false
+                try {
+                    if ($checkpoint.sequence -ne ($script:profileMemorySamples + 1)) { throw 'Unexpected memory checkpoint sequence.' }
+                    $raw = Read-ProfileMemoryInfo $Device $checkpoint.pid
+                    [IO.File]::AppendAllText($memoryPath, "--- checkpoint $($checkpoint.sequence) ---`n$raw`n", $utf8)
+                    $metrics = ConvertFrom-ProfileMemoryInfo $raw $checkpoint.pid $profileId
+                    $sample = [ordered]@{ event = 'memory_sample' }
+                    foreach ($key in $checkpoint.Keys) {
+                        if ($key -notin @('event', 'isolateId')) { $sample[$key] = $checkpoint[$key] }
+                    }
+                    foreach ($key in $metrics.Keys) { $sample[$key] = $metrics[$key] }
+                    $sampleLine = 'NOVEL_PROFILE ' + ($sample | ConvertTo-Json -Compress)
+                    $sampleLine | Out-File -LiteralPath $logPath -Append -Encoding utf8
+                    Write-Host $sampleLine
+                    $sampled = $true
+                } catch { Write-Warning "Memory checkpoint $($checkpoint.sequence): $($_.Exception.Message)" }
+                try {
+                    Send-ProfileMemoryAck $script:profileMemoryService $checkpoint $sampled
+                    if ($sampled) { $script:profileMemorySamples++ }
+                } catch { Write-Warning "Memory checkpoint $($checkpoint.sequence): $($_.Exception.Message)" }
             }
         }
         Assert-NativeSuccess 'Run profile target'
@@ -174,6 +220,12 @@ flutter:
         }
         if ($MainPage -and $script:profileSuiteResult.frameReportCount -ne $script:profileFrameReports) {
             throw "Incomplete profile frame output. Expected $($script:profileSuiteResult.frameReportCount), received $script:profileFrameReports. See $logPath"
+        }
+        if ($Memory) {
+            if ($script:profileMemorySamples -eq 0 -or $script:profileSuiteResult.expectedMemorySamples -ne $script:profileMemorySamples) {
+                throw "Incomplete memory output. Expected $($script:profileSuiteResult.expectedMemorySamples), received $script:profileMemorySamples. See $logPath"
+            }
+            Write-Host "Android memory samples: $script:profileMemorySamples. Raw meminfo: $memoryPath"
         }
         Write-Host "Profile results: $logPath"
     } finally { Pop-Location }

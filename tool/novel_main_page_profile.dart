@@ -18,8 +18,10 @@ import 'novel_main_page_profile_timings.dart';
 import 'novel_mixed_first_line_indent_profile.dart';
 import 'novel_pagination_profile_config.dart';
 import 'novel_pagination_profile_fixtures.dart';
+import 'novel_profile_memory.dart';
 
 const _baseline = bool.fromEnvironment('PROFILE_BASELINE');
+const _memoryMode = bool.fromEnvironment('PROFILE_MEMORY');
 const _inlineSoftSpace = bool.fromEnvironment('PROFILE_INLINE_SOFT_SPACE');
 const _warmReturn = bool.fromEnvironment('PROFILE_WARM_RETURN');
 const _corpus = String.fromEnvironment(
@@ -38,6 +40,13 @@ const _config = NovelProfileBaselineConfig(
   turnsPerGroup: int.fromEnvironment('PROFILE_TURNS', defaultValue: 200),
 );
 final _runtimeErrors = <String>[];
+const _memoryOpens = 20;
+const _memorySettle = Duration(milliseconds: 250);
+final _warmups = _baseline || _memoryMode ? _config.warmupsPerFixture : 0;
+final _opens = _memoryMode
+    ? _memoryOpens
+    : (_baseline ? _config.opensPerFixture : 1);
+final _turnGroups = _memoryMode ? 0 : (_baseline ? _config.turnGroups : 1);
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -47,6 +56,12 @@ void main() {
   if (_fixtures.isEmpty) throw StateError('Empty profile corpus');
   if (!['native', 'legacy', 'both'].contains(_backend)) {
     throw ArgumentError('Unknown profile backend');
+  }
+  if (_memoryMode &&
+      (_baseline || _inlineSoftSpace || _warmReturn || _backend == 'both')) {
+    throw ArgumentError(
+      'Memory sampling requires one backend and no timing diagnostics',
+    );
   }
   final previousError = FlutterError.onError;
   FlutterError.onError = (details) {
@@ -79,12 +94,13 @@ class _MainPageProfile extends StatefulWidget {
 class _MainPageProfileState extends State<_MainPageProfile> {
   final _frames = ProfileFrameWindows();
   final _runs = <Map<String, Object?>>[];
+  final _memory = _memoryMode ? NovelProfileMemory(_emit) : null;
   int _serial = 0;
 
   @override
   void initState() {
     super.initState();
-    SchedulerBinding.instance.addTimingsCallback(_timings);
+    if (!_memoryMode) SchedulerBinding.instance.addTimingsCallback(_timings);
     WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_suite()));
   }
 
@@ -214,7 +230,14 @@ class _MainPageProfileState extends State<_MainPageProfile> {
           'engine vsync intervals; batched delivery does not select phase',
       'synthetic': true,
       'baseline': _baseline,
-      'sampleConfig': _config.toJson(),
+      'memoryMode': _memoryMode,
+      'sampleConfig': _memoryMode
+          ? {
+              'warmupsPerFixture': _warmups,
+              'opensPerFixture': _opens,
+              'settlingMs': _memorySettle.inMilliseconds,
+            }
+          : _config.toJson(),
       'inlineSoftSpaceRequested': _inlineSoftSpace,
       'warmReturnRequested': _warmReturn,
       'corpus': _corpus,
@@ -242,27 +265,38 @@ class _MainPageProfileState extends State<_MainPageProfile> {
           continue;
         }
         for (final fixture in _fixtures) {
-          for (
-            var i = 0;
-            i < (_baseline ? _config.warmupsPerFixture : 0);
-            i++
-          ) {
+          for (var i = 0; i < _warmups; i++) {
             await _run(native, fixture, kind: 'warmup', index: i);
+            if (_memoryMode && _runs.last['passed'] != true) {
+              throw StateError('Memory warmup failed');
+            }
           }
-          for (var i = 0; i < (_baseline ? _config.opensPerFixture : 1); i++) {
+          if (_memoryMode) {
+            await _sampleMemory('warmed', native, fixture.name);
+          }
+          for (var i = 0; i < _opens; i++) {
             await _run(
               native,
               fixture,
               kind: 'open',
               index: i,
-              reflow: !_baseline,
+              reflow: !_baseline && !_memoryMode,
             );
+            if (_memoryMode) {
+              final run = _runs.last;
+              if (run['passed'] != true) {
+                throw StateError('Memory lifecycle round failed');
+              }
+              // The run has returned and no longer holds the route or owner.
+              await _sampleMemory(
+                'closed',
+                native,
+                fixture.name,
+                run: run['id']! as int,
+              );
+            }
           }
-          for (
-            var group = 0;
-            group < (_baseline ? _config.turnGroups : 1);
-            group++
-          ) {
+          for (var group = 0; group < _turnGroups; group++) {
             await _run(
               native,
               fixture,
@@ -303,9 +337,9 @@ class _MainPageProfileState extends State<_MainPageProfile> {
         final warmups = runs.where((run) => run['kind'] == 'warmup').toList();
         final turns = runs.where((run) => run['kind'] == 'turns').toList();
         final complete =
-            warmups.length == (_baseline ? _config.warmupsPerFixture : 0) &&
-            opens.length == (_baseline ? _config.opensPerFixture : 1) &&
-            turns.length == (_baseline ? _config.turnGroups : 1) &&
+            warmups.length == _warmups &&
+            opens.length == _opens &&
+            turns.length == _turnGroups &&
             runs.every((run) => run['passed'] == true) &&
             turns.every(
               (run) => run['completedTurns'] == run['requestedTurns'],
@@ -319,16 +353,17 @@ class _MainPageProfileState extends State<_MainPageProfile> {
               .length,
           'successfulOpens': successfulOpens.length,
           'completedTurns': turns.map((run) => run['completedTurns']).toList(),
-          for (final metric in [
-            'uncoveredTargetUs',
-            'routeSettledUs',
-            'firstReadableUs',
-            'planCompleteUs',
-            if (_warmReturn) 'warmReturnUs',
-          ])
-            metric: profileDistribution(
-              successfulOpens.map((run) => run[metric]! as int),
-            ),
+          if (!_memoryMode)
+            for (final metric in [
+              'uncoveredTargetUs',
+              'routeSettledUs',
+              'firstReadableUs',
+              'planCompleteUs',
+              if (_warmReturn) 'warmReturnUs',
+            ])
+              metric: profileDistribution(
+                successfulOpens.map((run) => run[metric]! as int),
+              ),
         });
         _emit({'event': 'sample_summary', ...matrix.last});
       }
@@ -361,6 +396,8 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       'windowsWithoutFrames': missingFrames,
       'frameReportCount': frameReportCount,
       'retainedSyntheticChapters': widget.data.retainedChapters,
+      if (_memoryMode)
+        'expectedMemorySamples': matrix.length * (1 + 2 * _memoryOpens),
       'hasRequiredSampleCounts': _baseline && _config.hasRequiredSampleCounts,
       'baselineSamplingCompleted':
           passed && _baseline && _config.hasRequiredSampleCounts,
@@ -370,6 +407,22 @@ class _MainPageProfileState extends State<_MainPageProfile> {
     if (const bool.fromEnvironment('PROFILE_AUTO_EXIT')) {
       await SystemNavigator.pop();
     }
+  }
+
+  Future<void> _sampleMemory(
+    String phase,
+    bool native,
+    String fixture, {
+    int? run,
+  }) async {
+    // Give route disposal and renderer work a consistent settling interval.
+    await Future<void>.delayed(_memorySettle);
+    await _memory!.checkpoint(
+      phase: phase,
+      backend: native ? 'native' : 'legacy',
+      fixture: fixture,
+      run: run,
+    );
   }
 
   Future<void> _run(
@@ -411,6 +464,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
     bool windowOpen = false;
     final clock = Stopwatch()..start();
     void begin(String phase, {String? reportGroup}) {
+      if (_memoryMode) return;
       _frames.begin(
         '$id/$phase',
         _frameTime,
@@ -516,6 +570,9 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       }
       run['completeUs'] = clock.elapsedMicroseconds;
       run['pageCount'] = latest.count;
+      if (_memoryMode && kind == 'open') {
+        await _sampleMemory('visible', native, fixture.name, run: id);
+      }
       if (_warmReturn && kind != 'turns') {
         final before = latest;
         final cover = PageRouteBuilder<void>(
@@ -699,7 +756,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
 
   @override
   void dispose() {
-    SchedulerBinding.instance.removeTimingsCallback(_timings);
+    if (!_memoryMode) SchedulerBinding.instance.removeTimingsCallback(_timings);
     super.dispose();
   }
 }
