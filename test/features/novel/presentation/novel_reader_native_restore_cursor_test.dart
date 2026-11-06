@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:html_pagination_core/html_pagination_core.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
@@ -328,6 +329,71 @@ void main() {
       expect(result.isReadOnlyCompatibilityRestore, offset != 1);
     }
   });
+
+  test(
+    'same layout restores the saved side of a shared page boundary',
+    () async {
+      final fixture = NativeReaderTestFixture(
+        '<p>abcdefgh</p>',
+        width: 20,
+        height: 10,
+        complete: false,
+      );
+      final anchor = _anchor(fixture, 2);
+      final cursor = _cursor(
+        fixture,
+        _position(anchor: anchor).copyWith(
+          paginationKey: 'native-geometry',
+          pageIndex: 1,
+          progressPercent: .25,
+        ),
+      );
+      fixture.finishSource(pages: 1);
+      final first = await _coverage(fixture, 0);
+      expect(first.locate(anchor)!.affinity, HtmlProjectionAffinity.upstream);
+      cursor.observe(snapshot: fixture.session.snapshot, coverage: first);
+      cursor.finishCandidateScan(1);
+      expect(cursor.resolve(fixture.session.snapshot), isNull);
+
+      fixture.finishSource(pages: 2);
+      final second = await _coverage(fixture, 1);
+      expect(
+        second.locate(anchor)!.affinity,
+        HtmlProjectionAffinity.downstream,
+      );
+      cursor.observe(snapshot: fixture.session.snapshot, coverage: second);
+      expect(cursor.resolve(fixture.session.snapshot)!.pageIndex, 1);
+    },
+  );
+
+  test(
+    'a saved page without exact coverage cannot override a proven endpoint',
+    () async {
+      final fixture = NativeReaderTestFixture(
+        '<p>ab</p><p>cdef</p>',
+        width: 20,
+        height: 10,
+        complete: false,
+      );
+      final anchor = _anchor(fixture, 2);
+      final cursor = _cursor(
+        fixture,
+        _position(anchor: anchor).copyWith(
+          paginationKey: 'native-geometry',
+          pageIndex: 1,
+          progressPercent: .25,
+        ),
+      );
+      fixture.finishSource(pages: 2);
+      cursor.observe(
+        snapshot: fixture.session.snapshot,
+        coverage: await _coverage(fixture, 0),
+      );
+      expect(cursor.resolve(fixture.session.snapshot), isNull);
+      cursor.finishCandidateScan(2);
+      expect(cursor.resolve(fixture.session.snapshot)!.pageIndex, 0);
+    },
+  );
 
   test('legacy, future and changed text identities stay read-only with matching layout hints', () async {
     final fixture = NativeReaderTestFixture(

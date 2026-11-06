@@ -1,3 +1,4 @@
+import 'package:html_pagination_core/html_pagination_core.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_reading_progress.dart';
@@ -6,7 +7,7 @@ import 'package:y300/features/novel/domain/services/novel_reader_progress_policy
 import '../models/novel_reader_native_page_coverage.dart';
 import '../models/novel_reader_pagination_restore_resolution.dart';
 
-/// Pure, layout-scoped restore state. It retains at most three page indices,
+/// Pure, layout-scoped restore state. It retains a bounded set of page indices,
 /// never native layouts, coverage collections, a source session or page prefix.
 /// Feed only complete native coverage; source envelopes are not accepted here.
 /// Real navigation retires this cursor rather than upgrading its latched result.
@@ -81,6 +82,8 @@ final class NovelReaderNativeRestoreCursor {
   NovelReaderTextAnchor? _conversionAnchor;
   NovelReaderPaginationRestoreResolution? _resolution;
   int? _exactPage;
+  bool _exactIsTrailing = false;
+  int _candidateScanEnd = 0;
   int? _convertedPage;
   int? _nodePage;
   NovelReaderTextAnchor? _nodeAnchor;
@@ -94,6 +97,17 @@ final class NovelReaderNativeRestoreCursor {
   bool get isResolved => _resolution != null;
   NovelReaderTextAnchor? get resolvedNavigationAnchor =>
       _resolvedNavigationAnchor;
+
+  int? get _savedLayoutPage {
+    final position = _position;
+    return !isConversionRestore &&
+            position != null &&
+            position.isPaged &&
+            position.paginationKey == paginationKey &&
+            position.pageIndex >= 0
+        ? position.pageIndex
+        : null;
+  }
 
   /// A resolved target must never keep old percent-driven foreground demand.
   bool get requiresCompletePageCount =>
@@ -133,7 +147,10 @@ final class NovelReaderNativeRestoreCursor {
     if (saved == null) return;
     final exact = coverage.locate(saved);
     if (exact != null) {
-      _exactPage ??= coverage.pageIndex;
+      _observeExact(
+        coverage.pageIndex,
+        trailing: exact.affinity == HtmlProjectionAffinity.upstream,
+      );
       if (isExplicitNavigation) _resolvedNavigationAnchor ??= exact.anchor;
     }
     for (final point in coverage.locations) {
@@ -164,10 +181,25 @@ final class NovelReaderNativeRestoreCursor {
     final saved = _savedAnchor;
     if (saved == null) return;
     if (_sameCanonical(saved, candidate)) {
-      _exactPage ??= pageIndex;
+      _observeExact(pageIndex, trailing: false);
       if (isExplicitNavigation) _resolvedNavigationAnchor ??= candidate;
     }
     _observeNode(saved, candidate, pageIndex);
+  }
+
+  void _observeExact(int page, {required bool trailing}) {
+    if (_exactPage == null || page == _savedLayoutPage) {
+      _exactPage = page;
+      _exactIsTrailing = trailing;
+    }
+  }
+
+  /// Every candidate in the scanned prefix was checked. This includes pages
+  /// with no candidate for the target anchor.
+  void finishCandidateScan(int endPageExclusive) {
+    if (endPageExclusive > _candidateScanEnd) {
+      _candidateScanEnd = endPageExclusive;
+    }
   }
 
   void _observeNode(
@@ -230,7 +262,19 @@ final class NovelReaderNativeRestoreCursor {
     // Canonical proof wins before percentage approximation at both partial
     // and complete prefixes. Proof on another page cannot make a fallback
     // writable. Once latched, later EOF/proofs cannot move or upgrade it.
-    if (_exactPage != null) return _latch(_exactPage!, exact: true);
+    if (_exactPage case final exact?) {
+      final savedPage = _savedLayoutPage;
+      // Both sides of a page break can prove the same canonical position.
+      // Check the later saved page before accepting an upstream endpoint.
+      if (_exactIsTrailing &&
+          savedPage != null &&
+          savedPage == exact + 1 &&
+          savedPage >= _candidateScanEnd &&
+          (!snapshot.isComplete || savedPage < snapshot.length)) {
+        return null;
+      }
+      return _latch(exact, exact: true);
+    }
     if (snapshot.isComplete && _hasUsablePercent) {
       // Preserve the existing saved percentage convention, including paged
       // rows written before pageCount existed. No persisted fields change.

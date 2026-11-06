@@ -1212,6 +1212,7 @@ final class NovelReaderNativePagedController {
           _guard(epoch, token);
         }
         _scannedPages = search.nextPageIndex;
+        restore.finishCandidateScan(_scannedPages);
       } finally {
         search.close();
       }
