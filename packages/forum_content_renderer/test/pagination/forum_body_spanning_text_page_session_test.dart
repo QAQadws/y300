@@ -1,4 +1,5 @@
 import 'package:flutter/painting.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
@@ -92,44 +93,33 @@ List<ForumBodyPreparedTextFragment> _page(
   }
 }
 
-String _ruby({
-  bool dense = false,
-  String direction = 'ltr',
-  String gap = '',
-  bool annotationGap = false,
-  bool rootAnnotationGap = false,
-}) {
-  final firstLevel =
-      '<rt style="font-size:10px">xx</rt>${annotationGap ? ' ' : ''}<rt style="font-size:15px">yy</rt>';
-  final annotations = dense
-      ? annotationGap
-            ? '${List.generate(60, (r) => '<rtc style="font-size:1px"><rt>x$r</rt> <rt>y$r</rt></rtc>').join()}<rtc style="font-size:1px">all</rtc>'
-            : List.generate(
-                100,
-                (r) => '<rtc style="font-size:1px">r$r</rtc>',
-              ).join()
-      : '${rootAnnotationGap ? firstLevel : '<rtc>$firstLevel</rtc>'}<rtc style="font-size:10px">abcdefghij</rtc><rtc style="font-size:8px">outer</rtc>';
-  return '<ruby style="direction:$direction"><rb style="font-size:20px">A</rb>$gap<rb style="font-size:30px">B</rb>$annotations</ruby>';
+String _ruby({bool dense = false, String direction = 'ltr', String gap = ''}) {
+  final moreBases = dense ? '<rb style="font-size:1px">C</rb>' * 80 : '';
+  return '<ruby style="direction:$direction"><rb style="font-size:20px">A</rb>'
+      '$gap<rb style="font-size:30px">B</rb>$moreBases'
+      '<rtc style="font-size:10px">abcdefghij</rtc></ruby>';
 }
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(() async {
+    await (FontLoader(
+      'packages/forum_content_renderer/ForumBodyInlineSpace',
+    )..addFont(rootBundle.load('assets/fonts/inline_space.ttf'))).load();
+  });
   for (final q in [1, 7, 32]) {
     for (final dense in [false, true]) {
-      for (final (direction, gap, annotationGap, rootAnnotationGap) in [
+      for (final (direction, gap) in [
         for (final direction in ['ltr', 'rtl'])
-          for (final gap in ['', ' '])
-            for (final annotationGap in [false, true])
-              for (final root
-                  in dense || !annotationGap ? [false] : [false, true])
-                (direction, gap, annotationGap, root),
+          for (final gap in ['', ' ']) (direction, gap),
       ]) {
         test(
-          'PUBLIC Session raw spanning atom retains original members q=$q dense=$dense $direction gap=${gap.isNotEmpty} annotationGap=$annotationGap root=$rootAnnotationGap',
+          'spanning single-level ruby retains original members q=$q dense=$dense $direction gap=${gap.isNotEmpty}',
           () {
             final f = _open(
-              '<p dir="$direction">${_ruby(dense: dense, direction: direction, gap: gap, annotationGap: annotationGap, rootAnnotationGap: rootAnnotationGap)}</p>',
-              entries: dense ? (annotationGap ? 4 : 3) : 2,
+              '<p dir="$direction">${_ruby(dense: dense, direction: direction, gap: gap)}</p>',
+              entries: dense ? 3 : 2,
+              width: 160,
             );
             _finish(f.session, f.cache);
             expect(f.session.snapshot.length, 1);
@@ -139,14 +129,9 @@ void main() {
                   fragments.single as ForumBodyPreparedInlineFragment;
               expect(fragment.view.atomIndices, [0]);
               final extra = gap.isEmpty ? 0 : 1;
-              final handles = dense
-                  ? (annotationGap ? 184 : 103)
-                  : (annotationGap ? 8 : 7);
+              final handles = dense ? 84 : 4;
               expect(fragment.nativeLeases.length, handles + extra);
-              expect(
-                f.cache.pictureBuildCount,
-                dense ? (annotationGap ? 3 : 2) : 1,
-              );
+              expect(f.cache.pictureBuildCount, dense ? 2 : 1);
               for (final window in fragment.view.content.contexts) {
                 final text = window.content.projection.text;
                 if (text.isEmpty) continue;
@@ -221,7 +206,7 @@ void main() {
             } else {
               atomicPages++;
               expect(fragment.view.atomIndices, [0]);
-              expect(fragment.nativeLeases.length, 7);
+              expect(fragment.nativeLeases.length, 4);
               final spanStart = fragment.projection.text.indexOf('abcdefghij');
               expect(
                 fragment.glyphBoxes(spanStart, spanStart + 10),
@@ -245,14 +230,14 @@ void main() {
       'actual root gap preserves empty RT slots without invented glyphs ($left,$right)',
       () {
         final f = _open(
-          '<ruby><rt>$left</rt> <rt>$right</rt><rtc>all</rtc></ruby>',
+          '<ruby><rb>A</rb><rb>B</rb><rt>$left</rt> <rt>$right</rt></ruby>',
         );
         _finish(f.session, f.cache);
         final fragments = _page(f.session, f.cache, 0, 1);
         final fragment = fragments.single as ForumBodyPreparedInlineFragment;
         try {
           final nonempty = (left.isEmpty ? 0 : 1) + (right.isEmpty ? 0 : 1);
-          expect(fragment.nativeLeases.length, 5 + nonempty);
+          expect(fragment.nativeLeases.length, 4 + nonempty);
           expect(f.cache.pictureBuildCount, 1);
           final window = fragment.view.content.contexts.singleWhere(
             (w) => w.content.projection.text == ' ',
@@ -263,8 +248,8 @@ void main() {
           final hit = fragment.view.sourceAt(
             Offset(box.left + .001, (box.top + box.bottom) / 2),
           );
-          expect(hit.isExact, isTrue);
-          expect(hit.sourceRune, left.length);
+          expect(hit.isExact, left.isNotEmpty);
+          expect(hit.sourceRune, 2 + left.length);
         } finally {
           for (final fragment in fragments) {
             fragment.close();
@@ -275,28 +260,25 @@ void main() {
     );
   }
 
-  test(
-    'raw orphan bases preserve separate font strut handles without invented source',
-    () {
-      final f = _open(
-        '<ruby><rtc>word</rtc><rtc><rt>x</rt><rt>y</rt></rtc></ruby>',
-        entries: 3,
-      );
-      _finish(f.session, f.cache);
-      final fragments = _page(f.session, f.cache, 0, 1);
-      try {
-        final fragment = fragments.single as ForumBodyPreparedInlineFragment;
-        expect(fragment.projection.text, 'wordxy');
-        expect(fragment.nativeLeases.length, 6);
-        expect(f.cache.pictureBuildCount, 1);
-      } finally {
-        for (final f in fragments) {
-          f.close();
-        }
+  test('orphan fallback does not expose annotations from a second level', () {
+    final f = _open(
+      '<ruby><rtc>word</rtc><rtc><rt>x</rt><rt>y</rt></rtc></ruby>',
+      entries: 3,
+    );
+    _finish(f.session, f.cache);
+    final fragments = _page(f.session, f.cache, 0, 1);
+    try {
+      final fragment = fragments.single as ForumBodyPreparedInlineFragment;
+      expect(fragment.projection.text, 'word');
+      expect(fragment.nativeLeases.length, 3);
+      expect(f.cache.pictureBuildCount, 1);
+    } finally {
+      for (final f in fragments) {
+        f.close();
       }
-      expect(f.cache.activeLeases, 0);
-    },
-  );
+    }
+    expect(f.cache.activeLeases, 0);
+  });
 
   test(
     'cancel during actual spanning metrics retires the only current native work',

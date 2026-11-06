@@ -161,6 +161,55 @@ void main() {
     },
   );
 
+  test(
+    'a second ruby level never owns a visible or copyable source window',
+    () {
+      final f = _Fixture(
+        '<p><ruby><rb>AB</rb><rb>CD</rb><rtc><rt>xy</rt><rt>uv</rt></rtc>'
+        '<rtc><rt>discard</rt><rt>extra</rt></rtc></ruby>Z</p>',
+        width: 120,
+        height: 100,
+      );
+      f.finish();
+      final body = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+      try {
+        final projection = body.projection;
+        expect(projection.text, 'ABxyCDuvZ');
+        final dropped = f.document.sourceText.indexOf('discard');
+        expect(
+          projection.displayRangesInSource(
+            sourceStart: dropped,
+            sourceEnd: dropped + 'discardextra'.length,
+            startUtf16: 0,
+            endUtf16: projection.text.length,
+          ),
+          isEmpty,
+        );
+        final page = f.session.snapshot.single;
+        for (final (i, expected) in ['AB', 'xy', 'CD', 'uv'].indexed) {
+          final caret = 2 * i + 1;
+          final box = body.glyphBoxes(caret, caret + 1).single.toRect();
+          final point = Offset(box.left + .01, box.center.dy);
+          final selection = forumBodyTextSelectionAt(
+            binding: body,
+            fragment: page.fragments.single,
+            pageSize: const Size(120, 100),
+            point: point,
+          );
+          expect(selection?.text, expected);
+          expect(selection?.isAnnotation, i.isOdd);
+        }
+        expect(
+          projection.sourceAtUtf16(8).sourceRune,
+          f.document.sourceText.indexOf('Z'),
+        );
+      } finally {
+        body.close();
+      }
+      expect(f.cache.activeLeases, 0);
+    },
+  );
+
   for (final html in [
     'AB H<sup>2</sup>O',
     'AB A<sub>n</sub>z',
@@ -790,10 +839,10 @@ void main() {
     ('rtl', 'under'),
   ]) {
     test(
-      'raw mixed RT/RTC keeps real baselines and sources: $direction/$position',
+      'the retained level keeps real baselines and sources: $direction/$position',
       () {
         final f = _Fixture(
-          '<p dir="$direction"><ruby style="ruby-position:$position"><rb style="font-size:30px">A</rb><rb>B</rb><rt>xx</rt><rt>yy</rt><rtc><rt style="font-size:15px">uu</rt><rt style="font-size:8px">vv</rt></rtc><rt>zz</rt><rt>ww</rt></ruby></p>',
+          '<p dir="$direction"><ruby style="ruby-position:$position"><rb style="font-size:30px">A</rb><rb>B</rb><rt style="font-size:15px">xx</rt><rt style="font-size:8px">yy</rt><rtc><rt>uu</rt><rt>vv</rt></rtc><rt>zz</rt><rt>ww</rt></ruby></p>',
           width: 200,
           height: 100,
         );
@@ -802,7 +851,7 @@ void main() {
         final builds = f.cache.layoutBuildCount;
         final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
         try {
-          expect(fragment.projection.text, 'AxxuuzzByyvvww');
+          expect(fragment.projection.text, 'AxxByy');
           final leases = fragment.nativeLeases
               .skip(1)
               .cast<ForumBodyTextLease>()
@@ -810,14 +859,10 @@ void main() {
           expect(leases.map((lease) => lease.content.projection.text), [
             'A',
             'xx',
-            'uu',
-            'zz',
             'B',
             'yy',
-            'vv',
-            'ww',
           ]);
-          final starts = [0, 1, 3, 5, 7, 8, 10, 12];
+          final starts = [0, 1, 3, 4];
           final boxes = [
             for (var i = 0; i < starts.length; i++)
               fragment.glyphBoxes(starts[i], starts[i] + 1).single,
@@ -826,22 +871,17 @@ void main() {
               boxes[i].top -
               leases[i].layout.selectionBoxes(0, 1).single.top +
               leases[i].layout.alphabeticBaseline;
-          for (var rank = 0; rank < 4; rank++) {
-            expect(baseline(rank), closeTo(baseline(rank + 4), 1e-4));
-          }
-          final sides = [
-            position == 'under' || position == 'alternate under',
-            position == 'under' || position == 'alternate',
-            position == 'under' || position == 'alternate under',
-          ];
-          for (var rank = 0; rank < 3; rank++) {
+          expect(baseline(0), closeTo(baseline(2), 1e-4));
+          expect(baseline(1), closeTo(baseline(3), 1e-4));
+          final under = position == 'under' || position == 'alternate under';
+          for (final index in [1, 3]) {
             expect(
-              sides[rank]
-                  ? boxes[rank + 1].top >= boxes[0].bottom
-                  : boxes[rank + 1].bottom <= boxes[0].top,
+              under
+                  ? boxes[index].top >= boxes[index - 1].bottom
+                  : boxes[index].bottom <= boxes[index - 1].top,
               isTrue,
             );
-            final start = starts[rank + 1] + 1;
+            final start = starts[index] + 1;
             final box = fragment.glyphBoxes(start, start + 1).single;
             final hit = fragment.view.sourceAt(
               Offset(box.left + .1, (box.top + box.bottom) / 2),
@@ -849,16 +889,8 @@ void main() {
             expect(hit.isExact, isTrue);
             expect(
               hit.sourceRune,
-              leases[rank + 1].content.projection.sourceAtUtf16(1).sourceRune,
+              leases[index].content.projection.sourceAtUtf16(1).sourceRune,
             );
-          }
-          if (position == 'over') {
-            expect(boxes[2].bottom, lessThanOrEqualTo(boxes[1].top));
-            expect(boxes[3].bottom, lessThanOrEqualTo(boxes[2].top));
-          }
-          if (position == 'under') {
-            expect(boxes[2].top, greaterThanOrEqualTo(boxes[1].bottom));
-            expect(boxes[3].top, greaterThanOrEqualTo(boxes[2].bottom));
           }
           expect(f.cache.layoutBuildCount, builds);
         } finally {
@@ -870,7 +902,7 @@ void main() {
     );
   }
 
-  test('raw multi-level wrapping keeps independent physical rows', () {
+  test('the retained level wraps into independent physical rows', () {
     final f = _Fixture(
       '<ruby><rb style="font-size:30px">A</rb><rb>B</rb><rtc><rt>xx</rt><rt>yy</rt></rtc><rtc><rt>uu</rt></rtc></ruby>',
       width: 30,
@@ -885,48 +917,46 @@ void main() {
       try {
         heights.add(fragment.view.height);
         expect(fragment.view.atomIndices, [page]);
-        expect(fragment.nativeLeases.length, page == 0 ? 4 : 3);
+        expect(fragment.nativeLeases.length, 3);
       } finally {
         fragment.close();
       }
     }
-    expect(heights, [50, 30]);
+    expect(heights, [40, 30]);
     expect(f.cache.activeLeases, 0);
   });
 
-  test(
-    'raw 100 RTC levels use bounded preparation and current source identity',
-    () {
-      final f = _Fixture(
-        '<ruby><rb style="font-size:30px">A</rb><rb>B</rb>${List.generate(100, (i) => '<rtc><rt style="font-size:1px">x$i</rt><rt style="font-size:2px">y$i</rt></rtc>').join()}</ruby>',
-        width: 100,
-        height: 400,
+  test('100 authored RTC levels prepare only the first pair of annotations', () {
+    final f = _Fixture(
+      '<ruby><rb style="font-size:30px">A</rb><rb>B</rb>${List.generate(100, (i) => '<rtc><rt style="font-size:1px">x$i</rt><rt style="font-size:2px">y$i</rt></rtc>').join()}</ruby>',
+      width: 100,
+      height: 400,
+    );
+    f.finish();
+    expect(f.session.snapshot, hasLength(1));
+    expect(f.cache.pictureBuildCount, 0);
+    final builds = f.cache.layoutBuildCount;
+    final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+    try {
+      expect(fragment.nativeLeases.length, 5);
+      expect(f.cache.pictureBuildCount, 1);
+      expect(fragment.projection.text, 'Ax0By0');
+      final last = fragment.projection.text.lastIndexOf('y0');
+      final box = fragment.glyphBoxes(last + 1, last + 2).single;
+      final hit = fragment.view.sourceAt(
+        Offset(box.left + .01, (box.top + box.bottom) / 2),
       );
-      f.finish();
-      expect(f.session.snapshot, hasLength(1));
-      expect(f.cache.pictureBuildCount, 0);
-      final builds = f.cache.layoutBuildCount;
-      final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
-      try {
-        expect(fragment.nativeLeases.length, 203);
-        expect(f.cache.pictureBuildCount, 4);
-        final last = fragment.projection.text.lastIndexOf('y99');
-        final box = fragment.glyphBoxes(last + 1, last + 2).single;
-        final hit = fragment.view.sourceAt(
-          Offset(box.left + .01, (box.top + box.bottom) / 2),
-        );
-        expect(hit.isExact, isTrue);
-        expect(hit.sourceRune, 580);
-        expect(f.cache.layoutBuildCount, builds);
-      } finally {
-        fragment.close();
-      }
-      expect(f.cache.activeLeases, 0);
-      expect(f.session.activeIssuedLeases, 0);
-      f.close();
-      expect(f.cache.estimatedRetainedBytes, 0);
-    },
-  );
+      expect(hit.isExact, isTrue);
+      expect(hit.sourceRune, 5);
+      expect(f.cache.layoutBuildCount, builds);
+    } finally {
+      fragment.close();
+    }
+    expect(f.cache.activeLeases, 0);
+    expect(f.session.activeIssuedLeases, 0);
+    f.close();
+    expect(f.cache.estimatedRetainedBytes, 0);
+  });
 
   for (final (html, display, handles) in [
     ('<ruby>A<rtc>word</rtc></ruby>', 'Aword', 3),
@@ -939,32 +969,32 @@ void main() {
       'ApreBxx',
       5,
     ),
-    ('<ruby>A<rt>xx</rt><rtc>word</rtc><rt>zz</rt></ruby>', 'Axxwordzz', 5),
+    ('<ruby>A<rt>xx</rt><rtc>word</rtc><rt>zz</rt></ruby>', 'Axx', 3),
     (
       '<ruby><rb>A</rb><rb>B</rb><rtc><rt></rt><rt>yy</rt></rtc><rtc><rt>uu</rt></rtc></ruby>',
-      'AuuByy',
-      5,
+      'AByy',
+      4,
     ),
     (
       '<ruby><rt>xx</rt><rt>yy</rt><rtc><rt>uu</rt><rt>vv</rt></rtc></ruby>',
-      'xxuuyyvv',
-      7,
+      'xxyy',
+      5,
     ),
     (
       '<ruby><rb>A</rb><rb>B</rb><rtc><rt>xx</rt></rtc><rtc><rt>uu</rt><rt>vv</rt><rt>ww</rt></rtc></ruby>',
-      'AxxuuBvvww',
-      8,
+      'AxxB',
+      4,
     ),
     (
       '<ruby><rb>A</rb><rb>B</rb><rtc></rtc><rtc><rt>xx</rt><rt>yy</rt></rtc></ruby>',
       'AxxByy',
       5,
     ),
-    ('<ruby>A<rt>x<br>y</rt><rtc><rt>u<br>v</rt></rtc></ruby>', 'Ax yu v', 4),
+    ('<ruby>A<rt>x<br>y</rt><rtc><rt>u<br>v</rt></rtc></ruby>', 'Ax y', 3),
     (
       '<ruby> A <rtc><rt>xx</rt></rtc><rtc><rt>uu</rt><rt>vv</rt></rtc></ruby>Z',
-      'Axxuuvv Z',
-      6,
+      'Axx Z',
+      3,
     ),
   ]) {
     test('raw sparse/missing/break levels preserve native slots: $html', () {
@@ -994,36 +1024,34 @@ void main() {
     });
   }
 
-  test(
-    '100 actual anonymous RTC levels retain styles and complete native ownership',
-    () {
-      final f = _Fixture(
-        '<ruby>A${List.generate(100, (i) => '<rtc style="font-size:1px">r$i</rtc>').join()}</ruby>',
-        width: 100,
-        height: 200,
+  test('only the first of 100 anonymous levels retains native ownership', () {
+    final f = _Fixture(
+      '<ruby>A${List.generate(100, (i) => '<rtc style="font-size:1px">r$i</rtc>').join()}</ruby>',
+      width: 100,
+      height: 200,
+    );
+    f.finish();
+    final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+    try {
+      expect(fragment.nativeLeases.length, 3);
+      expect(f.cache.pictureBuildCount, 1);
+      expect(fragment.projection.text, 'Ar0');
+      final last = fragment.projection.text.lastIndexOf('r0');
+      final box = fragment.glyphBoxes(last + 1, last + 2).single;
+      final hit = fragment.view.sourceAt(
+        Offset(box.left + .01, (box.top + box.bottom) / 2),
       );
-      f.finish();
-      final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
-      try {
-        expect(fragment.nativeLeases.length, 102);
-        expect(f.cache.pictureBuildCount, 2);
-        final last = fragment.projection.text.lastIndexOf('r99');
-        final box = fragment.glyphBoxes(last + 1, last + 2).single;
-        final hit = fragment.view.sourceAt(
-          Offset(box.left + .01, (box.top + box.bottom) / 2),
-        );
-        expect(hit.isExact, isTrue);
-        expect(hit.sourceRune, 289);
-        expect(fragment.runs.last.style.textStyle.fontSize, 1);
-      } finally {
-        fragment.close();
-      }
-      expect(f.cache.activeLeases, 0);
-      expect(f.session.activeIssuedLeases, 0);
-      f.close();
-      expect(f.cache.estimatedRetainedBytes, 0);
-    },
-  );
+      expect(hit.isExact, isTrue);
+      expect(hit.sourceRune, 2);
+      expect(fragment.runs.last.style.textStyle.fontSize, 1);
+    } finally {
+      fragment.close();
+    }
+    expect(f.cache.activeLeases, 0);
+    expect(f.session.activeIssuedLeases, 0);
+    f.close();
+    expect(f.cache.estimatedRetainedBytes, 0);
+  });
 
   test('canceling raw dense level planning releases all current glyph work', () {
     final f = _Fixture(
@@ -2143,7 +2171,7 @@ void main() {
 
   for (final ranks in [1, 100]) {
     test(
-      'warm typed convenience completes cached $ranks ranks and plain delivery rejects inline upfront',
+      'warm typed delivery keeps only one of $ranks levels and rejects plain delivery upfront',
       () {
         final f = _Fixture(
           '<ruby><rb>AB</rb>${List.generate(ranks, (i) => '<rtc><rt style="font-size:1px">r$i</rt></rtc>').join()}</ruby>',
@@ -2157,7 +2185,7 @@ void main() {
         final before = (f.cache.layoutBuildCount, f.cache.pictureBuildCount);
         final fragments = f.session.preparePageFragments(0);
         expect(fragments.single, isA<ForumBodyPreparedInlineFragment>());
-        expect(fragments.single.nativeLeases.length, ranks + 2);
+        expect(fragments.single.nativeLeases.length, 3);
         for (final fragment in fragments) {
           fragment.close();
         }

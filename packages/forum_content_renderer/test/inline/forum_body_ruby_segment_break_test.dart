@@ -43,24 +43,18 @@ void main() {
       final input = _input(
         '<ruby><rb>A</rb><rb>B</rb><rt>漢</rt>\n<rt>字</rt> <rt>語</rt><rtc>whole</rtc></ruby>',
       );
-      final request =
-          (input.atoms.single as ForumBodyRubySegmentAtomRequest).value;
-      expect(request.bases.length, 3);
-      expect(request.spans.length, 4);
-      expect(request.annotationGaps.single.beforeSpanIndex, 2);
-      expect(request.nativeRequests.map((r) => r.content.projection.text), [
-        'A',
-        'B',
-        '',
-        '漢',
-        '字',
-        ' ',
-        '語',
-        'whole',
-      ]);
+      final columns = input.atoms.whereType<ForumBodyRubyColumnAtomRequest>();
+      expect(columns, hasLength(3));
+      expect(columns.last.value.base.content.isSourceFree, isTrue);
+      final gap = input.atoms
+          .whereType<ForumBodyRubySoftSpaceAtomRequest>()
+          .single;
+      expect(gap.value.beforeColumn, 2);
+      expect(gap.value.members.single.request.content.projection.text, ' ');
+      expect(input.content.projection.display.text, 'A漢B字 語');
       input.content.resolveAtomicContexts(
-        0,
-        request.nativeRequests.map((r) => r.content).toList(),
+        input.atoms.indexOf(gap),
+        gap.value.nativeRequests.map((r) => r.content).toList(),
       );
     },
   );
@@ -87,20 +81,32 @@ void main() {
         'actual gap context keeps authored spacing root=$root ($left,$right,$mode,$space)',
         () {
           final annotations = '<rt>$left</rt>$space<rt>$right</rt>';
-          final input = _input(
-            '<ruby style="white-space:$mode"><rb>A</rb><rb>B</rb>${root ? annotations : '<rtc>$annotations</rtc>'}<rtc>whole</rtc></ruby>',
-          );
-          final request =
-              (input.atoms.single as ForumBodyRubySegmentAtomRequest).value;
+          final html =
+              '<ruby style="white-space:$mode"><rb>A</rb><rb>B</rb>${root ? annotations : '<rtc>$annotations</rtc>'}<rtc>whole</rtc></ruby>';
+          if (mode == 'pre' && expected.isNotEmpty) {
+            expect(
+              () => _input(html),
+              throwsA(isA<ForumBodyParagraphInputException>()),
+            );
+            return;
+          }
+          final input = _input(html);
+          final gaps = input.atoms
+              .whereType<ForumBodyRubySoftSpaceAtomRequest>()
+              .toList();
           expect(
-            request.annotationGaps
-                .map((g) => g.request.content.projection.text)
+            gaps
+                .map(
+                  (g) => g.value.members.single.request.content.projection.text,
+                )
                 .join(),
             expected,
           );
-          expect(request.annotationGaps.length, expected.isEmpty ? 0 : 1);
-          expect(request.spans.length, 3);
-          expect(request.bases.length, 2);
+          expect(gaps.length, expected.isEmpty ? 0 : 1);
+          expect(
+            input.atoms.whereType<ForumBodyRubyColumnAtomRequest>(),
+            hasLength(2),
+          );
           if (expected.isEmpty) {
             final fence = input.content.contexts.singleWhere(
               (w) => w.content.projection.text.isEmpty,

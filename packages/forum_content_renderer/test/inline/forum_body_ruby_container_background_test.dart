@@ -41,7 +41,7 @@ ForumBodyInlinePlanInput _input(
 ForumBodyRubyContainerBackground? _background(ForumBodyRubyAtomRequest atom) =>
     atom.background;
 const _column = '<rb style="font-size:20px">A</rb><rt>x</rt>';
-const _segment = '<rb>A</rb><rb>B</rb><rtc><rt>x</rt></rtc><rtc>word</rtc>';
+const _segment = '<rb>A</rb><rb>B</rb><rtc>word</rtc>';
 const _space = '<rb>A</rb> <rb>B</rb><rt>x</rt> <rt>y</rt>';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

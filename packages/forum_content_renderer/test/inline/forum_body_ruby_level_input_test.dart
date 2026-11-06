@@ -58,9 +58,9 @@ void main() {
     ),
     (
       '<ruby>A<rtc><rt>x</rt></rtc><rtc>word</rtc></ruby>',
-      'Axword',
+      'Ax',
       [
-        ['A', 'x', 'word'],
+        ['A', 'x'],
       ],
     ),
     (
@@ -73,168 +73,156 @@ void main() {
     ),
     (
       '<ruby>A<rtc><rt>x</rt></rtc><rtc><rt>y</rt></rtc></ruby>',
-      'Axy',
+      'Ax',
       [
-        ['A', 'x', 'y'],
+        ['A', 'x'],
       ],
     ),
     (
       '<ruby><rt>x</rt><rt>y</rt><rtc><rt>u</rt></rtc></ruby>',
-      'xuy',
+      'xy',
       [
-        ['', 'x', 'u'],
-        ['', 'y', ''],
+        ['', 'x'],
+        ['', 'y'],
       ],
     ),
     (
       '<ruby><rb>A</rb><rb>B</rb><rtc><rt>xx</rt><rt>yy</rt></rtc><rtc><rt>uu</rt><rt>vv</rt></rtc></ruby>',
-      'AxxuuByyvv',
+      'AxxByy',
       [
-        ['A', 'xx', 'uu'],
-        ['B', 'yy', 'vv'],
+        ['A', 'xx'],
+        ['B', 'yy'],
       ],
     ),
     (
       '<ruby><rb>A</rb><rb>B</rb><rt>xx</rt><rt>yy</rt><rtc><rt>uu</rt><rt>vv</rt></rtc><rt>zz</rt></ruby>',
-      'AxxuuzzByyvv',
+      'AxxByy',
       [
-        ['A', 'xx', 'uu', 'zz'],
-        ['B', 'yy', 'vv', ''],
+        ['A', 'xx'],
+        ['B', 'yy'],
       ],
     ),
     (
       '<ruby><rb>A</rb><rb>B</rb><rtc><rt>xx</rt></rtc><rtc><rt>uu</rt><rt>vv</rt><rt>ww</rt></rtc></ruby>',
-      'AxxuuBvvww',
+      'AxxB',
       [
-        ['A', 'xx', 'uu'],
-        ['B', '', 'vv'],
-        ['', '', 'ww'],
+        ['A', 'xx'],
+        ['B', ''],
       ],
     ),
     (
       '<ruby><rt>xx</rt><rt>yy</rt><rtc><rt>uu</rt><rt>vv</rt></rtc></ruby>',
-      'xxuuyyvv',
+      'xxyy',
       [
-        ['', 'xx', 'uu'],
-        ['', 'yy', 'vv'],
+        ['', 'xx'],
+        ['', 'yy'],
       ],
     ),
     (
       '<ruby><rb>A</rb><rb>B</rb><rtc></rtc><rtc><rt>xx</rt><rt>yy</rt></rtc></ruby>',
       'AxxByy',
       [
-        ['A', '', 'xx'],
-        ['B', '', 'yy'],
+        ['A', 'xx'],
+        ['B', 'yy'],
       ],
     ),
     (
       '<ruby><rb>A</rb><rb>B</rb><rtc><rt></rt><rt>yy</rt></rtc><rtc><rt>uu</rt></rtc></ruby>',
-      'AuuByy',
+      'AByy',
       [
-        ['A', '', 'uu'],
-        ['B', 'yy', ''],
+        ['A', ''],
+        ['B', 'yy'],
       ],
     ),
   ]) {
-    test('raw ordered levels preserve columns and original sources: $html', () {
-      final input = _input(html);
-      expect(input.content.projection.display.text, display);
-      expect([
-        for (final column in input.groups)
-          [
-            column.base.content.projection.text,
-            for (final rank in column.annotations)
-              rank.request.content.projection.text,
-          ],
-      ], parts);
-      expect(input.rubyLevelIds.toSet(), {0});
-      final glyphs = <ForumBodyParagraphContent>[];
-      for (final column in input.groups) {
-        for (final request in [
-          column.base,
-          ...column.annotations.map((a) => a.request),
-        ]) {
-          final content = request.content;
-          if (content.projection.text.isEmpty) {
-            if (content.isSourceFree) {
-              expect(content.path, isNull);
-              expect(content.runs, isEmpty);
+    test(
+      'the readable ruby level preserves columns and original sources: $html',
+      () {
+        final input = _input(html);
+        expect(input.content.projection.display.text, display);
+        expect([
+          for (final column in input.groups)
+            [
+              column.base.content.projection.text,
+              for (final rank in column.annotations)
+                rank.request.content.projection.text,
+            ],
+        ], parts);
+        expect(input.rubyLevelIds.toSet(), {0});
+        final glyphs = <ForumBodyParagraphContent>[];
+        for (final column in input.groups) {
+          for (final request in [
+            column.base,
+            ...column.annotations.map((a) => a.request),
+          ]) {
+            final content = request.content;
+            if (content.projection.text.isEmpty) {
+              if (content.isSourceFree) {
+                expect(content.path, isNull);
+                expect(content.runs, isEmpty);
+              } else {
+                // An actual empty RT retains its DOM range and resolved style;
+                // only a missing pairing slot is an anonymous source-free value.
+                expect(content.path, isNotNull);
+              }
             } else {
-              // An actual empty RT retains its DOM range and resolved style;
-              // only a missing pairing slot is an anonymous source-free value.
-              expect(content.path, isNotNull);
+              glyphs.add(content);
             }
-          } else {
-            glyphs.add(content);
           }
         }
-      }
-      // The actual batching order follows the original level-major DOM order.
-      final band = input.groups
-          .expand((column) => column.nativeRequests)
-          .whereType<ForumBodyTextBandChildRequest>()
-          .first
-          .band;
-      expect(band.contexts.toSet(), glyphs.toSet());
-      final starts = band.contexts
-          .map((context) => context.projection.sourceAtUtf16(0).sourceRune)
-          .toList();
-      expect(starts, orderedEquals([...starts]..sort()));
-      for (final context in input.content.contexts) {
-        if (context.content.projection.text.length < 2) continue;
-        final hit = input.content.projection.display.sourceAtUtf16(
-          context.startUtf16 + 1,
-        );
-        expect(hit.isExact, isTrue);
-        expect(
-          hit.sourceRune,
-          context.content.projection.sourceAtUtf16(1).sourceRune,
-        );
-      }
-    });
+        // The actual batching order follows the original level-major DOM order.
+        final band = input.groups
+            .expand((column) => column.nativeRequests)
+            .whereType<ForumBodyTextBandChildRequest>()
+            .first
+            .band;
+        expect(band.contexts.toSet(), glyphs.toSet());
+        final starts = band.contexts
+            .map((context) => context.projection.sourceAtUtf16(0).sourceRune)
+            .toList();
+        expect(starts, orderedEquals([...starts]..sort()));
+        for (final context in input.content.contexts) {
+          if (context.content.projection.text.length < 2) continue;
+          final hit = input.content.projection.display.sourceAtUtf16(
+            context.startUtf16 + 1,
+          );
+          expect(hit.isExact, isTrue);
+          expect(
+            hit.sourceRune,
+            context.content.projection.sourceAtUtf16(1).sourceRune,
+          );
+        }
+      },
+    );
   }
 
   for (final (style, levels, expected) in [
-    (
-      '',
-      '<rt>x</rt><rtc><rt>u</rt></rtc><rt>z</rt>',
-      [ForumBodyRubySide.over, ForumBodyRubySide.under, ForumBodyRubySide.over],
-    ),
+    ('', '<rt>x</rt><rtc><rt>u</rt></rtc><rt>z</rt>', ForumBodyRubySide.over),
     (
       'ruby-position:alternate under',
       '<rt>x</rt><rtc><rt>u</rt></rtc><rt>z</rt>',
-      [
-        ForumBodyRubySide.under,
-        ForumBodyRubySide.over,
-        ForumBodyRubySide.under,
-      ],
+      ForumBodyRubySide.under,
     ),
     (
       'ruby-position:over',
       '<rtc><rt>x</rt></rtc><rtc><rt>u</rt></rtc><rtc><rt>z</rt></rtc>',
-      [ForumBodyRubySide.over, ForumBodyRubySide.over, ForumBodyRubySide.over],
+      ForumBodyRubySide.over,
     ),
     (
       'ruby-position:under',
       '<rtc><rt>x</rt></rtc><rtc><rt>u</rt></rtc>',
-      [ForumBodyRubySide.under, ForumBodyRubySide.under],
+      ForumBodyRubySide.under,
     ),
     (
       '',
       '<rtc></rtc><rtc><rt>x</rt></rtc><rtc><rt style="ruby-position:under">u</rt></rtc>',
-      [ForumBodyRubySide.over, ForumBodyRubySide.under, ForumBodyRubySide.over],
+      ForumBodyRubySide.over,
     ),
   ]) {
-    test(
-      'each actual level owns its side, including empty ranks: $style/$levels',
-      () {
-        final input = _input('<ruby style="$style">A$levels</ruby>');
-        expect(
-          input.groups.single.annotations.map((rank) => rank.side),
-          expected,
-        );
-      },
-    );
+    test('the readable level uses its actual side: $style/$levels', () {
+      final input = _input('<ruby style="$style">A$levels</ruby>');
+      expect(input.groups.single.annotations.single.side, expected);
+    });
   }
 
   test('empty actual RT consumes its own column with its resolved style', () {
@@ -259,22 +247,26 @@ void main() {
           .fontSize,
       30,
     );
-    expect(input.groups.map((column) => column.nativeHandleCount), [2, 2]);
+    expect(input.groups.map((column) => column.nativeHandleCount), [1, 2]);
   });
 
   for (final html in [
     '<ruby>A<rtc style="white-space:pre"><rt>x</rt> <rt>y</rt></rtc><rt>z</rt></ruby>',
     '<ruby>A<rtc><rt>x<ruby>B<rt>b</rt></ruby></rt></rtc><rt>z</rt></ruby>',
-    '<ruby>A<rtc><rt>x</rt></rtc><rtc style="ruby-position:inter-character"><rt>y</rt></rtc></ruby>',
   ]) {
-    test(
-      'unsupported later level does not flatten or partially admit: $html',
-      () {
-        expect(
-          () => _input(html),
-          throwsA(isA<ForumBodyParagraphInputException>()),
-        );
-      },
-    );
+    test('unsupported content in the readable level is rejected: $html', () {
+      expect(
+        () => _input(html),
+        throwsA(isA<ForumBodyParagraphInputException>()),
+      );
+    });
   }
+
+  test('an unsupported later level does not invalidate the first level', () {
+    final input = _input(
+      '<ruby>A<rtc><rt>x</rt></rtc>'
+      '<rtc style="ruby-position:inter-character"><rt>y</rt></rtc></ruby>',
+    );
+    expect(input.content.projection.display.text, 'Ax');
+  });
 }

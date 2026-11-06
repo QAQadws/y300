@@ -104,6 +104,42 @@ void main() {
     },
   );
 
+  test(
+    'empty and later levels leave their source outside the readable level',
+    () {
+      const html =
+          '<ruby><rb>A</rb><rb>B</rb><rtc></rtc><rt>x</rt> <rt>y</rt>'
+          '<rtc>omit</rtc><rt>later</rt></ruby><ruby>C<rt>z</rt></ruby>';
+      final input = _drain(
+        _cursor(html),
+      ).whereType<ForumBodyTextFlowInline>().single.content;
+      final groups = input.parts.whereType<ForumBodyInlineFlowRuby>().toList();
+      expect(groups, hasLength(2));
+      expect(groups.first.group.annotations.map((rt) => _text(rt.parts)), [
+        'x',
+        'y',
+      ]);
+      final gap = groups.first.group.annotationGaps.single;
+      expect(gap.beforeAnnotationIndex, 1);
+      expect(gap.content.projection.text, ' ');
+      expect(_text(groups.last.group.annotations.single.parts), 'z');
+      final source = _document(html).sourceText;
+      expect(
+        input.ignored
+            .where(
+              (item) =>
+                  item.reason ==
+                  ForumBodyRubyIgnoredReason.unselectedAnnotationLevel,
+            )
+            .map(
+              (item) =>
+                  source.substring(item.source.runeStart, item.source.runeEnd),
+            ),
+        ['', 'omit', 'later'],
+      );
+    },
+  );
+
   test('prefix, ruby groups and suffix remain one source-bound context', () {
     final cursor = _cursor(
       '<p>前 <b>粗</b> <ruby>漢<rt>かん</rt>字<rt>じ</rt></ruby> 后</p>',

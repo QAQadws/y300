@@ -129,10 +129,64 @@ final class ForumBodyTextFlowSequence {
 
   void addRuby(ForumBodyRubyGroupContent group) {
     _ensureOpen();
-    _parts.add(ForumBodyInlineFlowRuby(group));
-    // The grammar publishes only an actual base or annotation structure. A
-    // structured group is retained even when a later format cannot render it.
+    final readable = _readableRuby(group);
+    if (readable.base.isEmpty && readable.annotations.isEmpty) return;
+    _parts.add(ForumBodyInlineFlowRuby(readable));
     _visible = true;
+  }
+
+  ForumBodyRubyGroupContent _readableRuby(ForumBodyRubyGroupContent group) {
+    final annotations = group.annotations;
+    if (annotations.length < 2) return group;
+    var start = 0;
+    while (start < annotations.length &&
+        annotations[start] is ForumBodyRubyAnnotationContainerContent &&
+        annotations[start].parts.isEmpty) {
+      start++;
+    }
+    // Consecutive direct RTs belong to one level, even with several bases.
+    // RTCs are separate levels and keep their actual box and style together.
+    var end = start;
+    if (start < annotations.length) {
+      if (annotations[start] is ForumBodyRubyAnnotationContainerContent) {
+        end++;
+      } else {
+        while (end < annotations.length &&
+            annotations[end] is ForumBodyRubyTextAnnotationContent) {
+          end++;
+        }
+      }
+    }
+    if (start == 0 && end == annotations.length) return group;
+    for (final (index, annotation) in annotations.indexed) {
+      if (index >= start && index < end) continue;
+      _ignored.add(
+        ForumBodyRubyIgnoredContent(
+          annotation.path,
+          annotation.source,
+          ForumBodyRubyIgnoredReason.unselectedAnnotationLevel,
+        ),
+      );
+    }
+    return ForumBodyRubyGroupContent(
+      identity: group.identity,
+      fontRevision: group.fontRevision,
+      styleRevision: group.styleRevision,
+      style: group.style,
+      rootPath: group.rootPath,
+      index: group.index,
+      base: group.base,
+      annotations: annotations.sublist(start, end),
+      annotationGaps: [
+        for (final gap in group.annotationGaps)
+          if (gap.beforeAnnotationIndex > start &&
+              gap.beforeAnnotationIndex < end)
+            (
+              beforeAnnotationIndex: gap.beforeAnnotationIndex - start,
+              content: gap.content,
+            ),
+      ],
+    );
   }
 
   void addIgnored(List<ForumBodyRubyIgnoredContent> ignored) {

@@ -40,53 +40,48 @@ void main() {
       'packages/forum_content_renderer/ForumBodyInlineSpace',
     )..addFont(rootBundle.load('assets/fonts/inline_space.ttf'))).load();
   });
-  test(
-    'raw span is one original source-bound atom, alongside its actual column RTs',
-    () {
-      final input = _input(
-        '<ruby><rb>A</rb><rb>B</rb><rtc><rt>x</rt></rtc><rtc>word</rtc></ruby>',
-      );
-      expect(input.content.projection.display.text, 'ABxword');
-      expect(input.content.projection.atoms.length, 1);
-      expect(() => input.groups, throwsStateError);
-      final request =
-          (input.atoms.single as ForumBodyRubySegmentAtomRequest).value;
-      expect(request.bases.map((b) => b.content.projection.text), ['A', 'B']);
-      expect(
-        request.spans.map(
-          (s) => (s.startColumn, s.endColumn, s.annotationIndex),
-        ),
-        [(0, 1, 0), (0, 2, 1)],
-      );
-      expect(request.nativeHandleCount, 4);
-      final original = request.nativeRequests.map((r) => r.content).toList();
-      final bound = input.content.resolveAtomicContexts(0, original);
-      expect(bound.map((c) => c.content), orderedEquals(original));
-      final band = (request.bases.first as ForumBodyTextBandChildRequest).band;
-      expect(band.contexts, orderedEquals(original));
-      input.replaceBand(band, 123);
-      final rebound =
-          (input.atoms.single as ForumBodyRubySegmentAtomRequest).value;
-      expect(
-        rebound.nativeRequests.every(
-          (r) => (r as ForumBodyTextBandChildRequest).gutter == 123,
-        ),
-        isTrue,
-      );
-      expect(
-        rebound.nativeRequests.map((r) => r.content),
-        orderedEquals(original),
-      );
-      input.replaceBand(band, null);
-      expect(
-        (input.atoms.single as ForumBodyRubySegmentAtomRequest)
-            .value
-            .nativeRequests
-            .every((r) => r is ForumBodyParagraphTextRequest),
-        isTrue,
-      );
-    },
-  );
+  test('the retained span is one original source-bound atom', () {
+    final input = _input(
+      '<ruby><rb>A</rb><rb>B</rb><rtc>word</rtc><rtc><rt>x</rt></rtc></ruby>',
+    );
+    expect(input.content.projection.display.text, 'ABword');
+    expect(input.content.projection.atoms.length, 1);
+    expect(() => input.groups, throwsStateError);
+    final request =
+        (input.atoms.single as ForumBodyRubySegmentAtomRequest).value;
+    expect(request.bases.map((b) => b.content.projection.text), ['A', 'B']);
+    expect(
+      request.spans.map((s) => (s.startColumn, s.endColumn, s.annotationIndex)),
+      [(0, 2, 0)],
+    );
+    expect(request.nativeHandleCount, 3);
+    final original = request.nativeRequests.map((r) => r.content).toList();
+    final bound = input.content.resolveAtomicContexts(0, original);
+    expect(bound.map((c) => c.content), orderedEquals(original));
+    final band = (request.bases.first as ForumBodyTextBandChildRequest).band;
+    expect(band.contexts, orderedEquals(original));
+    input.replaceBand(band, 123);
+    final rebound =
+        (input.atoms.single as ForumBodyRubySegmentAtomRequest).value;
+    expect(
+      rebound.nativeRequests.every(
+        (r) => (r as ForumBodyTextBandChildRequest).gutter == 123,
+      ),
+      isTrue,
+    );
+    expect(
+      rebound.nativeRequests.map((r) => r.content),
+      orderedEquals(original),
+    );
+    input.replaceBand(band, null);
+    expect(
+      (input.atoms.single as ForumBodyRubySegmentAtomRequest)
+          .value
+          .nativeRequests
+          .every((r) => r is ForumBodyParagraphTextRequest),
+      isTrue,
+    );
+  });
 
   for (final q in [1, 7, 32]) {
     for (final narrow in [false, true]) {
@@ -240,46 +235,26 @@ void main() {
     );
   });
 
-  test(
-    'annotation gap keeps actual neighbouring span index inside a true spanning closure',
-    () {
-      final input = _input(
-        '<ruby><rb>A</rb> <rb>B</rb><rtc><rt>x</rt> <rt>y</rt></rtc><rtc>whole</rtc></ruby>',
-      );
-      final request =
-          (input.atoms.single as ForumBodyRubySegmentAtomRequest).value;
-      expect(request.annotationGaps.single.beforeSpanIndex, 1);
-      expect(request.nativeRequests.map((r) => r.content.projection.text), [
-        'A',
-        ' ',
-        'B',
-        'x',
-        ' ',
-        'y',
-        'whole',
-      ]);
-      expect(request.bases.length, 2);
-      expect(request.spans.length, 3);
-      input.content.resolveAtomicContexts(
-        0,
-        request.nativeRequests.map((r) => r.content).toList(),
-      );
-      final band = (request.bases.first as ForumBodyTextBandChildRequest).band;
-      input.replaceBand(band, 123);
-      final mapped =
-          (input.atoms.single as ForumBodyRubySegmentAtomRequest).value;
-      expect(
-        (mapped.annotationGaps.single.request as ForumBodyTextBandChildRequest)
-            .gutter,
-        123,
-      );
-      expect(
-        mapped.annotationGaps.single.request.content,
-        same(request.annotationGaps.single.request.content),
-      );
-      expect(mapped.annotationGaps.single.beforeSpanIndex, 1);
-    },
-  );
+  test('a gap in an omitted level does not enter the spanning request', () {
+    final input = _input(
+      '<ruby><rb>A</rb> <rb>B</rb><rtc>whole</rtc><rtc><rt>x</rt> <rt>y</rt></rtc></ruby>',
+    );
+    final request =
+        (input.atoms.single as ForumBodyRubySegmentAtomRequest).value;
+    expect(request.annotationGaps, isEmpty);
+    expect(request.nativeRequests.map((r) => r.content.projection.text), [
+      'A',
+      ' ',
+      'B',
+      'whole',
+    ]);
+    expect(request.bases.length, 2);
+    expect(request.spans, hasLength(1));
+    input.content.resolveAtomicContexts(
+      0,
+      request.nativeRequests.map((r) => r.content).toList(),
+    );
+  });
 
   for (final outer in ['', '<rtc> </rtc>']) {
     test(
@@ -299,7 +274,7 @@ void main() {
         expect(gap.beforeColumn, 1);
         expect(gap.members.single.annotationIndex, 0);
         expect(gap.members.single.request.content.isSourceFree, isFalse);
-        expect(gap.sides.length, outer.isEmpty ? 1 : 2);
+        expect(gap.sides, [ForumBodyRubySide.over]);
       },
     );
   }
@@ -344,15 +319,15 @@ void main() {
   );
 
   test(
-    'actual base and two ranked gaps retain source ordering through band retries',
+    'base and annotation gaps retain source ordering through band retries',
     () {
       final input = _input(
         '<ruby><rb>A</rb> <rb>B</rb><rtc><rt>x</rt> <rt>y</rt></rtc><rtc style="ruby-position:under"><rt>u</rt> <rt>v</rt></rtc></ruby>',
       );
       final request =
           (input.atoms[1] as ForumBodyRubySoftSpaceAtomRequest).value;
-      expect(request.members.map((m) => m.annotationIndex), [null, 0, 1]);
-      expect(request.sides, [ForumBodyRubySide.over, ForumBodyRubySide.under]);
+      expect(request.members.map((m) => m.annotationIndex), [null, 0]);
+      expect(request.sides, [ForumBodyRubySide.over]);
       expect(request.maxWidth, 16384);
       final contexts = request.nativeRequests.map((r) => r.content).toList();
       expect(
@@ -368,9 +343,6 @@ void main() {
         'x',
         ' ',
         'y',
-        'u',
-        ' ',
-        'v',
       ]);
       input.replaceBand(band, null);
       final mapped =
@@ -498,48 +470,43 @@ void main() {
     });
   }
 
-  test(
-    'implicit spanning base keeps real outer spaces and anonymous excess base',
-    () {
-      final input = _input(
-        'X<ruby> A <rt>xx</rt><rt>yy</rt><rtc>word</rtc></ruby>Z',
-      );
-      expect(input.content.projection.display.text, 'X Axxyyword Z');
-      final request =
-          (input.atoms.single as ForumBodyRubySegmentAtomRequest).value;
-      expect(request.bases.map((b) => b.content.projection.text), ['A', '']);
-      expect(request.bases.last.content.isSourceFree, isTrue);
-      expect(request.spans.map((s) => (s.startColumn, s.endColumn)), [
-        (0, 1),
-        (1, 2),
-        (0, 2),
-      ]);
-      final contexts = input.content.resolveAtomicContexts(
-        0,
-        request.nativeRequests.map((r) => r.content).toList(),
-      );
-      expect(contexts.map((c) => c.content.projection.text), [
-        'A',
-        '',
-        'xx',
-        'yy',
-        'word',
-      ]);
-      for (final window in contexts) {
-        if (window.content.isSourceFree) {
-          expect(window.startUtf16, window.endUtf16);
-          continue;
-        }
-        final from = window.content.projection.text.length > 1 ? 1 : 0;
-        expect(
-          input.content.projection.display
-              .sourceAtUtf16(window.startUtf16 + from)
-              .sourceRune,
-          window.content.projection.sourceAtUtf16(from).sourceRune,
-        );
+  test('an omitted span leaves implicit base spaces and actual columns', () {
+    final input = _input(
+      'X<ruby> A <rt>xx</rt><rt>yy</rt><rtc>word</rtc></ruby>Z',
+    );
+    expect(input.content.projection.display.text, 'X Axxyy Z');
+    expect(input.groups.map((column) => column.base.content.projection.text), [
+      'A',
+      '',
+    ]);
+    expect(input.groups.last.base.content.isSourceFree, isTrue);
+    final contexts = [
+      for (final (index, column) in input.groups.indexed)
+        ...input.content.resolveAtomicContexts(
+          index,
+          column.nativeRequests.map((r) => r.content).toList(),
+        ),
+    ];
+    expect(contexts.map((c) => c.content.projection.text), [
+      'A',
+      'xx',
+      '',
+      'yy',
+    ]);
+    for (final window in contexts) {
+      if (window.content.isSourceFree) {
+        expect(window.startUtf16, window.endUtf16);
+        continue;
       }
-    },
-  );
+      final from = window.content.projection.text.length > 1 ? 1 : 0;
+      expect(
+        input.content.projection.display
+            .sourceAtUtf16(window.startUtf16 + from)
+            .sourceRune,
+        window.content.projection.sourceAtUtf16(from).sourceRune,
+      );
+    }
+  });
 
   test('structural outer gap omission does not absorb a component source', () {
     final input = _input(

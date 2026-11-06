@@ -8,6 +8,8 @@ import 'package:forum_content_renderer/src/inline/forum_body_ruby_tree_input.dar
 import 'package:forum_content_renderer/src/inline/forum_body_ruby_tree_metrics_preparation.dart';
 import 'package:forum_content_renderer/src/inline/forum_body_ruby_tree_layout.dart';
 
+import 'test_support/unprojected_ruby_fixture.dart';
+
 const _nested =
     '<ruby style="text-emphasis:\'X\' red;font-size:24px;line-height:.4">'
     '<rb><ruby><rb>A é 👩‍👩‍👧‍👦</rb><rt> inner </rt></ruby></rb>'
@@ -25,7 +27,7 @@ ForumBodyRubyGroupContent _group(String html, TextDirection direction) {
     sourceId: 'glyph-tree-source',
     conversionIdentity: 'none',
   );
-  final flow = ForumBodyTextFlowCursor(
+  final flow = ForumBodyStyledFlowCursor(
     document: doc,
     reader: ForumBodyReaderStyle(
       textStyle: const TextStyle(fontFamily: 'Ahem', fontSize: 20),
@@ -35,13 +37,7 @@ ForumBodyRubyGroupContent _group(String html, TextDirection direction) {
     ),
   );
   try {
-    while (!flow.isComplete) {
-      flow.advance(maxEvents: 1);
-      if (flow.current case ForumBodyTextFlowInline(:final content)) {
-        return content.parts.whereType<ForumBodyInlineFlowRuby>().first.group;
-      }
-    }
-    throw StateError('Fixture has no original ruby');
+    return readUnprojectedRubyGroup(flow);
   } finally {
     flow.close();
   }

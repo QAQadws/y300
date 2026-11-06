@@ -6,6 +6,8 @@ import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:forum_content_renderer/src/inline/forum_body_inline_plan_input.dart';
 import 'package:forum_content_renderer/src/inline/forum_body_ruby_atom_request.dart';
 
+import 'unprojected_ruby_fixture.dart';
+
 final class RubyGapFixture {
   RubyGapFixture({
     required this.direction,
@@ -37,7 +39,7 @@ final class RubyGapFixture {
       sourceId: 'actual-base-gap',
       conversionIdentity: 'none',
     );
-    final flow = ForumBodyTextFlowCursor(
+    final flow = ForumBodyStyledFlowCursor(
       document: doc,
       reader: ForumBodyReaderStyle(
         textStyle: const TextStyle(fontFamily: 'Ahem', fontSize: 20, height: 1),
@@ -46,13 +48,23 @@ final class RubyGapFixture {
       ),
     );
     try {
-      while (!flow.isComplete) {
-        flow.advance(maxEvents: 1);
-        if (flow.current case ForumBodyTextFlowInline(:final content)) {
-          input = ForumBodyInlinePlanInput(content, 300);
-          break;
-        }
-      }
+      if (!flow.moveNext()) throw StateError('Fixture has no paragraph');
+      final paragraph = flow.current!;
+      final group = readUnprojectedRubyGroup(flow);
+      input = ForumBodyInlinePlanInput(
+        ForumBodyInlineFlowContent(
+          identity: flow.identity,
+          path: paragraph.node.path,
+          fontRevision: flow.fontRevision,
+          styleRevision: flow.styleRevision,
+          style: paragraph.paragraphStyle,
+          layoutMode: ForumBodyParagraphLayoutMode.wrap,
+          parts: [ForumBodyInlineFlowRuby(group)],
+          ignored: const [],
+          issues: const [],
+        ),
+        300,
+      );
     } finally {
       flow.close();
     }

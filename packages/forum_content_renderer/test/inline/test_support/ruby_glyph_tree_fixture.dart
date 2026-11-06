@@ -1,6 +1,8 @@
 import 'package:flutter/painting.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
+import 'unprojected_ruby_fixture.dart';
+
 ForumBodyRubyTreeEmphasisPlan rubyTreeEmphasisPlanFixture(
   String html,
   ForumBodyParagraphCache cache, {
@@ -178,7 +180,7 @@ ForumBodyRubyGlyphTreeMetrics rubyGlyphTreeMetricsFixture(
     sourceId: sourceId,
     conversionIdentity: 'none',
   );
-  final flow = ForumBodyTextFlowCursor(
+  final flow = ForumBodyStyledFlowCursor(
     document: document,
     reader: ForumBodyReaderStyle(
       textStyle: const TextStyle(fontFamily: 'Ahem', fontSize: 20),
@@ -187,19 +189,14 @@ ForumBodyRubyGlyphTreeMetrics rubyGlyphTreeMetricsFixture(
       textDirection: direction,
     ),
   );
-  ForumBodyRubyGroupContent? group;
+  final ForumBodyRubyGroupContent group;
   try {
-    while (!flow.isComplete && group == null) {
-      flow.advance(maxEvents: 1);
-      if (flow.current case ForumBodyTextFlowInline(:final content)) {
-        group = content.parts.whereType<ForumBodyInlineFlowRuby>().first.group;
-      }
-    }
+    group = readUnprojectedRubyGroup(flow);
   } finally {
     flow.close();
   }
   final source = ForumBodyRubyGlyphTreeInputPreparation(
-    group: group!,
+    group: group,
     maxWidth: 500,
     ensureOwner: () {},
   );

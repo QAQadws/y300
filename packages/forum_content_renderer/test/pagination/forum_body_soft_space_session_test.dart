@@ -141,15 +141,10 @@ void main() {
                 final fragment =
                     fragments.single as ForumBodyPreparedInlineFragment;
                 expect(fragment.view.atomIndices, trimmed ? [0, 2] : [0, 1, 2]);
-                final ranks = sample == 4
-                    ? 80
-                    : sample == 3
-                    ? 3
-                    : 1;
                 final visibleMembers =
                     2 +
-                    (sample == 2 ? 0 : ranks * 2) +
-                    (trimmed ? 0 : ranks + (sample == 0 ? 0 : 1));
+                    (sample == 2 ? 0 : 2) +
+                    (trimmed ? 0 : 1 + (sample == 0 ? 0 : 1));
                 expect(fragment.nativeLeases.length, visibleMembers + 1);
                 for (final window in fragment.view.content.contexts) {
                   final text = window.content.projection.text;

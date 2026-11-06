@@ -124,7 +124,12 @@ final class ForumBodyRubyGroupContent {
   final List<ForumBodyRubyRootAnnotationGap> annotationGaps;
 }
 
-enum ForumBodyRubyIgnoredReason { fallback, annotationWhitespace, hidden }
+enum ForumBodyRubyIgnoredReason {
+  fallback,
+  annotationWhitespace,
+  hidden,
+  unselectedAnnotationLevel,
+}
 
 /// Structural omission only, not evidence that the enclosed source was read.
 final class ForumBodyRubyIgnoredContent {

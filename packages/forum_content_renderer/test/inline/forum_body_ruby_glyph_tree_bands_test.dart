@@ -6,6 +6,8 @@ import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:forum_content_renderer/src/inline/forum_body_ruby_tree_input.dart';
 import 'package:forum_content_renderer/src/inline/forum_body_ruby_tree_metrics_preparation.dart';
 
+import 'test_support/unprojected_ruby_fixture.dart';
+
 ForumBodyRubyGlyphTreeGeometry _geometry(
   String html,
   ForumBodyParagraphCache cache, {
@@ -17,7 +19,7 @@ ForumBodyRubyGlyphTreeGeometry _geometry(
     sourceId: 'original-tree-bands',
     conversionIdentity: 'none',
   );
-  final flow = ForumBodyTextFlowCursor(
+  final flow = ForumBodyStyledFlowCursor(
     document: doc,
     reader: ForumBodyReaderStyle(
       textStyle: const TextStyle(fontFamily: 'Ahem', fontSize: 20),
@@ -26,19 +28,14 @@ ForumBodyRubyGlyphTreeGeometry _geometry(
       textDirection: direction,
     ),
   );
-  ForumBodyRubyGroupContent? group;
+  final ForumBodyRubyGroupContent group;
   try {
-    while (!flow.isComplete && group == null) {
-      flow.advance(maxEvents: 1);
-      if (flow.current case ForumBodyTextFlowInline(:final content)) {
-        group = content.parts.whereType<ForumBodyInlineFlowRuby>().first.group;
-      }
-    }
+    group = readUnprojectedRubyGroup(flow);
   } finally {
     flow.close();
   }
   final source = ForumBodyRubyGlyphTreeInputPreparation(
-    group: group!,
+    group: group,
     maxWidth: 500,
     ensureOwner: () {},
   );

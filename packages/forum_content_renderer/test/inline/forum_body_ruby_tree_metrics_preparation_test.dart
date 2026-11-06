@@ -136,7 +136,6 @@ void main() {
         'a',
         'B',
         'b',
-        'c',
       ]);
       final base = parsed.group.base.single as ForumBodyRubyBaseContent;
       final nested = base.parts.single as ForumBodyRubyNestedContent;
@@ -164,11 +163,8 @@ void main() {
       }
       final root = tree.nodes.last as ForumBodyRubyTreeGroup;
       expect(root.group, same(parsed.group));
-      expect(root.annotations.map((a) => a.side), [
-        ForumBodyRubySide.over,
-        ForumBodyRubySide.under,
-      ]);
-      expect(tree.nativeRequests, hasLength(5));
+      expect(root.annotations.single.side, ForumBodyRubySide.over);
+      expect(tree.nativeRequests, hasLength(4));
       expect(() => tree.nodes.clear(), throwsUnsupportedError);
       expect(() => tree.nativeRequests.clear(), throwsUnsupportedError);
       // Numeric preparation is not permission to publish a page without binding.

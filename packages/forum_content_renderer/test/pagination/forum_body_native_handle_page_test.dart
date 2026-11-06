@@ -83,9 +83,9 @@ List<ForumBodyPreparedTextFragment> _page(
   }
 }
 
-String _ruby(int columns, {int ranks = 1, double gapSize = 10}) =>
+String _ruby(int columns, {double gapSize = 10}) =>
     '<ruby>${List.generate(columns, (i) => '<rb>A</rb>').join(' ')}'
-    '${List.generate(ranks, (r) => '<rtc style="font-size:${ranks > 1 ? 1 : gapSize}px">${List.generate(columns, (i) => '<rt>x</rt>').join(' ')}</rtc>').join()}</ruby>';
+    '<rtc style="font-size:${gapSize}px">${List.generate(columns, (i) => '<rt>x</rt>').join(' ')}</rtc></ruby>';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -196,8 +196,8 @@ void main() {
     'one indivisible native row over its slot budget preserves published prefix',
     () {
       final f = _open(
-        '<p>prefix</p><p>${_ruby(6, ranks: 24)}</p>',
-        pageLimit: 256,
+        '<p>prefix</p><p>${_ruby(6)}</p>',
+        pageLimit: 8,
         width: 1000,
         height: 1000,
       );

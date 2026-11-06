@@ -6,7 +6,7 @@ import 'package:forum_content_renderer/src/inline/forum_body_inline_plan_prepara
 
 const _fixtures = [
   '<ruby>A<rt>x</rt></ruby>',
-  '<ruby><rb>A</rb><rb>B</rb><rtc><rt>x</rt></rtc><rtc>word</rtc></ruby>',
+  '<ruby><rb>A</rb><rb>B</rb><rtc>word</rtc></ruby>',
   '<ruby style="font-size:44px"><ruby>A<rt>x</rt></ruby><rt>y</rt></ruby>',
   '<ruby style="text-emphasis:circle">A<rt style="text-emphasis:triangle">x</rt></ruby>',
   '<ruby style="ruby-position:under;text-emphasis:circle;text-emphasis-position:under">A<rt style="text-emphasis:triangle;text-emphasis-position:under">x</rt></ruby>',

@@ -516,7 +516,7 @@ void main() {
   for (final direction in TextDirection.values) {
     for (final ratio in [1, 3]) {
       test(
-        'actual outer span and under rank share original columns $direction DPR$ratio',
+        'outer span shares original columns while a later level is omitted $direction DPR$ratio',
         () async {
           final f = _Fixture(
             '<ruby style="color:red"><rb><ruby>A<rt style="font-size:10px;color:blue">x</rt></ruby></rb>'
@@ -530,13 +530,12 @@ void main() {
               f.prepare(0).single as ForumBodyPreparedInlineFragment;
           final painters = <TextPainter>[];
           try {
-            expect(prepared.projection.text, 'AxBuvwxyzpq');
-            expect(prepared.nativeLeases, hasLength(6));
+            expect(prepared.projection.text, 'AxBuvwxyz');
+            expect(prepared.nativeLeases, hasLength(5));
             final parent =
                 prepared.nativeLeases.first as ForumBodyInlineParagraphLease;
             final origin = parent.layout.atomBoxes.single.toRect().topLeft;
-            // The real 48px anonymous span allocates 24px per column. The 12px
-            // under annotation shares both columns without widening either one.
+            // The real 48px anonymous span allocates 24px per column.
             final a = direction == TextDirection.ltr ? 2.0 : 26.0;
             final b = direction == TextDirection.ltr ? 26.0 : 2.0;
             final expected = [
@@ -544,7 +543,6 @@ void main() {
               ('x', 10.0, const Color(0xff0000ff), Offset(a + 5, 8)),
               ('B', 20.0, const Color(0xffff0000), Offset(b, 18)),
               ('uvwxyz', 8.0, const Color(0xff008000), Offset.zero),
-              ('pq', 6.0, const Color(0xffffa500), const Offset(18, 38)),
             ];
             for (final (text, size, color, _) in expected) {
               painters.add(
@@ -567,10 +565,10 @@ void main() {
               ratio,
             );
             final reference = await _pixels((canvas) {
-              // The visible parent clips ink to its independently known 44px
+              // The visible parent clips ink to its independently known 38px
               // line frame, including tiny-font descender rounding at the edge.
               canvas.clipRect(
-                const Rect.fromLTWH(0, 0, 100, 44),
+                const Rect.fromLTWH(0, 0, 100, 38),
                 doAntiAlias: false,
               );
               for (final (i, item) in expected.indexed) {
