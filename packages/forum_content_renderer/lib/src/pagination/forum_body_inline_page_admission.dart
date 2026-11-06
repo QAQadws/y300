@@ -45,7 +45,7 @@ final class ForumBodyInlinePageAdmission {
             'Inline continuation belongs to a different input',
           );
         }
-        _retainSource(continuation);
+        _validateSource(continuation);
         _initial = ForumBodyInlinePlanPreparation(
           input: continuation,
           cache: cache,
@@ -62,7 +62,7 @@ final class ForumBodyInlinePageAdmission {
           cache: cache,
           textScaler: textScaler,
           ensureOwner: _guard,
-          validateInput: _retainSource,
+          validateInput: _validateSource,
         );
       }
     } catch (_) {
@@ -74,7 +74,6 @@ final class ForumBodyInlinePageAdmission {
   TextScaler? _scaler;
   void Function()? _ensureOwner;
   void Function(int, int)? _validateCounts;
-  ForumBodyInlinePlanInput? _source;
   ForumBodyInlinePlanInput? _readySource;
   ForumBodyInlinePlanPreparation? _initial;
   ForumBodyInlineFontOverflowPreparation? _probe;
@@ -91,10 +90,9 @@ final class ForumBodyInlinePageAdmission {
     return _content!.fontFrames?.source ?? _readySource!;
   }
 
-  void _retainSource(ForumBodyInlinePlanInput source) {
+  void _validateSource(ForumBodyInlinePlanInput source) {
     _validateCounts!(source.retainedTextCodeUnits, source.retainedRuns);
     _guard();
-    _source = source;
   }
 
   Iterable<ForumBodyNativeParagraphLease> get nativeLeases sync* {
@@ -149,17 +147,19 @@ final class ForumBodyInlinePageAdmission {
             if (!overflow) {
               _phase = _InlineAdmissionPhase.ready;
             } else {
+              // Natural measurement can split a word that exceeds the width.
+              // Allocate frames for the resulting source and its current atoms.
+              final source = _readySource!;
               _validateCounts!(
-                _content!.retainedTextCodeUnits +
-                    _source!.retainedTextCodeUnits,
-                _content!.retainedRuns + _source!.retainedRuns,
+                _content!.retainedTextCodeUnits + source.retainedTextCodeUnits,
+                _content!.retainedRuns + source.retainedRuns,
               );
               _guard();
               _lease!.release();
               _lease = null;
               _content = null;
               _frames = ForumBodyInlineFontFramePreparation(
-                input: _source!,
+                input: source,
                 cache: cache,
                 textScaler: _scaler!,
                 ensureOwner: _guard,
@@ -277,7 +277,6 @@ final class ForumBodyInlinePageAdmission {
     _scaler = null;
     _ensureOwner = null;
     _validateCounts = null;
-    _source = null;
     _readySource = null;
     _initial = null;
     _probe = null;

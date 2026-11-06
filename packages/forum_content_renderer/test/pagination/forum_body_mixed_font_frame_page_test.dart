@@ -14,6 +14,7 @@ final class _Fixture {
   _Fixture({
     String html = _html,
     TextDirection direction = TextDirection.ltr,
+    double width = 300,
     double height = 35,
     int entries = 128,
     int bytes = 1 << 26,
@@ -53,7 +54,7 @@ final class _Fixture {
         maxIssuedLeases: handles,
       ),
       layoutId: 'mixed-font-pages',
-      width: 300,
+      width: width,
       height: height,
       maxNativeEntriesPerPage: maxEntriesPerPage,
     );
@@ -208,6 +209,40 @@ void main() {
     } finally {
       for (final v in values) {
         v.close();
+      }
+    }
+    expect(fixture.cache.activeLeases, 0);
+  });
+
+  test('tight font frames reuse the measured split of an overwide word', () {
+    final fixture = _Fixture(
+      html:
+          '<p style="white-space:pre-wrap;line-height:.25">'
+          'AA\nABC<sup>2</sup>DE\n<ruby>B<rt>b</rt></ruby>\nCC</p>',
+      width: 65,
+      height: 200,
+    )..finish();
+    fixture.cache.clearUnpinned();
+    final bindings = fixture.prepare(0);
+    try {
+      final binding = bindings.single as ForumBodyPreparedInlineFragment;
+      expect(
+        binding.view.nativeLeases.whereType<ForumBodyTextPictureLease>(),
+        isNotEmpty,
+      );
+      expect(binding.projection.text, 'AA\nABC2DE\nBb\nCC');
+      final superscript = binding.view.content.contexts.singleWhere(
+        (window) => window.content.projection.text == '2',
+      );
+      final box = binding
+          .glyphBoxes(superscript.startUtf16, superscript.endUtf16)
+          .single;
+      final hit = binding.view.sourceHitAt(box.toRect().center);
+      expect(hit.window, same(superscript));
+      expect(hit.position.isExact, isTrue);
+    } finally {
+      for (final binding in bindings) {
+        binding.close();
       }
     }
     expect(fixture.cache.activeLeases, 0);
