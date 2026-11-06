@@ -22,13 +22,16 @@ import 'novel_profile_memory.dart';
 
 const _baseline = bool.fromEnvironment('PROFILE_BASELINE');
 const _memoryMode = bool.fromEnvironment('PROFILE_MEMORY');
+const _chapterCycle = bool.fromEnvironment('PROFILE_CHAPTER_CYCLE');
 const _inlineSoftSpace = bool.fromEnvironment('PROFILE_INLINE_SOFT_SPACE');
 const _warmReturn = bool.fromEnvironment('PROFILE_WARM_RETURN');
 const _corpus = String.fromEnvironment(
   'PROFILE_CORPUS',
   defaultValue: 'baseline',
 );
-final _fixtures = novelMainPageProfileFixtures(_corpus);
+final _fixtures = _chapterCycle
+    ? [(name: 'chapter-cycle', html: novelProfileSafeHtml)]
+    : novelMainPageProfileFixtures(_corpus);
 const _backend = String.fromEnvironment(
   'PROFILE_BACKEND',
   defaultValue: 'both',
@@ -42,8 +45,10 @@ const _config = NovelProfileBaselineConfig(
 final _runtimeErrors = <String>[];
 const _memoryOpens = 20;
 const _memorySettle = Duration(milliseconds: 250);
-final _warmups = _baseline || _memoryMode ? _config.warmupsPerFixture : 0;
-final _opens = _memoryMode
+final _warmups = _baseline || (_memoryMode && !_chapterCycle)
+    ? _config.warmupsPerFixture
+    : 0;
+final _opens = _memoryMode && !_chapterCycle
     ? _memoryOpens
     : (_baseline ? _config.opensPerFixture : 1);
 final _turnGroups = _memoryMode ? 0 : (_baseline ? _config.turnGroups : 1);
@@ -61,6 +66,12 @@ void main() {
       (_baseline || _inlineSoftSpace || _warmReturn || _backend == 'both')) {
     throw ArgumentError(
       'Memory sampling requires one backend and no timing diagnostics',
+    );
+  }
+  if (_chapterCycle &&
+      (!_memoryMode || _backend != 'native' || _corpus != 'baseline')) {
+    throw ArgumentError(
+      'Chapter cycling uses the native memory profile and built-in chapters',
     );
   }
   final previousError = FlutterError.onError;
@@ -231,11 +242,16 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       'synthetic': true,
       'baseline': _baseline,
       'memoryMode': _memoryMode,
+      if (_chapterCycle) 'chapterCycle': true,
       'sampleConfig': _memoryMode
           ? {
               'warmupsPerFixture': _warmups,
               'opensPerFixture': _opens,
               'settlingMs': _memorySettle.inMilliseconds,
+              if (_chapterCycle) ...{
+                'chapterWarmups': _config.warmupsPerFixture,
+                'chapterRoundTrips': _memoryOpens,
+              },
             }
           : _config.toJson(),
       'inlineSoftSpaceRequested': _inlineSoftSpace,
@@ -271,7 +287,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
               throw StateError('Memory warmup failed');
             }
           }
-          if (_memoryMode) {
+          if (_memoryMode && !_chapterCycle) {
             await _sampleMemory('warmed', native, fixture.name);
           }
           for (var i = 0; i < _opens; i++) {
@@ -397,7 +413,9 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       'frameReportCount': frameReportCount,
       'retainedSyntheticChapters': widget.data.retainedChapters,
       if (_memoryMode)
-        'expectedMemorySamples': matrix.length * (1 + 2 * _memoryOpens),
+        'expectedMemorySamples':
+            matrix.length *
+            (_chapterCycle ? 2 + _memoryOpens : 1 + 2 * _memoryOpens),
       'hasRequiredSampleCounts': _baseline && _config.hasRequiredSampleCounts,
       'baselineSamplingCompleted':
           passed && _baseline && _config.hasRequiredSampleCounts,
@@ -425,6 +443,85 @@ class _MainPageProfileState extends State<_MainPageProfile> {
     );
   }
 
+  Future<ProfileReaderObservation> _cycleChapters(
+    GlobalKey key,
+    NovelReaderArgs args,
+    ProfileReaderObservation initial,
+    Map<String, Object?> run,
+  ) async {
+    final episodes = await widget.data.getEpisodes(novelId: args.novelId);
+    final first = episodes.first.episodeId;
+    final second = episodes.last.episodeId;
+    final owner = initial.nativeOwner!;
+    final id = run['id']! as int;
+    var current = initial;
+    Future<void> hop(String target, {required bool forward}) async {
+      final previous = current.nativeController!;
+      final controls = current.overlay?.bottomBar.progress;
+      final command = forward ? controls?.onNext : controls?.onPrevious;
+      final enabled = forward
+          ? controls?.nextEnabled
+          : controls?.previousEnabled;
+      if (command == null || enabled != true) {
+        throw StateError('Chapter command unavailable');
+      }
+      command();
+      current = await _wait(key, args, (observation) {
+        final controller = observation.nativeController;
+        return observation.ready &&
+            observation.businessConfirmed &&
+            observation.complete &&
+            observation.frontmost &&
+            observation.page == 0 &&
+            controller?.visibleView?.coverage.identity.sourceId == target &&
+            identical(
+              observation.businessController,
+              initial.businessController,
+            ) &&
+            identical(observation.nativeOwner, owner) &&
+            !owner.isClosed &&
+            owner.activeCacheHandles == 1 &&
+            owner.retainedCacheGenerations == 1 &&
+            owner.preparationCache.inFlightCount == 0 &&
+            previous.isClosed &&
+            previous.snapshot == null &&
+            previous.visibleView == null &&
+            previous.readyTarget == null &&
+            !previous.hasPendingNavigation;
+      });
+      final coverage = current.nativeController!.visibleView!.coverage;
+      if (!coverage.hasLocations || coverage.hasClippedGlyphs) {
+        throw StateError('Switched chapter has no readable native coverage');
+      }
+      run['chapterTransitions'] = (run['chapterTransitions'] as int? ?? 0) + 1;
+    }
+
+    final warmups = _config.warmupsPerFixture;
+    for (var i = 1; i <= warmups + _memoryOpens; i++) {
+      await hop(second, forward: true);
+      await hop(first, forward: false);
+      if (i < warmups) continue;
+      final round = i - warmups;
+      run['chapterRoundTrips'] = round;
+      _emit({
+        'event': 'chapter_round_trip',
+        'run': id,
+        'round': round,
+        'activeCacheHandles': owner.activeCacheHandles,
+        'cacheGenerations': owner.retainedCacheGenerations,
+        'preparedEntries': owner.preparationCache.length,
+        'estimatedRetainedBytes': owner.estimatedRetainedBytes,
+      });
+      await _sampleMemory(
+        round == 0 ? 'chapter_warmed' : 'chapter_returned',
+        true,
+        run['fixture']! as String,
+        run: id,
+      );
+    }
+    return current;
+  }
+
   Future<void> _run(
     bool native,
     ({String name, String html}) fixture, {
@@ -445,7 +542,10 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       'completedTurns': 0,
       'passed': false,
     };
-    final source = widget.data.add(fixture.html);
+    final source = widget.data.add(
+      fixture.html,
+      nextChapterHtml: _chapterCycle ? novelProfileComplexHtml : null,
+    );
     final args = NovelReaderArgs(
       novelId: source.novelId,
       episodeId: source.episodeId,
@@ -570,7 +670,9 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       }
       run['completeUs'] = clock.elapsedMicroseconds;
       run['pageCount'] = latest.count;
-      if (_memoryMode && kind == 'open') {
+      if (_chapterCycle) {
+        latest = await _cycleChapters(key, args, latest, run);
+      } else if (_memoryMode && kind == 'open') {
         await _sampleMemory('visible', native, fixture.name, run: id);
       }
       if (_warmReturn && kind != 'turns') {
@@ -700,7 +802,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       run['ownerCachesReleased'] = released;
       run['routeUnmounted'] = key.currentContext == null;
       if (!released || key.currentContext != null) run['passed'] = false;
-      widget.data.release(source.episodeId);
+      widget.data.release(source.novelId);
       _runs.add(run);
       _emit(run);
     }

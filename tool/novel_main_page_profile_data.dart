@@ -23,6 +23,7 @@ import 'package:y300/features/novel/domain/repositories/novel_reading_state_repo
 final class NovelMainPageProfileData
     implements NovelRepository, NovelReadingStateRepository {
   final _chapters = <String, NovelChapterContent>{};
+  final _works = <String, List<String>>{};
   final _progress = <String, NovelReadingProgress>{};
   final _states = <String, LibraryEpisodeState>{};
   final _bookmarks = <String, NovelReaderBookmark>{};
@@ -34,8 +35,22 @@ final class NovelMainPageProfileData
   ({String novelId, String episodeId}) add(
     String source, {
     List<String>? storedParagraphs,
+    String? nextChapterHtml,
   }) {
     final id = 'synthetic-profile:${++_serial}';
+    _addChapter(id, source, storedParagraphs: storedParagraphs);
+    _works[id] = [id];
+    if (nextChapterHtml != null) {
+      final nextId = '$id:next';
+      _addChapter(nextId, nextChapterHtml);
+      _works[id]!.add(nextId);
+    }
+    // Every open starts without a persisted position or typography preview.
+    _preferences.value = profileReaderPreferences;
+    return (novelId: id, episodeId: id);
+  }
+
+  void _addChapter(String id, String source, {List<String>? storedParagraphs}) {
     final text =
         storedParagraphs?.join('\n') ?? html.parseFragment(source).text ?? '';
     _chapters[id] = NovelChapterContent(
@@ -44,16 +59,15 @@ final class NovelMainPageProfileData
       plainText: text,
       paragraphs: storedParagraphs ?? [text],
     );
-    // Every open starts without a persisted position or typography preview.
-    _preferences.value = profileReaderPreferences;
-    return (novelId: id, episodeId: id);
   }
 
-  void release(String id) {
-    _chapters.remove(id);
-    _progress.remove(id);
-    _states.remove(id);
-    _bookmarks.removeWhere((_, bookmark) => bookmark.novelId == id);
+  void release(String novelId) {
+    for (final episodeId in _works.remove(novelId) ?? const <String>[]) {
+      _chapters.remove(episodeId);
+      _progress.remove(episodeId);
+      _states.remove(episodeId);
+    }
+    _bookmarks.removeWhere((_, bookmark) => bookmark.novelId == novelId);
   }
 
   Widget scope(
@@ -78,16 +92,23 @@ final class NovelMainPageProfileData
   Future<List<NovelEpisodeItem>> getEpisodes({
     required String novelId,
     bool descending = false,
-  }) async => [
-    NovelEpisodeItem(
-      episodeId: novelId,
-      novelId: novelId,
-      sourceTid: '100',
-      sourcePid: '5001',
-      episodeTitle: 'Synthetic chapter',
-      orderIndex: 0,
-    ),
-  ];
+  }) async {
+    final ids = _works[novelId] ?? const <String>[];
+    final order = ids.indexed;
+    return [
+      for (final (index, id) in descending ? order.toList().reversed : order)
+        NovelEpisodeItem(
+          episodeId: id,
+          novelId: novelId,
+          sourceTid: '100',
+          sourcePid: '${5001 + index}',
+          episodeTitle: index == 0
+              ? 'Synthetic chapter'
+              : 'Synthetic chapter 2',
+          orderIndex: index,
+        ),
+    ];
+  }
 
   @override
   Future<NovelChapterContent?> getChapterContent({
@@ -101,7 +122,7 @@ final class NovelMainPageProfileData
     sourceFid: '49',
     title: 'Synthetic profile corpus',
     updatedAt: DateTime.utc(2026, 10, 1),
-    episodeCount: 1,
+    episodeCount: _works[novelId]?.length ?? 0,
   );
 
   @override
@@ -122,12 +143,22 @@ final class NovelMainPageProfileData
   @override
   Future<NovelReadingStateSnapshot> loadWorkState({
     required String novelId,
-  }) async => NovelReadingStateSnapshot(
-    novelId: novelId,
-    progressByEpisode: {novelId: ?_progress[novelId]},
-    episodeStates: {novelId: ?_states[novelId]},
-    recentEpisodeId: _progress.containsKey(novelId) ? novelId : null,
-  );
+  }) async {
+    final ids = _works[novelId] ?? const <String>[];
+    final progress = {for (final id in ids) id: ?_progress[id]};
+    NovelReadingProgress? recent;
+    for (final saved in progress.values) {
+      if (recent == null || saved.updatedAt.isAfter(recent.updatedAt)) {
+        recent = saved;
+      }
+    }
+    return NovelReadingStateSnapshot(
+      novelId: novelId,
+      progressByEpisode: progress,
+      episodeStates: {for (final id in ids) id: ?_states[id]},
+      recentEpisodeId: recent?.episodeId,
+    );
+  }
 
   @override
   Future<NovelReadingProgress?> getChapterProgress({

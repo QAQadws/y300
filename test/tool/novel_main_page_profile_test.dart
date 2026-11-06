@@ -157,6 +157,48 @@ void main() {
     },
   );
 
+  test(
+    'a chapter cycle releases both episodes without releasing another work',
+    () async {
+      final data = NovelMainPageProfileData();
+      final work = data.add(
+        '<p>Ordinary</p>',
+        nextChapterHtml: '<p>Complex</p>',
+      );
+      final other = data.add('<p>Other</p>');
+      final episodes = await data.getEpisodes(novelId: work.novelId);
+      final descending = await data.getEpisodes(
+        novelId: work.novelId,
+        descending: true,
+      );
+      expect(episodes.map((episode) => episode.orderIndex), [0, 1]);
+      expect(
+        episodes.map((episode) => episode.novelId),
+        everyElement(work.novelId),
+      );
+      expect(
+        descending.map((episode) => episode.episodeId),
+        episodes.reversed.map((episode) => episode.episodeId),
+      );
+      final next = episodes.last.episodeId;
+      expect(next, isNot(work.episodeId));
+      expect(
+        (await data.getChapterContent(episodeId: next))?.plainText,
+        'Complex',
+      );
+      data.release(work.novelId);
+      expect(await data.getEpisodes(novelId: work.novelId), isEmpty);
+      expect(await data.getChapterContent(episodeId: work.episodeId), isNull);
+      expect(await data.getChapterContent(episodeId: next), isNull);
+      expect(
+        (await data.getChapterContent(episodeId: other.episodeId))?.plainText,
+        'Other',
+      );
+      data.release(other.novelId);
+      expect(data.retainedChapters, 0);
+    },
+  );
+
   test('tiny dense profile remains an explicit issued-handle failure', () {
     final cache = ForumBodyParagraphCache(
       maxEntries: 64,
