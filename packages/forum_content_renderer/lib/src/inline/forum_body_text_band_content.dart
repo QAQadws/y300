@@ -83,6 +83,19 @@ final class ForumBodyTextBandContent {
   final int textCodeUnits;
   final int runCount;
 
+  late final ForumBodyTextBandContent withoutTextBackground =
+      ForumBodyTextBandContent._(
+        List.unmodifiable([
+          for (final context in contexts)
+            context.hasSolidTextBackground
+                ? context.withoutTextBackground
+                : context,
+        ]),
+        projection,
+        textCodeUnits,
+        runCount,
+      );
+
   /// Pure eligibility only. Scope, source order, root compatibility and total
   /// budgets still belong to construction. Native isolation is checked later.
   static bool supportsContext(ForumBodyParagraphContent context) =>

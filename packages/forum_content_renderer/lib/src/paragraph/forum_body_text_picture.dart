@@ -105,6 +105,23 @@ final class ForumBodyTextPictureCommand {
     }
   }
 
+  /// Applies the authored draw order inside the caller's saved canvas state.
+  Offset applyPaintTransform(Canvas canvas) {
+    var transform = _transform;
+    while (transform != null) {
+      if (transform.offset case final shift?) {
+        canvas.translate(shift.dx, shift.dy);
+      } else {
+        canvas.clipRect(transform.clip!, doAntiAlias: false);
+      }
+      transform = transform.inner;
+    }
+    if (fitScale == 1) return offset;
+    canvas.translate(offset.dx, offset.dy);
+    canvas.scale(fitScale, fitScale);
+    return Offset.zero;
+  }
+
   factory ForumBodyTextPictureCommand.fromText(
     ForumBodyTextLease text,
     Offset offset, {
@@ -516,21 +533,8 @@ final class ForumBodyTextPicturePreparation {
                 if (saved) {
                   canvas.save();
                 }
-                var transform = command._transform;
-                while (transform != null) {
-                  if (transform.offset case final offset?) {
-                    canvas.translate(offset.dx, offset.dy);
-                  } else {
-                    canvas.clipRect(transform.clip!, doAntiAlias: false);
-                  }
-                  transform = transform.inner;
-                }
-                if (fitted) {
-                  canvas.translate(command.offset.dx, command.offset.dy);
-                  canvas.scale(command.fitScale, command.fitScale);
-                }
                 try {
-                  final offset = fitted ? Offset.zero : command.offset;
+                  final offset = command.applyPaintTransform(canvas);
                   final row = _rowViews[command._dependency];
                   final inlineRow = _inlineRowViews[command._dependency];
                   if (command.nativeInputIdentity case _TextPictureFill(

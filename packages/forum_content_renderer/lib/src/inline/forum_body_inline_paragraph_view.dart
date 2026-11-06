@@ -4,7 +4,9 @@ import 'package:flutter/painting.dart';
 import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../paragraph/forum_body_paragraph_cache.dart';
+import '../paragraph/forum_body_paragraph_background_view.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
+import '../paragraph/forum_body_text_layout.dart';
 import '../style/forum_body_text_background_geometry.dart';
 import 'forum_body_inline_paragraph_layout.dart';
 import 'forum_body_inline_span_content.dart';
@@ -29,6 +31,7 @@ part 'forum_body_inline_image_binding.dart';
 part 'forum_body_inline_view_assembly.dart';
 part 'forum_body_inline_ruby_binding_work.dart';
 part 'forum_body_inline_background_regions.dart';
+part 'forum_body_inline_text_highlights.dart';
 part 'forum_body_inline_paint_commands.dart';
 part 'forum_body_inline_font_frame_view.dart';
 part 'forum_body_inline_font_frame_view_preparation.dart';
@@ -135,6 +138,8 @@ final class ForumBodyInlineParagraphView {
   List<({Rect rect, ForumBodyRubyContainerFontBox font})> _backgrounds;
   List<({Color color, ForumBodyTextBackgroundGeometry geometry})>?
   _backgroundOutlines;
+  _InlineTextHighlights? _textHighlights;
+  bool _preparedTextHighlights = false;
   List<int> _backgroundRows;
   _InlineFontFrameBinding? _fontFrames;
   bool? _hasExternalOwnerChecks;
@@ -411,10 +416,19 @@ final class ForumBodyInlineParagraphView {
     Canvas canvas,
     Offset offset, {
     bool paintBackgrounds = true,
+    Color? backgroundColor,
+    double backgroundRadius = 0,
   }) {
     _ensureActive();
     if (_fragment == null) return;
-    if (paintBackgrounds) paintContainerBackgrounds(canvas, offset);
+    if (paintBackgrounds) {
+      paintContainerBackgrounds(
+        canvas,
+        offset,
+        color: backgroundColor,
+        radius: backgroundRadius,
+      );
+    }
     canvas.save();
     try {
       // Child pictures already contain their native edge coverage. A second
@@ -425,12 +439,31 @@ final class ForumBodyInlineParagraphView {
       } else {
         _fragment!.paintParent(canvas, offset);
       }
-      for (final entry in _children.entries) {
-        entry.value.paint(canvas, offset + _origin(entry.key));
+      final highlights = _textHighlights;
+      if (highlights != null &&
+          (backgroundColor != null || backgroundRadius > 0)) {
+        highlights.paint(
+          canvas,
+          offset,
+          color: backgroundColor,
+          radius: backgroundRadius,
+        );
+      } else {
+        for (final entry in _children.entries) {
+          entry.value.paint(canvas, offset + _origin(entry.key));
+        }
       }
     } finally {
       canvas.restore();
     }
+  }
+
+  /// Borrows already placed children for an optional paint-only replay.
+  void prepareTextBackgrounds() {
+    _ensureActive();
+    if (_preparedTextHighlights) return;
+    _textHighlights = _InlineTextHighlights.prepare(this);
+    _preparedTextHighlights = true;
   }
 
   Offset _origin(int index) => _fontFrames == null
@@ -719,6 +752,7 @@ final class ForumBodyInlineParagraphView {
     _children = const {};
     _backgrounds = const [];
     _backgroundOutlines = null;
+    _textHighlights = null;
     _backgroundRows = const [];
     _fragment = null;
     _fontFrames?.close();

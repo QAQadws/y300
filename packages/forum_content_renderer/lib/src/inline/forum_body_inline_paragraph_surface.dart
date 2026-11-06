@@ -5,6 +5,7 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../paragraph/forum_body_text_surface_box.dart';
 import '../style/forum_body_style_options.dart';
+import '../style/forum_body_text_background_style.dart';
 import '../contracts/forum_html_display_image.dart';
 import '../contracts/forum_html_image_host.dart';
 import '../html_rendering/widgets/forum_html_image_view.dart';
@@ -12,6 +13,8 @@ import '../services/forum_html_image_anchor_controller.dart';
 import 'forum_body_inline_paragraph_view.dart';
 
 part 'forum_body_inline_image_surface.dart';
+
+typedef _BackgroundAppearance = ({Color? color, double radius});
 
 /// Owns a prepared text/ruby view. Image-bearing views use the image Surface,
 /// which supplies its current Host and mounts the separate resource plane.
@@ -34,6 +37,15 @@ final class ForumBodyInlineParagraphSurface extends LeafRenderObjectWidget {
   final void Function(HtmlProjectedSourcePosition)? onSourceTap;
   final Object? interactionIdentity;
   final bool paintBackgrounds;
+
+  _BackgroundAppearance? _backgroundAppearance(BuildContext context) {
+    final style = context
+        .dependOnInheritedWidgetOfExactType<ForumBodyTextBackgroundStyle>();
+    return style == null || (style.color == null && style.borderRadius == 0)
+        ? null
+        : (color: style.color, radius: style.borderRadius);
+  }
+
   @override
   RenderBox createRenderObject(BuildContext context) {
     _validateImages();
@@ -42,6 +54,7 @@ final class ForumBodyInlineParagraphSurface extends LeafRenderObjectWidget {
       onSourceTap,
       interactionIdentity,
       paintBackgrounds,
+      _backgroundAppearance(context),
     );
   }
 
@@ -56,6 +69,7 @@ final class ForumBodyInlineParagraphSurface extends LeafRenderObjectWidget {
       onSourceTap,
       interactionIdentity,
       paintBackgrounds,
+      _backgroundAppearance(context),
     );
   }
 
@@ -74,21 +88,40 @@ final class _InlineSurfaceBox extends ForumBodyTextSurfaceBox {
     super.onTap,
     super.interactionIdentity,
     this._paintBackgrounds,
-  );
+    this._appearance,
+  ) {
+    try {
+      if (_appearance != null && _view.isActive) _view.prepareTextBackgrounds();
+    } catch (_) {
+      dispose();
+      rethrow;
+    }
+  }
   ForumBodyInlineParagraphView _view;
   bool _paintBackgrounds;
+  _BackgroundAppearance? _appearance;
   void configure(
     ForumBodyInlineParagraphView view,
     void Function(HtmlProjectedSourcePosition)? onTap,
     Object? interactionIdentity,
     bool paintBackgrounds,
+    _BackgroundAppearance? appearance,
   ) {
     final changed = !identical(view, _view);
-    if (_paintBackgrounds != paintBackgrounds) markNeedsPaint();
+    final appearanceChanged = _appearance != appearance;
+    if (_paintBackgrounds != paintBackgrounds || appearanceChanged) {
+      markNeedsPaint();
+    }
     _paintBackgrounds = paintBackgrounds;
+    _appearance = appearance;
     if (changed) {
       _view.close();
       _view = view;
+    }
+    if ((changed || appearanceChanged) &&
+        appearance != null &&
+        _view.isActive) {
+      _view.prepareTextBackgrounds();
     }
     refreshInteraction(
       onTap: onTap,
@@ -113,8 +146,13 @@ final class _InlineSurfaceBox extends ForumBodyTextSurfaceBox {
   bool hitTestSelf(Offset position) =>
       super.hitTestSelf(position) && _view.imageAt(position) == null;
   @override
-  void paintContent(Canvas canvas, Offset offset) =>
-      _view.paintTextLayer(canvas, offset, paintBackgrounds: _paintBackgrounds);
+  void paintContent(Canvas canvas, Offset offset) => _view.paintTextLayer(
+    canvas,
+    offset,
+    paintBackgrounds: _paintBackgrounds,
+    backgroundColor: _appearance?.color,
+    backgroundRadius: _appearance?.radius ?? 0,
+  );
   @override
   void describeContentSemantics(SemanticsConfiguration config) {
     final content = _view.content;

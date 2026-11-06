@@ -93,11 +93,15 @@ final class ForumBodyParagraphCache {
     0,
     (sum, entry) =>
         sum +
-        (entry.layout is ForumBodyTextBandLayout
-            ? (entry.layout as ForumBodyTextBandLayout).preparedPictureCount
-            : entry.layout is _TextPictureLayout
-            ? 1
-            : 0),
+        (switch (entry.layout) {
+          final ForumBodyTextBandLayout band => band.preparedPictureCount,
+          _TextPictureLayout() => 1,
+          _ => 0,
+        }) +
+        (switch (entry.textBackgroundInk) {
+          final ForumBodyTextBandLayout band => band.preparedPictureCount,
+          _ => 0,
+        }),
   );
   bool get isClosed => _closed;
 
@@ -599,12 +603,19 @@ final class ForumBodyParagraphCache {
   /// Cooperative work outside paint: admit a measured display list before
   /// making its clipped child views readable. A rejection drops the ticket.
   /// Returns true only when an actual native picture was recorded.
-  bool prepareBandChildPaint(ForumBodyTextBandChildLease lease) {
+  bool prepareBandChildPaint(ForumBodyTextBandChildLease lease) =>
+      _prepareBandChildPaint(lease);
+
+  bool _prepareBandChildPaint(
+    ForumBodyTextBandChildLease lease, {
+    ForumBodyTextBandLayout? ink,
+  }) {
     if (!ownsLease(lease)) {
       throw StateError('Text band lease is retired or foreign');
     }
     final entry = lease._entry;
-    final band = entry.layout as ForumBodyTextBandLayout;
+    final original = entry.layout as ForumBodyTextBandLayout;
+    final band = ink ?? original;
     if (band.isPaintPrepared(lease.childIndex)) return false;
     if (_preparingPicture) throw StateError('Picture preparation is reentrant');
     _preparingPicture = true;
@@ -617,8 +628,15 @@ final class ForumBodyParagraphCache {
         return false;
       }
       final reserve = (entry.key as ForumBodyTextBandCacheKey).pictureReserve;
-      final extra = band.approximatePictureBytes - reserve;
-      final target = entry.initialBytes + (extra > 0 ? extra : 0);
+      int bytes(ForumBodyTextBandLayout layout) {
+        final extra = layout.approximatePictureBytes - reserve;
+        return entry.initialBytes + (extra > 0 ? extra : 0);
+      }
+
+      final companion =
+          ink ?? entry.textBackgroundInk as ForumBodyTextBandLayout?;
+      final target =
+          bytes(original) + (companion == null ? 0 : bytes(companion));
       final growth = target > entry.bytes ? target - entry.bytes : 0;
       if (target > maxEstimatedBytes) {
         throw ForumBodyParagraphBudgetException(
@@ -1216,6 +1234,8 @@ sealed class ForumBodyTextLease extends ForumBodyNativeParagraphLease {
   ForumBodyTextLease._(super.owner, super.entry) : super._();
   ForumBodyParagraphContent get content;
   ForumBodyTextLayout get layout;
+  TextScaler get capturedTextScaler;
+  ForumBodyTextLayout prepareTextBackgroundInk();
 
   /// The native text frame and glyph overhang in this lease's coordinates.
   Rect get fontBounds {
@@ -1256,6 +1276,7 @@ final class ForumBodyParagraphLease extends ForumBodyTextLease {
   @override
   final ForumBodyParagraphContent content;
 
+  @override
   late final TextScaler capturedTextScaler = ForumBodyTextScaleSnapshot(
     {
       for (final (size, value) in (_entry.key as _LayoutKey).scales)
@@ -1269,13 +1290,18 @@ final class ForumBodyParagraphLease extends ForumBodyTextLease {
 
   /// The cache owns the optional paint companion under the existing entry.
   /// It is never used for line breaking, hit testing, or source coverage.
+  @override
   ForumBodyParagraphLayout prepareTextBackgroundInk() {
     final original = layout;
-    final cached = _entry.textBackgroundInk;
+    final cached = _entry.textBackgroundInk as ForumBodyParagraphLayout?;
     if (cached != null) return cached;
     final key = _entry.key as _LayoutKey;
     final bytes = _entry.initialBytes;
     _owner._makeRoom(bytes, newEntry: false);
+    if (!_owner.ownsLease(this)) throw StateError('Paragraph lease is retired');
+    if (_entry.textBackgroundInk case final ForumBodyParagraphLayout admitted) {
+      return admitted;
+    }
     final ink = ForumBodyParagraphLayout.create(
       content: content.withoutTextBackground,
       width: original.width,
@@ -1461,6 +1487,63 @@ final class ForumBodyTextBandChildLease extends ForumBodyTextLease {
   }
 
   @override
+  late final TextScaler capturedTextScaler = ForumBodyTextScaleSnapshot(
+    {
+      for (final (size, value)
+          in (_entry.key as ForumBodyTextBandCacheKey).scales)
+        size: value,
+    },
+    rootSize: content.style.textStyle.fontSize!,
+    missingSize: const ForumBodyParagraphLayoutException(
+      ForumBodyParagraphLayoutFailure.scale,
+    ),
+  );
+
+  @override
+  ForumBodyTextBandChildLayout prepareTextBackgroundInk() {
+    if (!_owner.ownsLease(this)) throw StateError('Text band lease is retired');
+    final original = _entry.layout as ForumBodyTextBandLayout;
+    final cached = _entry.textBackgroundInk as ForumBodyTextBandLayout?;
+    if (cached != null) {
+      _owner._prepareBandChildPaint(this, ink: cached);
+      return cached.view(childIndex);
+    }
+    _owner._makeRoom(_entry.initialBytes, newEntry: false);
+    if (!_owner.ownsLease(this)) throw StateError('Text band lease is retired');
+    if (_entry.textBackgroundInk case final ForumBodyTextBandLayout admitted) {
+      _owner._prepareBandChildPaint(this, ink: admitted);
+      return admitted.view(childIndex);
+    }
+    final ForumBodyTextBandLayout ink;
+    try {
+      ink = ForumBodyTextBandLayout.create(
+        content: bandContent.withoutTextBackground,
+        textScaler: capturedTextScaler,
+        gutter: original.gutter,
+      );
+    } on ForumBodyTextBandLayoutException {
+      throw const ForumBodyParagraphLayoutException(
+        ForumBodyParagraphLayoutFailure.coverage,
+      );
+    }
+    var adopted = false;
+    try {
+      _owner._builds++;
+      if (!original.hasSamePaintPlacement(ink)) {
+        throw const ForumBodyParagraphLayoutException(
+          ForumBodyParagraphLayoutFailure.coverage,
+        );
+      }
+      _owner._prepareBandChildPaint(this, ink: ink);
+      _entry.textBackgroundInk = ink;
+      adopted = true;
+      return ink.view(childIndex);
+    } finally {
+      if (!adopted) ink.dispose();
+    }
+  }
+
+  @override
   void release() {
     _view.dispose();
     super.release();
@@ -1504,7 +1587,7 @@ final class _LayoutEntry {
   int bytes;
   int leases = 0;
   bool retired = false;
-  ForumBodyParagraphLayout? textBackgroundInk;
+  ForumBodyNativeParagraphLayout? textBackgroundInk;
   ForumBodyTextBandContent? bandHint;
   WeakReference<ForumBodyTextScaleSnapshot>? bandScalerHint;
   double? bandGutterHint;

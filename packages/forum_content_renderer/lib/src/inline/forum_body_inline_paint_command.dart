@@ -1,6 +1,7 @@
 import 'package:flutter/painting.dart';
 
 import '../paragraph/forum_body_paragraph_cache.dart';
+import '../paragraph/forum_body_text_layout.dart';
 import 'forum_body_inline_paint_row.dart';
 
 /// One borrowed ACTUAL drawable and its pure command. This neither owns the
@@ -52,4 +53,29 @@ final class ForumBodyInlinePaintCommand {
       ForumBodyInlinePaintCommand._(command.translated(offset), resource, row);
   ForumBodyInlinePaintCommand clipped(Rect clip) =>
       ForumBodyInlinePaintCommand._(command.clipped(clip), resource, row);
+
+  void replay(Canvas canvas, {ForumBodyTextLayout? textInk}) {
+    canvas.save();
+    try {
+      final offset = command.applyPaintTransform(canvas);
+      if (command.fill case final fill?) {
+        canvas.drawRect(fill.rect.shift(offset), Paint()..color = fill.color);
+      } else if (row case final line?) {
+        line.paint(canvas, offset);
+      } else {
+        switch (resource) {
+          case final ForumBodyTextLease text:
+            (textInk ?? text.layout).paint(canvas, offset);
+          case final ForumBodyDecorationTextLease decoration:
+            decoration.layout.paint(canvas, offset);
+          case final ForumBodyTextPictureLease picture:
+            picture.paint(canvas, offset);
+          default:
+            throw StateError('Unsupported inline paint resource');
+        }
+      }
+    } finally {
+      canvas.restore();
+    }
+  }
 }

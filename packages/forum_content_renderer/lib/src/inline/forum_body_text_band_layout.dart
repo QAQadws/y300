@@ -253,6 +253,24 @@ final class ForumBodyTextBandLayout implements ForumBodyNativeParagraphLayout {
   bool isPaintPrepared(int index) =>
       !_disposed && _paintStore.isPrepared(index);
 
+  bool hasSamePaintPlacement(ForumBodyTextBandLayout other) {
+    _ensureOpen();
+    other._ensureOpen();
+    if (children.length != other.children.length) return false;
+    for (var index = 0; index < children.length; index++) {
+      final a = children[index];
+      final b = other.children[index];
+      if (a.size != b.size ||
+          a.baseline != b.baseline ||
+          a.fontBounds != b.fontBounds ||
+          a._origin != b._origin ||
+          a._clip != b._clip) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   /// Records native drawing outside visible paint. Cache adapters inspect
   /// the ticket's cost before adopting it. One admitted band recording can
   /// serve multiple children, each with its own physical clip and source.

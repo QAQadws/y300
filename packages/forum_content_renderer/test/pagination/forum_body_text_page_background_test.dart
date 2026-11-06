@@ -92,6 +92,16 @@ Future<Uint8List> _pagePixels(WidgetTester tester, GlobalKey key) async =>
       }
     }))!;
 
+int _rgbCount(Uint8List pixels, int rgb) {
+  var count = 0;
+  for (var index = 0; index < pixels.length; index += 4) {
+    final value =
+        (pixels[index] << 16) | (pixels[index + 1] << 8) | pixels[index + 2];
+    if (value == rgb) count++;
+  }
+  return count;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -149,18 +159,6 @@ void main() {
         return _pagePixels(tester, key);
       }
 
-      int colored(Uint8List pixels, int rgb) {
-        var count = 0;
-        for (var index = 0; index < pixels.length; index += 4) {
-          final value =
-              (pixels[index] << 16) |
-              (pixels[index + 1] << 8) |
-              pixels[index + 2];
-          if (value == rgb) count++;
-        }
-        return count;
-      }
-
       final authored = await show();
       final element = tester.element(find.byWidget(surface));
       final work = (
@@ -169,22 +167,25 @@ void main() {
         f.cache.activeLeases,
       );
       final authoredBytes = f.cache.estimatedRetainedBytes;
-      expect(colored(authored, 0xff0000), greaterThan(0));
-      expect(colored(authored, 0x00ff00), 0);
+      expect(_rgbCount(authored, 0xff0000), greaterThan(0));
+      expect(_rgbCount(authored, 0x00ff00), 0);
       const green = Color(0xff00ff00);
       final square = await show(color: green);
       expect(f.cache.layoutBuildCount, work.$1 + (buildsInk ? 1 : 0));
       final bytes = f.cache.estimatedRetainedBytes;
       expect(bytes, buildsInk ? greaterThan(authoredBytes) : authoredBytes);
       final rounded = await show(color: green, radius: 9);
-      expect(colored(square, 0x00ff00), colored(authored, 0xff0000));
-      expect(colored(square, 0xff0000), 0);
-      expect(colored(rounded, 0x00ff00), greaterThan(0));
-      expect(colored(rounded, 0x00ff00), lessThan(colored(square, 0x00ff00)));
+      expect(_rgbCount(square, 0x00ff00), _rgbCount(authored, 0xff0000));
+      expect(_rgbCount(square, 0xff0000), 0);
+      expect(_rgbCount(rounded, 0x00ff00), greaterThan(0));
+      expect(
+        _rgbCount(rounded, 0x00ff00),
+        lessThan(_rgbCount(square, 0x00ff00)),
+      );
       if (buildsInk) {
-        final authoredInk = colored(authored, 0x0022ff);
+        final authoredInk = _rgbCount(authored, 0x0022ff);
         expect(authoredInk, greaterThan(0));
-        expect(colored(rounded, 0x0022ff), authoredInk);
+        expect(_rgbCount(rounded, 0x0022ff), authoredInk);
       }
       expect(await show(), orderedEquals(authored));
       expect(await show(color: green), orderedEquals(square));
@@ -204,6 +205,88 @@ void main() {
       expect(f.cache.estimatedRetainedBytes, 0);
     });
   }
+
+  testWidgets('ruby base and annotation use one shared styled band recording', (
+    tester,
+  ) async {
+    final f = _Fixture(
+      '<p>before <ruby><rb style="background:#ff0000;color:transparent">'
+      'AB</rb><rt style="background:#0000ff;color:transparent">xy</rt></ruby> after</p>',
+      height: 70,
+    );
+    f.drain();
+    final snapshot = f.session.snapshot;
+    final fragments = f.prepare(0);
+    final inline = fragments
+        .whereType<ForumBodyPreparedInlineFragment>()
+        .single;
+    final bands = inline.nativeLeases
+        .whereType<ForumBodyTextBandChildLease>()
+        .where((lease) => lease.content.hasSolidTextBackground)
+        .toList();
+    expect(
+      bands.map((lease) => lease.content.projection.text),
+      unorderedEquals(['AB', 'xy']),
+    );
+    expect(
+      bands.map((lease) => lease.nativeInputIdentity).toSet(),
+      hasLength(1),
+    );
+    final surface = ForumBodyTextPageSurface.prepared(
+      snapshot: snapshot,
+      pageIndex: 0,
+      layoutId: snapshot.layoutId,
+      fragments: fragments,
+    );
+    final key = GlobalKey();
+    final body = RepaintBoundary(key: key, child: surface);
+    Future<Uint8List> show({Color? color, double radius = 0}) async {
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: ForumBodyTextBackgroundStyle(
+              color: color,
+              borderRadius: radius,
+              child: body,
+            ),
+          ),
+        ),
+      );
+      return _pagePixels(tester, key);
+    }
+
+    final authored = await show();
+    final red = _rgbCount(authored, 0xff0000);
+    final blue = _rgbCount(authored, 0x0000ff);
+    expect(red, greaterThan(0));
+    expect(blue, greaterThan(0));
+    final builds = f.cache.layoutBuildCount;
+    final pictures = f.cache.pictureBuildCount;
+    final preparedPictures = f.cache.preparedPictureCount;
+    final handles = f.cache.activeLeases;
+    final bytes = f.cache.estimatedRetainedBytes;
+    final element = tester.element(find.byWidget(surface));
+    final square = await show(color: const Color(0xff00ff00));
+    expect(_rgbCount(square, 0x00ff00), red + blue);
+    expect(_rgbCount(square, 0xff0000) + _rgbCount(square, 0x0000ff), 0);
+    final rounded = await show(radius: 5);
+    expect(_rgbCount(rounded, 0xff0000), inExclusiveRange(0, red));
+    expect(_rgbCount(rounded, 0x0000ff), inExclusiveRange(0, blue));
+    expect(await show(), orderedEquals(authored));
+    expect(tester.element(find.byWidget(surface)), same(element));
+    expect(f.cache.layoutBuildCount, builds + 1);
+    expect(f.cache.pictureBuildCount, pictures + 1);
+    expect(f.cache.preparedPictureCount, preparedPictures + 1);
+    expect(f.cache.activeLeases, handles);
+    expect(f.cache.estimatedRetainedBytes, greaterThan(bytes));
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(f.cache.activeLeases, 0);
+    f.cache.clearUnpinned();
+    expect(f.cache.estimatedRetainedBytes, 0);
+    expect(f.cache.preparedPictureCount, 0);
+  });
 
   testWidgets('paragraph rounds natural ends across columns and pages', (
     tester,

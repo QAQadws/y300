@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-/// Paint overrides for existing solid paragraph and ruby container backgrounds.
+/// Paint overrides for solid paragraph, ruby container, base and annotation fills.
 final class ForumBodyTextBackgroundStyle extends InheritedWidget {
   const ForumBodyTextBackgroundStyle({
     super.key,
