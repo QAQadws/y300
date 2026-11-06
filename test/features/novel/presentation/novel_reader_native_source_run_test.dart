@@ -243,6 +243,53 @@ void main() {
     idle.complete();
   });
 
+  test(
+    'idle deferral does not consume the remaining source frame budget',
+    () async {
+      final fixture = NativeReaderTestFixture(
+        '<p>abcdefgh</p>',
+        width: 20,
+        height: 10,
+        complete: false,
+      );
+      final firstIdle = Completer<void>();
+      final waiting = Completer<void>();
+      final workDemand = NovelReaderPaginationDemand(
+        lookAhead: 0,
+        idleScheduler: () {
+          if (waiting.isCompleted) return Future<void>.value();
+          waiting.complete();
+          return firstIdle.future;
+        },
+      )..update(targetPending: false, pageIndex: 0);
+      addTearDown(workDemand.dispose);
+      var frames = 0;
+      final publicationFrames = <int>[];
+      final run = NovelReaderNativeSourceRun(
+        session: fixture.session,
+        demand: workDemand,
+        parent: fixture.parent,
+        limits: const NovelReaderNativeSourceRunLimits(
+          frameBudget: Duration(milliseconds: 60),
+        ),
+        scheduler: NovelReaderNativeWorkScheduler(
+          nextFrame: () async {
+            frames++;
+          },
+        ),
+        onPublication: (_, _) => publicationFrames.add(frames),
+      );
+      addTearDown(run.close);
+      final future = run.run();
+      await waiting.future;
+      expect(publicationFrames, hasLength(1));
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      firstIdle.complete();
+      expect((await future).length, 4);
+      expect(publicationFrames[1], publicationFrames.first);
+    },
+  );
+
   test('pinned source work waits for a real release without requesting extra frames', () async {
     final fixture = NativeReaderTestFixture(
       '<p>abcdef</p>',

@@ -170,10 +170,14 @@ final class NovelReaderNativeSourceRun {
             _state = NovelReaderNativeSourceRunState.complete;
             return prefix;
           }
-          await _demandLease!.afterPublication(published);
-          // Fast metadata consumers can share this frame's remaining slice.
-          // Keep the original clock/step count: callback work and real idle or
-          // view-frame waits never manufacture a fresh source work budget.
+          final demand = _demand!;
+          final resume = _demandLease!.afterPublication(published);
+          // Idle deferral has already yielded to the scheduler. Carry the
+          // spent frame budget forward without charging the wait to it.
+          if (demand.isDeferring) _clock.stop();
+          await resume;
+          _guard();
+          _clock.start();
         }
         if (_steps >= limits.maxStepsPerFrame ||
             _clock.elapsed >= limits.frameBudget) {
