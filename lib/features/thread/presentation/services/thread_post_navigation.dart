@@ -44,6 +44,7 @@ class ThreadPostNavigation {
     ThreadImageOpenRequest request, {
     Future<void> Function(ThreadImageReaderExitResult)? onBeforeExit,
   }) {
+    if (!mounted) return;
     if (request.continuousImages.isEmpty) {
       copyUrl(
         '${post.number}# ${AppLocalizations.of(context).threadDetailImageLink}',

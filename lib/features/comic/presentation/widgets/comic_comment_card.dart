@@ -184,6 +184,8 @@ class _ComicCommentCardState extends ConsumerState<ComicCommentCard> {
       onOpenAuthorProfile: actions?.navigation.openAuthor,
       onOpenCommentAuthorProfile: actions?.navigation.openCommentAuthor,
       onOpenPostLink: actions?.navigation.openLink,
+      onOpenSelectedPostLink: actions?.navigation.openSelectedLink,
+      isSelectionCurrent: controller == null ? null : current,
       onOpenPostImages: actions?.navigation.openImages,
       onCopyActionUrl: actions?.navigation.copyUrl,
       onLoadAllRatings:

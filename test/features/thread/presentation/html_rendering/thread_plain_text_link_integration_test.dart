@@ -143,11 +143,25 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await _tapText(tester, plain);
+    Future<void> tapBodyText(String text) async {
+      final finder = find.byWidgetPredicate(
+        (widget) =>
+            widget is ForumBodyParagraphSurface &&
+            widget.lease.content.projection.text == text,
+      );
+      final paragraph = tester.widget<ForumBodyParagraphSurface>(finder);
+      final glyph = paragraph.lease.layout.selectionBoxes(0, 1).single;
+      await tester.tapAt(tester.getTopLeft(finder) + glyph.toRect().center);
+    }
+
+    await tapBodyText(plain);
     expect(events, isEmpty);
-    await _tapText(tester, 'Linked');
+    await tapBodyText('Linked');
     expect(events, [existing]);
-    final fragment = html_parser.parseFragment(_document(tester).preparedHtml);
+    final body = tester.widget<ThreadPostNativeFlow>(
+      find.byType(ThreadPostNativeFlow),
+    );
+    final fragment = html_parser.parseFragment(body.prepared.preparedHtml);
     expect(fragment.querySelectorAll('a'), hasLength(1));
     expect(fragment.querySelector('a')!.attributes['href'], existing);
     expect(fragment.text, contains(plain));

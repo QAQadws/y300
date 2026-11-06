@@ -7,6 +7,7 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_ratings_repository.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
+import 'package:y300/features/thread/presentation/html_rendering/thread_post_native_flow.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -156,7 +157,7 @@ void main() {
       expect(first, findsNothing);
       position.jumpTo(0);
       await tester.pump();
-      // A recycled async HtmlWidget used to return a zero-height body here.
+      // Preparation is still pending on the first remounted frame.
       expect(tester.getSize(first).height, closeTo(before, 0.5));
       expect(tester.element(first), isNot(same(originalMount)));
       final explicitJumps = trace.jumps;
@@ -250,10 +251,26 @@ void main() {
       await _settleAsyncBodies(tester);
       final first = find.byKey(const Key('comic-comment-card-1'));
       final position = Scrollable.of(tester.element(first)).position;
-      await tester.tap(
-        find.byKey(const Key('forum-html-collapse-toggle-1-fold')),
+      final foldToggle = find.descendant(
+        of: first,
+        matching: find.byWidgetPredicate((widget) {
+          final key = widget.key;
+          return key is ValueKey<String> &&
+              key.value.startsWith('forum-native-collapse-toggle-');
+        }),
       );
-      await _settleAsyncBodies(tester);
+      await _waitForBody(tester, foldToggle);
+      await tester.tap(foldToggle);
+      await _waitForBody(tester, _nativeText('fold content'));
+      await _waitForBody(
+        tester,
+        find.descendant(
+          of: first,
+          matching: find.byWidgetPredicate(
+            (widget) => widget is ForumBodyFlowBox && widget.prefix.isComplete,
+          ),
+        ),
+      );
       final card = tester.widget<ThreadPostCard>(first);
       card.onLoadAllRatings!(card.post);
       await _settleAsyncBodies(tester);
@@ -268,15 +285,15 @@ void main() {
       position.jumpTo(0);
       await tester.pump();
       expect(tester.getSize(first).height, closeTo(height, 0.5));
-      await _settleAsyncBodies(tester);
-      expect(find.text('fold content', findRichText: true), findsOneWidget);
+      await _waitForBody(tester, _nativeText('fold content'));
+      expect(_nativeText('fold content'), findsOneWidget);
       expect(find.text('expanded reason', findRichText: true), findsOneWidget);
       expect(ratings.calls, 1);
       expect(find.byType(ThreadPostCard).evaluate().length, lessThan(15));
       await fixture.session.resetSession();
       await _settleAsyncBodies(tester);
       expect(find.text('expanded reason', findRichText: true), findsNothing);
-      expect(find.text('fold content', findRichText: true), findsNothing);
+      expect(_nativeText('fold content'), findsNothing);
       expect(
         Scrollable.of(tester.element(first)).position.pixels,
         closeTo(0, 0.5),
@@ -411,15 +428,28 @@ void main() {
         tester.element(find.byType(ImageReaderEngine)),
       );
       expect(find.byKey(const Key('comic-comment-list')), findsOneWidget);
-      final body = tester.widget<ForumHtmlWidgetPostRenderer>(
-        find.byType(ForumHtmlWidgetPostRenderer).first,
-      );
-      expect(body.html, contains('fixture comment paragraph'));
-      expect(body.html, isNot(contains('comic-page.jpg')));
+      final body = tester
+          .widget<ThreadPostNativeFlow>(find.byType(ThreadPostNativeFlow).first)
+          .prepared;
+      expect(body.preparedHtml, contains('fixture comment paragraph'));
+      expect(body.preparedHtml, isNot(contains('comic-page.jpg')));
       expect(find.text(l10n.comicLastEpisode), findsNothing);
       expect(tester.takeException(), isNull);
     });
   }
+}
+
+Finder _nativeText(String text) => find.byWidgetPredicate(
+  (widget) =>
+      widget is ForumBodyParagraphSurface &&
+      widget.lease.content.projection.text == text,
+);
+
+Future<void> _waitForBody(WidgetTester tester, Finder body) async {
+  for (var i = 0; i < 12 && body.evaluate().isEmpty; i++) {
+    await _settleAsyncBodies(tester);
+  }
+  expect(body, findsOneWidget);
 }
 
 CommentDetailRead _page(

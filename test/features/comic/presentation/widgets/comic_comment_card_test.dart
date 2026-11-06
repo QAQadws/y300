@@ -28,7 +28,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
-import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
@@ -147,14 +146,22 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.byType(ForumHtmlWidgetPostRenderer), findsOneWidget);
+      expect(find.byType(ForumHtmlWidgetPostRenderer), findsNothing);
       expect(find.byKey(const Key('thread-post-1')), findsOneWidget);
-      expect(find.text('comic body', findRichText: true), findsOneWidget);
-      final renderer = tester.widget<ForumHtmlWidgetPostRenderer>(
-        find.byType(ForumHtmlWidgetPostRenderer),
+      expect(
+        tester
+            .widget<ForumBodyParagraphSurface>(
+              find.byType(ForumBodyParagraphSurface).first,
+            )
+            .lease
+            .content
+            .projection
+            .text,
+        'comic body',
       );
-      expect(renderer.preparedDocument!.sequence.entries, isEmpty);
-      expect(renderer.html, isNot(contains('comic-page.jpg')));
+      final prepared = _nativeBody(tester).prepared;
+      expect(prepared.sequence.entries, isEmpty);
+      expect(prepared.preparedHtml, isNot(contains('comic-page.jpg')));
       expect(
         images.requests.where((r) => r.sourceUrl.contains('comic-page.jpg')),
         isEmpty,
@@ -181,7 +188,8 @@ void main() {
         1,
         message:
             '<p>caption</p><img src="https://example.test/comic-page.jpg">'
-            '<img src="https://example.test/extra.jpg">'
+            '<p><img width="50" height="50" src="https://example.test/extra.jpg"></p>'
+            '<p><img width="50" height="50" src="https://example.test/extra.jpg"></p>'
             '<img src="/static/image/smiley/face.gif">',
       );
       final projection = _filteredFirstPost(post);
@@ -200,20 +208,28 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      final renderer = tester.widget<ForumHtmlWidgetPostRenderer>(
-        find.byType(ForumHtmlWidgetPostRenderer),
+      final prepared = _nativeBody(tester).prepared;
+      expect(prepared.preparedHtml, contains('/static/image/smiley/face.gif'));
+      expect(prepared.sequence.entries, hasLength(2));
+      final visible = find.byWidgetPredicate(
+        (widget) =>
+            widget is ForumHtmlImageView &&
+            widget.image.sourceUrl == 'https://example.test/extra.jpg',
       );
-      expect(renderer.html, contains('/static/image/smiley/face.gif'));
-      expect(renderer.preparedDocument!.sequence.entries, hasLength(1));
-      renderer.callbacks.onTapImage!(
-        const ForumHtmlImageRequest(
-          url: 'https://example.test/extra.jpg',
-          readableIndex: 0,
-        ),
+      final firstImage = tester.getSize(visible.first).height;
+      final scroll = tester.state<ScrollableState>(
+        find.byType(Scrollable).first,
       );
+      scroll.position.jumpTo(firstImage + 80);
+      await tester.pumpAndSettle();
+      await tester.tap(visible.hitTestable().last);
       expect(opened, isNotNull);
-      expect(opened!.group.urls, ['https://example.test/extra.jpg']);
+      expect(
+        opened!.group.urls,
+        List.filled(2, 'https://example.test/extra.jpg'),
+      );
       expect(opened!.initialEntry?.url, 'https://example.test/extra.jpg');
+      expect(opened!.initialIndex, 1);
     },
   );
   testWidgets(
@@ -293,7 +309,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(copied, 'comic body 軟體正文\nafter image');
       expect(post.message, contains('软件正文'));
-      await tester.longPress(find.byKey(const Key('thread-author-avatar-1')));
+      await tester.tap(find.byKey(const Key('thread-post-more-1')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('thread-post-select-copy-action')));
       await tester.pumpAndSettle();
@@ -327,11 +343,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      final commentHtml = tester
-          .widget<ForumHtmlWidgetPostRenderer>(
-            find.byType(ForumHtmlWidgetPostRenderer),
-          )
-          .html;
+      final commentHtml = _nativeBody(tester).prepared.preparedHtml;
       await tester.pumpWidget(
         _host(
           Builder(
@@ -345,14 +357,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(
-        tester
-            .widget<ForumHtmlWidgetPostRenderer>(
-              find.byType(ForumHtmlWidgetPostRenderer),
-            )
-            .html,
-        commentHtml,
-      );
+      expect(_nativeBody(tester).prepared.preparedHtml, commentHtml);
       expect(commentHtml, contains('blockquote'));
     },
   );
@@ -433,18 +438,22 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final status = find.byKey(const Key('forum-html-discuz-edit-status'));
-      expect(tester.widget<Text>(status).data, notice);
-      expect(tester.widget<Text>(status).maxLines, 1);
-      expect(
-        tester
-            .widget<FittedBox>(
-              find.ancestor(of: status, matching: find.byType(FittedBox)),
-            )
-            .fit,
-        BoxFit.scaleDown,
+      final paragraphs = tester.widgetList<ForumBodyParagraphSurface>(
+        find.byType(ForumBodyParagraphSurface),
       );
-      expect(find.textContaining('评论正文', findRichText: true), findsOneWidget);
+      final status = paragraphs.firstWhere(
+        (paragraph) =>
+            paragraph.lease.content.style.role == ForumBodyTextRole.notice,
+      );
+      expect(status.lease.content.projection.text, notice);
+      expect(
+        status.lease.content.layoutMode,
+        ForumBodyParagraphLayoutMode.fitSingleLine,
+      );
+      expect(
+        paragraphs.map((p) => p.lease.content.projection.text),
+        contains('评论正文'),
+      );
       expect(tester.takeException(), isNull);
     },
   );
@@ -472,10 +481,7 @@ void main() {
     expect(find.text('2026-07-19 12:30'), findsOneWidget);
     expect(find.text('5#'), findsOneWidget);
     expect(find.byType(ThreadPostCard), findsOneWidget);
-    final renderer = tester.widget<ForumHtmlWidgetPostRenderer>(
-      find.byType(ForumHtmlWidgetPostRenderer),
-    );
-    expect(renderer.html, contains('评论正文'));
+    expect(_nativeBody(tester).prepared.preparedHtml, contains('评论正文'));
     final avatar = tester.widget<CachedLibraryImage>(
       find.descendant(
         of: find.byKey(const Key('thread-author-avatar-p5')),
@@ -548,8 +554,9 @@ void main() {
     tester,
   ) async {
     const html =
-        '<p>正文<img src="smiley.png"></p>'
+        '<p>正文<img src="/static/image/smiley/face.gif"></p>'
         '<img src="data/attachment/forum/comment.png">';
+    final cache = _NoopImageCacheService();
     await tester.pumpWidget(
       _host(
         ComicCommentCard(
@@ -558,18 +565,26 @@ void main() {
           ),
           sourceTid: '573279',
         ),
-        imageCacheService: _NoopImageCacheService(),
+        imageCacheService: cache,
       ),
     );
     await tester.pumpAndSettle();
 
-    final renderer = tester.widget<ForumHtmlWidgetPostRenderer>(
-      find.byType(ForumHtmlWidgetPostRenderer),
+    final prepared = _nativeBody(tester).prepared;
+    expect(prepared.preparedHtml, contains('/static/image/smiley/face.gif'));
+    expect(prepared.preparedHtml, contains('comment.png'));
+    expect(
+      cache.requests.where(
+        (request) => request.sourceUrl.endsWith('/smiley/face.gif'),
+      ),
+      isNotEmpty,
     );
-    expect(renderer.contentImageKind, ForumImageKind.threadInline);
-    expect(renderer.html, contains('smiley.png'));
-    expect(renderer.html, contains('comment.png'));
-    expect(renderer.imageCacheOwnerId, 'comic-comment-573279-p5');
+    expect(
+      cache.requests
+          .where((request) => request.sourceUrl.endsWith('comment.png'))
+          .map((request) => (request.role, request.ownerId)),
+      contains((ImageCacheRole.threadInline, 'comic-comment-573279-p5')),
+    );
   });
 
   testWidgets('uses forum HTML preferences and follows dark theme', (
@@ -592,9 +607,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final renderer = tester.widget<ForumHtmlWidgetPostRenderer>(
-      find.byType(ForumHtmlWidgetPostRenderer),
-    );
+    final renderer = _nativeBody(tester);
     expect(renderer.preferences, preferences);
     expect(renderer.theme.brightness.name, 'dark');
   });
@@ -625,15 +638,15 @@ void main() {
       expect(find.text('发型用户名'), findsOneWidget);
       expect(find.text('髮型用戶名'), findsNothing);
       expect(find.text('軟體時間'), findsOneWidget);
-      final renderer = tester.widget<ForumHtmlWidgetPostRenderer>(
-        find.byType(ForumHtmlWidgetPostRenderer),
-      );
-      expect(renderer.html, contains('軟體正文'));
-      expect(renderer.html, contains('/raw-image.jpg'));
-      expect(renderer.imageCacheOwnerId, 'comic-comment-573279-p5');
+      final prepared = _nativeBody(tester).prepared;
+      expect(prepared.preparedHtml, contains('軟體正文'));
+      expect(prepared.sequence.entries.single.url, endsWith('/raw-image.jpg'));
     },
   );
 }
+
+ThreadPostNativeFlow _nativeBody(WidgetTester tester) =>
+    tester.widget<ThreadPostNativeFlow>(find.byType(ThreadPostNativeFlow));
 
 ComicCommentItemProjection _filteredFirstPost(ThreadPost post) =>
     ComicCommentBodyProjector(['https://example.test/comic-page.jpg'])

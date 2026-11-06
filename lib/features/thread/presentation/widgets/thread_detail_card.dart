@@ -733,6 +733,8 @@ class ThreadPostCard extends StatelessWidget {
     this.onOpenAuthorProfile,
     this.onCopyActionUrl,
     this.onOpenPostLink,
+    this.onOpenSelectedPostLink,
+    this.isSelectionCurrent,
     this.onOpenPostImages,
     this.onTogglePollOption,
     this.onSubmitPollVote,
@@ -764,6 +766,8 @@ class ThreadPostCard extends StatelessWidget {
   final ValueChanged<ThreadPost>? onOpenAuthorProfile;
   final void Function(String label, String url)? onCopyActionUrl;
   final ValueChanged<String>? onOpenPostLink;
+  final ForumSelectionLinkOpener? onOpenSelectedPostLink;
+  final bool Function()? isSelectionCurrent;
   final void Function(ThreadPost post, ThreadImageOpenRequest request)?
   onOpenPostImages;
   final void Function(ThreadPoll poll, ThreadPollOption option)?
@@ -874,22 +878,33 @@ class ThreadPostCard extends StatelessWidget {
                       : () => authorProfileCallback(post),
                 ),
               ),
+              if (postActionCallback != null)
+                IconButton(
+                  key: Key('thread-post-more-${post.pid}'),
+                  tooltip: l10n.threadPostActions,
+                  icon: const Icon(Icons.more_horiz),
+                  color: resolvedPalette.softText,
+                  onPressed: () => postActionCallback(post),
+                ),
             ],
           ),
           if (showBody) ...[
             const SizedBox(height: 8),
             DefaultTextStyle.merge(
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: palette.bodyText,
-                height: 1.5,
-              ),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: palette.bodyText, height: 1.5),
               child: ThreadPostHtmlBody(
                 key: Key('thread-post-${post.pid}'),
                 post: post,
                 threadId: threadId,
                 imageReferer: resolvedImageReferer ?? '',
                 onOpenPostLink: linkCallback,
+                onOpenSelectedPostLink: interactionPolicy.allowPostLinks
+                    ? onOpenSelectedPostLink
+                    : null,
+                isSelectionCurrent: isSelectionCurrent,
                 onOpenPostImage: imageOpenCallback,
+                nativeBody: true,
                 theme: const ForumHtmlRenderThemeFactory().fromThreadPalette(
                   palette: resolvedPalette,
                   brightness: Theme.of(context).brightness,

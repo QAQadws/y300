@@ -419,6 +419,7 @@ class _ThreadPostHtmlFirstBodyState
         widget.imageReferer,
         widget.imagePrecacheService,
         widget.nativeBody,
+        widget.bodyPresentation,
       );
       if ((tracked || widget.nativeBody) &&
           _readingIdentity != readingIdentity) {
@@ -506,6 +507,9 @@ class _ThreadPostHtmlFirstBodyState
         key: Key('thread-post-html-first-body-${sourcePost.pid}'),
         child: widget.nativeBody
             ? ThreadPostNativeFlow(
+                key: widget.bodyPresentation == null
+                    ? null
+                    : ObjectKey(widget.bodyPresentation),
                 prepared: preparedDocument,
                 preferences: preferences,
                 theme: widget.theme,
