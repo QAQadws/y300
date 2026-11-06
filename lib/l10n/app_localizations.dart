@@ -3606,6 +3606,54 @@ abstract class AppLocalizations {
   /// **'显示设置'**
   String get novelDisplaySettings;
 
+  /// No description provided for @novelReaderSettingsScope.
+  ///
+  /// In zh, this message translates to:
+  /// **'设置范围'**
+  String get novelReaderSettingsScope;
+
+  /// No description provided for @novelReaderSettingsDefaults.
+  ///
+  /// In zh, this message translates to:
+  /// **'小说默认'**
+  String get novelReaderSettingsDefaults;
+
+  /// No description provided for @novelReaderSettingsWork.
+  ///
+  /// In zh, this message translates to:
+  /// **'本作品'**
+  String get novelReaderSettingsWork;
+
+  /// No description provided for @novelReaderSettingsDefaultsHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'适用于所有小说中沿用默认设置的项目。'**
+  String get novelReaderSettingsDefaultsHint;
+
+  /// No description provided for @novelReaderSettingsWorkHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'只保存本作品改过的项目，其余沿用小说默认。'**
+  String get novelReaderSettingsWorkHint;
+
+  /// No description provided for @novelReaderSettingsWorkReadOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'本作品的设置格式需要更新版本的应用才能编辑。'**
+  String get novelReaderSettingsWorkReadOnly;
+
+  /// No description provided for @novelReaderResetWorkSettings.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复本作品的默认设置'**
+  String get novelReaderResetWorkSettings;
+
+  /// No description provided for @novelReaderResetWorkSettingsBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'让本作品重新沿用小说默认设置，保留阅读位置和书签。'**
+  String get novelReaderResetWorkSettingsBody;
+
   /// No description provided for @novelTypography.
   ///
   /// In zh, this message translates to:

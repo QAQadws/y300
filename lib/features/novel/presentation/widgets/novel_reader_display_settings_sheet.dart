@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/fonts/fonts.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
+import 'package:y300/features/novel/domain/repositories/novel_reader_preferences_repository.dart';
 import 'package:y300/features/novel/presentation/novel_text_resolver.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_chapter_interactions_dock_controller.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -30,11 +31,19 @@ class NovelReaderDisplaySettingsSheet extends StatefulWidget {
     required this.onPreferencesChanged,
     this.fontPreviewStyle,
     this.nativeTypography = false,
+    this.scope,
+    this.canEditWork = false,
+    this.onScopeChanged,
+    this.onResetWork,
   });
 
   final NovelReaderPreferences initialPreferences;
   final ValueChanged<NovelReaderPreferences> onPreferencesChanged;
   final TextStyle? fontPreviewStyle;
+  final NovelReaderPreferenceScope? scope;
+  final bool canEditWork;
+  final ValueChanged<NovelReaderPreferenceScope>? onScopeChanged;
+  final VoidCallback? onResetWork;
 
   /// Controlled native entry only; old rendering modes do not advertise this.
   final bool nativeTypography;
@@ -86,6 +95,53 @@ class _NovelReaderDisplaySettingsSheetState
             mainAxisSize: MainAxisSize.min,
             children: [
               ReaderSheetTitle(title: l10n.novelDisplaySettings),
+              if (widget.scope case final scope?)
+                _SettingsSection(
+                  title: l10n.novelReaderSettingsScope,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: SegmentedButton<NovelReaderPreferenceScope>(
+                        key: const Key('novel-reader-settings-scope'),
+                        segments: [
+                          ButtonSegment(
+                            value: NovelReaderPreferenceScope.defaults,
+                            label: Text(l10n.novelReaderSettingsDefaults),
+                          ),
+                          ButtonSegment(
+                            value: NovelReaderPreferenceScope.work,
+                            enabled: widget.canEditWork,
+                            label: Text(l10n.novelReaderSettingsWork),
+                          ),
+                        ],
+                        selected: {scope},
+                        onSelectionChanged: (selection) {
+                          final selected = selection.single;
+                          if (selected != scope) {
+                            widget.onScopeChanged?.call(selected);
+                          }
+                        },
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                      child: Text(
+                        !widget.canEditWork
+                            ? l10n.novelReaderSettingsWorkReadOnly
+                            : scope == NovelReaderPreferenceScope.work
+                            ? l10n.novelReaderSettingsWorkHint
+                            : l10n.novelReaderSettingsDefaultsHint,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                    if (widget.onResetWork != null)
+                      TextButton(
+                        key: const Key('novel-reader-reset-work-settings'),
+                        onPressed: _confirmWorkReset,
+                        child: Text(l10n.novelReaderResetWorkSettings),
+                      ),
+                  ],
+                ),
               _SettingsSection(
                 title: l10n.novelTypography,
                 children: [
@@ -127,7 +183,9 @@ class _NovelReaderDisplaySettingsSheetState
                     max: 2.4,
                     displayValue: _draft.lineHeight.toStringAsFixed(1),
                     onChanged: (value) => _applyPreferences(
-                      _draft.copyWith(lineHeight: _snap(value, 0.05)),
+                      _draft.copyWith(
+                        lineHeight: _snap(value, 0.05).clamp(1.2, 2.4),
+                      ),
                     ),
                   ),
                   if (widget.nativeTypography)
@@ -470,6 +528,31 @@ class _NovelReaderDisplaySettingsSheetState
         ),
       ),
     );
+  }
+
+  Future<void> _confirmWorkReset() async {
+    final l10n = AppLocalizations.of(context);
+    final reset = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.novelReaderResetWorkSettings),
+        content: Text(l10n.novelReaderResetWorkSettingsBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(l10n.commonCancel),
+          ),
+          TextButton(
+            key: const Key('novel-reader-confirm-reset-work-settings'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(l10n.commonReset),
+          ),
+        ],
+      ),
+    );
+    if (reset == true && mounted && ModalRoute.of(context)?.isCurrent == true) {
+      widget.onResetWork?.call();
+    }
   }
 
   void _applyPreferences(NovelReaderPreferences next) {

@@ -232,8 +232,29 @@ final class _ResolvedScopes implements NovelReaderPreferenceScopes {
   bool get hasWorkOverrides => _work._activeFields.isNotEmpty;
   @override
   bool get canEditWork => _work.canEdit;
+  @override
+  NovelReaderPreferenceScope get fontFamilyScope => _scopeOf('fontFamily');
+  @override
+  NovelReaderPreferenceScope get flowModeScope => _scopeOf('flowMode');
+
+  NovelReaderPreferenceScope _scopeOf(String field) =>
+      _work._activeFields.containsKey(field)
+      ? NovelReaderPreferenceScope.work
+      : NovelReaderPreferenceScope.defaults;
 
   @override
   NovelReaderPreferences previewDefaults(NovelReaderPreferences draft) =>
       _codec.apply(draft, _work._activeFields);
+
+  @override
+  NovelReaderPreferences previewEdit(
+    NovelReaderPreferenceScope scope,
+    NovelReaderPreferences previous,
+    NovelReaderPreferences draft,
+  ) {
+    final changes = _codec.changes(previous, draft);
+    return scope == NovelReaderPreferenceScope.defaults
+        ? previewDefaults(_codec.apply(defaults, changes))
+        : _codec.apply(effective, changes);
+  }
 }

@@ -28,6 +28,7 @@ import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_spacing.dart';
 import 'package:y300/features/novel/domain/models/novel_episode_open_policy.dart';
 import 'package:y300/features/novel/domain/models/novel_source_reading_context.dart';
+import 'package:y300/features/novel/domain/repositories/novel_reader_preferences_repository.dart';
 import 'package:y300/features/novel/data/services/novel_reader_progress_diagnostics.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_bookmark_range.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
@@ -85,6 +86,8 @@ import 'package:y300/features/novel/presentation/services/novel_html_image_reade
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 
 const _progressDiagnostics = NovelReaderProgressDiagnostics();
+
+typedef _DisplayScopeAction = ({NovelReaderPreferenceScope scope, bool reset});
 
 class NovelReaderPage extends ConsumerStatefulWidget {
   const NovelReaderPage({
@@ -157,6 +160,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   NovelReaderDisplayPreferencesCoordinator? _displayPreferencesCoordinator;
   NovelReaderController? _displayPreferencesOwner;
   Future<void>? _displayCommitTail;
+  Object? _displaySettingsSession;
   NovelReaderController? _fontRepairOwner;
   String? _fontRepairId;
   int _readerSemanticsSuspendCount = 0;
@@ -2983,9 +2987,12 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         current.preferences.flowMode == NovelReaderFlowMode.vertical) {
       return;
     }
-    final next = current.persistedPreferences.copyWith(
-      flowMode: NovelReaderFlowMode.vertical,
-    );
+    final scopes = current.preferenceScopes;
+    final scope = scopes?.flowModeScope;
+    final baseline = scope == NovelReaderPreferenceScope.defaults
+        ? scopes!.defaults
+        : current.persistedPreferences;
+    final next = baseline.copyWith(flowMode: NovelReaderFlowMode.vertical);
     final source = _capturePagedSource(current);
     _nativeFlowEntry = source == null
         ? null
@@ -2993,10 +3000,12 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     if (widget.nativePagination) {
       controller.preserveProgressOnEnteringVerticalMode();
     }
-    final coordinator = _displayPreferencesCoordinatorFor(controller);
+    final coordinator = scope == null
+        ? _displayPreferencesCoordinatorFor(controller)
+        : _bindScopedDisplayEditor(controller, current, scope, baseline).queue;
     coordinator.begin(
-      preferences: current.preferences,
-      persistedPreferences: current.persistedPreferences,
+      preferences: scope == null ? current.preferences : baseline,
+      persistedPreferences: baseline,
     );
     await coordinator.commitImmediately(
       next,
@@ -3280,7 +3289,60 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     NovelReaderViewState viewState,
     NovelReaderController controller,
   ) async {
-    if (ref.read(novelReaderControllerProvider(_args)).isLoading) return;
+    if (_displaySettingsSession != null ||
+        ref.read(novelReaderControllerProvider(_args)).isLoading) {
+      return;
+    }
+    final session = _displaySettingsSession = Object();
+    void release() {
+      if (identical(_displaySettingsSession, session)) {
+        _displaySettingsSession = null;
+      }
+    }
+
+    final scopes = viewState.preferenceScopes;
+    var scope = scopes == null
+        ? null
+        : scopes.canEditWork && scopes.hasWorkOverrides
+        ? NovelReaderPreferenceScope.work
+        : NovelReaderPreferenceScope.defaults;
+    try {
+      var current = viewState;
+      while (mounted && identical(_displaySettingsSession, session)) {
+        final action = await _editDisplayScope(
+          current,
+          controller,
+          scope,
+          release,
+        );
+        if (action == null) return;
+        final latest = _displayEditState(controller, viewState);
+        if (latest == null) return;
+        current = latest;
+        scope = action.scope;
+      }
+    } finally {
+      release();
+    }
+  }
+
+  Future<_DisplayScopeAction?> _editDisplayScope(
+    NovelReaderViewState viewState,
+    NovelReaderController controller,
+    NovelReaderPreferenceScope? scope,
+    VoidCallback onDismissed,
+  ) async {
+    final scopes = viewState.preferenceScopes;
+    final baseline = scope == NovelReaderPreferenceScope.defaults
+        ? scopes!.defaults
+        : viewState.persistedPreferences;
+    final initial = scope == null ? viewState.editablePreferences : baseline;
+    final editor = scope == null
+        ? null
+        : _bindScopedDisplayEditor(controller, viewState, scope, baseline);
+    final coordinator =
+        editor?.queue ?? _displayPreferencesCoordinatorFor(controller);
+    coordinator.begin(preferences: initial, persistedPreferences: baseline);
     final menuSource = _nativeMenuSource;
     final pagedSource =
         _capturePagedSource(viewState) ??
@@ -3290,21 +3352,17 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     _nativeMenuSource = null;
     _overlayController.hideMenu();
     final maxSheetHeight = MediaQuery.sizeOf(context).height * 0.5;
-    final coordinator = _displayPreferencesCoordinatorFor(controller);
-    coordinator.begin(
-      preferences: viewState.editablePreferences,
-      persistedPreferences: viewState.persistedPreferences,
-    );
     NovelReaderPaginationCancellationToken? capture;
     Future<void>? pendingChange;
-    void change(NovelReaderPreferences next) {
+    void prepareModeChange(NovelReaderFlowMode mode, VoidCallback apply) {
       capture?.cancel();
+      pendingChange = null;
       final flow = _nativeFlowKey.currentState;
       final current = ref
           .read(novelReaderControllerProvider(_args))
           .asData
           ?.value;
-      if (next.flowMode == NovelReaderFlowMode.vertical) {
+      if (mode == NovelReaderFlowMode.vertical) {
         _nativePagedEntry = null;
         if (current != null &&
             current.preferences.flowMode != NovelReaderFlowMode.vertical) {
@@ -3327,8 +3385,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       if (flow == null ||
           current == null ||
           current.preferences.flowMode != NovelReaderFlowMode.vertical ||
-          next.flowMode == NovelReaderFlowMode.vertical) {
-        coordinator.change(next);
+          mode == NovelReaderFlowMode.vertical) {
+        apply();
         return;
       }
       final token = capture = NovelReaderPaginationCancellationToken();
@@ -3341,7 +3399,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         }
         if (token.isCancelled ||
             !mounted ||
-            !identical(_displayPreferencesOwner, controller)) {
+            !identical(_displayPreferencesCoordinator, coordinator)) {
           return;
         }
         final latest = ref
@@ -3363,18 +3421,33 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                 latest.preferences.flowMode != NovelReaderFlowMode.vertical
             ? null
             : (document: current.document, source: source);
-        coordinator.change(next);
+        apply();
       }();
     }
 
-    await _runWithReaderSemanticsSuspended(() async {
-      await showModalBottomSheet<void>(
+    return _runWithReaderSemanticsSuspended(() async {
+      final action = await showModalBottomSheet<_DisplayScopeAction>(
         context: context,
         constraints: BoxConstraints(maxHeight: maxSheetHeight),
         builder: (context) => NovelReaderDisplaySettingsSheet(
           nativeTypography: widget.nativePagination,
-          initialPreferences: viewState.editablePreferences,
-          onPreferencesChanged: change,
+          initialPreferences: initial,
+          scope: scope,
+          canEditWork: scopes?.canEditWork ?? false,
+          onScopeChanged: scope == null
+              ? null
+              : (target) =>
+                    Navigator.of(context).pop((scope: target, reset: false)),
+          onResetWork:
+              scope == NovelReaderPreferenceScope.work &&
+                  scopes?.canEditWork == true
+              ? () => Navigator.of(context)
+                    .pop((scope: NovelReaderPreferenceScope.work, reset: true))
+              : null,
+          onPreferencesChanged: (next) => prepareModeChange(
+            editor?.previewMode(next) ?? next.flowMode,
+            () => coordinator.change(next),
+          ),
           fontPreviewStyle: _typographyResolver
               .resolve(
                 preferences: viewState.preferences,
@@ -3388,13 +3461,112 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
               .body,
         ),
       );
+      // A dismissed editor stops owning the modal immediately. Its accepted
+      // writes still serve as the barrier for a newly opened editor.
+      if (action == null) onDismissed();
       if (!mounted) {
         capture?.cancel();
-        return;
+        return null;
       }
       await pendingChange;
       await coordinator.flush();
+      if (action?.reset == true && editor != null) {
+        final latest = _displayEditState(controller, viewState);
+        if (latest == null || !editor.isCurrent()) return null;
+        Future<void>? reset;
+        prepareModeChange(latest.preferenceScopes!.defaults.flowMode, () {
+          reset = () async {
+            try {
+              await controller.resetWorkPreferences(
+                isCurrent: editor.isCurrent,
+              );
+            } catch (_) {
+              if (mounted && editor.isCurrent()) {
+                _showReaderSnackBar(
+                  AppLocalizations.of(context).novelSaveDisplaySettingsFailed,
+                );
+              }
+            }
+          }();
+        });
+        await pendingChange;
+        await reset;
+      }
+      return action;
     });
+  }
+
+  NovelReaderViewState? _displayEditState(
+    NovelReaderController controller,
+    NovelReaderViewState original,
+  ) {
+    if (!mounted) return null;
+    final provider = novelReaderControllerProvider(_args);
+    final state = ref.read(provider);
+    final latest = state.asData?.value;
+    if (state.isLoading ||
+        latest == null ||
+        latest.transition != null ||
+        !identical(ref.read(provider.notifier), controller) ||
+        latest.readingSurfaceRevision != original.readingSurfaceRevision ||
+        latest.readingAuthorityRevision != original.readingAuthorityRevision ||
+        latest.currentEpisode.episodeId != original.currentEpisode.episodeId) {
+      return null;
+    }
+    return latest;
+  }
+
+  ({
+    NovelReaderDisplayPreferencesCoordinator queue,
+    NovelReaderFlowMode Function(NovelReaderPreferences) previewMode,
+    bool Function() isCurrent,
+  })
+  _bindScopedDisplayEditor(
+    NovelReaderController controller,
+    NovelReaderViewState original,
+    NovelReaderPreferenceScope scope,
+    NovelReaderPreferences initialBaseline,
+  ) {
+    var baseline = initialBaseline;
+    late final NovelReaderDisplayPreferencesCoordinator queue;
+    bool isCurrent() =>
+        identical(queue, _displayPreferencesCoordinator) &&
+        _displayEditState(controller, original) != null;
+    NovelReaderPreferenceScopes currentScopes() =>
+        _displayEditState(controller, original)?.preferenceScopes ??
+        original.preferenceScopes!;
+    NovelReaderFlowMode previewMode(NovelReaderPreferences draft) {
+      final scopes = currentScopes();
+      return draft.flowMode == baseline.flowMode ||
+              (scope == NovelReaderPreferenceScope.defaults &&
+                  scopes.flowModeScope == NovelReaderPreferenceScope.work)
+          ? scopes.effective.flowMode
+          : draft.flowMode;
+    }
+
+    queue = _replaceDisplayPreferencesCoordinator(
+      controller,
+      preview: (draft) {
+        if (isCurrent()) {
+          controller.previewPreferences(
+            currentScopes().previewEdit(scope, baseline, draft),
+          );
+        }
+      },
+      commit: (draft) async {
+        if (await controller.commitScopedPreferences(
+          scope: scope,
+          previous: baseline,
+          requested: draft,
+          isCurrent: isCurrent,
+        )) {
+          // Only the editor draft advances the diff base. A concurrent write
+          // can change inherited values that this sheet still shows as before.
+          baseline = draft;
+        }
+      },
+    );
+    return (queue: queue, previewMode: previewMode, isCurrent: isCurrent);
   }
 
   NovelReaderDisplayPreferencesCoordinator _displayPreferencesCoordinatorFor(
@@ -3403,12 +3575,25 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     if (identical(_displayPreferencesOwner, controller)) {
       return _displayPreferencesCoordinator!;
     }
+    return _replaceDisplayPreferencesCoordinator(
+      controller,
+      preview: controller.previewPreferences,
+      commit: controller.commitPreferences,
+    );
+  }
+
+  NovelReaderDisplayPreferencesCoordinator
+  _replaceDisplayPreferencesCoordinator(
+    NovelReaderController controller, {
+    required ValueChanged<NovelReaderPreferences> preview,
+    required Future<void> Function(NovelReaderPreferences) commit,
+  }) {
     _retireDisplayPreferencesCoordinator();
     _displayPreferencesOwner = controller;
     return _displayPreferencesCoordinator =
         NovelReaderDisplayPreferencesCoordinator(
-          preview: controller.previewPreferences,
-          commit: controller.commitPreferences,
+          preview: preview,
+          commit: commit,
           revertPreview: controller.revertPreferencePreview,
           precedingCommit: _displayCommitTail,
           onFailure: () {

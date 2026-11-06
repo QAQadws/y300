@@ -4,6 +4,7 @@ import 'package:crypto/crypto.dart';
 import 'package:y300/core/preferences/preference_key.dart';
 import 'package:y300/core/preferences/preference_keys.dart';
 import 'package:y300/core/preferences/preferences_store.dart';
+import 'package:y300/features/fonts/fonts.dart' show FontIdentity;
 import 'package:y300/features/novel/data/preferences/novel_reader_preferences_legacy_source.dart';
 import 'package:y300/features/novel/data/preferences/novel_reader_preferences_snapshot_codec.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_preferences.dart';
@@ -109,6 +110,32 @@ final class SharedPreferencesNovelReaderPreferencesRepository
         await _writeWork(key, previous: work.source, next: source);
         return _workCodec.scope(defaults, _workCodec.decode(source));
       });
+
+  @override
+  Future<NovelReaderPreferenceScopes?> repairFontReference(
+    String novelId, {
+    required NovelReaderPreferenceScope scope,
+    required String unavailableId,
+  }) => _serialized(() async {
+    final key = _workKey(novelId);
+    final work = await _readWork(key);
+    final defaults = await _loadDefaults();
+    final current = _workCodec.scope(defaults, work.record);
+    if (current.fontFamilyScope != scope ||
+        current.effective.fontFamily != unavailableId) {
+      return null;
+    }
+    if (scope == NovelReaderPreferenceScope.defaults) {
+      final updated = defaults.copyWith(fontFamily: FontIdentity.system);
+      await _write(updated);
+      return _workCodec.scope(updated, work.record);
+    }
+    final source = _workCodec.encode(work.record, {
+      'fontFamily': FontIdentity.system,
+    });
+    await _writeWork(key, previous: work.source, next: source);
+    return _workCodec.scope(defaults, _workCodec.decode(source));
+  });
 
   Future<({String? source, NovelReaderWorkPreferenceRecord record})> _readWork(
     PreferenceKey<String> key,

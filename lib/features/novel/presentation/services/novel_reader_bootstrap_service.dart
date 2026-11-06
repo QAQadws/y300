@@ -47,6 +47,7 @@ class NovelReaderCriticalBootstrap {
     required this.progressSnapshot,
     required this.currentOffset,
     this.readingState,
+    this.preferenceScopes,
   });
 
   final List<NovelEpisodeItem> episodes;
@@ -59,6 +60,7 @@ class NovelReaderCriticalBootstrap {
   final NovelReaderProgressSnapshot progressSnapshot;
   final double currentOffset;
   final NovelReadingStateSnapshot? readingState;
+  final NovelReaderPreferenceScopes? preferenceScopes;
 }
 
 abstract interface class NovelReaderBootstrapService {
@@ -114,7 +116,11 @@ class DefaultNovelReaderBootstrapService
 
     // Load preferences before building so traditional/simplified conversion is
     // applied to the document at build time (and re-applied on episode change).
-    final persistedPreferences = await _preferencesRepository.load();
+    final preferences = _preferencesRepository;
+    final scopes = preferences is NovelReaderScopedPreferencesRepository
+        ? await preferences.loadScopes(context.novelId)
+        : null;
+    final persistedPreferences = scopes?.effective ?? await preferences.load();
     final effectivePreferences = persistedPreferences;
     final converter = resolveTextConverter(
       effectivePreferences.sharedConversionMode,
@@ -172,6 +178,7 @@ class DefaultNovelReaderBootstrapService
       progressSnapshot: progressSnapshot,
       currentOffset: progressSnapshot.scrollOffset,
       readingState: readingState,
+      preferenceScopes: scopes,
     );
   }
 

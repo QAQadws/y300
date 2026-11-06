@@ -2196,6 +2196,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String get novelDisplaySettings => '显示设置';
 
   @override
+  String get novelReaderSettingsScope => '设置范围';
+
+  @override
+  String get novelReaderSettingsDefaults => '小说默认';
+
+  @override
+  String get novelReaderSettingsWork => '本作品';
+
+  @override
+  String get novelReaderSettingsDefaultsHint => '适用于所有小说中沿用默认设置的项目。';
+
+  @override
+  String get novelReaderSettingsWorkHint => '只保存本作品改过的项目，其余沿用小说默认。';
+
+  @override
+  String get novelReaderSettingsWorkReadOnly => '本作品的设置格式需要更新版本的应用才能编辑。';
+
+  @override
+  String get novelReaderResetWorkSettings => '恢复本作品的默认设置';
+
+  @override
+  String get novelReaderResetWorkSettingsBody => '让本作品重新沿用小说默认设置，保留阅读位置和书签。';
+
+  @override
   String get novelTypography => '排版';
 
   @override
@@ -8251,6 +8275,30 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get novelDisplaySettings => '顯示設定';
+
+  @override
+  String get novelReaderSettingsScope => '設定範圍';
+
+  @override
+  String get novelReaderSettingsDefaults => '小說預設';
+
+  @override
+  String get novelReaderSettingsWork => '本作品';
+
+  @override
+  String get novelReaderSettingsDefaultsHint => '套用到所有小說中沿用預設設定的項目。';
+
+  @override
+  String get novelReaderSettingsWorkHint => '只儲存本作品改過的項目，其餘沿用小說預設。';
+
+  @override
+  String get novelReaderSettingsWorkReadOnly => '本作品的設定格式需要更新版本的應用程式才能編輯。';
+
+  @override
+  String get novelReaderResetWorkSettings => '恢復本作品的預設設定';
+
+  @override
+  String get novelReaderResetWorkSettingsBody => '讓本作品重新沿用小說預設設定，保留閱讀位置和書籤。';
 
   @override
   String get novelTypography => '排版';

@@ -24,6 +24,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_pagination_
 import 'package:y300/features/novel/presentation/services/novel_reader_bootstrap_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_preference_impact_analyzer.dart';
+import 'package:y300/features/novel/domain/repositories/novel_reader_preferences_repository.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_shared_preferences_bridge.dart';
 
@@ -82,6 +83,7 @@ class NovelReaderViewState {
     required this.document,
     required this.persistedPreferences,
     required this.effectivePreferences,
+    this.preferenceScopes,
     required this.readingProgress,
     required this.progressSnapshot,
     required this.currentOffset,
@@ -108,6 +110,7 @@ class NovelReaderViewState {
   final NovelReaderDocument document;
   final NovelReaderPreferences persistedPreferences;
   final NovelReaderPreferences effectivePreferences;
+  final NovelReaderPreferenceScopes? preferenceScopes;
   final NovelReadingProgress? readingProgress;
   final NovelReaderProgressSnapshot progressSnapshot;
   final double currentOffset;
@@ -201,6 +204,7 @@ class NovelReaderViewState {
     NovelReaderDocument? document,
     NovelReaderPreferences? persistedPreferences,
     NovelReaderPreferences? effectivePreferences,
+    NovelReaderPreferenceScopes? preferenceScopes,
     FontResolution? fontResolution,
     NovelReadingProgress? readingProgress,
     NovelReadingStateSnapshot? readingState,
@@ -226,6 +230,7 @@ class NovelReaderViewState {
       document: document ?? this.document,
       persistedPreferences: persistedPreferences ?? this.persistedPreferences,
       effectivePreferences: effectivePreferences ?? this.effectivePreferences,
+      preferenceScopes: preferenceScopes ?? this.preferenceScopes,
       fontResolution: fontResolution ?? this.fontResolution,
       readingProgress: clearReadingProgress
           ? null
@@ -385,8 +390,9 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
 
   void _publishPreferencePreview(
     NovelReaderPreferences next,
-    FontResolution resolution,
-  ) {
+    FontResolution resolution, {
+    NovelReaderDocument? preparedDocument,
+  }) {
     final current = state.value;
     if (current == null) return;
     final effectiveNext = next.copyWith(fontFamily: resolution.font.id);
@@ -395,6 +401,8 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       effectiveNext,
     );
     if (diff.hasChanges ||
+        (preparedDocument != null &&
+            !identical(preparedDocument, current.document)) ||
         current.fontResolution.font != resolution.font ||
         current.fontResolution.failure != resolution.failure ||
         current.fontResolution.requestedId != resolution.requestedId) {
@@ -402,10 +410,11 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
         current.copyWith(
           effectivePreferences: effectiveNext,
           fontResolution: resolution,
+          document: preparedDocument,
         ),
       );
     }
-    if (current.document.textConversionIdentity !=
+    if ((preparedDocument ?? current.document).textConversionIdentity !=
         effectiveNext.conversionMode.name) {
       // Persistence owns error presentation; preview work must not produce an
       // unhandled error or delay the next selection/reader session.
@@ -419,6 +428,15 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
   Future<void> commitPreferences(NovelReaderPreferences requested) async {
     final current = state.value;
     if (current == null) {
+      return;
+    }
+    if (current.preferenceScopes != null) {
+      await commitScopedPreferences(
+        scope: NovelReaderPreferenceScope.defaults,
+        previous: current.persistedPreferences,
+        requested: requested,
+        isCurrent: () => true,
+      );
       return;
     }
     final commitSerial = ++_preferenceCommitSerial;
@@ -501,6 +519,102 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     );
   }
 
+  Future<bool> commitScopedPreferences({
+    required NovelReaderPreferenceScope scope,
+    required NovelReaderPreferences previous,
+    required NovelReaderPreferences requested,
+    required bool Function() isCurrent,
+  }) {
+    if (!ref.mounted || !isCurrent()) return Future.value(false);
+    final scopes = state.value?.preferenceScopes;
+    final repository = ref.read(novelReaderPreferencesRepositoryProvider);
+    if (scopes == null ||
+        repository is! NovelReaderScopedPreferencesRepository) {
+      return Future.value(false);
+    }
+    if (previous == requested) return Future.value(true);
+    final novelId = _args.novelId;
+    return _commitScopedChange(
+      preview: scopes.previewEdit(scope, previous, requested),
+      write: () => repository.saveScope(
+        novelId,
+        scope: scope,
+        previous: previous,
+        next: requested,
+      ),
+      isCurrent: isCurrent,
+    );
+  }
+
+  Future<bool> resetWorkPreferences({required bool Function() isCurrent}) {
+    if (!ref.mounted || !isCurrent()) return Future.value(false);
+    final scopes = state.value?.preferenceScopes;
+    final repository = ref.read(novelReaderPreferencesRepositoryProvider);
+    if (scopes == null ||
+        repository is! NovelReaderScopedPreferencesRepository) {
+      return Future.value(false);
+    }
+    final novelId = _args.novelId;
+    return _commitScopedChange(
+      preview: scopes.defaults,
+      write: () => repository.resetWork(novelId),
+      isCurrent: isCurrent,
+    );
+  }
+
+  Future<bool> _commitScopedChange({
+    required NovelReaderPreferences preview,
+    required Future<NovelReaderPreferenceScopes> Function() write,
+    required bool Function() isCurrent,
+  }) async {
+    final current = state.value;
+    if (state.isLoading || current == null || current.transition != null) {
+      return false;
+    }
+    final commit = ++_preferenceCommitSerial;
+    final session = _activeSessionToken;
+    final previewSerial = _fontPreviewSerial;
+    bool accepts() =>
+        ref.mounted &&
+        commit == _preferenceCommitSerial &&
+        session == _activeSessionToken &&
+        !state.isLoading &&
+        state.value?.transition == null &&
+        isCurrent();
+    final document = await _resolvePreferenceDocument(preview);
+    if (!accepts()) return false;
+    final NovelReaderPreferenceScopes saved;
+    _preferenceWritesInFlight++;
+    try {
+      saved = await write();
+    } finally {
+      _preferenceWritesInFlight--;
+    }
+    if (!accepts()) return false;
+    final latest = state.value!;
+    final confirmed = saved.effective;
+    state = AsyncData(
+      latest.copyWith(persistedPreferences: confirmed, preferenceScopes: saved),
+    );
+    if (previewSerial == _fontPreviewSerial) {
+      if (latest.fontResolution.requestedId == confirmed.fontFamily) {
+        _publishPreferencePreview(
+          confirmed,
+          latest.fontResolution,
+          preparedDocument:
+              identical(current.currentContent, latest.currentContent) &&
+                  document.textConversionIdentity ==
+                      confirmed.conversionMode.name
+              ? document
+              : null,
+        );
+      } else {
+        previewPreferences(confirmed);
+      }
+    }
+    return true;
+  }
+
   /// Called inside the display coordinator's write queue so earlier accepted
   /// settings finish before selecting this confirmed, font-only patch.
   Future<NovelReaderPreferences?> repairPersistedFontReference(
@@ -522,9 +636,22 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     final next = current.persistedPreferences.copyWith(
       fontFamily: FontIdentity.system,
     );
+    final scopes = current.preferenceScopes;
+    final repository = ref.read(novelReaderPreferencesRepositoryProvider);
+    NovelReaderPreferenceScopes? repaired;
     _preferenceWritesInFlight += 1;
     try {
-      await ref.read(novelReaderPreferencesRepositoryProvider).save(next);
+      if (scopes != null &&
+          repository is NovelReaderScopedPreferencesRepository) {
+        repaired = await repository.repairFontReference(
+          _args.novelId,
+          scope: scopes.fontFamilyScope,
+          unavailableId: unavailableId,
+        );
+        if (repaired == null) return null;
+      } else {
+        await repository.save(next);
+      }
     } catch (_) {
       _persistedPreferenceSnapshotDirty = true;
       rethrow;
@@ -543,9 +670,14 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     if (latest != null) {
       // Keep the current preview and loaded font. Repairing persistent data
       // does not confirm a draft or start another layout/reading transition.
-      state = AsyncData(latest.copyWith(persistedPreferences: next));
+      state = AsyncData(
+        latest.copyWith(
+          persistedPreferences: repaired?.effective ?? next,
+          preferenceScopes: repaired,
+        ),
+      );
     }
-    return next;
+    return repaired == null ? next : null;
   }
 
   Future<FontResolution> _resolveReaderFont(String fontId) {
@@ -1321,6 +1453,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       currentContent: critical.currentContent,
       document: critical.document,
       persistedPreferences: critical.persistedPreferences,
+      preferenceScopes: critical.preferenceScopes,
       effectivePreferences: critical.effectivePreferences.copyWith(
         fontFamily: fontResolution.font.id,
       ),
@@ -1354,6 +1487,7 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
       currentContent: critical.currentContent,
       document: critical.document,
       persistedPreferences: critical.persistedPreferences,
+      preferenceScopes: critical.preferenceScopes,
       effectivePreferences: critical.effectivePreferences.copyWith(
         fontFamily: fontResolution.font.id,
       ),

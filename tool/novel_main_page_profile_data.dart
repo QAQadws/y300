@@ -25,6 +25,7 @@ final class NovelMainPageProfileData
   final _chapters = <String, NovelChapterContent>{};
   final _progress = <String, NovelReadingProgress>{};
   final _states = <String, LibraryEpisodeState>{};
+  final _bookmarks = <String, NovelReaderBookmark>{};
   final _preferences = _Preferences();
   int _serial = 0;
 
@@ -48,6 +49,7 @@ final class NovelMainPageProfileData
     _chapters.remove(id);
     _progress.remove(id);
     _states.remove(id);
+    _bookmarks.removeWhere((_, bookmark) => bookmark.novelId == id);
   }
 
   Widget scope(
@@ -101,7 +103,17 @@ final class NovelMainPageProfileData
   @override
   Future<List<NovelReaderBookmark>> listReaderBookmarks({
     required String novelId,
-  }) async => [];
+  }) async => [
+    for (final bookmark in _bookmarks.values)
+      if (bookmark.novelId == novelId) bookmark,
+  ];
+
+  @override
+  Future<void> addReaderBookmark({
+    required NovelReaderBookmark bookmark,
+  }) async {
+    _bookmarks[bookmark.bookmarkId] = bookmark;
+  }
 
   @override
   Future<NovelReadingStateSnapshot> loadWorkState({

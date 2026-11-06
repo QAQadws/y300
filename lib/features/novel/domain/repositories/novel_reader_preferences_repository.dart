@@ -15,8 +15,16 @@ abstract interface class NovelReaderPreferenceScopes {
   NovelReaderPreferences get effective;
   bool get hasWorkOverrides;
   bool get canEditWork;
+  NovelReaderPreferenceScope get fontFamilyScope;
+  NovelReaderPreferenceScope get flowModeScope;
 
   NovelReaderPreferences previewDefaults(NovelReaderPreferences draft);
+
+  NovelReaderPreferences previewEdit(
+    NovelReaderPreferenceScope scope,
+    NovelReaderPreferences previous,
+    NovelReaderPreferences draft,
+  );
 }
 
 abstract interface class NovelReaderScopedPreferencesRepository
@@ -33,6 +41,14 @@ abstract interface class NovelReaderScopedPreferencesRepository
   });
 
   Future<NovelReaderPreferenceScopes> resetWork(String novelId);
+
+  /// Compare against storage inside the write queue so a repair cannot replace
+  /// a font chosen by another reader since this owner loaded.
+  Future<NovelReaderPreferenceScopes?> repairFontReference(
+    String novelId, {
+    required NovelReaderPreferenceScope scope,
+    required String unavailableId,
+  });
 }
 
 /// The running version cannot safely edit this stored preference format.

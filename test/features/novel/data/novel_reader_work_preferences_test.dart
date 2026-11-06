@@ -24,6 +24,48 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  test('font repair respects the field scope and a newer selection', () async {
+    final repo = _repository();
+    final oldFont = 'a' * 64, newFont = 'b' * 64;
+    final defaults = NovelReaderPreferences.defaults().copyWith(
+      fontFamily: oldFont,
+    );
+    await repo.save(defaults);
+    final work = await repo.saveScope(
+      _a,
+      scope: NovelReaderPreferenceScope.work,
+      previous: defaults,
+      next: defaults.copyWith(fontFamily: newFont),
+    );
+    expect(work.fontFamilyScope, NovelReaderPreferenceScope.work);
+    expect(
+      await repo.repairFontReference(
+        _a,
+        scope: NovelReaderPreferenceScope.defaults,
+        unavailableId: oldFont,
+      ),
+      isNull,
+    );
+    final repaired = await repo.repairFontReference(
+      _a,
+      scope: NovelReaderPreferenceScope.work,
+      unavailableId: newFont,
+    );
+    expect(repaired?.effective.fontFamily, 'system');
+    expect((await repo.load()).fontFamily, oldFont);
+    await repo.save(defaults.copyWith(fontFamily: newFont));
+    expect(
+      await repo.repairFontReference(
+        _b,
+        scope: NovelReaderPreferenceScope.defaults,
+        unavailableId: oldFont,
+      ),
+      isNull,
+    );
+    expect((await repo.loadScopes(_b)).effective.fontFamily, newFont);
+    expect((await repo.loadScopes(_a)).effective.fontFamily, 'system');
+  });
+
   test('work keeps only chosen fields including explicit defaults', () async {
     final repo = _repository();
     final global = NovelReaderPreferences.defaults().copyWith(
