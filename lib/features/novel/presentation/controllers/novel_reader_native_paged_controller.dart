@@ -670,7 +670,7 @@ final class NovelReaderNativePagedController {
     _phase = NovelReaderNativePagedPhase.loading;
     _resolveStartEntry();
     _syncDemand();
-    _restartProducer();
+    _restartProducer(resumeFinalPlan: _snapshot?.isComplete == true);
     _notify();
     return true;
   }
@@ -995,7 +995,7 @@ final class NovelReaderNativePagedController {
     }
   }
 
-  void _restartProducer() {
+  void _restartProducer({bool resumeFinalPlan = false}) {
     final epoch = ++_producerEpoch;
     _source?.close();
     try {
@@ -1008,12 +1008,14 @@ final class NovelReaderNativePagedController {
       );
       _source = source;
       unawaited(
-        source.run().then<void>(
-          (_) {},
-          onError: (Object error, StackTrace stack) {
-            if (!isClosed && epoch == _producerEpoch) _pause(error);
-          },
-        ),
+        source
+            .run(resumeFinalPlan: resumeFinalPlan)
+            .then<void>(
+              (_) {},
+              onError: (Object error, StackTrace stack) {
+                if (!isClosed && epoch == _producerEpoch) _pause(error);
+              },
+            ),
       );
     } catch (error) {
       _pause(error);

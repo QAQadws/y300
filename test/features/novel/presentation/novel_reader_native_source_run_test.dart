@@ -112,6 +112,36 @@ void main() {
     expect(fixture.cache.layoutBuildCount, 1);
   });
 
+  test(
+    'a finalized source republishes its existing plan without a source frame',
+    () async {
+      final fixture = NativeReaderTestFixture('<p>abcdef</p>');
+      final plan = fixture.session.snapshot;
+      expect(plan.isComplete, isTrue);
+      final publications = <ForumBodyTextPageSnapshot>[];
+      var frames = 0;
+      final run = NovelReaderNativeSourceRun(
+        session: fixture.session,
+        demand: demand(),
+        parent: fixture.parent,
+        scheduler: NovelReaderNativeWorkScheduler(
+          nextFrame: () async {
+            frames++;
+          },
+        ),
+        onPublication: (snapshot, _) => publications.add(snapshot),
+      );
+      addTearDown(run.close);
+      final builds = fixture.cache.layoutBuildCount;
+      final result = run.run(resumeFinalPlan: true);
+      expect(publications, isEmpty);
+      expect(await result, same(plan));
+      expect(publications, [same(plan)]);
+      expect(frames, 0);
+      expect(fixture.cache.layoutBuildCount, builds);
+    },
+  );
+
   test('source starts after a frame and emits fixed stable prefixes through actual EOF', () async {
     final fixture = NativeReaderTestFixture(
       '<p>abcdef</p>',

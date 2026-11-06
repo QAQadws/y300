@@ -126,7 +126,7 @@ final class NovelReaderNativeSourceRun {
     }
   }
 
-  Future<ForumBodyTextPageSnapshot> run() {
+  Future<ForumBodyTextPageSnapshot> run({bool resumeFinalPlan = false}) {
     final current = _running;
     if (current != null) return current;
     if (_state != NovelReaderNativeSourceRunState.pending) {
@@ -136,7 +136,7 @@ final class NovelReaderNativeSourceRun {
     _running = completion.future;
     _state = NovelReaderNativeSourceRunState.running;
     unawaited(
-      _drive().then<void>(
+      _drive(resumeFinalPlan).then<void>(
         completion.complete,
         onError: (Object error, StackTrace stack) =>
             completion.completeError(error, stack),
@@ -145,10 +145,17 @@ final class NovelReaderNativeSourceRun {
     return completion.future;
   }
 
-  Future<ForumBodyTextPageSnapshot> _drive() async {
+  Future<ForumBodyTextPageSnapshot> _drive(bool resumeFinalPlan) async {
     try {
       _demandLease = _demand!.start(_token);
-      await _yieldFrame();
+      _guard();
+      if (resumeFinalPlan && _session!.isComplete) {
+        // Resume only republishes the immutable plan. Keep the callback
+        // asynchronous and let the view job yield before acquiring leases.
+        await Future<void>.value();
+      } else {
+        await _yieldFrame();
+      }
       var published = 0;
       while (true) {
         _guard();
