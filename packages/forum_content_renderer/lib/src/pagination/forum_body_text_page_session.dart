@@ -121,6 +121,7 @@ final class ForumBodyTextPageSessionStep {
     this.formatUnitsPrepared = 0,
     this.layoutsBuilt = 0,
     this.rulesComposed = 0,
+    this.columnsSealed = 0,
     required this.unitsRead,
     required this.linesInspected,
     required this.paragraphsAdmitted,
@@ -135,6 +136,7 @@ final class ForumBodyTextPageSessionStep {
   final int formatUnitsPrepared;
   final int layoutsBuilt;
   final int rulesComposed;
+  final int columnsSealed;
   final int unitsRead;
   final int linesInspected;
   final int paragraphsAdmitted;
@@ -145,6 +147,7 @@ final class ForumBodyTextPageSessionStep {
   final bool isComplete;
   bool get madeProgress =>
       rulesComposed > 0 ||
+      columnsSealed > 0 ||
       flowWorkDone > 0 ||
       formatUnitsPrepared > 0 ||
       layoutsBuilt > 0 ||
@@ -199,6 +202,7 @@ final class ForumBodyTextPageSession {
     required String layoutId,
     required double width,
     required double height,
+    ForumBodyPageColumns columns = const ForumBodyPageColumns(),
     TextScaler textScaler = TextScaler.noScaling,
     ForumBodyParagraphContentBuilder paragraphBuilder =
         const ForumBodyParagraphContentBuilder(),
@@ -224,6 +228,12 @@ final class ForumBodyTextPageSession {
     ForumBodyTableExtent tableExtent = ForumBodyTableExtent.bookPage,
   }) {
     limits._validate();
+    if (columns.count != 1 &&
+        (contentRoot != null ||
+            scopedImage != null ||
+            intrinsicAvailableWidth != null)) {
+      throw ArgumentError('Columns require a full document viewport');
+    }
     if (intrinsicAvailableWidth != null &&
         (!intrinsicAvailableWidth.isFinite || intrinsicAvailableWidth <= 0)) {
       throw ArgumentError.value(
@@ -248,6 +258,7 @@ final class ForumBodyTextPageSession {
       layoutId: layoutId,
       width: width,
       height: height,
+      columns: columns,
       maxPages: limits.maxPages,
       maxFragments: limits.maxFragments,
       flowing: tableExtent == ForumBodyTableExtent.natural,
@@ -268,7 +279,7 @@ final class ForumBodyTextPageSession {
         ForumBodyBlockFlowCursor(
           document: document,
           reader: reader,
-          width: width,
+          width: composer.width,
           paragraphBuilder: paragraphBuilder,
           rubyLimits: rubyLimits,
           inlineImageResolver: inlineImageResolver,
@@ -579,6 +590,7 @@ final class ForumBodyTextPageSession {
     var formatUnits = 0;
     final buildsBefore = _cache.layoutBuildCount;
     final before = snapshot.length;
+    final columnsBefore = _composer.sealedColumnCount;
     _waiting = false;
     ForumBodyTextPageSessionStep result({
       int lines = 0,
@@ -593,6 +605,7 @@ final class ForumBodyTextPageSession {
         formatUnitsPrepared: formatUnits,
         layoutsBuilt: _cache.layoutBuildCount - buildsBefore,
         rulesComposed: rules,
+        columnsSealed: _composer.sealedColumnCount - columnsBefore,
         unitsRead: units,
         linesInspected: lines,
         paragraphsAdmitted: admitted,
@@ -882,13 +895,17 @@ final class ForumBodyTextPageSession {
         }
         switch (unit) {
           case ForumBodyBlockFlowTable():
+            // A book table owns a whole viewport, even between text columns.
+            final spansColumns = _composer.columns.count > 1;
             _pendingTable = (
               element: unit.table.element,
-              left: unit.left,
-              width: math.min(
-                unit.width,
-                _intrinsic?.availableWidth ?? unit.width,
-              ),
+              left: spansColumns ? 0 : unit.left,
+              width: spansColumns
+                  ? _composer.screenWidth
+                  : math.min(
+                      unit.width,
+                      _intrinsic?.availableWidth ?? unit.width,
+                    ),
             );
           case ForumBodyBlockFlowImage():
             _consumeFlowIndex(unit.image.index);

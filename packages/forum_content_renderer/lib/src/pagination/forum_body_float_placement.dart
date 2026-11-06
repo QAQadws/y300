@@ -68,8 +68,8 @@ extension ForumBodyFloatPlacement on ForumBodyTextPageComposer {
       ),
       size: occupied,
     );
-    bool retry(ForumBodyTextPageFailure failure) =>
-        precedingLine == null && _retryFloat(atStart, failure);
+    bool retryBudget(ForumBodyTextPageFailure failure) =>
+        precedingLine == null && _retryFloat(failure, forceScreen: true);
     if (precedingLine != null) {
       final band = nextFloatTextBand(
         left: left,
@@ -83,7 +83,8 @@ extension ForumBodyFloatPlacement on ForumBodyTextPageComposer {
       }
     }
     if (position.bottom > height && !(_flowing && atStart)) {
-      return retry(ForumBodyTextPageFailure.oversizedGroup);
+      return precedingLine == null &&
+          _retryFloat(ForumBodyTextPageFailure.oversizedGroup);
     }
 
     final background = layout.background;
@@ -114,14 +115,14 @@ extension ForumBodyFloatPlacement on ForumBodyTextPageComposer {
       _fail(ForumBodyTextPageFailure.fragmentLimit);
     }
     if (maxDeliveriesPerPage case final limit?
-        when _draftDeliveries + deliveries + (precedingLine == null ? 0 : 1) >
+        when _screenDeliveries + deliveries + (precedingLine == null ? 0 : 1) >
             limit) {
-      return retry(ForumBodyTextPageFailure.fragmentLimit);
+      return retryBudget(ForumBodyTextPageFailure.fragmentLimit);
     }
     if (maxNativeHandlesPerPage case final limit?
         when _usedNativeHandles + handles + (precedingLine?.handles ?? 0) >
             limit) {
-      return retry(ForumBodyTextPageFailure.nativeHandleLimit);
+      return retryBudget(ForumBodyTextPageFailure.nativeHandleLimit);
     }
     if (maxNativeEntriesPerPage case final limit?
         when _nativeEntries.length +
@@ -129,16 +130,16 @@ extension ForumBodyFloatPlacement on ForumBodyTextPageComposer {
                 entries +
                 (precedingLine?.entries ?? 0) >
             limit) {
-      return retry(ForumBodyTextPageFailure.nativeEntryLimit);
+      return retryBudget(ForumBodyTextPageFailure.nativeEntryLimit);
     }
     if (maxNativeEstimatedBytesPerPage case final limit?
         when _nativeBytes + _sceneBytes + bytes + (precedingLine?.bytes ?? 0) >
             limit) {
-      return retry(ForumBodyTextPageFailure.nativeByteLimit);
+      return retryBudget(ForumBodyTextPageFailure.nativeByteLimit);
     }
     if (maxImagesPerPage case final limit?
         when _usedImages + images + (precedingLine?.images ?? 0) > limit) {
-      return retry(ForumBodyTextPageFailure.imageLimit);
+      return retryBudget(ForumBodyTextPageFailure.imageLimit);
     }
 
     _touchBackgrounds(position.top);
@@ -166,46 +167,20 @@ extension ForumBodyFloatPlacement on ForumBodyTextPageComposer {
     for (final (index, page) in child.indexed) {
       final offset = contentOrigin + Offset(0, layout.pageTop(index));
       if (page.table case final table?) {
-        _floatedTables.add((
-          path: table.path,
-          sourceRange: table.sourceRange,
-          bounds: table.bounds.shift(offset),
-          contentSize: table.contentSize,
-          fingerprint: table.fingerprint,
-        ));
+        _floatedTables.add(_shiftTable(table, offset));
       }
       _draft.addAll(
         page.fragments.map(
-          (fragment) =>
-              _shiftFloatFragment(fragment, offset, _nextParagraphIndex),
-        ),
-      );
-      _rules.addAll(
-        page.rules.map(
-          (rule) => ForumBodyTextPageRule._(
-            path: rule.path,
-            left: rule.left + offset.dx,
-            top: rule.top + offset.dy,
-            width: rule.width,
-            thickness: rule.thickness,
-            color: rule.color,
+          (fragment) => _shiftFragment(
+            fragment,
+            offset,
+            floatInputOffset: _nextParagraphIndex,
           ),
         ),
       );
+      _rules.addAll(page.rules.map((rule) => rule._shift(offset)));
       _floatBackgrounds.addAll(
-        page.backgrounds.map(
-          (box) => ForumBodyTextPageBackground._(
-            box.path,
-            box.left + offset.dx,
-            box.top + offset.dy,
-            box.width,
-            box.height,
-            box.color,
-            box.quoteDecoration,
-            box.startsBox,
-            box.endsBox,
-          ),
-        ),
+        page.backgrounds.map((box) => box._shift(offset)),
       );
     }
     _nextParagraphIndex += inputCount;
@@ -339,9 +314,14 @@ extension ForumBodyFloatPlacement on ForumBodyTextPageComposer {
     }
   }
 
-  bool _retryFloat(bool atStart, ForumBodyTextPageFailure failure) {
-    if (atStart) _fail(failure);
-    _seal();
+  bool _retryFloat(
+    ForumBodyTextPageFailure failure, {
+    bool forceScreen = false,
+  }) {
+    if (!(forceScreen ? _hasScreenContent : _hasColumnContent)) {
+      _fail(failure);
+    }
+    _seal(forceScreen: forceScreen);
     return false;
   }
 
@@ -398,14 +378,14 @@ extension ForumBodyFloatPlacement on ForumBodyTextPageComposer {
   }
 }
 
-ForumBodyTextPageFragment _shiftFloatFragment(
+ForumBodyTextPageFragment _shiftFragment(
   ForumBodyTextPageFragment fragment,
-  Offset offset,
-  int inputOffset,
-) {
+  Offset offset, {
+  int? floatInputOffset,
+}) {
   final header = fragment.collapseHeader;
   return ForumBodyTextPageFragment._(
-    paragraphIndex: fragment.paragraphIndex + inputOffset,
+    paragraphIndex: fragment.paragraphIndex + (floatInputOffset ?? 0),
     path: fragment.path,
     fontRevision: fragment.fontRevision,
     styleRevision: fragment.styleRevision,
@@ -433,6 +413,6 @@ ForumBodyTextPageFragment _shiftFloatFragment(
     engineRange: fragment.engineRange,
     imageCount: fragment.imageCount,
     imagePaths: fragment.imagePaths,
-    isFloated: true,
+    isFloated: floatInputOffset != null || fragment.isFloated,
   );
 }

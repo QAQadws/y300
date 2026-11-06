@@ -14,6 +14,7 @@ ForumBodyTextPageSession _open(
   List<ForumBodyInlineImageInput>? imageInputs,
   int issuedLeases = 8,
   int? pageImages,
+  ForumBodyPageColumns columns = const ForumBodyPageColumns(),
 }) {
   final document = const ForumBodyParser().parse(
     html: html,
@@ -46,6 +47,7 @@ ForumBodyTextPageSession _open(
     layoutId: 'discuz-float-page',
     width: width,
     height: height,
+    columns: columns,
     captureFloats: true,
     maxNativeHandlesPerPage: handles,
     maxNativeEntriesPerPage: handles,
@@ -189,6 +191,28 @@ void main() {
       expect(session.snapshot.last.fragments.single.paragraphIndex, 2);
     },
   );
+
+  test('a new column restores full line width after a floated band', () {
+    final session = _open(
+      '<span style="float:left;height:30px">AA</span>'
+      'abcdefghijklmnopqrstuvwxyz',
+      width: 130,
+      height: 30,
+      columns: const ForumBodyPageColumns(count: 2, gap: 10),
+    );
+    _advance(session);
+    final page = session.snapshot.single;
+    final [floated, beside, nextColumn] = page.fragments;
+    expect(floated.isFloated, isTrue);
+    expect((floated.left, floated.top, floated.width), (0, 0, 20));
+    expect((beside.left, beside.top, beside.width), (20, 0, 40));
+    expect((nextColumn.left, nextColumn.top, nextColumn.width), (70, 0, 60));
+    expect(beside.sourceHint!.runeEnd, nextColumn.sourceHint!.runeStart);
+    for (final fragment in _prepare(session, 0)) {
+      fragment.close();
+    }
+    expect(session.activeIssuedLeases, 0);
+  });
 
   test('a second float respects the draft native handle budget', () {
     final session = _open(
@@ -708,7 +732,7 @@ void main() {
         images[1].element.path,
       ]);
       for (final (index, page) in session.snapshot.indexed) {
-      expect(page.fragments.expand((part) => part.imagePaths), hasLength(1));
+        expect(page.fragments.expand((part) => part.imagePaths), hasLength(1));
         final delivered = _prepare(session, index);
         final image = delivered.first as ForumBodyPreparedInlineFragment;
         expect(

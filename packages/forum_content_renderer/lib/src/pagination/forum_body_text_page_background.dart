@@ -23,6 +23,19 @@ final class ForumBodyTextPageBackground {
   /// Corner eligibility for rounded chrome. Rectangular fills do not wait for
   /// an exact-edge close, since that boundary cannot affect their paint.
   final bool startsBox, endsBox;
+
+  ForumBodyTextPageBackground _shift(Offset offset) =>
+      ForumBodyTextPageBackground._(
+        path,
+        left + offset.dx,
+        top + offset.dy,
+        width,
+        height,
+        color,
+        quoteDecoration,
+        startsBox,
+        endsBox,
+      );
 }
 
 /// Bounded numeric block decoration state, independent of native resources.

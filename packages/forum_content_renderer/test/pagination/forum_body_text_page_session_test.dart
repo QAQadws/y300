@@ -43,6 +43,10 @@ final class _Fixture {
     String id = 'generation-1',
     ForumBodyRubyContentLimits rubyLimits = const ForumBodyRubyContentLimits(),
     ForumBodyTableExtent tableExtent = ForumBodyTableExtent.bookPage,
+    ForumBodyPageColumns columns = const ForumBodyPageColumns(),
+    int? maxNativeHandlesPerPage,
+    bool dedicatedTables = false,
+    bool captureFloats = false,
   }) {
     final session = ForumBodyTextPageSession(
       document: document,
@@ -56,6 +60,11 @@ final class _Fixture {
       layoutId: id,
       width: width,
       height: height,
+      columns: columns,
+      maxNativeHandlesPerPage: maxNativeHandlesPerPage,
+      captureNativeUsage: true,
+      dedicatedTables: dedicatedTables,
+      captureFloats: captureFloats,
       textScaler: textScaler,
       rubyLimits: rubyLimits,
       tableExtent: tableExtent,
@@ -90,6 +99,117 @@ Matcher _failure(ForumBodyTextPageSessionFailure failure) => throwsA(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  for (final order in TextDirection.values) {
+    test('publishes fixed screen prefixes in ${order.name} column order', () {
+      final fixture = _Fixture(
+        '<p style="margin:0;background-color:#f00">'
+        'aaaaaaaaaaaaaa</p>',
+      );
+      final session = fixture.session(
+        width: 140,
+        height: 10,
+        columns: ForumBodyPageColumns(count: 3, gap: 10, readingOrder: order),
+      );
+      final empty = session.snapshot;
+      _advance(session, pages: 1);
+      final prefix = session.snapshot;
+      expect(empty, isEmpty);
+      expect(prefix.width, 140);
+      expect(prefix.columns.widthFor(prefix.width), 40);
+      final lefts = order == TextDirection.ltr ? [0, 50, 100] : [100, 50, 0];
+      final first = prefix.single;
+      expect(first.fragments.map((part) => part.left), lefts);
+      expect(first.fragments.map((part) => part.coverageStartUtf16), [0, 4, 8]);
+      expect(first.fragments.map((part) => part.coverageEndUtf16), [4, 8, 12]);
+      expect(first.backgrounds.map((box) => box.left), lefts);
+      expect(first.backgrounds.map((box) => box.width), [40, 40, 40]);
+      expect(first.usedHeight, 10);
+      _advance(session);
+      expect(prefix.single, same(session.snapshot.first));
+      expect(session.snapshot, hasLength(2));
+      final last = session.snapshot.last.fragments.single;
+      expect(last.left, lefts.first);
+      expect(last.coverageStartUtf16, 12);
+      expect(last.coverageEndUtf16, 14);
+      final job = session.openPagePreparation(0);
+      while (!job.isReady) {
+        job.advance(maxFragments: 1);
+      }
+      for (final part in job.takeFragments()) {
+        part.close();
+      }
+      expect(fixture.cache.activeLeases, 0);
+    });
+  }
+
+  test('a delivery budget applies to the entire screen', () {
+    final fixture = _Fixture('<p style="margin:0">aaaaaaaaaaaaaa</p>');
+    final session = fixture.session(
+      width: 140,
+      height: 10,
+      columns: const ForumBodyPageColumns(count: 3, gap: 10),
+      maxNativeHandlesPerPage: 2,
+    );
+    _advance(session);
+    expect(session.snapshot, hasLength(2));
+    expect(session.snapshot.first.fragments.map((part) => part.left), [0, 50]);
+    expect(session.snapshot.last.fragments.map((part) => part.left), [0, 50]);
+    expect(session.snapshot.map((page) => page.nativeUsage!.handles), [2, 2]);
+  });
+
+  test('a table flushes partial columns and owns the next full screen', () {
+    final fixture = _Fixture(
+      '<p style="margin:0">abcdefgh</p>'
+      '<table style="width:240px"><tr><td>Cell</td></tr></table>'
+      '<p style="margin:0">end</p>',
+    );
+    final session = fixture.session(
+      width: 140,
+      height: 10,
+      columns: const ForumBodyPageColumns(count: 3, gap: 10),
+      dedicatedTables: true,
+      captureFloats: true,
+    );
+    _advance(session, pages: 1);
+    final prefix = session.snapshot;
+    expect(prefix.single.fragments.map((part) => part.left), [0, 50]);
+    _advance(session);
+    expect(session.snapshot, hasLength(3));
+    expect(session.snapshot.first, same(prefix.single));
+    final page = session.snapshot[1];
+    expect(page.fragments, isEmpty);
+    expect(page.table!.bounds, const Rect.fromLTWH(0, 0, 140, 10));
+    expect(page.table!.contentSize.width, 240);
+    final lease = session.acquireTablePage(1)!;
+    expect(lease.layout.size, page.table!.contentSize);
+    lease.close();
+    expect(session.snapshot.last.fragments.single.left, 0);
+  });
+
+  test(
+    'late failure retires unfinished columns and keeps the published screen',
+    () {
+      final fixture = _Fixture(
+        '<p style="margin:0">abcdefghijkl</p>'
+        '<div style="position:absolute">unsupported</div>',
+      );
+      final session = fixture.session(
+        width: 90,
+        height: 10,
+        columns: const ForumBodyPageColumns(count: 2, gap: 10),
+      );
+      _advance(session, pages: 1);
+      final prefix = session.snapshot;
+      expect(prefix.single.fragments.map((part) => part.coverageEndUtf16), [
+        4,
+        8,
+      ]);
+      expect(() => _advance(session), throwsException);
+      expect(session.snapshot.single, same(prefix.single));
+      expect(fixture.cache.activeLeases, 0);
+    },
+  );
 
   for (final extent in ForumBodyTableExtent.values) {
     test('attachment lists and notices survive ${extent.name} flow', () {

@@ -144,6 +144,15 @@ final class ForumBodyTextPageRule {
   final double width;
   final double thickness;
   final Color color;
+
+  ForumBodyTextPageRule _shift(Offset offset) => ForumBodyTextPageRule._(
+    path: path,
+    left: left + offset.dx,
+    top: top + offset.dy,
+    width: width,
+    thickness: thickness,
+    color: color,
+  );
 }
 
 /// The containing box requested for a separately materialized table.
@@ -157,6 +166,17 @@ typedef ForumBodyTextPageTable = ({
   Size contentSize,
   String fingerprint,
 });
+
+ForumBodyTextPageTable _shiftTable(
+  ForumBodyTextPageTable table,
+  Offset offset,
+) => (
+  path: table.path,
+  sourceRange: table.sourceRange,
+  bounds: table.bounds.shift(offset),
+  contentSize: table.contentSize,
+  fingerprint: table.fingerprint,
+);
 
 final class ForumBodyTextPage {
   ForumBodyTextPage._(
@@ -190,6 +210,30 @@ final class ForumBodyTextPage {
   final double usedHeight;
 }
 
+/// Physical columns in one horizontal viewport. Reading order is independent
+/// of the text direction of each paragraph.
+final class ForumBodyPageColumns {
+  const ForumBodyPageColumns({
+    this.count = 1,
+    this.gap = 0,
+    this.readingOrder = TextDirection.ltr,
+  });
+
+  final int count;
+  final double gap;
+  final TextDirection readingOrder;
+
+  double widthFor(double screenWidth) =>
+      (screenWidth - (count - 1) * gap) / count;
+
+  double _leftFor(double columnWidth, int index) {
+    final physicalIndex = readingOrder == TextDirection.ltr
+        ? index
+        : count - 1 - index;
+    return physicalIndex * (columnWidth + gap);
+  }
+}
+
 /// Fixed read-only prefix over append-only storage. Completion and length are
 /// captured at creation, so later publication never changes an earlier view.
 /// Coverage offsets are paragraph-local display UTF-16, not semantic anchors.
@@ -201,6 +245,7 @@ final class ForumBodyTextPageSnapshot
     this.layoutId,
     this.width,
     this.height,
+    this.columns,
     this.isComplete,
   ) : backendRevision = ForumBodyParagraphLayout.backendRevision,
       composerRevision = ForumBodyTextPageComposer.revision,
@@ -211,6 +256,7 @@ final class ForumBodyTextPageSnapshot
   final String layoutId;
   final double width;
   final double height;
+  final ForumBodyPageColumns columns;
   final int backendRevision;
   final int composerRevision;
   final bool isComplete;
@@ -250,24 +296,34 @@ final class ForumBodyTextPageComposer {
   ForumBodyTextPageComposer({
     required this.identity,
     required this.layoutId,
-    required this.width,
+    required double width,
     required this.height,
     required this.maxPages,
     required this.maxFragments,
     bool flowing = false,
     bool avoidIsolatedLines = false,
     bool captureNativeUsage = false,
+    this.columns = const ForumBodyPageColumns(),
     this.maxNativeHandlesPerPage,
     this.maxNativeEntriesPerPage,
     this.maxNativeEstimatedBytesPerPage,
     this.maxDeliveriesPerPage,
     this.maxImagesPerPage,
-  }) : _flowing = flowing,
+  }) : screenWidth = width,
+       width = columns.widthFor(width),
+       _flowing = flowing,
        _avoidIsolatedLines = avoidIsolatedLines && !flowing,
        _captureNativeUsage = captureNativeUsage {
     if (layoutId.isEmpty ||
         !width.isFinite ||
         width <= 0 ||
+        columns.count < 1 ||
+        columns.count > 3 ||
+        !columns.gap.isFinite ||
+        columns.gap < 0 ||
+        !this.width.isFinite ||
+        this.width <= 0 ||
+        (flowing && columns.count != 1) ||
         !height.isFinite ||
         height <= 0 ||
         maxPages <= 0 ||
@@ -281,11 +337,15 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 39;
+  static const revision = 40;
   final ForumBodyIdentity identity;
   final String layoutId;
+
+  /// The line layout width of the current column.
   final double width;
+  final double screenWidth;
   final double height;
+  final ForumBodyPageColumns columns;
   final bool _flowing;
   final bool _avoidIsolatedLines;
   final bool _captureNativeUsage;
@@ -308,6 +368,14 @@ final class ForumBodyTextPageComposer {
   int _sceneEntries = 0, _sceneBytes = 0;
   _EmphasisSceneReservation? _lastSceneReservation;
   final _pages = <ForumBodyTextPage>[];
+  final _screenFragments = <ForumBodyTextPageFragment>[];
+  final _screenRules = <ForumBodyTextPageRule>[];
+  final _screenBackgrounds = <ForumBodyTextPageBackground>[];
+  final _screenTables = <ForumBodyTextPageTable>[];
+  int _screenItems = 0;
+  int _columnIndex = 0;
+  double _screenUsedHeight = 0;
+  int _sealedColumnCount = 0;
   final _draft = <ForumBodyTextPageFragment>[];
   final _rules = <ForumBodyTextPageRule>[];
   final _backgrounds = _PageBackgrounds();
@@ -330,6 +398,12 @@ final class ForumBodyTextPageComposer {
   // beside it. Only the in-flow cursor can exhaust that remaining space.
   double get _flowSealExtent => _floats.isEmpty ? _usedHeight : _flowHeight;
   int get _draftDeliveries => _draft.length + _floatedTables.length;
+  int get _screenDeliveries =>
+      _screenFragments.length + _screenTables.length + _draftDeliveries;
+  bool get _hasColumnContent =>
+      _usedHeight != 0 || _draftDeliveries != 0 || _rules.isNotEmpty;
+  bool get _hasScreenContent => _columnIndex != 0 || _hasColumnContent;
+  int get sealedColumnCount => _sealedColumnCount;
   bool _complete = false;
   bool _closed = false;
 
@@ -373,13 +447,17 @@ final class ForumBodyTextPageComposer {
     }
     final atPageStart = _draft.isEmpty && _rules.isEmpty && _usedHeight == 0;
     final extent = atPageStart ? freshExtent : occupiedExtent;
-    if (_flowHeight + extent > height ||
+    final exhaustsBudget =
         (maxDeliveriesPerPage != null &&
-            _draftDeliveries + 2 > maxDeliveriesPerPage!) ||
+            _screenDeliveries + 2 > maxDeliveriesPerPage!) ||
         (maxNativeHandlesPerPage != null &&
-            _usedNativeHandles + 2 > maxNativeHandlesPerPage!)) {
-      if (_pages.length + 1 >= maxPages) return;
-      _seal();
+            _usedNativeHandles + 2 > maxNativeHandlesPerPage!);
+    if (_flowHeight + extent > height || exhaustsBudget) {
+      if (_pages.length + 1 >= maxPages &&
+          (exhaustsBudget || _columnIndex + 1 == columns.count)) {
+        return;
+      }
+      if (_hasScreenContent) _seal(forceScreen: exhaustsBudget);
     }
     _headingFollowerIndex = _nextParagraphIndex + 1;
   }
@@ -395,8 +473,9 @@ final class ForumBodyTextPageComposer {
         _pages,
         identity,
         layoutId,
-        width,
+        screenWidth,
         height,
+        columns,
         _complete,
       );
 
@@ -433,10 +512,8 @@ final class ForumBodyTextPageComposer {
 
   bool sealBeforeTable() {
     _ensureTableBoundary();
-    if (_usedHeight == 0 && _draftDeliveries == 0 && _rules.isEmpty) {
-      return false;
-    }
-    _seal();
+    if (!_hasScreenContent) return false;
+    _seal(forceScreen: true);
     return true;
   }
 
@@ -446,7 +523,7 @@ final class ForumBodyTextPageComposer {
     ForumBodyTableExtent extent = ForumBodyTableExtent.bookPage,
   }) {
     _ensureTableBoundary();
-    if (_usedHeight != 0 || _draftDeliveries != 0 || _rules.isNotEmpty) {
+    if (_hasScreenContent) {
       throw StateError('Table requires an empty page');
     }
     final bounds = table.bounds;
@@ -461,7 +538,7 @@ final class ForumBodyTextPageComposer {
     if (!bounds.isFinite ||
         bounds.left < 0 ||
         bounds.width <= 0 ||
-        bounds.right > width + precisionErrorTolerance ||
+        bounds.right > screenWidth + precisionErrorTolerance ||
         !validExtent) {
       _fail(ForumBodyTextPageFailure.invalidGeometry);
     }
@@ -590,12 +667,12 @@ final class ForumBodyTextPageComposer {
     final before = _pages.length;
     try {
       if (maxDeliveriesPerPage != null &&
-          _draftDeliveries >= maxDeliveriesPerPage!) {
-        _seal();
+          _screenDeliveries >= maxDeliveriesPerPage!) {
+        _seal(forceScreen: true);
         return (pagesPublished: 1, isComplete: false);
       }
       if (maxImagesPerPage != null && _usedImages >= maxImagesPerPage!) {
-        _seal();
+        _seal(forceScreen: true);
         return (pagesPublished: 1, isComplete: false);
       }
       final atStart = _draft.isEmpty && _rules.isEmpty && _usedHeight == 0;
@@ -626,7 +703,7 @@ final class ForumBodyTextPageComposer {
       if (bottom > height) {
         if (!atStart) {
           _seal();
-          return (pagesPublished: 1, isComplete: false);
+          return (pagesPublished: _pages.length - before, isComplete: false);
         }
         if (!_flowing) _fail(ForumBodyTextPageFailure.oversizedGroup);
       }
@@ -659,8 +736,8 @@ final class ForumBodyTextPageComposer {
         }
       }
       if (budgetFailure != null) {
-        if (atStart) _fail(budgetFailure);
-        _seal();
+        if (!_hasScreenContent) _fail(budgetFailure);
+        _seal(forceScreen: true);
         return (pagesPublished: 1, isComplete: false);
       }
       _touchBackgrounds(top - inset);
@@ -757,7 +834,7 @@ final class ForumBodyTextPageComposer {
       if (bottom > height) {
         if (atStart) _fail(ForumBodyTextPageFailure.oversizedGroup);
         _seal();
-        return (pagesPublished: 1, isComplete: false);
+        return (pagesPublished: _pages.length - before, isComplete: false);
       }
       _touchBackgrounds(top);
       if (_fragmentCount >= maxFragments) {
@@ -990,7 +1067,11 @@ final class ForumBodyTextPageComposer {
         if (top >= height) {
           if (atPageStart) _fail(ForumBodyTextPageFailure.oversizedGroup);
           _seal();
-          return (extentConsumed: 0.0, pagesPublished: 1, isComplete: false);
+          return (
+            extentConsumed: 0.0,
+            pagesPublished: _pages.length - pagesBefore,
+            isComplete: false,
+          );
         }
         _flowHeight = top;
         active.started = true;
@@ -1069,8 +1150,8 @@ final class ForumBodyTextPageComposer {
             _draft.isNotEmpty && _draft.last.paragraphIndex == active.index;
         if (!continuation &&
             maxDeliveriesPerPage != null &&
-            _draftDeliveries >= maxDeliveriesPerPage!) {
-          _seal();
+            _screenDeliveries >= maxDeliveriesPerPage!) {
+          _seal(forceScreen: true);
           return _result(inspected, pagesBefore, false);
         }
         final firstLine = continuation
@@ -1103,10 +1184,8 @@ final class ForumBodyTextPageComposer {
         final proposedImages =
             _usedImages - (continuation ? _lastFragmentImages : 0) + images;
         if (maxImagesPerPage != null && proposedImages > maxImagesPerPage!) {
-          if (_draft.isEmpty && _usedHeight == 0) {
-            _fail(ForumBodyTextPageFailure.imageLimit);
-          }
-          _seal();
+          if (!_hasScreenContent) _fail(ForumBodyTextPageFailure.imageLimit);
+          _seal(forceScreen: true);
           return _result(inspected, pagesBefore, false);
         }
         final fragmentHeight = view?.height ?? layout.height;
@@ -1279,10 +1358,10 @@ final class ForumBodyTextPageComposer {
         final replaced = continuation ? _lastFragmentNativeHandles : 0;
         final proposed = _usedNativeHandles - replaced + handles;
         if (limit != null && proposed > limit) {
-          if (_draft.isEmpty && _usedHeight == 0) {
+          if (!_hasScreenContent) {
             _fail(ForumBodyTextPageFailure.nativeHandleLimit);
           }
-          _seal();
+          _seal(forceScreen: true);
           return _result(inspected, pagesBefore, false);
         }
         Map<Object, int>? addedEntries;
@@ -1349,19 +1428,19 @@ final class ForumBodyTextPageComposer {
           final proposedEntries =
               _nativeEntries.length + proposedSceneEntries + increase.entries;
           if (entryLimit != null && proposedEntries > entryLimit) {
-            if (_draft.isEmpty && _usedHeight == 0) {
+            if (!_hasScreenContent) {
               _fail(ForumBodyTextPageFailure.nativeEntryLimit);
             }
-            _seal();
+            _seal(forceScreen: true);
             return _result(inspected, pagesBefore, false);
           }
           addedBytes = increase.bytes;
           if (byteLimit != null &&
               _nativeBytes + addedBytes + proposedSceneBytes > byteLimit) {
-            if (_draft.isEmpty && _usedHeight == 0) {
+            if (!_hasScreenContent) {
               _fail(ForumBodyTextPageFailure.nativeByteLimit);
             }
-            _seal();
+            _seal(forceScreen: true);
             return _result(inspected, pagesBefore, false);
           }
         }
@@ -1473,11 +1552,11 @@ final class ForumBodyTextPageComposer {
             !extendedBand &&
             (!paragraphComplete || !_backgrounds.needsEndBoundary)) {
           _seal();
+          return _result(inspected, pagesBefore, paragraphComplete);
         }
         if (paragraphComplete ||
             (floatBandBottom != null && _flowHeight >= floatBandBottom) ||
-            inspected >= maxLines ||
-            _pages.length != pagesBefore) {
+            inspected >= maxLines) {
           return _result(inspected, pagesBefore, paragraphComplete);
         }
       }
@@ -1529,7 +1608,7 @@ final class ForumBodyTextPageComposer {
     if (!_backgrounds.isBalanced) throw StateError('Unclosed page background');
     if (_collapseHeader != null) throw StateError('Unclosed collapse title');
     try {
-      if (_draftDeliveries != 0 || _usedHeight > 0) _seal();
+      if (_hasScreenContent) _seal(forceScreen: true);
       _complete = true;
       _snapshot = null;
     } catch (_) {
@@ -1538,22 +1617,89 @@ final class ForumBodyTextPageComposer {
     }
   }
 
-  void _seal({ForumBodyTextPageTable? table}) {
+  void _seal({ForumBodyTextPageTable? table, bool forceScreen = false}) {
     if (_pages.length >= maxPages) _fail(ForumBodyTextPageFailure.pageLimit);
+    final hasColumn = _hasColumnContent;
     final backgrounds = _backgrounds.seal(
       _flowing ? _usedHeight : table?.bounds.bottom ?? height,
     );
-    _pages.add(
-      ForumBodyTextPage._(
-        _pages.length,
+    if (hasColumn && table == null) _sealedColumnCount++;
+    final publish =
+        forceScreen || table != null || _columnIndex + 1 == columns.count;
+    if (columns.count == 1 || table != null) {
+      _publishScreen(
         _draft,
         _rules,
         _floatBackgrounds.isEmpty
             ? backgrounds
             : [...backgrounds, ..._floatBackgrounds],
+        _floatedTables,
         _usedHeight,
+        table,
+      );
+    } else {
+      final offset = Offset(columns._leftFor(width, _columnIndex), 0);
+      _screenFragments.addAll(
+        offset == Offset.zero
+            ? _draft
+            : _draft.map((fragment) => _shiftFragment(fragment, offset)),
+      );
+      _screenRules.addAll(_rules.map((rule) => rule._shift(offset)));
+      _screenBackgrounds
+        ..addAll(backgrounds.map((box) => box._shift(offset)))
+        ..addAll(_floatBackgrounds.map((box) => box._shift(offset)));
+      _screenTables.addAll(
+        _floatedTables.map((table) => _shiftTable(table, offset)),
+      );
+      _screenUsedHeight = math.max(_screenUsedHeight, _usedHeight);
+      _screenItems +=
+          _draft.length +
+          _rules.length +
+          backgrounds.length +
+          _floatBackgrounds.length +
+          _floatedTableItems;
+      _columnIndex++;
+      if (publish) {
+        _publishScreen(
+          _screenFragments,
+          _screenRules,
+          _screenBackgrounds,
+          _screenTables,
+          _screenUsedHeight,
+          null,
+        );
+      }
+    }
+    _draft.clear();
+    _rules.clear();
+    _floatBackgrounds.clear();
+    _floatedTables.clear();
+    _floatedTableItems = 0;
+    _floats.clear();
+    _lastFragmentNativeHandles = 0;
+    _lastFragmentImages = 0;
+    _lastSceneReservation = null;
+    _usedHeight = 0;
+    _flowHeight = 0;
+  }
+
+  void _publishScreen(
+    List<ForumBodyTextPageFragment> fragments,
+    List<ForumBodyTextPageRule> rules,
+    List<ForumBodyTextPageBackground> backgrounds,
+    List<ForumBodyTextPageTable> floatedTables,
+    double usedHeight,
+    ForumBodyTextPageTable? table,
+  ) {
+    _pages.add(
+      ForumBodyTextPage._(
+        _pages.length,
+        fragments,
+        rules,
+        backgrounds,
+        usedHeight,
         table: table,
-        floatedTables: _floatedTables,
+        floatedTables: floatedTables,
         nativeUsage: _captureNativeUsage
             ? (
                 handles: _usedNativeHandles,
@@ -1564,24 +1710,24 @@ final class ForumBodyTextPageComposer {
             : null,
       ),
     );
-    _draft.clear();
-    _rules.clear();
-    _floatBackgrounds.clear();
-    _floatedTables.clear();
-    _floatedTableItems = 0;
-    _floats.clear();
+    _clearScreen();
+    _snapshot = null;
+  }
+
+  void _clearScreen() {
+    _screenFragments.clear();
+    _screenRules.clear();
+    _screenBackgrounds.clear();
+    _screenTables.clear();
+    _screenItems = 0;
+    _columnIndex = 0;
+    _screenUsedHeight = 0;
     _usedNativeHandles = 0;
     _nativeEntries.clear();
     _nativeBytes = 0;
-    _lastFragmentNativeHandles = 0;
     _usedImages = 0;
-    _lastFragmentImages = 0;
     _sceneEntries = 0;
     _sceneBytes = 0;
-    _lastSceneReservation = null;
-    _usedHeight = 0;
-    _flowHeight = 0;
-    _snapshot = null;
   }
 
   Never _fail(ForumBodyTextPageFailure failure) =>
@@ -1600,6 +1746,7 @@ final class ForumBodyTextPageComposer {
     _rule = null;
     _image = null;
     _fragmentCount -=
+        _screenItems +
         _draft.length +
         _rules.length +
         _backgrounds.itemCount +
@@ -1613,12 +1760,9 @@ final class ForumBodyTextPageComposer {
     _floatedTableItems = 0;
     _floats.clear();
     _collapseHeader = null;
-    _usedNativeHandles = 0;
-    _nativeEntries.clear();
-    _nativeBytes = 0;
+    _clearScreen();
     _lastFragmentNativeHandles = 0;
-    _sceneEntries = 0;
-    _sceneBytes = 0;
+    _lastFragmentImages = 0;
     _lastSceneReservation = null;
     _usedHeight = 0;
     _flowHeight = 0;

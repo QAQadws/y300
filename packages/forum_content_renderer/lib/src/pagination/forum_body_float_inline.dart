@@ -124,6 +124,7 @@ final class _FloatInlineAdmission {
       _session._margin = 0;
     }
 
+    final columnsBefore = composer.sealedColumnCount;
     final step = composer.advance(
       maxLines: maxLines,
       floatBandBottom: reduced ? band.bottom : null,
@@ -134,7 +135,9 @@ final class _FloatInlineAdmission {
     if (step.paragraphCompleted) {
       isComplete = true;
     } else if (reduced || holdLastLine) {
-      final sealed = step.pagesPublished != 0;
+      final sealed =
+          step.pagesPublished != 0 ||
+          composer.sealedColumnCount != columnsBefore;
       final end = composer.retireFloatTextBand(
         bottom: band.bottom,
         pageSealed: reduced && sealed,
