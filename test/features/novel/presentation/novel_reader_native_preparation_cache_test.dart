@@ -119,6 +119,13 @@ void main() {
             'private-path',
           ),
         );
+        diagnostics.failed(
+          mode,
+          const ForumBodyParagraphInputException(
+            ForumBodyParagraphInputFailure.inputLimit,
+            'private-paragraph-path',
+          ),
+        );
         diagnostics.failed(mode, StateError('private-exception'));
         diagnostics.failed(
           mode,
@@ -127,7 +134,7 @@ void main() {
             message: 'private-cancellation',
           ),
         );
-        expect(messages, hasLength(3));
+        expect(messages, hasLength(4));
         expect(messages.join(), isNot(contains('private-')));
         final rows = messages
             .map(
@@ -148,6 +155,7 @@ void main() {
           'category': 'table.overlap',
           'count': 1,
         });
+        expect(rows[2]['category'], 'paragraph.inputLimit');
         expect(rows.last['category'], 'unexpected');
       } finally {
         debugPrint = original;

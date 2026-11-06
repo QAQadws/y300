@@ -67,6 +67,8 @@ final class NovelReaderNativeDiagnostics {
       ForumBodyTextPageException(:final failure) => 'compose.${failure.name}',
       ForumBodyTextPageSessionException(:final failure) =>
         'session.${failure.name}',
+      ForumBodyParagraphInputException(:final failure) =>
+        'paragraph.${failure.name}',
       ForumBodyParagraphBudgetException(:final failure) =>
         'resources.${failure.name}',
       _ => 'unexpected',
