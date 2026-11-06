@@ -16,7 +16,6 @@ import 'forum_body_inline_emphasis_row_placement.dart';
 import 'forum_body_inline_paragraph_request.dart';
 import 'forum_body_inline_plan_input.dart';
 import 'forum_body_inline_plan_preparation.dart';
-import 'forum_body_inline_source_preparation.dart';
 
 /// Complete natural-parent measurement, with immutable source/child plans and
 /// the actual final geometry. Isolation, row allocation and visible admission
@@ -147,11 +146,7 @@ final class ForumBodyInlineEmphasisParentPreparation {
         );
       }
       if (flow != null) {
-        _sourceWork = ForumBodyInlineSourcePreparation(
-          input: flow,
-          width: width,
-          ensureOwner: _guard,
-        );
+        _flow = flow;
         _phase = _ParentPhase.source;
       } else {
         _beginText();
@@ -170,7 +165,7 @@ final class ForumBodyInlineEmphasisParentPreparation {
   void Function()? _ensureOwner;
   void Function(ForumBodyInlinePlanInput)? _validateInput;
   Iterable<ForumBodyNativeParagraphLease> Function()? _additionalOwned;
-  ForumBodyInlineSourcePreparation? _sourceWork;
+  ForumBodyInlineFlowContent? _flow;
   ForumBodyInlineEmphasisTextPreparation? _textWork;
   ForumBodyInlineEmphasisTextInput? _text;
   Iterator<double>? _samples;
@@ -231,18 +226,14 @@ final class ForumBodyInlineEmphasisParentPreparation {
         _guard();
         switch (_phase) {
           case _ParentPhase.source:
-            final work = _sourceWork!;
-            used += work.advance(maxParts: maxParts - used);
+            final input = ForumBodyInlinePlanInput(_flow!, width);
+            used++;
+            _flow = null;
+            _validateInput?.call(input);
             _guard();
-            if (work.isReady) {
-              final input = work.takeInput();
-              _sourceWork = null;
-              _validateInput?.call(input);
-              _guard();
-              _validateInput = null;
-              _input = input;
-              _beginText();
-            }
+            _validateInput = null;
+            _input = input;
+            _beginText();
             continue;
           case _ParentPhase.text:
             final work = _textWork!;
@@ -523,8 +514,7 @@ final class ForumBodyInlineEmphasisParentPreparation {
   }
 
   void _drop() {
-    _sourceWork?.close();
-    _sourceWork = null;
+    _flow = null;
     _textWork?.close();
     _textWork = null;
     _initialWork?.close();

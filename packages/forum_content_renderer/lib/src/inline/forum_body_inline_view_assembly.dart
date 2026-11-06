@@ -16,7 +16,6 @@ final class ForumBodyInlineViewAssembly {
     Map<int, ForumBodyInlineParagraphView> intrinsicBoxes = const {},
     Map<int, ForumBodyRubySegmentLayout> rubySegments = const {},
     Map<int, ForumBodyRubySoftSpaceLayout> rubySpaces = const {},
-    Map<int, ForumBodyRubyTreeLayout> rubyTrees = const {},
     Map<int, ForumBodyRubyContainerFontBox> containerBackgrounds = const {},
     Map<int, ForumBodyRubyRootFontBox> rootFonts = const {},
     void Function()? ensureOwner,
@@ -27,7 +26,6 @@ final class ForumBodyInlineViewAssembly {
        _inlineBoxes = Map.of(intrinsicBoxes),
        _segments = Map.of(rubySegments),
        _spaces = Map.of(rubySpaces),
-       _trees = Map.of(rubyTrees),
        _backgroundFonts = Map.of(containerBackgrounds),
        _rootFonts = Map.of(rootFonts),
        _ensureOwner = ensureOwner;
@@ -38,7 +36,6 @@ final class ForumBodyInlineViewAssembly {
   Map<int, ForumBodyInlineParagraphView> _inlineBoxes;
   Map<int, ForumBodyRubySegmentLayout> _segments;
   Map<int, ForumBodyRubySoftSpaceLayout> _spaces;
-  Map<int, ForumBodyRubyTreeLayout> _trees;
   Map<int, ForumBodyRubyContainerFontBox> _backgroundFonts;
   Map<int, ForumBodyRubyRootFontBox> _rootFonts;
   final _backgroundRegions = _RubyBackgroundRegions();
@@ -52,7 +49,6 @@ final class ForumBodyInlineViewAssembly {
   _RubyBindingWork? _binding;
   ForumBodyRubyAtomFrame? _bindingFrame;
   var _bindingIndex = -1;
-  var _treeBackgroundIndex = 0;
   var _atom = 0;
   var _preparedAtoms = 0;
   var _workCount = 0;
@@ -69,7 +65,6 @@ final class ForumBodyInlineViewAssembly {
     for (final view in _inlineBoxes.values) ...view.nativeLeases,
     for (final segment in _segments.values) ...segment.nativeLeases,
     for (final space in _spaces.values) ...space.nativeLeases,
-    for (final tree in _trees.values) ...tree.nativeLeases,
   ];
 
   int advance({required int maxParts}) {
@@ -92,8 +87,7 @@ final class ForumBodyInlineViewAssembly {
                 _baselines.isNotEmpty ||
                 _inlineBoxes.isNotEmpty ||
                 _segments.isNotEmpty ||
-                _spaces.isNotEmpty ||
-                _trees.isNotEmpty) {
+                _spaces.isNotEmpty) {
               _fail(ForumBodyInlineViewFailure.coverage);
             }
           } else {
@@ -113,17 +107,6 @@ final class ForumBodyInlineViewAssembly {
             work += _binding!.advance(maxParts: maxParts - work);
           }
           if (_binding!.isComplete) {
-            final backgrounds = _trees[_bindingIndex]?.backgrounds;
-            if (backgrounds != null &&
-                _treeBackgroundIndex < backgrounds.length) {
-              if (work == maxParts) break;
-              _appendTreeBackground(
-                _bindingIndex,
-                backgrounds[_treeBackgroundIndex++],
-              );
-              work++;
-              if (_treeBackgroundIndex < backgrounds.length) continue;
-            }
             final child = _binding!.takeBinding();
             _bindings[_bindingIndex] = switch (_bindingFrame) {
               final frame? => _RubyRootFrameBinding(
@@ -136,7 +119,6 @@ final class ForumBodyInlineViewAssembly {
             _appendBackground(_bindingIndex, _bindings[_bindingIndex]!);
             _binding = null;
             _bindingFrame = null;
-            _treeBackgroundIndex = 0;
             _preparedAtoms++;
           }
         } else if (_atom < _parent!.layout.projection.atoms.length) {
@@ -156,13 +138,11 @@ final class ForumBodyInlineViewAssembly {
             final inlineBox = _inlineBoxes[atom.index];
             final segment = _segments[atom.index];
             final space = _spaces[atom.index];
-            final tree = _trees[atom.index];
             if ((group != null ? 1 : 0) +
                         (baselineText != null ? 1 : 0) +
                         (inlineBox != null ? 1 : 0) +
                         (segment != null ? 1 : 0) +
-                        (space != null ? 1 : 0) +
-                        (tree != null ? 1 : 0) >
+                        (space != null ? 1 : 0) >
                     1 ||
                 atom.isSoftSpace != (space != null)) {
               _fail(ForumBodyInlineViewFailure.leases);
@@ -171,8 +151,7 @@ final class ForumBodyInlineViewAssembly {
                 baselineText == null &&
                 inlineBox == null &&
                 segment == null &&
-                space == null &&
-                tree == null) {
+                space == null) {
               _fail(ForumBodyInlineViewFailure.coverage);
             }
             final size =
@@ -182,15 +161,13 @@ final class ForumBodyInlineViewAssembly {
                     : Size(inlineBox.width, inlineBox.height)) ??
                 group?.size ??
                 segment?.size ??
-                space?.size ??
-                tree!.size;
+                space!.size;
             final baseline =
                 baselineText?.metrics.baseline ??
                 inlineBox?.lines.single.baseline ??
                 group?.baseline ??
                 segment?.baseline ??
-                space?.baseline ??
-                tree!.baseline;
+                space!.baseline;
             final root = _rootFonts[atom.index];
             if (root != null) {
               final parent = _parent!.content;
@@ -200,23 +177,13 @@ final class ForumBodyInlineViewAssembly {
                 _fail(ForumBodyInlineViewFailure.identity);
               }
             }
-            if (tree != null &&
-                (root == null ||
-                    !identical(root.input, tree.metrics.root.font.input) ||
-                    root.height != tree.metrics.root.font.height ||
-                    root.alphabeticBaseline !=
-                        tree.metrics.root.font.alphabeticBaseline)) {
-              _fail(ForumBodyInlineViewFailure.identity);
-            }
             _bindingFrame = root?.enclose(
               childSize: size,
               childBaseline: baseline,
             );
             final frameSize = _bindingFrame?.size ?? size;
             final frameBaseline = _bindingFrame?.baseline ?? baseline;
-            if (tree == null &&
-                frameSize == size &&
-                frameBaseline == baseline) {
+            if (frameSize == size && frameBaseline == baseline) {
               _bindingFrame = null;
             }
             final dimension = _parent!.layout.dimensions[atom.index];
@@ -234,7 +201,6 @@ final class ForumBodyInlineViewAssembly {
               group: group,
               segment: segment,
               space: space,
-              tree: tree,
               own: _own,
             );
           }
@@ -245,8 +211,7 @@ final class ForumBodyInlineViewAssembly {
                   _baselines.length +
                   _inlineBoxes.length +
                   _segments.length +
-                  _spaces.length +
-                  _trees.length) {
+                  _spaces.length) {
             _fail(ForumBodyInlineViewFailure.coverage);
           }
           _state = _ViewAssemblyState.ready;
@@ -259,27 +224,12 @@ final class ForumBodyInlineViewAssembly {
     });
   }
 
-  void _appendTreeBackground(
-    int index,
-    ({Rect rect, ForumBodyRubyContainerFontBox font}) region,
-  ) {
-    final layout = _parent!.layout;
-    final origin =
-        layout.atomBoxes[index].toRect().topLeft - Offset(0, _fragment!.top);
-    _backgroundRegions.add(
-      region.font,
-      _rowOfAtom(index),
-      region.rect.shift(origin),
-    );
-  }
-
   void _bindImage(int index) {
     if (_groups.containsKey(index) ||
         _baselines.containsKey(index) ||
         _inlineBoxes.containsKey(index) ||
         _segments.containsKey(index) ||
         _spaces.containsKey(index) ||
-        _trees.containsKey(index) ||
         _rootFonts.containsKey(index) ||
         _backgroundFonts.containsKey(index)) {
       _fail(ForumBodyInlineViewFailure.coverage);
@@ -401,7 +351,6 @@ final class ForumBodyInlineViewAssembly {
     _inlineBoxes = const {};
     _segments = const {};
     _spaces = const {};
-    _trees = const {};
     _bindings = {};
     _images = const {};
     _state = _ViewAssemblyState.transferred;
@@ -468,15 +417,11 @@ final class ForumBodyInlineViewAssembly {
     for (final space in _spaces.values) {
       space.close();
     }
-    for (final tree in _trees.values) {
-      tree.close();
-    }
     _groups = const {};
     _baselines = const {};
     _inlineBoxes = const {};
     _segments = const {};
     _spaces = const {};
-    _trees = const {};
     _bindings = {};
     for (final image in _images.values) {
       image._retire();

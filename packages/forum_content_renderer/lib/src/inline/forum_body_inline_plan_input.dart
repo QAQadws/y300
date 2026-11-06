@@ -19,7 +19,6 @@ import 'forum_body_ruby_child_input.dart';
 import 'forum_body_ruby_whitespace.dart';
 import 'forum_body_inline_text_window.dart';
 import 'forum_body_text_band_content.dart';
-import 'forum_body_ruby_tree_input.dart';
 import 'forum_body_inline_image_input.dart';
 
 part 'forum_body_intrinsic_text_input.dart';
@@ -45,12 +44,11 @@ final class ForumBodyInlinePlanInput {
              .atoms
              .map((atom) => atom.engineUtf16),
        );
-  static const revision = 32;
+  static const revision = 33;
 
   factory ForumBodyInlinePlanInput(
     ForumBodyInlineFlowContent input,
     double width, {
-    Map<ForumBodyRubyGroupContent, ForumBodyRubyTreeInput> trees = const {},
     bool groupMixedWords = true,
     ForumBodyInlinePlanInput? prefix,
     bool keepTrailingSpace = false,
@@ -450,30 +448,6 @@ final class ForumBodyInlinePlanInput {
               group.rootPath,
             );
           }
-          final tree = trees[group];
-          if (tree != null) {
-            if (!identical(tree.rootGroup.group, group) ||
-                tree.maxWidth != width) {
-              throw ForumBodyParagraphInputException(
-                ForumBodyParagraphInputFailure.identity,
-                group.rootPath,
-              );
-            }
-            final start = offset;
-            for (final source in tree.sources) {
-              if (!source.content.isSourceFree) {
-                sourceOrder.add(append(source.content));
-              }
-            }
-            if (start == offset) _unsupported(group.rootPath);
-            atoms.add((startUtf16: start, endUtf16: offset));
-            requestsByAtom.add(ForumBodyRubyAtomRequest.tree(tree));
-            levelIds.add(levelId);
-            previousCollapsibleSpace = false;
-            atLineStart = false;
-            lastPlain = null;
-            continue;
-          }
           final background = ForumBodyRubyContainerBackground.fromGroup(group);
           final rootBox = ForumBodyRubyRootBoxInput.fromGroup(group);
           final bases = resolveForumBodyRubyBaseInputs(group);
@@ -868,7 +842,6 @@ final class ForumBodyInlinePlanInput {
       return ForumBodyInlinePlanInput(
         input,
         width,
-        trees: trees,
         groupMixedWords: false,
         prefix: prefix,
         keepTrailingSpace: keepTrailingSpace,
@@ -991,23 +964,6 @@ final class ForumBodyInlinePlanInput {
           yield context.style.textStyle.fontSize!;
           for (final run in context.runs) {
             yield run.style.textStyle.fontSize!;
-          }
-        }
-      }
-      final tree = switch (atom) {
-        ForumBodyRubyTreeAtomRequest(:final value) => value,
-        _ => null,
-      };
-      if (tree != null) {
-        for (final node in tree.nodes) {
-          if (node is ForumBodyRubyTreeContainer) {
-            yield node.font.fontStrut.style.textStyle.fontSize!;
-            if (node.background case final background?) {
-              yield background.fontStrut.style.textStyle.fontSize!;
-            }
-          }
-          if (node is ForumBodyRubyTreeInline) {
-            yield* node.input.nativeFontSizes;
           }
         }
       }

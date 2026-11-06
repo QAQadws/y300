@@ -4,8 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:forum_content_renderer/src/inline/forum_body_inline_plan_preparation.dart';
 
-import 'test_support/unprojected_ruby_fixture.dart';
-
 const _fixtures = [
   '<ruby>A<rt>x</rt></ruby>',
   '<ruby><rb>A</rb><rb>B</rb><rtc>word</rtc></ruby>',
@@ -34,7 +32,6 @@ _Fixture _fixture(
   TextDirection direction = TextDirection.ltr,
   TextScaler scaler = TextScaler.noScaling,
   double width = 300,
-  bool authoredRuby = false,
 }) {
   final cache = ForumBodyParagraphCache(
     maxEntries: 512,
@@ -62,9 +59,7 @@ _Fixture _fixture(
     while (!flow.isComplete) {
       flow.advance(maxEvents: 1);
       if (flow.current case ForumBodyTextFlowInline(content: final value)) {
-        content = authoredRuby
-            ? withAuthoredRuby(value, readAuthoredRuby(doc, reader))
-            : value;
+        content = value;
         break;
       }
     }
@@ -225,7 +220,6 @@ void main() {
               direction: direction,
               scaler: scaler,
               width: width,
-              authoredRuby: index == 2,
             );
             final atoms = f.page.rubyAtoms;
             expect(
@@ -233,7 +227,7 @@ void main() {
                 (a) => switch (index) {
                   0 => a is ForumBodyRubyColumnPlan,
                   1 => a is ForumBodyRubySegmentPlan,
-                  2 => a is ForumBodyRubyTreePlan,
+                  2 => a is ForumBodyRubyColumnPlan,
                   3 => a is ForumBodyRubyColumnPlan,
                   5 => a is ForumBodyRubySoftSpacePlan,
                   _ => true,
@@ -274,9 +268,6 @@ void main() {
                 level = source.metrics.level;
               } else if (source is ForumBodyRubySoftSpacePlan) {
                 level = source.metrics.level;
-              } else if (source is ForumBodyRubyTreePlan) {
-                group = source.metrics.root.group;
-                level = source.metrics.root.segment?.level;
               }
               final top = group == null
                   ? -level!.baseAscent

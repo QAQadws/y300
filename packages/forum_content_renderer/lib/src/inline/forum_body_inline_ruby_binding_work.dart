@@ -11,7 +11,6 @@ final class _RubyBindingWork {
     ForumBodyInlineParagraphView? intrinsicBox,
     ForumBodyRubySegmentLayout? segment,
     ForumBodyRubySoftSpaceLayout? space,
-    ForumBodyRubyTreeLayout? tree,
     required void Function(ForumBodyNativeParagraphLease) own,
   }) : _cursor = content.openAtomicContexts(index),
        _group = group,
@@ -20,8 +19,6 @@ final class _RubyBindingWork {
        _boxLeases = intrinsicBox?.nativeLeases.iterator,
        _segment = segment,
        _space = space,
-       _tree = tree,
-       _treeLeases = tree?.nativeLeases.iterator,
        _members = segment?.inspectMembers(),
        _own = own;
   ForumBodyInlineAtomicContextCursor? _cursor;
@@ -35,11 +32,6 @@ final class _RubyBindingWork {
       Map.identity();
   ForumBodyRubySegmentLayout? _segment;
   ForumBodyRubySoftSpaceLayout? _space;
-  ForumBodyRubyTreeLayout? _tree;
-  Iterator<ForumBodyNativeParagraphLease>? _treeLeases;
-  bool _treeLeasesDone = false;
-  Map<int, ForumBodyInlineContext> _treeWindows = {};
-  int _treeMember = 0;
   ForumBodyRubySegmentMemberSnapshot? _members;
   void Function(ForumBodyNativeParagraphLease)? _own;
   ForumBodyRubyGroupMemberSnapshot? _current;
@@ -90,21 +82,6 @@ final class _RubyBindingWork {
         final window = _cursor!.resolve(text.content);
         _cursor!.finish();
         _result = _BaselineTextBinding(text, window);
-      } else if (_tree case final tree?) {
-        if (!_treeLeasesDone) {
-          if (_treeLeases!.moveNext()) {
-            _own!(_treeLeases!.current);
-          } else {
-            _treeLeasesDone = true;
-          }
-        }
-        if (_treeMember < tree.members.length) {
-          final member = tree.members[_treeMember++];
-          _treeWindows[member.nodeIndex] = _cursor!.resolve(member.content);
-        } else if (_treeLeasesDone) {
-          _cursor!.finish();
-          _result = _RubyTreeBinding(tree, UnmodifiableMapView(_treeWindows));
-        }
       } else if (_space != null) {
         if (_spaceWindows.length < _space!.contents.length) {
           final lease = _space!.memberAt(_spaceWindows.length);
@@ -198,9 +175,6 @@ final class _RubyBindingWork {
     _boxWindows = Map.identity();
     _segment = null;
     _space = null;
-    _tree = null;
-    _treeLeases = null;
-    _treeWindows = {};
     _members = null;
     _current = null;
     _own = null;

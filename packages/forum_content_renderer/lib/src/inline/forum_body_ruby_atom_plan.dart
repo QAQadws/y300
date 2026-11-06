@@ -6,8 +6,6 @@ import 'forum_body_ruby_group_metrics.dart';
 import 'forum_body_ruby_segment_request.dart';
 import 'forum_body_ruby_soft_space_request.dart';
 import 'forum_body_ruby_soft_space_contract.dart';
-import 'forum_body_ruby_tree_input.dart';
-import 'forum_body_ruby_tree_metrics_preparation.dart';
 import 'forum_body_inline_plan_preparation.dart';
 import 'forum_body_text_baseline_layout.dart';
 import 'forum_body_inline_image_input.dart';
@@ -55,10 +53,6 @@ sealed class ForumBodyRubyAtomPlan {
     required ForumBodyRubySoftSpaceRequest request,
     required ForumBodyRubySoftSpaceMetrics metrics,
   }) = ForumBodyRubySoftSpacePlan;
-  factory ForumBodyRubyAtomPlan.tree({
-    required ForumBodyRubyTreeInput request,
-    required ForumBodyRubyTreeMetrics metrics,
-  }) = ForumBodyRubyTreePlan;
   List<ForumBodyTextRequest> get nativeRequests;
   double get maxWidth;
   int get nativeHandleCount => nativeRequests.length;
@@ -147,39 +141,6 @@ final class ForumBodyTextBaselineAtomPlan extends ForumBodyRubyAtomPlan {
   final double maxWidth;
   @override
   List<ForumBodyTextRequest> get nativeRequests => [request];
-}
-
-/// A complete tree format, distinct from its private glyph-only numeric plan.
-/// Original windows qualify source; glyph requests retain their explicit
-/// derivation, and fonts plus the actual marker scene share one budget prefix.
-final class ForumBodyRubyTreePlan extends ForumBodyRubyAtomPlan {
-  ForumBodyRubyTreePlan({required this.request, required this.metrics})
-    : super._() {
-    if (!identical(request, metrics.input)) {
-      throw ArgumentError('Ruby tree plan identity differs');
-    }
-  }
-  final ForumBodyRubyTreeInput request;
-  final ForumBodyRubyTreeMetrics metrics;
-  @override
-  int get extraTextCodeUnits => request.extraTextCodeUnits;
-  @override
-  int get extraRuns => request.extraRuns;
-  @override
-  List<ForumBodyTextRequest> get nativeRequests => request.nativeRequests;
-  @override
-  int get nativeHandleCount => metrics.nativeHandleCount;
-  @override
-  Iterable<ForumBodyParagraphContent> get sourceContexts =>
-      request.sources.map((s) => s.content);
-  @override
-  Iterable<ForumBodyNativeRequestSlot> get nativeFootprint =>
-      metrics.nativeFootprint;
-  @override
-  Iterable<ForumBodyNativeBudgetSlot> get nativeBudgetFootprint =>
-      metrics.nativeBudgetFootprint;
-  @override
-  double get maxWidth => request.maxWidth;
 }
 
 final class ForumBodyRubySoftSpacePlan extends ForumBodyRubyAtomPlan {

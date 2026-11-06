@@ -12,7 +12,6 @@ import 'forum_body_ruby_atom_plan.dart';
 import 'forum_body_ruby_band_stack.dart';
 import 'forum_body_ruby_group_metrics.dart';
 import 'forum_body_ruby_root_box.dart';
-import 'forum_body_ruby_tree_metrics_preparation.dart';
 
 /// Font and annotation clearance in the actual mixed parent's coordinates.
 /// Root leading stays in its enclosing frame, not in the glyph base band.
@@ -183,7 +182,6 @@ final class ForumBodyInlineEmphasisChildBandsPreparation {
     final slot = layout.atomBoxes[_index].toRect();
     final source = page.rubyAtoms[_index];
     ForumBodyRubyAtomFrame? frame;
-    ForumBodyRubyTreeContainerMetrics? tree;
     double baseline;
     Size size;
     switch (source) {
@@ -213,28 +211,17 @@ final class ForumBodyInlineEmphasisChildBandsPreparation {
         _level = metrics.level;
         baseline = metrics.baseline;
         size = metrics.size;
-      case ForumBodyRubyTreePlan(:final metrics):
-        tree = metrics.root;
-        baseline = tree.box.alphabeticBaseline;
-        size = tree.frame.size;
     }
     frame = page.rootFonts[_index]?.enclose(
       childSize: size,
       childBaseline: baseline,
     );
     _origin = slot.topLeft + (frame?.childOffset ?? Offset.zero);
-    var baseOrigin = _origin;
-    if (tree != null) {
-      baseOrigin += tree.frame.childOffset;
-      _group = tree.group;
-      _level = tree.segment?.level;
-    }
     if (_group case final group?) {
-      _top = baseOrigin.dy + group.baseBandTop;
-      _bottom = baseOrigin.dy + group.baseBandBottom;
+      _top = _origin.dy + group.baseBandTop;
+      _bottom = _origin.dy + group.baseBandBottom;
     } else {
-      final nativeBaseline =
-          baseOrigin.dy + (tree?.segment?.baseline ?? baseline);
+      final nativeBaseline = _origin.dy + baseline;
       _top = nativeBaseline - _level!.baseAscent;
       _bottom = nativeBaseline + _level!.baseDescent;
       // Retain the actual local anchor for the existing shared stack arithmetic.
@@ -242,7 +229,7 @@ final class ForumBodyInlineEmphasisChildBandsPreparation {
       _over = _level!.baseAscent;
       _under = _level!.baseDescent;
     }
-    _bandOrigin = baseOrigin.dy;
+    _bandOrigin = _origin.dy;
     _phase = _ChildBandPhase.ranks;
   }
 

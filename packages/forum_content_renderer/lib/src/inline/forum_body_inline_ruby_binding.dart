@@ -111,59 +111,6 @@ final class _BaselineTextBinding extends _RubyBinding {
   void close() => text.close();
 }
 
-final class _RubyTreeBinding extends _RubyBinding {
-  const _RubyTreeBinding(this.tree, this.windows);
-  final ForumBodyRubyTreeLayout tree;
-  final Map<int, ForumBodyInlineContext> windows;
-  @override
-  Size get size => tree.size;
-  @override
-  double get baseline => tree.baseline;
-  @override
-  bool get isActive => tree.isActive;
-  @override
-  Iterable<ForumBodyNativeParagraphLease> get nativeLeases => tree.nativeLeases;
-  @override
-  void paint(Canvas canvas, Offset offset) => tree.paint(canvas, offset);
-  @override
-  _RubySourceHit sourceAt(Offset point) {
-    final hit = tree.sourceAt(point);
-    return (window: windows[hit.nodeIndex]!, position: hit.position);
-  }
-
-  @override
-  List<TextBox> selectionBoxes(int start, int end) => [
-    for (final member in tree.members)
-      ..._selectRubyWindow(
-        windows[member.nodeIndex],
-        start,
-        end,
-        (from, to) => tree.selectionBoxes(
-          nodeIndex: member.nodeIndex,
-          startUtf16: from,
-          endUtf16: to,
-        ),
-      ),
-  ];
-  @override
-  List<TextBox> glyphBoxes(int start, int end) => [
-    for (final member in tree.members)
-      ..._selectRubyWindow(
-        windows[member.nodeIndex],
-        start,
-        end,
-        (from, to) => tree.selectionBoxes(
-          nodeIndex: member.nodeIndex,
-          startUtf16: from,
-          endUtf16: to,
-          paintedOnly: true,
-        ),
-      ),
-  ];
-  @override
-  void close() => tree.close();
-}
-
 /// The complete scene already qualifies actual glyphs and markers. This second
 /// binding associates each original current source with its real parent window.
 final class _RubyRootFrameBinding extends _RubyBinding {

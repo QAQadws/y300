@@ -331,7 +331,6 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
         ForumBodyInlineImageAtomPlan() ||
         ForumBodyTextBaselineAtomPlan() ||
         ForumBodyIntrinsicInlineAtomPlan() => null,
-        ForumBodyRubyTreePlan(:final request) => request.rootGroup.font,
         ForumBodyRubyColumnPlan(:final request) => request.rootBox,
         ForumBodyRubySegmentPlan(:final request) => request.rootBox,
         ForumBodyRubySoftSpacePlan(:final request) => request.rootBox,
@@ -343,7 +342,6 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
         ForumBodyInlineImageAtomPlan() ||
         ForumBodyTextBaselineAtomPlan() ||
         ForumBodyIntrinsicInlineAtomPlan() => null,
-        ForumBodyRubyTreePlan() => null,
         ForumBodyRubyColumnPlan(:final request) => request.background,
         ForumBodyRubySegmentPlan(:final request) => request.background,
         ForumBodyRubySoftSpacePlan(:final request) => request.background,
@@ -385,10 +383,6 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
         ForumBodyTextBaselineAtomPlan(:final metrics) => (
           size: metrics.size,
           baseline: metrics.baseline,
-        ),
-        ForumBodyRubyTreePlan(:final metrics) => (
-          size: metrics.rootAtom.size,
-          baseline: metrics.rootAtom.baseline,
         ),
         ForumBodyRubySegmentPlan(:final metrics) => (
           size: metrics.size,

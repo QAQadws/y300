@@ -3,9 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:forum_content_renderer/src/inline/forum_body_inline_plan_input.dart';
 import 'package:forum_content_renderer/src/inline/forum_body_inline_plan_preparation.dart';
-import 'package:forum_content_renderer/src/inline/forum_body_inline_source_preparation.dart';
-
-import 'unprojected_ruby_fixture.dart';
 
 const mixedEmphasisChildren = [
   '<ruby style="text-emphasis:none">A<rt>x</rt></ruby>',
@@ -104,7 +101,6 @@ final class MixedEmphasisParentFixture {
     String parentStyle = 'text-emphasis:circle;line-height:.4',
     String prefix = 'P',
     String suffix = 'Q',
-    bool authoredRuby = false,
     TextStyle readerTextStyle = const TextStyle(
       fontFamily: 'Ahem',
       fontSize: 20,
@@ -129,17 +125,15 @@ final class MixedEmphasisParentFixture {
       while (!flow.isComplete) {
         flow.advance(maxEvents: 1);
         if (flow.current case ForumBodyTextFlowInline(:final content)) {
-          actual = authoredRuby
-              ? withAuthoredRubies(content, readAuthoredRubies(doc, reader))
-              : content;
+          actual = content;
           break;
         }
       }
     } finally {
       flow.close();
     }
-    final source = ForumBodyInlineSourcePreparation(
-      input: layoutMode == null
+    input = ForumBodyInlinePlanInput(
+      layoutMode == null
           ? actual!
           : ForumBodyInlineFlowContent(
               identity: actual!.identity,
@@ -152,17 +146,8 @@ final class MixedEmphasisParentFixture {
               ignored: actual.ignored,
               issues: actual.issues,
             ),
-      width: width,
-      ensureOwner: () {},
+      width,
     );
-    try {
-      while (!source.isReady) {
-        source.advance(maxParts: 1);
-      }
-      input = source.takeInput();
-    } finally {
-      source.close();
-    }
     final text = ForumBodyInlineEmphasisTextPreparation(
       content: input.content,
       ensureOwner: () {},
