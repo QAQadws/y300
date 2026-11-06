@@ -6,6 +6,7 @@ import 'package:y300/features/fonts/fonts.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/repositories/novel_reader_preferences_repository.dart';
+import 'package:y300/features/novel/domain/repositories/novel_reader_preset_repository.dart';
 import 'package:y300/features/novel/presentation/novel_text_resolver.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_chapter_interactions_dock_controller.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -22,6 +23,7 @@ import 'novel_reader_text_alignment_settings_panel.dart';
 import 'novel_reader_viewport_settings_panel.dart';
 import 'novel_reader_color_settings_panel.dart';
 import 'novel_reader_author_color_settings_panel.dart';
+import 'novel_reader_preset_dialog.dart';
 import '../services/novel_reader_native_typography_adapter.dart';
 
 class NovelReaderDisplaySettingsSheet extends StatefulWidget {
@@ -35,6 +37,7 @@ class NovelReaderDisplaySettingsSheet extends StatefulWidget {
     this.canEditWork = false,
     this.onScopeChanged,
     this.onResetWork,
+    this.presetActions,
   });
 
   final NovelReaderPreferences initialPreferences;
@@ -44,6 +47,12 @@ class NovelReaderDisplaySettingsSheet extends StatefulWidget {
   final bool canEditWork;
   final ValueChanged<NovelReaderPreferenceScope>? onScopeChanged;
   final VoidCallback? onResetWork;
+  final ({
+    NovelReaderPresetRepository repository,
+    Future<bool> Function(String) fontAvailable,
+    ValueChanged<NovelReaderPresetApplication> apply,
+  })?
+  presetActions;
 
   /// Controlled native entry only; old rendering modes do not advertise this.
   final bool nativeTypography;
@@ -139,6 +148,16 @@ class _NovelReaderDisplaySettingsSheetState
                         key: const Key('novel-reader-reset-work-settings'),
                         onPressed: _confirmWorkReset,
                         child: Text(l10n.novelReaderResetWorkSettings),
+                      ),
+                    if (widget.presetActions != null)
+                      ListTile(
+                        key: const Key('novel-reader-open-presets'),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                        ),
+                        title: Text(l10n.novelReaderPresets),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: _openPresets,
                       ),
                   ],
                 ),
@@ -552,6 +571,24 @@ class _NovelReaderDisplaySettingsSheetState
     );
     if (reset == true && mounted && ModalRoute.of(context)?.isCurrent == true) {
       widget.onResetWork?.call();
+    }
+  }
+
+  Future<void> _openPresets() async {
+    final actions = widget.presetActions;
+    if (actions == null) return;
+    final selection = await showDialog<NovelReaderPresetApplication>(
+      context: context,
+      builder: (context) => NovelReaderPresetDialog(
+        repository: actions.repository,
+        current: _draft,
+        fontAvailable: actions.fontAvailable,
+      ),
+    );
+    if (mounted &&
+        selection != null &&
+        ModalRoute.of(context)?.isCurrent == true) {
+      widget.presetActions?.apply(selection);
     }
   }
 

@@ -25,6 +25,7 @@ import 'package:y300/features/novel/presentation/services/novel_reader_bootstrap
 import 'package:y300/features/novel/presentation/services/novel_reader_document_build_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_preference_impact_analyzer.dart';
 import 'package:y300/features/novel/domain/repositories/novel_reader_preferences_repository.dart';
+import 'package:y300/features/novel/domain/repositories/novel_reader_preset_repository.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_shared_preferences_bridge.dart';
 
@@ -558,6 +559,38 @@ class NovelReaderController extends AsyncNotifier<NovelReaderViewState> {
     return _commitScopedChange(
       preview: scopes.defaults,
       write: () => repository.resetWork(novelId),
+      isCurrent: isCurrent,
+    );
+  }
+
+  Future<bool> applyReadingPreset({
+    required NovelReaderPreferenceScope scope,
+    required NovelReaderPresetApplication preset,
+    required bool Function() isCurrent,
+  }) {
+    if (!ref.mounted || !isCurrent()) return Future.value(false);
+    final scopes = state.value?.preferenceScopes;
+    final repository = ref.read(novelReaderPreferencesRepositoryProvider);
+    if (scopes == null ||
+        repository is! NovelReaderScopedPreferencesRepository) {
+      return Future.value(false);
+    }
+    final defaults = scope == NovelReaderPreferenceScope.defaults;
+    final target = preset.keepCurrentFont
+        ? preset.preferences.copyWith(
+            fontFamily:
+                (defaults ? scopes.defaults : scopes.effective).fontFamily,
+          )
+        : preset.preferences;
+    final novelId = _args.novelId;
+    return _commitScopedChange(
+      preview: defaults ? scopes.previewDefaults(target) : target,
+      write: () => repository.applyPreset(
+        novelId,
+        scope: scope,
+        preferences: target,
+        keepCurrentFont: preset.keepCurrentFont,
+      ),
       isCurrent: isCurrent,
     );
   }

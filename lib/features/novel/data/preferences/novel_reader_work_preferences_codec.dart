@@ -133,6 +133,15 @@ final class NovelReaderWorkPreferencesCodec {
     };
   }
 
+  Map<String, Object?> presetFields(
+    NovelReaderPreferences value, {
+    required bool keepCurrentFont,
+  }) {
+    final fields = _fields(value);
+    if (keepCurrentFont) fields.remove('fontFamily');
+    return fields;
+  }
+
   NovelReaderPreferences apply(
     NovelReaderPreferences defaults,
     Map<String, Object?> fields,

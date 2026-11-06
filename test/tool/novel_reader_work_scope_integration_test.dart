@@ -3,9 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/core/preferences/preferences_store.dart';
+import 'package:y300/features/fonts/data/services/flutter_font_runtime_loader.dart';
+import 'package:y300/features/fonts/domain/repositories/font_library_repository.dart';
+import 'package:y300/features/fonts/fonts.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/novel/data/preferences/novel_reader_preferences_legacy_source.dart';
 import 'package:y300/features/novel/data/preferences/shared_preferences_novel_reader_preferences_repository.dart';
+import 'package:y300/features/novel/data/preferences/shared_preferences_novel_reader_preset_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_preferences.dart';
 import 'package:y300/features/novel/domain/repositories/novel_reader_preferences_repository.dart';
@@ -53,20 +57,30 @@ void main() {
     );
     await data.addReaderBookmark(bookmark: bookmark);
     final navigator = GlobalKey<NavigatorState>();
-    await tester.pumpWidget(
-      data.scope(
-        MaterialApp(
-          navigatorKey: navigator,
-          theme: ThemeData.light().copyWith(
-            textTheme: const TextTheme(
-              bodyMedium: TextStyle(fontFamily: 'Ahem'),
-            ),
-          ),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: const Scaffold(),
+    final fonts = FontLibraryService(
+      repository: const _NoFonts(),
+      runtimeLoader: FlutterFontRuntimeLoader(),
+    );
+    addTearDown(fonts.dispose);
+    final fixture = data.scope(
+      MaterialApp(
+        navigatorKey: navigator,
+        theme: ThemeData.light().copyWith(
+          textTheme: const TextTheme(bodyMedium: TextStyle(fontFamily: 'Ahem')),
         ),
-        preferences: repo,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const Scaffold(),
+      ),
+      preferences: repo,
+    ) as ProviderScope;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...fixture.overrides,
+          fontLibraryServiceProvider.overrideWithValue(fonts),
+        ],
+        child: fixture.child,
       ),
     );
 
@@ -269,6 +283,51 @@ void main() {
         ))?.anchorNodeId,
         anchor.nodeId,
       );
+
+      final missingFont = 'a' * 64;
+      final presets = SharedPreferencesNovelReaderPresetRepository(
+        SharedPreferencesStore(),
+      );
+      await presets.save(
+        'Missing imported font',
+        state().persistedPreferences.copyWith(
+          fontSize: 22,
+          fontFamily: missingFont,
+        ),
+      );
+      await settings();
+      await scope(NovelReaderPreferenceScope.work);
+      final presetButton = find.byKey(const Key('novel-reader-open-presets'));
+      await tester.ensureVisible(presetButton);
+      await tester.tap(presetButton);
+      await tester.pumpAndSettle();
+      final preset = find.text('Missing imported font');
+      await tester.tap(preset);
+      await tester.pumpAndSettle();
+      final apply = find.byKey(
+        const Key('novel-reader-apply-preset-with-current-font'),
+      );
+      expect(apply, findsOneWidget);
+      expect(state().preferenceScopes!.hasWorkOverrides, isFalse);
+      await tester.tap(apply);
+      await tester.pumpAndSettle();
+      await dismissSettings();
+      final applied = await wait(
+        (value) =>
+            state().persistedPreferences.fontSize == 22 &&
+            value.paginationKey != reset.paginationKey,
+      );
+      expectAnchor(applied);
+      expect(state().preferences.fontFamily, 'system');
+      expect(
+        state().preferenceScopes!.fontFamilyScope,
+        NovelReaderPreferenceScope.defaults,
+      );
+      expect((await repo.load()).fontSize, 14);
+      expect(
+        (await presets.load()).single.preferences!.fontFamily,
+        missingFont,
+      );
       await closeReader(popped);
       expect(tester.takeException(), isNull);
     } finally {
@@ -282,4 +341,18 @@ final class _NoLegacy implements NovelReaderPreferencesLegacySource {
   const _NoLegacy();
   @override
   Future<NovelReaderPreferences?> load() async => null;
+}
+
+final class _NoFonts implements FontLibraryRepository {
+  const _NoFonts();
+
+  @override
+  Stream<void> get changes => const Stream.empty();
+
+  @override
+  Future<List<ImportedFont>> listFonts() async => const [];
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw StateError('Unexpected font I/O: ${invocation.memberName}');
 }

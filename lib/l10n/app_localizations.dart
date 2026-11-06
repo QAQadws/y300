@@ -3654,6 +3654,90 @@ abstract class AppLocalizations {
   /// **'让本作品重新沿用小说默认设置，保留阅读位置和书签。'**
   String get novelReaderResetWorkSettingsBody;
 
+  /// No description provided for @novelReaderPresets.
+  ///
+  /// In zh, this message translates to:
+  /// **'阅读预设'**
+  String get novelReaderPresets;
+
+  /// No description provided for @novelReaderPresetsEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无已保存的阅读预设'**
+  String get novelReaderPresetsEmpty;
+
+  /// No description provided for @novelReaderPresetLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'读取阅读预设失败'**
+  String get novelReaderPresetLoadFailed;
+
+  /// No description provided for @novelReaderPresetSaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存阅读预设失败'**
+  String get novelReaderPresetSaveFailed;
+
+  /// No description provided for @novelReaderPresetUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'此版本无法套用该预设'**
+  String get novelReaderPresetUnavailable;
+
+  /// No description provided for @novelReaderPresetApplyHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'点按套用到当前范围'**
+  String get novelReaderPresetApplyHint;
+
+  /// No description provided for @novelReaderPresetActions.
+  ///
+  /// In zh, this message translates to:
+  /// **'预设操作'**
+  String get novelReaderPresetActions;
+
+  /// No description provided for @novelReaderSavePreset.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存当前设置'**
+  String get novelReaderSavePreset;
+
+  /// No description provided for @novelReaderRenamePreset.
+  ///
+  /// In zh, this message translates to:
+  /// **'重命名预设'**
+  String get novelReaderRenamePreset;
+
+  /// No description provided for @novelReaderResetPreset.
+  ///
+  /// In zh, this message translates to:
+  /// **'重置预设'**
+  String get novelReaderResetPreset;
+
+  /// No description provided for @novelReaderPresetName.
+  ///
+  /// In zh, this message translates to:
+  /// **'预设名称'**
+  String get novelReaderPresetName;
+
+  /// No description provided for @novelReaderResetPresetBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'将此预设恢复为应用初始设置，保留预设名称。'**
+  String get novelReaderResetPresetBody;
+
+  /// No description provided for @novelReaderPresetFontUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'预设字体不可用'**
+  String get novelReaderPresetFontUnavailable;
+
+  /// No description provided for @novelReaderPresetFontUnavailableBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'继续将保留当前设置的字体，并套用预设中的其他设置。'**
+  String get novelReaderPresetFontUnavailableBody;
+
   /// No description provided for @novelTypography.
   ///
   /// In zh, this message translates to:

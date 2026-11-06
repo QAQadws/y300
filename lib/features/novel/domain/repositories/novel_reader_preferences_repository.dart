@@ -42,6 +42,13 @@ abstract interface class NovelReaderScopedPreferencesRepository
 
   Future<NovelReaderPreferenceScopes> resetWork(String novelId);
 
+  Future<NovelReaderPreferenceScopes> applyPreset(
+    String novelId, {
+    required NovelReaderPreferenceScope scope,
+    required NovelReaderPreferences preferences,
+    required bool keepCurrentFont,
+  });
+
   /// Compare against storage inside the write queue so a repair cannot replace
   /// a font chosen by another reader since this owner loaded.
   Future<NovelReaderPreferenceScopes?> repairFontReference(

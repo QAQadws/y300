@@ -84,11 +84,32 @@ final class SharedPreferencesNovelReaderPreferencesRepository
     required NovelReaderPreferenceScope scope,
     required NovelReaderPreferences previous,
     required NovelReaderPreferences next,
-  }) => _serialized(() async {
+  }) => _serialized(
+    () => _saveFields(novelId, scope, _workCodec.changes(previous, next)),
+  );
+
+  @override
+  Future<NovelReaderPreferenceScopes> applyPreset(
+    String novelId, {
+    required NovelReaderPreferenceScope scope,
+    required NovelReaderPreferences preferences,
+    required bool keepCurrentFont,
+  }) => _serialized(
+    () => _saveFields(
+      novelId,
+      scope,
+      _workCodec.presetFields(preferences, keepCurrentFont: keepCurrentFont),
+    ),
+  );
+
+  Future<NovelReaderPreferenceScopes> _saveFields(
+    String novelId,
+    NovelReaderPreferenceScope scope,
+    Map<String, Object?> changes,
+  ) async {
     final key = _workKey(novelId);
     final work = await _readWork(key);
     final defaults = await _loadDefaults();
-    final changes = _workCodec.changes(previous, next);
     if (changes.isEmpty) return _workCodec.scope(defaults, work.record);
     if (scope == NovelReaderPreferenceScope.defaults) {
       final updated = _workCodec.apply(defaults, changes);
@@ -98,7 +119,7 @@ final class SharedPreferencesNovelReaderPreferencesRepository
     final source = _workCodec.encode(work.record, changes);
     await _writeWork(key, previous: work.source, next: source);
     return _workCodec.scope(defaults, _workCodec.decode(source));
-  });
+  }
 
   @override
   Future<NovelReaderPreferenceScopes> resetWork(String novelId) =>

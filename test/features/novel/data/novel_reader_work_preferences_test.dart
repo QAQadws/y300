@@ -24,6 +24,32 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  test(
+    'a preset pins equal values but a missing font keeps its inheritance',
+    () async {
+      final repo = _repository();
+      final defaultFont = 'a' * 64, missing = 'b' * 64, changed = 'c' * 64;
+      final defaults = NovelReaderPreferences.defaults().copyWith(
+        fontFamily: defaultFont,
+      );
+      await repo.save(defaults);
+      final saved = await repo.applyPreset(
+        _a,
+        scope: NovelReaderPreferenceScope.work,
+        preferences: defaults.copyWith(fontFamily: missing),
+        keepCurrentFont: true,
+      );
+      expect(saved.hasWorkOverrides, isTrue);
+      expect(saved.fontFamilyScope, NovelReaderPreferenceScope.defaults);
+      expect(saved.effective.fontFamily, defaultFont);
+      await repo.save(defaults.copyWith(fontFamily: changed, fontSize: 24));
+      final next = await repo.loadScopes(_a);
+      expect(next.effective.fontFamily, changed);
+      expect(next.effective.fontSize, defaults.fontSize);
+      expect((await repo.loadScopes(_b)).effective.fontSize, 24);
+    },
+  );
+
   test('font repair respects the field scope and a newer selection', () async {
     final repo = _repository();
     final oldFont = 'a' * 64, newFont = 'b' * 64;

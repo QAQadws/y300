@@ -2220,6 +2220,49 @@ class AppLocalizationsZh extends AppLocalizations {
   String get novelReaderResetWorkSettingsBody => '让本作品重新沿用小说默认设置，保留阅读位置和书签。';
 
   @override
+  String get novelReaderPresets => '阅读预设';
+
+  @override
+  String get novelReaderPresetsEmpty => '暂无已保存的阅读预设';
+
+  @override
+  String get novelReaderPresetLoadFailed => '读取阅读预设失败';
+
+  @override
+  String get novelReaderPresetSaveFailed => '保存阅读预设失败';
+
+  @override
+  String get novelReaderPresetUnavailable => '此版本无法套用该预设';
+
+  @override
+  String get novelReaderPresetApplyHint => '点按套用到当前范围';
+
+  @override
+  String get novelReaderPresetActions => '预设操作';
+
+  @override
+  String get novelReaderSavePreset => '保存当前设置';
+
+  @override
+  String get novelReaderRenamePreset => '重命名预设';
+
+  @override
+  String get novelReaderResetPreset => '重置预设';
+
+  @override
+  String get novelReaderPresetName => '预设名称';
+
+  @override
+  String get novelReaderResetPresetBody => '将此预设恢复为应用初始设置，保留预设名称。';
+
+  @override
+  String get novelReaderPresetFontUnavailable => '预设字体不可用';
+
+  @override
+  String get novelReaderPresetFontUnavailableBody =>
+      '继续将保留当前设置的字体，并套用预设中的其他设置。';
+
+  @override
   String get novelTypography => '排版';
 
   @override
@@ -8299,6 +8342,49 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get novelReaderResetWorkSettingsBody => '讓本作品重新沿用小說預設設定，保留閱讀位置和書籤。';
+
+  @override
+  String get novelReaderPresets => '閱讀預設';
+
+  @override
+  String get novelReaderPresetsEmpty => '尚無已儲存的閱讀預設';
+
+  @override
+  String get novelReaderPresetLoadFailed => '讀取閱讀預設失敗';
+
+  @override
+  String get novelReaderPresetSaveFailed => '儲存閱讀預設失敗';
+
+  @override
+  String get novelReaderPresetUnavailable => '此版本無法套用該預設';
+
+  @override
+  String get novelReaderPresetApplyHint => '點按套用到目前範圍';
+
+  @override
+  String get novelReaderPresetActions => '預設操作';
+
+  @override
+  String get novelReaderSavePreset => '儲存目前設定';
+
+  @override
+  String get novelReaderRenamePreset => '重新命名預設';
+
+  @override
+  String get novelReaderResetPreset => '重置預設';
+
+  @override
+  String get novelReaderPresetName => '預設名稱';
+
+  @override
+  String get novelReaderResetPresetBody => '將此預設恢復為應用程式的初始設定，保留預設名稱。';
+
+  @override
+  String get novelReaderPresetFontUnavailable => '預設字型無法使用';
+
+  @override
+  String get novelReaderPresetFontUnavailableBody =>
+      '繼續將保留目前設定的字型，並套用預設中的其他設定。';
 
   @override
   String get novelTypography => '排版';

@@ -29,6 +29,7 @@ import 'package:y300/features/novel/domain/models/novel_reader_spacing.dart';
 import 'package:y300/features/novel/domain/models/novel_episode_open_policy.dart';
 import 'package:y300/features/novel/domain/models/novel_source_reading_context.dart';
 import 'package:y300/features/novel/domain/repositories/novel_reader_preferences_repository.dart';
+import 'package:y300/features/novel/domain/repositories/novel_reader_preset_repository.dart';
 import 'package:y300/features/novel/data/services/novel_reader_progress_diagnostics.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_bookmark_range.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
@@ -87,7 +88,11 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 
 const _progressDiagnostics = NovelReaderProgressDiagnostics();
 
-typedef _DisplayScopeAction = ({NovelReaderPreferenceScope scope, bool reset});
+typedef _DisplayScopeAction = ({
+  NovelReaderPreferenceScope scope,
+  bool reset,
+  NovelReaderPresetApplication? preset,
+});
 
 class NovelReaderPage extends ConsumerStatefulWidget {
   const NovelReaderPage({
@@ -3426,6 +3431,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     }
 
     return _runWithReaderSemanticsSuspended(() async {
+      final presetRepository = scope == null
+          ? null
+          : ref.read(novelReaderPresetRepositoryProvider);
+      final fonts = scope == null ? null : ref.read(fontLibraryServiceProvider);
       final action = await showModalBottomSheet<_DisplayScopeAction>(
         context: context,
         constraints: BoxConstraints(maxHeight: maxSheetHeight),
@@ -3437,13 +3446,27 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           onScopeChanged: scope == null
               ? null
               : (target) =>
-                    Navigator.of(context).pop((scope: target, reset: false)),
+                    Navigator.of(context)
+                        .pop((scope: target, reset: false, preset: null)),
           onResetWork:
               scope == NovelReaderPreferenceScope.work &&
                   scopes?.canEditWork == true
-              ? () => Navigator.of(context)
-                    .pop((scope: NovelReaderPreferenceScope.work, reset: true))
+              ? () => Navigator.of(context).pop((
+                  scope: NovelReaderPreferenceScope.work,
+                  reset: true,
+                  preset: null,
+                ))
               : null,
+          presetActions: presetRepository == null || scope == null
+              ? null
+              : (
+                  repository: presetRepository,
+                  fontAvailable: (id) async =>
+                      (await fonts!.resolveFont(id)).failure == null,
+                  apply: (preset) =>
+                      Navigator.of(context)
+                          .pop((scope: scope, reset: false, preset: preset)),
+                ),
           onPreferencesChanged: (next) => prepareModeChange(
             editor?.previewMode(next) ?? next.flowMode,
             () => coordinator.change(next),
@@ -3470,16 +3493,33 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       }
       await pendingChange;
       await coordinator.flush();
-      if (action?.reset == true && editor != null) {
+      if (editor != null &&
+          action != null &&
+          (action.reset || action.preset != null)) {
         final latest = _displayEditState(controller, viewState);
         if (latest == null || !editor.isCurrent()) return null;
-        Future<void>? reset;
-        prepareModeChange(latest.preferenceScopes!.defaults.flowMode, () {
-          reset = () async {
+        final latestScopes = latest.preferenceScopes!;
+        final preset = action.preset;
+        final mode = preset == null
+            ? latestScopes.defaults.flowMode
+            : action.scope == NovelReaderPreferenceScope.defaults
+            ? latestScopes.previewDefaults(preset.preferences).flowMode
+            : preset.preferences.flowMode;
+        Future<void>? mutation;
+        prepareModeChange(mode, () {
+          mutation = () async {
             try {
-              await controller.resetWorkPreferences(
-                isCurrent: editor.isCurrent,
-              );
+              if (preset == null) {
+                await controller.resetWorkPreferences(
+                  isCurrent: editor.isCurrent,
+                );
+              } else {
+                await controller.applyReadingPreset(
+                  scope: action.scope,
+                  preset: preset,
+                  isCurrent: editor.isCurrent,
+                );
+              }
             } catch (_) {
               if (mounted && editor.isCurrent()) {
                 _showReaderSnackBar(
@@ -3490,7 +3530,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           }();
         });
         await pendingChange;
-        await reset;
+        await mutation;
       }
       return action;
     });

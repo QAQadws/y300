@@ -12,6 +12,7 @@ import 'package:y300/features/novel/data/preferences/novel_interaction_preferenc
 import 'package:y300/features/novel/data/preferences/novel_reader_preferences_legacy_source.dart';
 import 'package:y300/features/novel/data/preferences/shared_preferences_novel_interaction_preferences_repository.dart';
 import 'package:y300/features/novel/data/preferences/shared_preferences_novel_reader_preferences_repository.dart';
+import 'package:y300/features/novel/data/preferences/shared_preferences_novel_reader_preset_repository.dart';
 import 'package:y300/features/novel/data/repositories/sqflite_novel_chapter_sync_repository.dart';
 import 'package:y300/features/novel/data/repositories/sqflite_novel_source_metadata_repository.dart';
 import 'package:y300/features/novel/data/repositories/sqflite_novel_source_state_repository.dart';
@@ -36,6 +37,7 @@ import 'package:content_title_core/content_title_core.dart';
 import 'package:y300/features/novel/domain/repositories/novel_source_state_repository.dart';
 import 'package:y300/features/novel/domain/repositories/novel_interaction_preferences_repository.dart';
 import 'package:y300/features/novel/domain/repositories/novel_reader_preferences_repository.dart';
+import 'package:y300/features/novel/domain/repositories/novel_reader_preset_repository.dart';
 import 'package:y300/features/novel/domain/repositories/novel_source_metadata_repository.dart';
 import 'package:y300/features/novel/domain/repositories/novel_chapter_sync_repository.dart';
 import 'package:y300/features/novel/domain/services/novel_post_attach_html_resolver.dart';
@@ -117,6 +119,13 @@ final novelReaderPreferencesRepositoryProvider =
       return SharedPreferencesNovelReaderPreferencesRepository(
         preferencesStore: ref.watch(preferencesStoreProvider),
         legacySource: ref.watch(novelReaderPreferencesLegacySourceProvider),
+      );
+    });
+
+final novelReaderPresetRepositoryProvider =
+    Provider<NovelReaderPresetRepository>((ref) {
+      return SharedPreferencesNovelReaderPresetRepository(
+        ref.watch(preferencesStoreProvider),
       );
     });
 
