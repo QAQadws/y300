@@ -3,7 +3,7 @@ part of 'thread_detail_widgets.dart';
 /// Reuses the entry-centered viewport without knowing intervening chunk heights.
 /// Whole HTML keeps its existing mounted state and scrolling path.
 mixin _ThreadDetailEndpointNavigation on ConsumerState<ThreadDetailContent> {
-  ThreadDetailPreparedBodyStore get _preparedBodies;
+  ThreadDetailPreparedBodyStore? get _preparedBodies;
   ThreadPostViewportAnchorCoordinator get _projectionAnchorCoordinator;
   set _pendingChunkAnchor(ThreadPostViewportAnchorSnapshot? value);
   GlobalKey get _targetCenterKey;
@@ -11,7 +11,6 @@ mixin _ThreadDetailEndpointNavigation on ConsumerState<ThreadDetailContent> {
   GlobalKey get _viewportKey;
   List<ThreadDetailPostProjection> get _postProjections;
   Object? get _renderLayoutIdentity;
-  bool get _canChunkBodies;
   bool _isCurrentPreparedRequest(ForumHtmlPreparationRequest request);
 
   final _endpointBoundaryKey = GlobalKey(debugLabel: 'thread-page-endpoint');
@@ -45,6 +44,7 @@ mixin _ThreadDetailEndpointNavigation on ConsumerState<ThreadDetailContent> {
         previous.state.currentPage != widget.state.currentPage ||
         previous.targetPid != widget.targetPid ||
         previous.landing != widget.landing ||
+        previous.nativeBody != widget.nativeBody ||
         !identical(previous.scrollController, widget.scrollController) ||
         previous.bodyReadingCoordinator != widget.bodyReadingCoordinator ||
         previous.enableBodyChunking != widget.enableBodyChunking;
@@ -93,10 +93,11 @@ mixin _ThreadDetailEndpointNavigation on ConsumerState<ThreadDetailContent> {
   }) async {
     // Reparenting a whole renderer would discard its local folds/image state.
     // Keep this fast path to pages whose bodies already have pure safe plans.
-    if (!_canChunkBodies ||
+    final preparedBodies = _preparedBodies;
+    if (preparedBodies == null ||
         _postProjections.isEmpty ||
         _postProjections.any((post) {
-          final body = _preparedBodies[post.sourcePost.pid];
+          final body = preparedBodies[post.sourcePost.pid];
           return body == null || !_isCurrentPreparedRequest(body.request);
         })) {
       return ThreadDetailEndpointNavigationResult.unavailable;

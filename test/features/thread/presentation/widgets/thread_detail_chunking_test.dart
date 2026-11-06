@@ -179,6 +179,7 @@ void main() {
     'theme',
     'themeFade',
     'fontScale',
+    'backend',
   ]) {
     testWidgets('quick endpoint $retirement retires its pending navigation', (
       tester,
@@ -223,6 +224,8 @@ void main() {
                 typography: preferences.typography.copyWith(fontScale: 1.5),
               ),
             );
+          case 'backend':
+            host.setNativeBody(true);
         }
         await tester.pump(const Duration(milliseconds: 16));
         if (changesLayout) {
@@ -261,6 +264,18 @@ void main() {
         if (retirement == 'content') {
           await _ready(tester, 'new current body');
           expect(_bodyText(tester), isNot(contains('old-unit[')));
+        }
+        if (retirement == 'backend') {
+          await _pumpUntil(
+            tester,
+            () => find.byType(ForumNativeBodyFlow).evaluate().isNotEmpty,
+          );
+          expect(_renderers(tester, 'long'), isEmpty);
+          host.setNativeBody(false);
+          await tester.pump();
+          host.controller.jumpTo(host.controller.position.minScrollExtent);
+          await _ready(tester, 'old-unit[0]');
+          expect(find.byType(ForumNativeBodyFlow), findsNothing);
         }
         if (changesLayout) {
           await _pumpUntil(
@@ -938,6 +953,7 @@ class _Host {
   final bool quickScrolling;
   final Duration themeAnimationDuration;
   int currentPage = 1;
+  bool nativeBody = false;
   int navigationStarts = 0;
   final confirmedOffsets = <double>[];
   final visibleTargets = <String>[];
@@ -956,6 +972,11 @@ class _Host {
   void changeTheme(ThemeData theme) => key.currentState!.changeTheme(theme);
   void changePage(int page) {
     currentPage = page;
+    key.currentState!.replacePosts();
+  }
+
+  void setNativeBody(bool value) {
+    nativeBody = value;
     key.currentState!.replacePosts();
   }
 
@@ -1091,6 +1112,7 @@ class _PageState extends State<_Page> {
               },
               child: ThreadDetailContent(
                 enableBodyChunking: true,
+                nativeBody: widget.host.nativeBody,
                 state: _state(),
                 projection: _projection(),
                 targetPid: widget.host.target,

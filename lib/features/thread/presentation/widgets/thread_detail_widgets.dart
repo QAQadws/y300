@@ -136,22 +136,17 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
     with _ThreadDetailEndpointNavigation {
   late final _isLowRamDevice =
       DeviceMemoryProfileStore.current?.isLowRamDevice ?? false;
+  _ThreadDetailChunks? _chunks;
   @override
-  late final _preparedBodies = ThreadDetailPreparedBodyStore(
-    maxRetainedCodeUnits: (_isLowRamDevice ? 2 : 4) * 1024 * 1024,
-  );
-  late final _bodyHandoffs = ThreadBodyPreparationHandoff(_preparedBodies);
-  late final _chunkPreparation = ThreadBodyChunkPreparation(_preparedBodies);
+  ThreadDetailPreparedBodyStore? get _preparedBodies => _chunks?.store;
   final _footerExpansions = <String, _ThreadPostFooterExpansion>{};
   final _wholeBodyPresentations = ThreadBodyPresentationStore();
   // Saved body percentages require complete actual geometry. Source reading
   // pages keep their existing whole-body renderer and reading observer.
-  @override
   bool get _canChunkBodies =>
       !widget.nativeBody &&
       widget.enableBodyChunking &&
       widget.bodyReadingCoordinator == null;
-  int _bodyGeneration = 0;
   @override
   Object? _renderLayoutIdentity;
   @override
@@ -217,6 +212,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
             widget.state.queryParameters['authorid'] ||
         oldWidget.state.queryParameters['ordertype'] !=
             widget.state.queryParameters['ordertype'] ||
+        oldWidget.nativeBody != widget.nativeBody ||
         !identical(oldWidget.scrollController, widget.scrollController) ||
         oldWidget.bodyReadingCoordinator != widget.bodyReadingCoordinator) {
       _wholeBodyPresentations.clear();
@@ -227,6 +223,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
     }
     if (oldWidget.state.tid != widget.state.tid ||
         oldWidget.state.currentPage != widget.state.currentPage ||
+        oldWidget.nativeBody != widget.nativeBody ||
         oldWidget.enableBodyChunking != widget.enableBodyChunking ||
         oldWidget.bodyReadingCoordinator != widget.bodyReadingCoordinator) {
       _retirePreparedBodies();
@@ -259,7 +256,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
     final projectionAnchor = shouldRestoreProjectionAnchor
         ? _projectionAnchorCoordinator.capture(_sourcePidsFor(oldWidget))
         : null;
-    if (widget.enableBodyChunking && projectionAnchor != null) {
+    if (_canChunkBodies && projectionAnchor != null) {
       _pendingChunkAnchor = projectionAnchor;
     }
     if (!identical(oldWidget.scrollController, widget.scrollController) ||
@@ -298,7 +295,6 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
     _clearFooterExpansions();
     _wholeBodyPresentations.clear();
     _retirePreparedBodies();
-    _chunkPreparation.dispose();
     _tickerModeNotifier?.removeListener(_handleTickerModeChanged);
     _imageViewportCoordinator?.dispose();
     _scrollStabilizer.dispose();
@@ -308,6 +304,13 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
 
   @override
   Widget build(BuildContext context) {
+    final chunks = _canChunkBodies
+        ? _chunks ??= _ThreadDetailChunks(
+            ThreadDetailPreparedBodyStore(
+              maxRetainedCodeUnits: (_isLowRamDevice ? 2 : 4) * 1024 * 1024,
+            ),
+          )
+        : null;
     final wholeBodyHtml = {
       for (final post in _postProjections)
         post.sourcePost.pid: post.displayPost.message,
@@ -316,7 +319,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
       (pid, html) =>
           widget.bodyReadingCoordinator == null &&
           wholeBodyHtml[pid] == html &&
-          _preparedBodies[pid] == null,
+          chunks?.store[pid] == null,
     );
     final footerPids = _sourcePidsFor(widget).toSet();
     _footerExpansions.removeWhere((pid, expansion) {
@@ -324,12 +327,11 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
       expansion.dispose();
       return true;
     });
-    if (_canChunkBodies) {
-      final activePids = _sourcePidsFor(widget).toSet();
-      _bodyHandoffs.retainPids(activePids);
-      _preparedBodies.retainWhere((pid, _) => activePids.contains(pid));
-      _chunkPreparation.retainCurrent();
-      if (_preparedBodies.bodies.isNotEmpty) {
+    if (chunks != null) {
+      chunks.handoffs.retainPids(footerPids);
+      chunks.store.retainWhere((pid, _) => footerPids.contains(pid));
+      chunks.preparation.retainCurrent();
+      if (chunks.store.bodies.isNotEmpty) {
         final fontBinding = ref.watch(forumHtmlReaderFontBindingProvider);
         final layoutIdentity = (
           fontBinding.preferences.renderOptions,
@@ -379,7 +381,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
       posts: _postProjections,
       targetPid: _endpointTarget == null ? widget.targetPid : null,
       landing: _endpointTarget == null ? widget.landing : ThreadPostLanding.top,
-      bodyManifests: _canChunkBodies ? _preparedBodies.manifests : const {},
+      bodyManifests: chunks?.store.manifests ?? const {},
     );
     _projectionAnchorCoordinator.prune(
       _postProjections.map((post) => post.sourcePost.pid),
@@ -492,70 +494,68 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
       _footerExpansions.putIfAbsent(pid, _ThreadPostFooterExpansion.new);
 
   ThreadBodyPresentation? _wholeBodyPresentationFor(String pid, String html) =>
-      widget.bodyReadingCoordinator != null || _preparedBodies[pid] != null
+      widget.bodyReadingCoordinator != null || _preparedBodies?[pid] != null
       ? null
       : _wholeBodyPresentations.obtain(pid, html);
 
   void _retirePreparedBodies() {
-    _bodyGeneration++;
-    _bodyHandoffs.clear();
-    _chunkPreparation.clear();
-    _preparedBodies.clear();
+    final chunks = _chunks;
+    _chunks = null;
+    chunks?.dispose();
     _pendingChunkAnchor = null;
     _renderLayoutIdentity = null;
   }
 
   bool _handoffPreparedBody(
+    _ThreadDetailChunks chunks,
     BuildContext bodyContext,
     ForumHtmlPreparationRequest request,
     ForumHtmlPreparedRenderDocument document,
   ) {
-    if (!_canChunkBodies) {
-      return false;
-    }
+    if (!identical(_chunks, chunks)) return false;
+    final handoffs = chunks.handoffs;
     final pid = request.sourceId;
     final identity = request.identity;
-    _bodyHandoffs.retireDeclinedInput(pid, identity);
-    if (_bodyHandoffs.isDeclined(pid, identity)) return false;
-    if (_bodyHandoffs.pendingFor(pid)?.identity == identity) return true;
+    handoffs.retireDeclinedInput(pid, identity);
+    if (handoffs.isDeclined(pid, identity)) return false;
+    if (handoffs.pendingFor(pid)?.identity == identity) return true;
     final candidate = ThreadDetailPreparedBody(
       request: request,
       document: document,
     );
-    final previousLease = _bodyHandoffs.pendingFor(pid);
-    if (previousLease != null) _bodyHandoffs.release(previousLease);
-    final generation = _bodyGeneration;
-    if (!_bodyHandoffs.canReserve(pid, candidate)) {
-      if (_preparedBodies[pid] == null) return false;
-      final rejected = _bodyHandoffs.begin(pid: pid, identity: identity);
+    final previousLease = handoffs.pendingFor(pid);
+    if (previousLease != null) handoffs.release(previousLease);
+    if (!handoffs.canReserve(pid, candidate)) {
+      if (chunks.store[pid] == null) return false;
+      final rejected = handoffs.begin(pid: pid, identity: identity);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted ||
-            generation != _bodyGeneration ||
-            !_bodyHandoffs.isCurrent(rejected)) {
+            !identical(_chunks, chunks) ||
+            !handoffs.isCurrent(rejected)) {
           return;
         }
         if (!_isCurrentPreparedRequest(request)) {
-          _bodyHandoffs.release(rejected);
+          handoffs.release(rejected);
           return;
         }
-        setState(() => _bodyHandoffs.decline(rejected));
+        setState(() => handoffs.decline(rejected));
       });
       return true;
     }
-    final lease = _bodyHandoffs.begin(pid: pid, identity: identity);
+    final lease = handoffs.begin(pid: pid, identity: identity);
     final seedOrdinal = _preparationSeedOrdinal(bodyContext, pid, document);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted ||
           !bodyContext.mounted ||
-          generation != _bodyGeneration ||
-          !_bodyHandoffs.isCurrent(lease) ||
+          !identical(_chunks, chunks) ||
+          !handoffs.isCurrent(lease) ||
           !_isCurrentPreparedRequest(request)) {
-        _bodyHandoffs.release(lease);
+        handoffs.release(lease);
         return;
       }
       late ThreadBodyPreparationHandoffResult result;
       setState(() {
-        result = _bodyHandoffs.complete(
+        result = handoffs.complete(
           lease,
           candidate,
           currentInput: true,
@@ -858,6 +858,11 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
     ThreadDetailNativePalette palette, {
     bool stabilizeImageLayout = true,
   }) {
+    final chunks = _chunks;
+    final ThreadPreparedBodyHandoff? onPreparedBody = chunks == null
+        ? null
+        : (context, request, document) =>
+              _handoffPreparedBody(chunks, context, request, document);
     switch (entry.kind) {
       case ThreadDetailRenderEntryKind.postCard:
         return KeyedSubtree(
@@ -898,11 +903,9 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
                 ?.anchorsFor(entry.sourcePost!.pid),
             imagePrecacheService: widget.htmlImagePrecacheService,
             bodyReadingCoordinator: widget.bodyReadingCoordinator,
-            onPreparedBody: _canChunkBodies ? _handoffPreparedBody : null,
-            preparerSelector: _canChunkBodies
-                ? _bodyHandoffs.selectPreparer
-                : null,
-            enableSafeDisplayPlanning: _canChunkBodies,
+            onPreparedBody: onPreparedBody,
+            preparerSelector: chunks?.handoffs.selectPreparer,
+            enableSafeDisplayPlanning: chunks != null,
             onOpenPostActions: widget.onOpenPostActions,
             onOpenCommentAuthorProfile: widget.onOpenCommentAuthorProfile,
             onTogglePollOption: widget.onTogglePollOption,
@@ -932,7 +935,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
           showPostActionsButton: widget.nativeBody,
         );
         return KeyedSubtree(
-          key: _preparedBodies[entry.sourcePost!.pid] == null
+          key: chunks?.store[entry.sourcePost!.pid] == null
               ? null
               : _projectionAnchorCoordinator.keyForPid(entry.sourcePost!.pid),
           child: _PostBuildObserver(
@@ -981,14 +984,12 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
                 ?.anchorsFor(entry.sourcePost!.pid),
             imagePrecacheService: widget.htmlImagePrecacheService,
             bodyReadingCoordinator: widget.bodyReadingCoordinator,
-            onPreparedBody: _canChunkBodies ? _handoffPreparedBody : null,
-            preparerSelector: _canChunkBodies
-                ? _bodyHandoffs.selectPreparer
-                : null,
-            enableSafeDisplayPlanning: _canChunkBodies,
+            onPreparedBody: onPreparedBody,
+            preparerSelector: chunks?.handoffs.selectPreparer,
+            enableSafeDisplayPlanning: chunks != null,
             bodyManifest: entry.bodyManifest,
-            chunkPreparation: _chunkPreparation,
-            preparedBodyStore: _preparedBodies,
+            chunkPreparation: chunks?.preparation,
+            preparedBodyStore: chunks?.store,
             layoutIdentity: _renderLayoutIdentity,
             chunkOrdinal: entry.chunkOrdinal,
             onOpenPostActions: widget.onOpenPostActions,
@@ -996,7 +997,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
         );
       case ThreadDetailRenderEntryKind.postFooter:
         return KeyedSubtree(
-          key: _preparedBodies[entry.sourcePost!.pid] != null
+          key: chunks?.store[entry.sourcePost!.pid] != null
               ? null
               : _projectionAnchorCoordinator.keyForPid(entry.sourcePost!.pid),
           child: _ThreadPostCardFooterEntry(

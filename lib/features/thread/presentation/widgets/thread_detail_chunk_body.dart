@@ -1,5 +1,22 @@
 part of 'thread_detail_widgets.dart';
 
+/// The legacy chunk cache and its preparation jobs have the same owner.
+final class _ThreadDetailChunks {
+  _ThreadDetailChunks(this.store)
+    : handoffs = ThreadBodyPreparationHandoff(store),
+      preparation = ThreadBodyChunkPreparation(store);
+
+  final ThreadDetailPreparedBodyStore store;
+  final ThreadBodyPreparationHandoff handoffs;
+  final ThreadBodyChunkPreparation preparation;
+
+  void dispose() {
+    handoffs.clear();
+    preparation.dispose();
+    store.clear();
+  }
+}
+
 Widget _chunkRenderer(
   ThreadDetailBodyManifest manifest,
   ThreadDetailPreparedChunk chunk, {
