@@ -151,6 +151,7 @@ class NovelReaderPreferences {
     this.compressBlankLines = false,
     this.removeSourceIndent = false,
     this.avoidIsolatedLines = false,
+    this.keepHeadingWithNext = false,
     this.typography = const NovelReaderTypographyOverrides(),
     this.viewport = const NovelReaderViewportOverrides(),
     this.colors = const NovelReaderColorOverrides(),
@@ -177,6 +178,7 @@ class NovelReaderPreferences {
     required this.compressBlankLines,
     required this.removeSourceIndent,
     required this.avoidIsolatedLines,
+    required this.keepHeadingWithNext,
     required this.typography,
     required this.viewport,
     required this.colors,
@@ -201,6 +203,7 @@ class NovelReaderPreferences {
       compressBlankLines: false,
       removeSourceIndent: false,
       avoidIsolatedLines: false,
+      keepHeadingWithNext: false,
       typography: NovelReaderTypographyOverrides(),
       viewport: NovelReaderViewportOverrides(),
       colors: NovelReaderColorOverrides(),
@@ -263,6 +266,7 @@ class NovelReaderPreferences {
   final bool compressBlankLines;
   final bool removeSourceIndent;
   final bool avoidIsolatedLines;
+  final bool keepHeadingWithNext;
 
   String get themeMode => themePreset.storageValue;
 
@@ -289,6 +293,7 @@ class NovelReaderPreferences {
         other.compressBlankLines == compressBlankLines &&
         other.removeSourceIndent == removeSourceIndent &&
         other.avoidIsolatedLines == avoidIsolatedLines &&
+        other.keepHeadingWithNext == keepHeadingWithNext &&
         other.typography == typography &&
         other.viewport == viewport &&
         other.colors == colors;
@@ -312,7 +317,7 @@ class NovelReaderPreferences {
     safeAreaEnabled,
     compressBlankLines,
     removeSourceIndent,
-    avoidIsolatedLines,
+    Object.hash(avoidIsolatedLines, keepHeadingWithNext),
     typography,
     viewport,
     colors,
@@ -337,6 +342,7 @@ class NovelReaderPreferences {
     bool? compressBlankLines,
     bool? removeSourceIndent,
     bool? avoidIsolatedLines,
+    bool? keepHeadingWithNext,
     NovelReaderTypographyOverrides? typography,
     NovelReaderViewportOverrides? viewport,
     NovelReaderColorOverrides? colors,
@@ -362,6 +368,7 @@ class NovelReaderPreferences {
       compressBlankLines: compressBlankLines ?? this.compressBlankLines,
       removeSourceIndent: removeSourceIndent ?? this.removeSourceIndent,
       avoidIsolatedLines: avoidIsolatedLines ?? this.avoidIsolatedLines,
+      keepHeadingWithNext: keepHeadingWithNext ?? this.keepHeadingWithNext,
       typography: typography ?? this.typography,
       viewport: viewport ?? this.viewport,
       colors: colors ?? this.colors,

@@ -83,6 +83,7 @@ class DefaultNovelReaderPreferenceImpactAnalyzer
         previous.compressBlankLines != next.compressBlankLines ||
         previous.removeSourceIndent != next.removeSourceIndent ||
         previous.avoidIsolatedLines != next.avoidIsolatedLines ||
+        previous.keepHeadingWithNext != next.keepHeadingWithNext ||
         previous.safeAreaEnabled != next.safeAreaEnabled) {
       impacts.add(NovelReaderPreferenceImpact.relayout);
     }

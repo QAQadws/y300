@@ -1008,6 +1008,8 @@
   "novelRemoveSourceIndentDescription": "清除普通正文开头的空格和作者设置的首行缩进",
   "novelAvoidIsolatedLines": "避免孤行",
   "novelAvoidIsolatedLinesDescription": "横向翻页时，尽量避免段落在页首或页尾只留一行",
+  "novelKeepHeadingWithNext": "标题与下段同页",
+  "novelKeepHeadingWithNextDescription": "横向翻页时，尽量让标题和下一段的开头留在同一页",
   "novelSafeContent": "安全显示正文",
   "novelChapterInteractionsDockSetting": "显示章末互动悬浮按钮",
   "novelChapterInteractionsSettingSaveFailed": "按钮设置保存失败，已恢复之前的设置",

@@ -330,6 +330,20 @@ class _NovelReaderDisplaySettingsSheetState
                   ),
                   if (widget.nativeTypography) ...[
                     SwitchListTile.adaptive(
+                      key: const Key('novel-reader-keep-heading-with-next'),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                      ),
+                      title: Text(l10n.novelKeepHeadingWithNext),
+                      subtitle: Text(l10n.novelKeepHeadingWithNextDescription),
+                      value: _draft.keepHeadingWithNext,
+                      onChanged: _draft.flowMode == NovelReaderFlowMode.vertical
+                          ? null
+                          : (value) => _applyPreferences(
+                              _draft.copyWith(keepHeadingWithNext: value),
+                            ),
+                    ),
+                    SwitchListTile.adaptive(
                       key: const Key('novel-reader-avoid-isolated-lines'),
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 20,

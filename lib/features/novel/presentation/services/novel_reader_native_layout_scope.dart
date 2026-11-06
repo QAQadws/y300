@@ -47,10 +47,12 @@ final class NovelReaderNativeLayoutScope {
     required String paragraphInputs,
     required bool usesQuoteTheme,
     required bool avoidIsolatedLines,
+    required bool keepHeadingWithNext,
   }) : _fontCollectionGeneration = fontCollectionGeneration,
        _paragraphInputs = paragraphInputs,
        _usesQuoteTheme = usesQuoteTheme,
-       _avoidIsolatedLines = avoidIsolatedLines;
+       _avoidIsolatedLines = avoidIsolatedLines,
+       _keepHeadingWithNext = keepHeadingWithNext;
   static const fingerprintRevision = 16;
   final NovelReaderNativePreparedChapter chapter;
   final ForumBodyReaderStyle reader;
@@ -70,6 +72,7 @@ final class NovelReaderNativeLayoutScope {
   final String _paragraphInputs;
   final bool _usesQuoteTheme;
   final bool _avoidIsolatedLines;
+  final bool _keepHeadingWithNext;
 
   static Future<NovelReaderNativeLayoutScope> prepare({
     required NovelReaderNativePreparedChapter chapter,
@@ -178,6 +181,7 @@ final class NovelReaderNativeLayoutScope {
       pageEntryLimit,
       pageByteLimit,
       environment.avoidIsolatedLines,
+      environment.keepHeadingWithNext,
       images?.geometryIdentity,
       if (collapses != null)
         [
@@ -206,6 +210,7 @@ final class NovelReaderNativeLayoutScope {
       paragraphInputs: jsonEncode([...revisions, ...readerValues]),
       usesQuoteTheme: inputs.usesQuoteTheme,
       avoidIsolatedLines: environment.avoidIsolatedLines,
+      keepHeadingWithNext: environment.keepHeadingWithNext,
       paginationKey:
           'native-$fingerprintRevision-${sha256.convert(utf8.encode(jsonEncode(payload)))}',
     );
@@ -225,6 +230,7 @@ final class NovelReaderNativeLayoutScope {
         width != this.width ||
         height != this.height ||
         environment.avoidIsolatedLines != _avoidIsolatedLines ||
+        environment.keepHeadingWithNext != _keepHeadingWithNext ||
         fontCollectionGeneration != _fontCollectionGeneration) {
       return null;
     }
@@ -264,6 +270,7 @@ final class NovelReaderNativeLayoutScope {
       paragraphInputs: _paragraphInputs,
       usesQuoteTheme: _usesQuoteTheme,
       avoidIsolatedLines: _avoidIsolatedLines,
+      keepHeadingWithNext: _keepHeadingWithNext,
       paginationKey: paginationKey,
     );
   }
@@ -294,6 +301,7 @@ final class NovelReaderNativeLayoutScope {
       captureFloats: true,
       tableExtent: tableExtent,
       avoidIsolatedLines: _avoidIsolatedLines,
+      keepHeadingWithNext: _keepHeadingWithNext,
       imageResolver: catalog?.resolve,
       inlineImageResolver: catalog == null
           ? null

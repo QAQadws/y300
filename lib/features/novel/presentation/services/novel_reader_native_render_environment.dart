@@ -15,6 +15,7 @@ final class NovelReaderNativeRenderEnvironment {
     this.textScaler,
     this.backgroundColor,
     this.avoidIsolatedLines,
+    this.keepHeadingWithNext,
   );
 
   factory NovelReaderNativeRenderEnvironment.capture(
@@ -77,6 +78,8 @@ final class NovelReaderNativeRenderEnvironment {
       palette.background,
       preferences.avoidIsolatedLines &&
           preferences.flowMode != NovelReaderFlowMode.vertical,
+      preferences.keepHeadingWithNext &&
+          preferences.flowMode != NovelReaderFlowMode.vertical,
     );
   }
 
@@ -84,4 +87,5 @@ final class NovelReaderNativeRenderEnvironment {
   final TextScaler textScaler;
   final Color backgroundColor;
   final bool avoidIsolatedLines;
+  final bool keepHeadingWithNext;
 }

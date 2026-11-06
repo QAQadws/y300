@@ -37,6 +37,7 @@ part 'forum_body_float_session.dart';
 part 'forum_body_float_text.dart';
 part 'forum_body_float_inline.dart';
 part 'forum_body_selection_copy.dart';
+part 'forum_body_heading_keep.dart';
 
 typedef _TableAdmission = ({
   ForumBodyElement element,
@@ -218,6 +219,7 @@ final class ForumBodyTextPageSession {
     bool captureFloats = false,
     bool captureNativeUsage = false,
     bool avoidIsolatedLines = false,
+    bool keepHeadingWithNext = false,
     // A flowing host consumes a table's actual occupied height as one slice.
     ForumBodyTableExtent tableExtent = ForumBodyTableExtent.bookPage,
   }) {
@@ -330,6 +332,9 @@ final class ForumBodyTextPageSession {
               )
             : null,
         contentRoot?.kind == ForumBodyElementKind.table,
+        keepHeadingWithNext &&
+            contentRoot == null &&
+            tableExtent == ForumBodyTableExtent.bookPage,
       );
       if (scopedImage != null) {
         try {
@@ -378,6 +383,7 @@ final class ForumBodyTextPageSession {
     this._openTable,
     this._openFloat,
     this._scopedTable,
+    this._keepHeadingWithNext,
   ) : _content = _RetainedParagraphs(limits);
   final ForumBodyBlockFlowCursor _flow;
   final ForumBodyTextPageComposer _composer;
@@ -386,6 +392,7 @@ final class ForumBodyTextPageSession {
   final ForumBodyImageResolver? _imageResolver;
   final bool _scopedBody;
   final bool _scopedTable;
+  final bool _keepHeadingWithNext;
   final ForumBodyTableExtent _tableExtent;
   final ForumBodyFlowWidthMeasure? _intrinsic;
   final ForumBodyTablePreparation Function(
@@ -435,6 +442,7 @@ final class ForumBodyTextPageSession {
   int _publishedParagraphCount = 0;
   int _droppedIssues = 0;
   bool _waiting = false;
+  _HeadingKeepProbe? _headingKeepProbe;
 
   ForumBodyTextPageSessionState get state => _state;
   bool get isComplete => _state == ForumBodyTextPageSessionState.complete;
@@ -832,14 +840,46 @@ final class ForumBodyTextPageSession {
           if (_scopedTable) _finishSource();
           return result(completed: true);
         }
-        if (work >= maxEvents) return result();
-        final step = _flow.advance(maxEvents: maxEvents - work);
-        events += step.eventsRead;
-        work += step.workDone;
-        _collectIssues();
-        final unit = _flow.current;
-        if (unit == null) continue;
+        final heading = _headingKeepProbe;
+        if (heading != null && heading.isMeasuring) {
+          formatUnits += heading.measure(this, maxParts: maxFormatParts);
+          return result();
+        }
+        final ForumBodyBlockFlowUnit unit;
+        if (heading != null && heading.isReplaying) {
+          unit = heading.take();
+          if (heading.isDrained) _headingKeepProbe = null;
+        } else {
+          if (work >= maxEvents) return result();
+          final step = _flow.advance(
+            maxEvents: math.min(
+              maxEvents - work,
+              heading?.sourceWorkLeft ?? maxEvents,
+            ),
+          );
+          events += step.eventsRead;
+          work += step.workDone;
+          _collectIssues();
+          final current = _flow.current;
+          if (heading != null) {
+            heading.observe(current, step.workDone);
+            if (current != null) units++;
+            continue;
+          }
+          if (current == null) continue;
+          unit = current;
+        }
         units++;
+        if (_keepHeadingWithNext &&
+            _headingKeepProbe == null &&
+            !identical(unit, heading?.opening) &&
+            _composer.canProbeHeading &&
+            unit is ForumBodyBlockFlowBoundary &&
+            _isHeadingOpening(unit) &&
+            _margin >= 0) {
+          _headingKeepProbe = _HeadingKeepProbe(unit, _margin);
+          continue;
+        }
         switch (unit) {
           case ForumBodyBlockFlowTable():
             _pendingTable = (
@@ -1477,6 +1517,8 @@ final class ForumBodyTextPageSession {
     if (isClosed) return;
     _recordPublished();
     _flow.close();
+    _headingKeepProbe?.close();
+    _headingKeepProbe = null;
     _pendingListItem = null;
     _pendingImage = null;
     _closePendingTable();
@@ -1515,6 +1557,8 @@ final class ForumBodyTextPageSession {
     if (isClosed) return;
     _state = ForumBodyTextPageSessionState.closed;
     _flow.close();
+    _headingKeepProbe?.close();
+    _headingKeepProbe = null;
     _pendingListItem = null;
     _pendingImage = null;
     _closePendingTable();

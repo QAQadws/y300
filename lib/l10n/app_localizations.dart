@@ -4086,6 +4086,18 @@ abstract class AppLocalizations {
   /// **'横向翻页时，尽量避免段落在页首或页尾只留一行'**
   String get novelAvoidIsolatedLinesDescription;
 
+  /// No description provided for @novelKeepHeadingWithNext.
+  ///
+  /// In zh, this message translates to:
+  /// **'标题与下段同页'**
+  String get novelKeepHeadingWithNext;
+
+  /// No description provided for @novelKeepHeadingWithNextDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'横向翻页时，尽量让标题和下一段的开头留在同一页'**
+  String get novelKeepHeadingWithNextDescription;
+
   /// No description provided for @novelSafeContent.
   ///
   /// In zh, this message translates to:

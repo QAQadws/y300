@@ -2446,6 +2446,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get novelAvoidIsolatedLinesDescription => '横向翻页时，尽量避免段落在页首或页尾只留一行';
 
   @override
+  String get novelKeepHeadingWithNext => '标题与下段同页';
+
+  @override
+  String get novelKeepHeadingWithNextDescription => '横向翻页时，尽量让标题和下一段的开头留在同一页';
+
+  @override
   String get novelSafeContent => '安全显示正文';
 
   @override
@@ -8463,6 +8469,12 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get novelAvoidIsolatedLinesDescription => '橫向翻頁時，盡量避免段落在頁首或頁尾只留一行';
+
+  @override
+  String get novelKeepHeadingWithNext => '標題與下段同頁';
+
+  @override
+  String get novelKeepHeadingWithNextDescription => '橫向翻頁時，盡量讓標題和下一段的開頭留在同一頁';
 
   @override
   String get novelSafeContent => '安全顯示正文';

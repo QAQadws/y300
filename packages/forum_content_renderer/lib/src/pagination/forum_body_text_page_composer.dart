@@ -281,7 +281,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 38;
+  static const revision = 39;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;
@@ -322,6 +322,7 @@ final class ForumBodyTextPageComposer {
   _ActiveRule? _rule;
   _ActiveImage? _image;
   int _nextParagraphIndex = 0;
+  int? _headingFollowerIndex;
   int _fragmentCount = 0;
   double _usedHeight = 0;
   double _flowHeight = 0;
@@ -344,6 +345,44 @@ final class ForumBodyTextPageComposer {
   bool get hasPendingPadding => _padding != null;
   bool get hasPendingRule => _rule != null;
   bool get hasPendingImage => _image != null;
+
+  bool get canProbeHeading =>
+      needsInput &&
+      !_flowing &&
+      _floats.isEmpty &&
+      _collapseHeader == null &&
+      (_draft.isNotEmpty ||
+          _rules.isNotEmpty ||
+          (_avoidIsolatedLines && _usedHeight == 0)) &&
+      (maxDeliveriesPerPage ?? 2) >= 2 &&
+      (maxNativeHandlesPerPage ?? 2) >= 2;
+
+  /// Heading and follower sizes come from the normal admission workers.
+  /// Reserving their geometry only affects the next draft break. The ordinary
+  /// placement ledger still validates both inputs before either is published.
+  void keepHeadingWithFollower({
+    required double occupiedExtent,
+    required double freshExtent,
+  }) {
+    if (!canProbeHeading ||
+        !occupiedExtent.isFinite ||
+        !freshExtent.isFinite ||
+        freshExtent <= 0 ||
+        freshExtent > height) {
+      return;
+    }
+    final atPageStart = _draft.isEmpty && _rules.isEmpty && _usedHeight == 0;
+    final extent = atPageStart ? freshExtent : occupiedExtent;
+    if (_flowHeight + extent > height ||
+        (maxDeliveriesPerPage != null &&
+            _draftDeliveries + 2 > maxDeliveriesPerPage!) ||
+        (maxNativeHandlesPerPage != null &&
+            _usedNativeHandles + 2 > maxNativeHandlesPerPage!)) {
+      if (_pages.length + 1 >= maxPages) return;
+      _seal();
+    }
+    _headingFollowerIndex = _nextParagraphIndex + 1;
+  }
 
   /// Admission order only; consumed input can extend beyond the stable pages.
   /// This ordinal must not be persisted as a confirmed reading position.
@@ -1098,6 +1137,8 @@ final class ForumBodyTextPageComposer {
           return _result(inspected, pagesBefore, false);
         }
         if (_avoidIsolatedLines &&
+            !(active.index == _headingFollowerIndex &&
+                active.nextLine == active.firstLine) &&
             (_draft.isNotEmpty || _rules.isNotEmpty) &&
             _floats.isEmpty &&
             floatBandBottom == null &&

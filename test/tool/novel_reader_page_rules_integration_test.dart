@@ -14,8 +14,14 @@ import '../../tool/novel_main_page_profile_data.dart';
 import '../../tool/novel_main_page_profile_observation.dart';
 
 void main() {
+  _testRule(heading: false);
+  _testRule(heading: true);
+}
+
+void _testRule({required bool heading}) {
+  const style = 'font-size:20px;line-height:32px;margin:0';
   testWidgets(
-    'the line balance switch reflows actual pages at the saved anchor',
+    '${heading ? 'Heading keep' : 'Line balance'} reflows at the saved anchor',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       await tester.binding.setSurfaceSize(const Size(800, 360));
@@ -37,8 +43,11 @@ void main() {
       );
       final data = NovelMainPageProfileData();
       final chapter = data.add(
-        '<p style="font-size:20px;line-height:32px">'
-        'ABCDEFGHIJKLMNOPQRSTUVWXYZab</p>',
+        heading
+            ? '<p style="$style">ABCDEFGHIJKLMN</p>'
+                  '<h2 style="$style">Title</h2>'
+                  '<p style="$style">OPQRSTUVWXYZab</p>'
+            : '<p style="$style">ABCDEFGHIJKLMNOPQRSTUVWXYZab</p>',
       );
       final args = NovelReaderArgs(
         novelId: chapter.novelId,
@@ -89,11 +98,18 @@ void main() {
         fail('Native reader did not publish the expected pages');
       }
 
-      List<int> rows(ProfileReaderObservation observation) => [
+      List<List<int>> rows(ProfileReaderObservation observation) => [
         for (final page in observation.nativeController!.snapshot!)
-          for (final fragment in page.fragments)
-            fragment.endLine - fragment.startLine,
+          [
+            for (final fragment in page.fragments)
+              fragment.endLine - fragment.startLine,
+          ],
       ];
+
+      Future<bool> readSetting() async {
+        final saved = await repository().load();
+        return heading ? saved.keepHeadingWithNext : saved.avoidIsolatedLines;
+      }
 
       Future<void> toggle({required bool from}) async {
         tester
@@ -108,9 +124,12 @@ void main() {
         final context = tester.element(
           find.byKey(const Key('novel-reader-display-settings-sheet')),
         );
+        final l10n = AppLocalizations.of(context);
         final control = find.widgetWithText(
           SwitchListTile,
-          AppLocalizations.of(context).novelAvoidIsolatedLines,
+          heading
+              ? l10n.novelKeepHeadingWithNext
+              : l10n.novelAvoidIsolatedLines,
         );
         await tester.ensureVisible(control);
         expect(tester.widget<SwitchListTile>(control).value, from);
@@ -124,10 +143,30 @@ void main() {
       try {
         final baseline = await wait((observation) => observation.page == 0);
         final original = baseline.nativeController!.snapshot!;
-        expect(rows(baseline), [
-          3,
-          1,
-        ], reason: 'Body ${original.width}×${original.height}');
+        final before = heading
+            ? const [
+                [2, 1],
+                [2],
+              ]
+            : const [
+                [3],
+                [1],
+              ];
+        final after = heading
+            ? const [
+                [2],
+                [1, 2],
+              ]
+            : const [
+                [2],
+                [2],
+              ];
+        expect(
+          rows(baseline),
+          before,
+          reason: 'Body ${original.width}×${original.height}',
+        );
+        final originalFirstPage = original.first;
         baseline.overlay!.onRightTap!();
         final tail = await wait(
           (observation) =>
@@ -146,21 +185,21 @@ void main() {
               observation.paginationKey != baseline.paginationKey &&
               observation.businessConfirmed,
         );
-        expect(rows(balanced), [2, 2]);
+        expect(rows(balanced), after);
         expect(balanced.page, 1);
         expect(
           balanced.nativeController!.viewForPage(1)!.coverage.locate(oldAnchor),
           isNotNull,
         );
-        expect(original.first.fragments.single.endLine, 3);
-        expect((await repository().load()).avoidIsolatedLines, isTrue);
+        expect(original.first, same(originalFirstPage));
+        expect(await readSetting(), isTrue);
 
         await toggle(from: true);
         final restored = await wait(
           (observation) => observation.paginationKey == baseline.paginationKey,
         );
-        expect(rows(restored), [3, 1]);
-        expect((await repository().load()).avoidIsolatedLines, isFalse);
+        expect(rows(restored), before);
+        expect(await readSetting(), isFalse);
         expect(tester.takeException(), isNull);
       } finally {
         await tester.pumpWidget(const SizedBox.shrink());

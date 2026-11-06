@@ -26,6 +26,7 @@ void main() {
     expect(defaults.compressBlankLines, isFalse);
     expect(defaults.removeSourceIndent, isFalse);
     expect(defaults.avoidIsolatedLines, isFalse);
+    expect(defaults.keepHeadingWithNext, isFalse);
   });
 
   test('constructor uses the same default theme as the default snapshot', () {
@@ -140,6 +141,28 @@ void main() {
           .decode('{"schemaVersion":1,"compressBlankLines":"true"}')
           .compressBlankLines,
       isFalse,
+    );
+  });
+
+  test('heading keep persists independently of flow mode and line balance', () {
+    const codec = NovelReaderPreferencesSnapshotCodec();
+    final defaults = NovelReaderPreferences.defaults();
+    final enabled = defaults.copyWith(
+      flowMode: NovelReaderFlowMode.vertical,
+      keepHeadingWithNext: true,
+    );
+    final saved = codec.encode(enabled);
+    expect(codec.decode(saved), enabled);
+    expect(codec.decode('{"schemaVersion":1}').keepHeadingWithNext, isFalse);
+    expect(
+      codec
+          .decode('{"schemaVersion":1,"keepHeadingWithNext":"true"}')
+          .keepHeadingWithNext,
+      isFalse,
+    );
+    expect(
+      codec.encode(defaults, previousSource: saved),
+      isNot(contains('keepHeadingWithNext')),
     );
   });
 

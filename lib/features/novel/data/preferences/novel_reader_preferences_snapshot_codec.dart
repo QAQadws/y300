@@ -51,6 +51,11 @@ final class NovelReaderPreferencesSnapshotCodec {
     } else {
       result.remove('avoidIsolatedLines');
     }
+    if (normalized.keepHeadingWithNext) {
+      result['keepHeadingWithNext'] = true;
+    } else {
+      result.remove('keepHeadingWithNext');
+    }
     final typography = _typography.encode(
       normalized.typography,
       previous: previous?['typography'],
@@ -150,6 +155,10 @@ final class NovelReaderPreferencesSnapshotCodec {
           decoded['avoidIsolatedLines'],
           fallback: defaults.avoidIsolatedLines,
         ),
+        keepHeadingWithNext: _validBool(
+          decoded['keepHeadingWithNext'],
+          fallback: defaults.keepHeadingWithNext,
+        ),
       );
     } on FormatException {
       return defaults;
@@ -182,6 +191,7 @@ final class NovelReaderPreferencesSnapshotCodec {
       compressBlankLines: preferences.compressBlankLines,
       removeSourceIndent: preferences.removeSourceIndent,
       avoidIsolatedLines: preferences.avoidIsolatedLines,
+      keepHeadingWithNext: preferences.keepHeadingWithNext,
     );
   }
 
