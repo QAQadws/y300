@@ -4,11 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
 const _body =
-    '<span style="text-emphasis:none;font-size:31px">大</span>AB '
+    '<span class="fixture-no-mark" style="font-size:31px">大</span>AB '
     '<span style="font-size:31px">؀</span>'
-    '<span style="text-emphasis-position:under">A</span> '
+    '<span class="fixture-under">A</span> '
     'e<b style="font-size:31px">́</b> '
-    '<span style="text-emphasis-position:under">👩‍👩‍👧‍👦</span> 中\n\n';
+    '<span class="fixture-under">👩‍👩‍👧‍👦</span> 中\n\n';
 
 class _Scaler extends TextScaler {
   const _Scaler(this.callback);
@@ -22,37 +22,78 @@ class _Scaler extends TextScaler {
 ForumBodyParagraphContent _content({
   String body = _body,
   String height = '.4',
-  String emphasis = "'X' red",
+  bool decorated = true,
   TextDirection direction = TextDirection.ltr,
   bool indent = false,
 }) {
   final doc = const ForumBodyParser().parse(
-    html:
-        '<p style="white-space:pre-wrap;line-height:$height;'
-        'text-emphasis:$emphasis">$body</p>',
+    html: '<p style="white-space:pre-wrap;line-height:$height">$body</p>',
     sourceId: 'emphasis-paragraph',
     conversionIdentity: 'none',
+  );
+  final styles = const ForumBodyStyleResolver().resolve(
+    doc,
+    ForumBodyReaderStyle(
+      textStyle: const TextStyle(
+        fontFamily: 'Ahem',
+        fontSize: 20,
+        color: Color(0xff123456),
+      ),
+      fontRevision: 'emphasis-paragraph-ahem',
+      linkColor: const Color(0xff0000ff),
+      textDirection: direction,
+      firstLineIndent: ForumBodyLength(indent ? 2 : 0, ForumBodyLengthUnit.em),
+    ),
   );
   return const ForumBodyParagraphContentBuilder().build(
     document: doc,
     path: '0',
-    styles: const ForumBodyStyleResolver().resolve(
-      doc,
-      ForumBodyReaderStyle(
-        textStyle: const TextStyle(
-          fontFamily: 'Ahem',
-          fontSize: 20,
-          color: Color(0xff123456),
-        ),
-        fontRevision: 'emphasis-paragraph-ahem',
-        linkColor: const Color(0xff0000ff),
-        textDirection: direction,
-        firstLineIndent: ForumBodyLength(
-          indent ? 2 : 0,
-          ForumBodyLengthUnit.em,
-        ),
-      ),
-    ),
+    styles: decorated ? _withMarks(doc, styles) : styles,
+  );
+}
+
+ForumBodyStyleResult _withMarks(
+  ForumBodyDocument doc,
+  ForumBodyStyleResult styles,
+) {
+  const over = ForumBodyTextEmphasis(
+    shape: ForumBodyEmphasisShape.custom,
+    customMark: 'X',
+    color: Color(0xffff0000),
+  );
+  const under = ForumBodyTextEmphasis(
+    shape: ForumBodyEmphasisShape.custom,
+    customMark: 'X',
+    color: Color(0xffff0000),
+    side: ForumBodyEmphasisSide.under,
+  );
+  final byPath = <String, ForumBodyResolvedStyle>{};
+  void visit(ForumBodyNode node, ForumBodyTextEmphasis inherited) {
+    final mark = node is ForumBodyElement
+        ? switch (node.attributes['class']) {
+            'fixture-no-mark' => const ForumBodyTextEmphasis(),
+            'fixture-under' => under,
+            _ => inherited,
+          }
+        : inherited;
+    byPath[node.path] = styles.byPath[node.path]!.withTextEmphasis(mark);
+    if (node is ForumBodyElement) {
+      for (final child in node.children) {
+        visit(child, mark);
+      }
+    }
+  }
+
+  for (final node in doc.nodes) {
+    visit(node, over);
+  }
+  return ForumBodyStyleResult(
+    identity: styles.identity,
+    fontRevision: styles.fontRevision,
+    root: styles.root,
+    resolverRevision: styles.resolverRevision,
+    issues: styles.issues,
+    byPath: byPath,
   );
 }
 
@@ -173,7 +214,7 @@ void main() {
   test(
     'mark-free text shares row allocation without introducing decoration',
     () {
-      final content = _content(body: 'AB\nCD\nEF', emphasis: 'none');
+      final content = _content(body: 'AB\nCD\nEF', decorated: false);
       final cache = _cache();
       final plan = _finish(
         ForumBodyEmphasisParagraphPreparation(

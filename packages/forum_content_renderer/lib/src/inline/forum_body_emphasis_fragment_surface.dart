@@ -5,7 +5,8 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 import '../paragraph/forum_body_text_surface_box.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../style/forum_body_style_options.dart';
-import 'forum_body_emphasis_line_layout.dart';
+import 'forum_body_emphasis_line_layout.dart'
+    show ForumBodyEmphasisFragmentLayout;
 
 /// Owns one fully prepared source/scene view. Visible paint only replays it;
 /// each concurrent mount needs its own two handles, even for a shared picture.
@@ -91,88 +92,6 @@ final class _EmphasisSurfaceBox extends ForumBodyTextSurfaceBox {
   void releaseContent() => _view.close();
 }
 
-/// A fully prepared single native source context. Its base and marks already
-/// share the actual fitted paint scale; the visible render object only replays.
-final class ForumBodyEmphasisLineSurface extends LeafRenderObjectWidget {
-  const ForumBodyEmphasisLineSurface({
-    super.key,
-    required this.view,
-    this.onSourceTap,
-    this.interactionIdentity,
-  });
-  final ForumBodyEmphasisLineLayout view;
-  final void Function(HtmlProjectedSourcePosition)? onSourceTap;
-  final Object? interactionIdentity;
-  @override
-  RenderBox createRenderObject(BuildContext context) =>
-      _LineSurfaceBox(view, onSourceTap, interactionIdentity);
-  @override
-  void updateRenderObject(
-    BuildContext context,
-    covariant RenderBox renderObject,
-  ) => (renderObject as _LineSurfaceBox).configure(
-    view,
-    onSourceTap,
-    interactionIdentity,
-  );
-}
-
-final class _LineSurfaceBox extends ForumBodyTextSurfaceBox {
-  _LineSurfaceBox(this._view, super.onTap, super.interactionIdentity) {
-    try {
-      _view.ensureActive();
-    } catch (_) {
-      dispose();
-      rethrow;
-    }
-  }
-  ForumBodyEmphasisLineLayout _view;
-  void configure(
-    ForumBodyEmphasisLineLayout view,
-    void Function(HtmlProjectedSourcePosition)? onTap,
-    Object? identity,
-  ) {
-    final changed = !identical(view, _view);
-    try {
-      view.ensureActive();
-    } catch (_) {
-      if (changed) view.close();
-      rethrow;
-    }
-    if (changed) {
-      _view.close();
-      _view = view;
-    }
-    refreshInteraction(
-      onTap: onTap,
-      interactionIdentity: identity,
-      geometryChanged: changed,
-    );
-  }
-
-  @override
-  bool get isContentActive => !_view.isDisposed;
-  @override
-  Size get contentSize =>
-      isContentActive ? Size(_view.width, _view.height) : Size.zero;
-  @override
-  HtmlProjectedSourcePosition sourceAt(Offset position) =>
-      _view.sourceAt(position);
-  @override
-  void paintContent(Canvas canvas, Offset offset) =>
-      _view.paint(canvas, offset);
-  @override
-  void describeContentSemantics(SemanticsConfiguration config) =>
-      _describeSemantics(
-        config,
-        _view.input.content,
-        0,
-        _view.projection.text.length,
-      );
-  @override
-  void releaseContent() => _view.close();
-}
-
 void _describeSemantics(
   SemanticsConfiguration config,
   ForumBodyParagraphContent content,
@@ -192,3 +111,6 @@ void _describeSemantics(
     ..isHeader = content.style.role == ForumBodyTextRole.heading
     ..label = text.toString();
 }
+
+/// A fully prepared single native source context. Its base and marks already
+/// share the actual fitted paint scale; the visible render object only replays.

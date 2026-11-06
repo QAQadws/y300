@@ -10,7 +10,6 @@ import '../document/forum_body_document.dart';
 import '../style/forum_body_style_options.dart';
 import '../inline/forum_body_inline_paragraph_layout.dart';
 import '../inline/forum_body_emphasis_paragraph_metrics.dart';
-import '../inline/forum_body_fitted_emphasis_plan.dart';
 import '../inline/forum_body_inline_font_frame_plan.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_layout.dart';
@@ -36,13 +35,7 @@ enum ForumBodyTextPageFailure {
   backgroundDepth,
 }
 
-enum ForumBodyTextPageFragmentKind {
-  paragraph,
-  inline,
-  emphasis,
-  fittedEmphasis,
-  image,
-}
+enum ForumBodyTextPageFragmentKind { paragraph, inline, emphasis, image }
 
 final class ForumBodyTextPageException implements Exception {
   const ForumBodyTextPageException(this.failure);
@@ -357,7 +350,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 40;
+  static const revision = 41;
   final ForumBodyIdentity identity;
   final String layoutId;
 
@@ -950,27 +943,6 @@ final class ForumBodyTextPageComposer {
     ForumBodyListMarkerPlan? listMarkers,
   }) => _append(
     input: _CompositionParagraph.emphasis(entries, ensureOwner),
-    paragraphIndex: paragraphIndex,
-    left: left,
-    spaceBefore: spaceBefore,
-    spaceAtPageStart: spaceAtPageStart,
-    window: window,
-    listMarkers: listMarkers,
-  );
-
-  /// One already measured complete fitted line, never a fabricated wrapping
-  /// row. Exact scene keys join the same native cost ledger as its font keys.
-  void appendFittedEmphasis({
-    required ForumBodyFittedEmphasisPlan plan,
-    required void Function() ensureOwner,
-    required int paragraphIndex,
-    required double left,
-    required double spaceBefore,
-    required double spaceAtPageStart,
-    ForumBodyParagraphWindow window = ForumBodyParagraphWindow.full,
-    ForumBodyListMarkerPlan? listMarkers,
-  }) => _append(
-    input: _CompositionParagraph.fitted(plan, ensureOwner),
     paragraphIndex: paragraphIndex,
     left: left,
     spaceBefore: spaceBefore,
@@ -1857,7 +1829,6 @@ final class _CompositionParagraph {
       _text = current.layout,
       _inline = null,
       _emphasisEntries = null,
-      _fitted = null,
       _frames = null,
       _emphasisGuard = null,
       identity = current.content.identity,
@@ -1880,7 +1851,6 @@ final class _CompositionParagraph {
       _text = null,
       _inline = current.layout,
       _emphasisEntries = null,
-      _fitted = null,
       _emphasisGuard = null,
       identity = current.content.identity,
       path = current.content.path,
@@ -1908,7 +1878,6 @@ final class _CompositionParagraph {
       _text = null,
       _inline = null,
       _emphasisEntries = entries,
-      _fitted = null,
       _frames = null,
       _emphasisGuard = ensureOwner,
       nativeHandleCountInRange = null,
@@ -1925,26 +1894,6 @@ final class _CompositionParagraph {
     }
   }
   final ForumBodyNativeParagraphLease? lease;
-  _CompositionParagraph.fitted(
-    ForumBodyFittedEmphasisPlan plan,
-    void Function() ensureOwner,
-  ) : lease = null,
-      _text = null,
-      _inline = null,
-      _emphasisEntries = null,
-      _fitted = plan,
-      _frames = null,
-      _emphasisGuard = ensureOwner,
-      nativeHandleCountInRange = ((_, _) => 2),
-      nativeEntriesInRange = null,
-      nativeCostsInRange = ((_, _) => plan.nativeCosts),
-      identity = plan.content.identity,
-      path = plan.content.path,
-      fontRevision = plan.content.fontRevision,
-      styleRevision = plan.content.styleRevision,
-      projection = plan.content.projection,
-      kind = ForumBodyTextPageFragmentKind.fittedEmphasis;
-  final ForumBodyFittedEmphasisPlan? _fitted;
   final ForumBodyInlineFontFramePlan? _frames;
   final ForumBodyEmphasisParagraphNativeEntries? _emphasisEntries;
   final void Function()? _emphasisGuard;
@@ -2023,32 +1972,28 @@ final class _CompositionParagraph {
   final ForumBodyTextPageFragmentKind kind;
   double get width =>
       _frames?.width ??
-      _fitted?.metrics.width ??
       _emphasisEntries?.paragraph.width ??
       _text?.width ??
       _inline!.width;
   double get height =>
       _frames?.height ??
-      _fitted?.metrics.height ??
       _emphasisEntries?.paragraph.height ??
       _text?.height ??
       _inline!.height;
   List<ForumBodyParagraphLine> get lines =>
       _frames?.lines ??
-      _fitted?.lines ??
       _emphasisEntries?.paragraph.lines ??
       _text?.lines ??
       _inline!.lines;
   double get alphabeticBaseline =>
       (_frames?.lines.first.baseline) ??
-      _fitted?.metrics.alphabeticBaseline ??
       _emphasisEntries?.paragraph.alphabeticBaseline ??
       _text?.alphabeticBaseline ??
       (_inline!.lines.isEmpty
           ? _inline.nativeAlphabeticBaseline
           : _inline.lines.first.baseline);
   void ensureActive() {
-    if (_emphasisEntries != null || _fitted != null) {
+    if (_emphasisEntries != null) {
       _emphasisGuard!();
       return;
     }
@@ -2058,14 +2003,6 @@ final class _CompositionParagraph {
   }
 
   ({int startLine, int endLine}) lineWindow(ForumBodyParagraphWindow window) {
-    if (_fitted != null) {
-      if (window != ForumBodyParagraphWindow.full) {
-        throw const ForumBodyParagraphLayoutException(
-          ForumBodyParagraphLayoutFailure.coverage,
-        );
-      }
-      return (startLine: 0, endLine: 1);
-    }
     return _emphasisEntries?.paragraph.lineWindow(window) ??
         _text?.lineWindow(window) ??
         _inline!.lineWindow(window);
@@ -2075,16 +2012,6 @@ final class _CompositionParagraph {
     int start,
     int end,
   ) {
-    if (_fitted != null) {
-      if (start != 0 || end != 1) {
-        throw RangeError('Fitted line must stay complete');
-      }
-      return (
-        height: _fitted.metrics.height,
-        coverageStartUtf16: _fitted.lines.single.coverageStartUtf16,
-        coverageEndUtf16: _fitted.lines.single.coverageEndUtf16,
-      );
-    }
     final emphasis = _emphasisEntries;
     if (emphasis != null) {
       final view = emphasis.paragraph.fragment(start, end);

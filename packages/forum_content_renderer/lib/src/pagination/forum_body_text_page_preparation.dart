@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/painting.dart';
 import '../inline/forum_body_ruby_group_preparation.dart';
-import '../inline/forum_body_emphasis_line_layout.dart';
 import '../inline/forum_body_ruby_atom_plan.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import 'forum_body_prepared_text_fragment.dart';
@@ -124,7 +123,6 @@ final class ForumBodyTextPagePreparation {
             input is ForumBodyListItemPageContent ||
             input is ForumBodyImagePageContent ||
             input is ForumBodyEmphasisPageContent ||
-            input is ForumBodyFittedEmphasisPageContent ||
             (input is ForumBodyInlinePageContent &&
                 (input.fontFrames != null ||
                     input.rubyAtoms.any(
@@ -153,8 +151,6 @@ final class ForumBodyTextPagePreparation {
   ForumBodyEmphasisPagePreparation? _activeEmphasis;
   final _fontFrames = <int, ForumBodyInlineFontFramePagePreparation>{};
   ForumBodyInlineFontFramePagePreparation? _activeFontFrame;
-  ForumBodyEmphasisLinePreparation? _fitted;
-  int _fittedWork = 0;
   bool _initialProbePending;
   var _state = ForumBodyTextPagePreparationState.active;
   bool _operating = false;
@@ -164,7 +160,6 @@ final class ForumBodyTextPagePreparation {
   int get _retainedWork =>
       _completedWork +
       (_list?.workCount ?? 0) +
-      _fittedWork +
       (_inline?.workCount ?? 0) +
       (_activeEmphasis?.workCount ?? 0) +
       (_activeFontFrame?.workCount ?? 0);
@@ -201,7 +196,6 @@ final class ForumBodyTextPagePreparation {
     }
     if (_activeEmphasis != null) yield* _activeEmphasis!.nativeLeases;
     if (_activeFontFrame != null) yield* _activeFontFrame!.nativeLeases;
-    if (_fitted != null) yield* _fitted!.nativeLeases;
   }
 
   ForumBodyTextPagePreparationStep advance({
@@ -404,42 +398,6 @@ final class ForumBodyTextPagePreparation {
       _completedWork++;
       return true;
     }
-    if (input is ForumBodyFittedEmphasisPageContent) {
-      final work = _fitted ??= ForumBodyEmphasisLinePreparation.fromMetrics(
-        input: input.plan.metrics.input,
-        metrics: input.plan.metrics,
-        cache: cache,
-        width: input.plan.metrics.requestWidth,
-        expectedTextScaler: _textScaler!,
-        ensureOwner: _guard,
-        ensureVisibleOwner: _ensureOwner!,
-        additionalOwnedLeases: () => _finishedLeases,
-      );
-      final step = work.advance(maxParts: maxParts, cachedOnly: cachedOnly);
-      _fittedWork += step.partsPrepared;
-      _waiting = step.waitingForLayoutBudget;
-      _guard();
-      if (work.isReady) {
-        final view = work.takeLayout();
-        try {
-          _guard();
-          _acceptBody(
-            ForumBodyPreparedTextFragment.fittedEmphasis(
-              view: view,
-              plan: input.plan,
-            ),
-          );
-          _guard();
-        } catch (_) {
-          view.close();
-          rethrow;
-        }
-        _fitted = null;
-        _completedWork += _fittedWork;
-        _fittedWork = 0;
-      }
-      return !work.cacheMiss;
-    }
     if (input is ForumBodyEmphasisPageContent) {
       final active = _activeEmphasis ??= _emphasisPart(index, input);
       final step = active.advance(cachedOnly: cachedOnly, maxParts: maxParts);
@@ -623,9 +581,7 @@ final class ForumBodyTextPagePreparation {
               probe,
               width: slot.width,
               minimumLineCount: slot.minimumLineCount,
-              textScaler: body is ForumBodyFittedEmphasisPageContent
-                  ? body.plan.metrics.textScaler
-                  : body is ForumBodyEmphasisPageContent
+              textScaler: body is ForumBodyEmphasisPageContent
                   ? body.paragraph.textScaler
                   : body is ForumBodyInlinePageContent &&
                         body.fontFrames != null
@@ -821,9 +777,6 @@ final class ForumBodyTextPagePreparation {
     _list = null;
     _pendingListBody?.close();
     _pendingListBody = null;
-    _fitted?.close();
-    _fitted = null;
-    _fittedWork = 0;
     for (final parts in _emphasis.values) {
       parts.close();
     }
@@ -852,9 +805,6 @@ final class ForumBodyTextPagePreparation {
 
   void _dropOwner() {
     _closeProbe();
-    _fitted?.close();
-    _fitted = null;
-    _fittedWork = 0;
     for (final parts in _emphasis.values) {
       parts.close();
     }

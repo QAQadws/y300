@@ -236,7 +236,6 @@ final class _HeadingKeepProbe {
         lease.release();
       }
     }
-    if (admission.isFitted) return admission.takeFitted().plan.metrics.height;
     final layout = admission.take().entries.paragraph;
     return _extent(
       layout.lineWindow(window),

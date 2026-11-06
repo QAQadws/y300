@@ -190,7 +190,6 @@ export 'src/inline/forum_body_emphasis_line_layout.dart';
 export 'src/inline/forum_body_ruby_base_emphasis_geometry.dart';
 export 'src/inline/forum_body_emphasis_row_allocation.dart';
 export 'src/inline/forum_body_emphasis_paragraph_metrics.dart';
-export 'src/inline/forum_body_fitted_emphasis_plan.dart';
 export 'src/inline/forum_body_emphasis_fragment_surface.dart';
 export 'src/paragraph/forum_body_paragraph_surface.dart';
 export 'src/style/forum_body_length.dart';

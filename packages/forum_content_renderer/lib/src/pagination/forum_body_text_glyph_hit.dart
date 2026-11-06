@@ -72,9 +72,6 @@ final class ForumBodyTextGlyphHit {
       case ForumBodyPreparedEmphasisFragment():
         position = body.view.sourceAt(point);
         role = body.view.input.paragraph.content.style.role;
-      case ForumBodyPreparedFittedEmphasisFragment():
-        position = body.view.sourceAt(point);
-        role = body.plan.content.style.role;
     }
     if (position == null ||
         (requireExactSource && !position.isExact) ||

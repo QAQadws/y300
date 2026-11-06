@@ -1,9 +1,6 @@
 import 'package:flutter/painting.dart';
 
 import '../inline/forum_body_emphasis_paragraph_metrics.dart';
-import '../inline/forum_body_emphasis_line_layout.dart';
-import '../inline/forum_body_emphasis_text_input.dart';
-import '../inline/forum_body_fitted_emphasis_plan.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_paragraph_font_overflow.dart';
@@ -12,17 +9,12 @@ import '../paragraph/forum_body_text_request_preparation.dart';
 import 'forum_body_text_page_content.dart';
 
 enum _AdmissionPhase {
-  inspect,
   plainAcquire,
   plainFrames,
   plain,
   measure,
   entries,
   ready,
-  fittedSource,
-  fittedMeasure,
-  fittedPlan,
-  fittedReady,
   closed,
 }
 
@@ -59,16 +51,10 @@ final class ForumBodyEmphasisPageAdmission {
   ForumBodyEmphasisParagraphNativeEntriesPreparation? _entries;
   ForumBodyEmphasisPageContent? _prepared;
   ForumBodyEmphasisParagraphNativeEntries? _result;
-  ForumBodyEmphasisTextPreparation? _fittedSource;
-  ForumBodyEmphasisLineMetricsPreparation? _fittedMeasure;
-  ForumBodyFittedEmphasisPlanPreparation? _fittedPlan;
-  ForumBodyFittedEmphasisPageContent? _fittedInput;
-  int _style = -1;
   bool _operating = false;
-  var _phase = _AdmissionPhase.inspect;
+  var _phase = _AdmissionPhase.plainAcquire;
 
-  bool get isReady => isPlain || isFitted || _phase == _AdmissionPhase.ready;
-  bool get isFitted => _phase == _AdmissionPhase.fittedReady;
+  bool get isReady => isPlain || _phase == _AdmissionPhase.ready;
   bool get isPlain => _phase == _AdmissionPhase.plain;
   ForumBodyParagraphContent get plainContent {
     _guard();
@@ -88,37 +74,6 @@ final class ForumBodyEmphasisPageAdmission {
       _guard();
       while (!isReady && used < maxParts && cache!.layoutBuildCount == builds) {
         switch (_phase) {
-          case _AdmissionPhase.inspect:
-            final content = _content!;
-            if (_style == content.runs.length) {
-              _phase = _AdmissionPhase.plainAcquire;
-            } else {
-              final style = _style < 0
-                  ? content.style
-                  : content.runs[_style].style;
-              _style++;
-              if (style.textEmphasis.isEnabled) {
-                if (content.layoutMode ==
-                    ForumBodyParagraphLayoutMode.fitSingleLine) {
-                  _fittedSource = ForumBodyEmphasisTextPreparation(
-                    content: content,
-                  );
-                  _phase = _AdmissionPhase.fittedSource;
-                  used++;
-                  break;
-                }
-                _measurement = ForumBodyEmphasisParagraphPreparation(
-                  content: content,
-                  cache: cache,
-                  width: _width,
-                  textScaler: _textScaler!,
-                  ensureOwner: _guard,
-                  captureIntrinsicWidths: captureIntrinsicWidths,
-                );
-                _phase = _AdmissionPhase.measure;
-              }
-            }
-            used++;
           case _AdmissionPhase.plainAcquire:
             _plainRequest ??= ForumBodyTextRequestPreparation(
               cache: cache,
@@ -214,54 +169,8 @@ final class ForumBodyEmphasisPageAdmission {
             work.close();
             _entries = null;
             _phase = _AdmissionPhase.ready;
-          case _AdmissionPhase.fittedSource:
-            used += _fittedSource!.advance(maxParts: maxParts - used);
-            _guard();
-            if (!_fittedSource!.isReady) break;
-            _fittedMeasure = ForumBodyEmphasisLineMetricsPreparation(
-              input: _fittedSource!.takeInput(),
-              cache: cache,
-              ensureOwner: _guard,
-              width: _width,
-              textScaler: _textScaler!,
-            );
-            _fittedSource = null;
-            _phase = _AdmissionPhase.fittedMeasure;
-          case _AdmissionPhase.fittedMeasure:
-            final job = _fittedMeasure!;
-            final step = job.advance(maxParts: maxParts - used);
-            used += step.partsPrepared;
-            _guard();
-            if (step.waitingForLayoutBudget) {
-              return (partsPrepared: used, waitingForLayoutBudget: true);
-            }
-            if (!job.isReady) {
-              return (partsPrepared: used, waitingForLayoutBudget: false);
-            }
-            _fittedPlan = ForumBodyFittedEmphasisPlanPreparation(
-              metrics: job.takeMetrics(),
-              cache: cache,
-              ensureOwner: _guard,
-            );
-            job.close();
-            _fittedMeasure = null;
-            _phase = _AdmissionPhase.fittedPlan;
-          case _AdmissionPhase.fittedPlan:
-            used += _fittedPlan!.advance(maxParts: maxParts - used);
-            _guard();
-            if (_fittedPlan!.isReady) {
-              final input = ForumBodyFittedEmphasisPageContent(
-                _fittedPlan!.take(),
-              );
-              _fittedPlan = null;
-              _validateCounts!(input.retainedTextCodeUnits, input.retainedRuns);
-              _guard();
-              _fittedInput = input;
-              _phase = _AdmissionPhase.fittedReady;
-            }
           case _AdmissionPhase.plain:
           case _AdmissionPhase.ready:
-          case _AdmissionPhase.fittedReady:
           case _AdmissionPhase.closed:
             throw StateError('Emphasis admission is not active');
         }
@@ -302,15 +211,6 @@ final class ForumBodyEmphasisPageAdmission {
     return result;
   }
 
-  ForumBodyFittedEmphasisPageContent takeFitted() {
-    if (_operating) throw StateError('Emphasis admission is reentrant');
-    _guard();
-    if (!isFitted) throw StateError('Fitted emphasis admission is incomplete');
-    final result = _fittedInput!;
-    close();
-    return result;
-  }
-
   void _guard() {
     if (_phase == _AdmissionPhase.closed) {
       throw StateError('Emphasis admission is retired');
@@ -334,13 +234,6 @@ final class ForumBodyEmphasisPageAdmission {
     _measurement = null;
     _entries?.close();
     _entries = null;
-    _fittedSource?.close();
-    _fittedSource = null;
-    _fittedMeasure?.close();
-    _fittedMeasure = null;
-    _fittedPlan?.close();
-    _fittedPlan = null;
-    _fittedInput = null;
     _prepared = null;
     _result = null;
     _content = null;

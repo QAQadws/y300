@@ -229,7 +229,7 @@ void main() {
             expect(captured.text, isNotEmpty);
             if (i == 4) expect(captured.rows, isNotEmpty);
             if (i == 1 || i == 2 || i == 6) {
-              expect(captured.pictures, isNotEmpty);
+              expect(captured.pictures, isEmpty);
             }
             final references = [
                   for (final dpr in [1.0, 1.25, 3.0])

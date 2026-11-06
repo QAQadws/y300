@@ -182,8 +182,6 @@ final class ForumBodySelectableText {
           body.view.sourceAt(point).displayUtf16,
         ForumBodyPreparedEmphasisFragment() =>
           body.view.sourceAt(point).displayUtf16,
-        ForumBodyPreparedFittedEmphasisFragment() =>
-          body.view.sourceAt(point).displayUtf16,
         ForumBodyPreparedImageFragment() ||
         ForumBodyPreparedListItemFragment() => null,
       };

@@ -384,61 +384,6 @@ void main() {
       }
     },
   );
-  test(
-    'mixed parent marker font classification recaptures after pin release',
-    () {
-      final cache = _cache(entries: 2),
-          f = _fixture(mixedEmphasisChildren.first, emphasis: true);
-      final measured = _finish(
-        _open(f, cache, emphasis: true),
-        cache,
-        emphasis: true,
-      ).value;
-      addTearDown(measured.parent.release);
-      final geometryWork = ForumBodyInlineEmphasisGeometryPreparation(
-        input: f.text,
-        parent: measured.parent,
-        ensureOwner: () {},
-      );
-      while (!geometryWork.isReady) {
-        geometryWork.advance(maxParts: 1);
-      }
-      final geometry = geometryWork.takeGeometry();
-      geometryWork.close();
-      final pin = _pin(cache);
-      var callbacks = 0;
-      final work = ForumBodyInlineEmphasisFontPreparation(
-        geometry: geometry,
-        parentRequest: ForumBodyInlineParagraphRequest(
-          content: measured.parent.content,
-          dimensions: measured.page.dimensions,
-          layoutMode: measured.page.layoutMode,
-        ),
-        parent: measured.parent,
-        cache: cache,
-        ensureOwner: () {},
-        expectedTextScaler: TextScaler.noScaling,
-        width: 300,
-        additionalOwnedLeases: () {
-          if (++callbacks == 2) pin.release();
-          return const [];
-        },
-      );
-      try {
-        for (var n = 0; !work.isReady; n++) {
-          expect(n, lessThan(50000));
-          final s = work.advance(maxParts: 1);
-          expect(s.waitingForLayoutBudget, isFalse);
-          expect(work.cacheMiss, isFalse);
-        }
-        expect(work.takeMetrics().geometry, same(geometry));
-        expect(callbacks, greaterThanOrEqualTo(2));
-        expect(cache.activeLeases, 1);
-      } finally {
-        work.close();
-      }
-    },
-  );
   test('flow constructor passes caller prefix through source preparation', () {
     final cache = _cache(), pin = _pin(cache);
     var validated = 0;

@@ -10,13 +10,9 @@ const _fixtures = [
   '<ruby>A<rt>x</rt></ruby>',
   '<ruby><rb>A</rb><rb>B</rb><rtc>word</rtc></ruby>',
   '<ruby style="font-size:44px"><ruby>A<rt>x</rt></ruby><rt>y</rt></ruby>',
-  '<ruby style="text-emphasis:circle">A<rt style="text-emphasis:triangle">x</rt></ruby>',
-  '<ruby style="ruby-position:under;text-emphasis:circle;text-emphasis-position:under">A<rt style="text-emphasis:triangle;text-emphasis-position:under">x</rt></ruby>',
-  '<ruby style="text-emphasis:circle">A<rt></rt></ruby>',
+  '<ruby style="ruby-position:under">A<rt>x</rt></ruby>',
   '<ruby style="font-size:60px;line-height:3"><span style="font-size:12px;line-height:1">A</span><rt style="font-size:7px;line-height:1">x</rt></ruby>',
   '<ruby><rb>A</rb> <rb>B</rb><rtc><rt>x</rt> <rt>y</rt></rtc></ruby>',
-  '<ruby style="font-size:12px"><rb>L<ruby>A<rt>x</rt></ruby>R</rb><rt style="text-emphasis:circle">z</rt></ruby>',
-  '<ruby style="font-size:12px;text-emphasis:circle"><rb><ruby><rb>A</rb><rt style="font-size:18px"></rt></ruby></rb><rt style="text-emphasis:triangle">x</rt></ruby>',
 ];
 
 final class _Curve extends TextScaler {
@@ -242,12 +238,8 @@ void main() {
                   0 => a is ForumBodyRubyColumnPlan,
                   1 => a is ForumBodyRubySegmentPlan,
                   2 => a is ForumBodyRubyTreePlan,
-                  3 ||
-                  4 ||
-                  5 ||
-                  8 ||
-                  9 => a is ForumBodyRubyTreeEmphasisAtomPlan,
-                  7 => a is ForumBodyRubySoftSpacePlan,
+                  3 => a is ForumBodyRubyColumnPlan,
+                  5 => a is ForumBodyRubySoftSpacePlan,
                   _ => true,
                 },
               ),
@@ -289,61 +281,6 @@ void main() {
               } else if (source is ForumBodyRubyTreePlan) {
                 group = source.metrics.root.group;
                 level = source.metrics.root.segment?.level;
-              } else if (source is ForumBodyRubyTreeEmphasisAtomPlan) {
-                final root =
-                    source.format.placement.input.input.geometry.metrics.root;
-                group = root.group;
-                level = root.segment?.level;
-                final placement = source.format.placement;
-                final rootRow = placement.rows.singleWhere(
-                  (r) => r.parent == null,
-                );
-                Rect? over, under;
-                for (final mark in placement.marks) {
-                  if (mark.row == rootRow.id) {
-                    continue;
-                  }
-                  var row = placement.rowForId(mark.row);
-                  while (row.parent != rootRow.id) {
-                    row = placement.rowForId(row.parent!);
-                  }
-                  if (row.annotationSide == ForumBodyRubySide.over) {
-                    over =
-                        over?.expandToInclude(mark.fontBounds) ??
-                        mark.fontBounds;
-                  } else {
-                    under =
-                        under?.expandToInclude(mark.fontBounds) ??
-                        mark.fontBounds;
-                  }
-                }
-                expect(
-                  b.overAnnotationMarkerBounds,
-                  over?.shift(b.glyphOrigin),
-                );
-                expect(
-                  b.underAnnotationMarkerBounds,
-                  under?.shift(b.glyphOrigin),
-                );
-                expect(rootRow.overAnnotationMarkerBounds, over);
-                expect(rootRow.underAnnotationMarkerBounds, under);
-                expect(
-                  b.overBaseline,
-                  rootRow.overBaseline == null
-                      ? null
-                      : b.glyphOrigin.dy + rootRow.overBaseline!,
-                );
-                expect(
-                  b.underBaseline,
-                  rootRow.underBaseline == null
-                      ? null
-                      : b.glyphOrigin.dy + rootRow.underBaseline!,
-                );
-                if (index == 3 || index == 8) {
-                  expect(b.overAnnotationMarkerBounds, isNotNull);
-                } else if (index == 4) {
-                  expect(b.underAnnotationMarkerBounds, isNotNull);
-                }
               }
               final top = group == null
                   ? -level!.baseAscent
@@ -353,7 +290,7 @@ void main() {
                   : group.baseBandBottom - group.baseline;
               expect(b.baseTop - baseline, closeTo(top, 1e-3));
               expect(b.baseBottom - baseline, closeTo(bottom, 1e-3));
-              if (index == 6) {
+              if (index == 4) {
                 expect(
                   b.baseBottom - b.baseTop,
                   lessThan(f.page.dimensions[i].size.height / 2),
@@ -387,7 +324,7 @@ void main() {
         'trimmed real soft gaps contribute no child bands $direction/$scaler',
         () {
           final f = _fixture(
-            _fixtures[7],
+            _fixtures[5],
             direction: direction,
             scaler: scaler,
             width: 35,
@@ -478,7 +415,7 @@ void main() {
     },
   );
   test('a stale soft trim mask cannot describe the current native parent', () {
-    final f = _fixture(_fixtures[7]);
+    final f = _fixture(_fixtures[5]);
     final soft = f.page.rubyAtoms.indexWhere(
       (a) => a is ForumBodyRubySoftSpacePlan,
     );

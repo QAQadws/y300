@@ -189,7 +189,7 @@ final class ForumBodyTablePageLease {
 /// demand scheduler or persisted semantic anchor is owned by this layer.
 final class ForumBodyTextPageSession {
   static const inlinePlanRevision = ForumBodyInlinePlanInput.revision;
-  static const paragraphPlanRevision = 1;
+  static const paragraphPlanRevision = 2;
   static const inlineFontFrameRevision = ForumBodyInlineFontFramePlan.revision;
   // Same numeric ceiling as an individual natural table extent. The native
   // text slice height is a work boundary, not a block image fitting limit.
@@ -1344,23 +1344,6 @@ final class ForumBodyTextPageSession {
         rethrow;
       }
       admission.close();
-    } else if (admission.isFitted) {
-      final fitted = admission.takeFitted();
-      input = _decorate(fitted);
-      if (_intrinsic != null) {
-        final width = fitted.plan.metrics.fontBounds.width;
-        _intrinsic.add(width, width);
-      }
-      _composer.appendFittedEmphasis(
-        plan: fitted.plan,
-        ensureOwner: _ensureActivePlan,
-        paragraphIndex: index,
-        left: left,
-        spaceBefore: spaceBefore,
-        spaceAtPageStart: 0,
-        window: window,
-        listMarkers: _listPlan,
-      );
     } else {
       final ready = admission.take();
       input = _decorate(ready.content);

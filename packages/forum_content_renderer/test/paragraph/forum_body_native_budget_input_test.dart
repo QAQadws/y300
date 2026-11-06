@@ -16,20 +16,36 @@ ForumBodyEmphasisLineMetrics _measure(
   String body = 'ABC',
 }) {
   final document = const ForumBodyParser().parse(
-    html: '<p style="text-emphasis:\'X\' red">$body</p>',
+    html: '<p>$body</p>',
     sourceId: 'mixed-budget',
     conversionIdentity: 'none',
+  );
+  final styles = const ForumBodyStyleResolver().resolve(
+    document,
+    ForumBodyReaderStyle(
+      textStyle: const TextStyle(fontFamily: 'Ahem', fontSize: 20, height: 1),
+      fontRevision: 'budget-ahem',
+      linkColor: const Color(0xff0000ff),
+    ),
+  );
+  // Exercise a typed mixed font/scene manifest independently of author CSS.
+  const mark = ForumBodyTextEmphasis(
+    shape: ForumBodyEmphasisShape.custom,
+    customMark: 'X',
+    color: Color(0xffff0000),
   );
   final content = const ForumBodyParagraphContentBuilder().build(
     document: document,
     path: '0',
     layoutMode: ForumBodyParagraphLayoutMode.fitSingleLine,
-    styles: const ForumBodyStyleResolver().resolve(
-      document,
-      ForumBodyReaderStyle(
-        textStyle: const TextStyle(fontFamily: 'Ahem', fontSize: 20, height: 1),
-        fontRevision: 'budget-ahem',
-        linkColor: const Color(0xff0000ff),
+    styles: ForumBodyStyleResult(
+      identity: styles.identity,
+      fontRevision: styles.fontRevision,
+      root: styles.root,
+      resolverRevision: styles.resolverRevision,
+      issues: styles.issues,
+      byPath: styles.byPath.map(
+        (path, style) => MapEntry(path, style.withTextEmphasis(mark)),
       ),
     ),
   );

@@ -355,37 +355,40 @@ void main() {
   );
 
   for (final direction in TextDirection.values) {
-    test('fitted emphasis proves only original body source ($direction)', () {
-      final fixture = _Fixture(
-        '<div class="pstatus" dir="${direction.name}" '
-        'style="margin:0;white-space:pre;text-emphasis:\'X\' red">AB  </div>',
-        width: 20,
-        height: 100,
-      );
-      final bindings = fixture.prepareFragments(0);
-      final fitted = bindings.single as ForumBodyPreparedFittedEmphasisFragment;
-      expect(fitted.projection.text, 'AB');
-      expect(fitted.view.selectionBoxes(0, 2), isNotEmpty);
-      expect(fitted.glyphBoxes(0, 2), isNotEmpty);
-      final before =
-          fixture.cache.layoutBuildCount + fixture.cache.pictureBuildCount;
-      final coverage = _finish(fixture.preparedCursor(0, bindings));
-      expect(coverage.hasClippedGlyphs, isFalse);
-      expect(coverage.points, isNotEmpty);
-      expect(coverage.points.every((p) => p.displayUtf16 <= 2), isTrue);
-      expect(coverage.locate(fixture.anchor(0)), isNotNull);
-      expect(
-        fixture.cache.layoutBuildCount + fixture.cache.pictureBuildCount,
-        before,
-      );
-      fixture.session.close();
-      expect(fixture.cache.activeLeases, 0);
-    });
+    test(
+      'fitted status ignores emphasis and proves original source ($direction)',
+      () {
+        final fixture = _Fixture(
+          '<div class="pstatus" dir="${direction.name}" '
+          'style="margin:0;white-space:pre;text-emphasis:\'X\' red">AB  </div>',
+          width: 20,
+          height: 100,
+        );
+        final bindings = fixture.prepareFragments(0);
+        final fitted = bindings.single as ForumBodyPreparedParagraphFragment;
+        expect(fitted.projection.text, 'AB');
+        expect(fitted.lease.layout.selectionBoxes(0, 2), isNotEmpty);
+        expect(fitted.glyphBoxes(0, 2), isNotEmpty);
+        final before =
+            fixture.cache.layoutBuildCount + fixture.cache.pictureBuildCount;
+        final coverage = _finish(fixture.preparedCursor(0, bindings));
+        expect(coverage.hasClippedGlyphs, isFalse);
+        expect(coverage.points, isNotEmpty);
+        expect(coverage.points.every((p) => p.displayUtf16 <= 2), isTrue);
+        expect(coverage.locate(fixture.anchor(0)), isNotNull);
+        expect(
+          fixture.cache.layoutBuildCount + fixture.cache.pictureBuildCount,
+          before,
+        );
+        fixture.session.close();
+        expect(fixture.cache.activeLeases, 0);
+      },
+    );
   }
 
   for (final direction in TextDirection.values) {
     test(
-      'emphasis page coverage uses actual body glyphs and original anchors: $direction',
+      'tight plain rows use actual body glyphs and original anchors: $direction',
       () {
         final fixture = _Fixture(
           '<p dir="${direction.name}" style="margin:0;white-space:pre-wrap;'
@@ -427,7 +430,7 @@ void main() {
     );
   }
 
-  test('emphasis marks and hidden text cannot create extra anchor proof', () {
+  test('ignored emphasis and hidden text cannot create extra anchor proof', () {
     final fixture = _Fixture(
       '<p style="margin:0;text-emphasis:\'X\' red">A'
       '<span style="visibility:hidden">ZZZ</span>B</p>',
@@ -479,8 +482,6 @@ void main() {
               ForumBodyPreparedInlineFragment(:final view) =>
                 view.selectionBoxes(3, 5, clipToView: false),
               ForumBodyPreparedEmphasisFragment(:final view) =>
-                view.selectionBoxes(3, 5),
-              ForumBodyPreparedFittedEmphasisFragment(:final view) =>
                 view.selectionBoxes(3, 5),
             };
             expect(raw, isNotEmpty);

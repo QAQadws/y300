@@ -529,22 +529,23 @@ void main() {
       },
     );
   }
-  test('isolation does not bypass active-emphasis source qualification', () {
+  test('row isolation ignores retired author emphasis', () {
     final content = _content(
-          html: '<p style="text-emphasis:filled dot">ABC</p>',
-        ),
-        cache = _cache();
-    expect(
-      () => cache.acquire(content: content, width: 140, rowIsolationPitch: 160),
-      throwsA(
-        isA<ForumBodyParagraphLayoutException>().having(
-          (e) => e.failure,
-          'failure',
-          ForumBodyParagraphLayoutFailure.emphasis,
-        ),
-      ),
+      html: '<p style="text-emphasis:filled dot">ABC</p>',
     );
-    expect(cache.layoutBuildCount, 0);
+    final cache = _cache();
+    final lease = cache.acquire(
+      content: content,
+      width: 140,
+      rowIsolationPitch: 160,
+    );
+    try {
+      expect(lease.content.projection.text, 'ABC');
+      expect(lease.layout.lines, hasLength(1));
+    } finally {
+      lease.release();
+    }
+    expect(cache.activeLeases, 0);
   });
 
   test(

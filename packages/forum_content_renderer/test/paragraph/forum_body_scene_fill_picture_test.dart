@@ -5,8 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
-import '../inline/test_support/mixed_emphasis_parent_fixture.dart';
-
 ForumBodyParagraphCache _cache({int entries = 32, int bytes = 1 << 24}) {
   final c = ForumBodyParagraphCache(
     maxEntries: entries,
@@ -257,120 +255,6 @@ void main() {
           expect(c.activeLeases, 0);
         },
       );
-    }
-  }
-
-  for (final i in [1, 2, 4]) {
-    for (final direction in TextDirection.values) {
-      for (final scaler in [TextScaler.noScaling, const MixedEmphasisCurve()]) {
-        test(
-          'real child marker scenes compose with actual container surfaces $i/$direction/$scaler',
-          () async {
-            // Active ordinary text around an opaque nested ruby still awaits
-            // the complete mixed-parent format. This sample is an actual
-            // already-supported nested tree, not a manufactured marker lease.
-            final source = i == 4
-                    ? '<ruby style="font-size:12px"><rb><ruby>A<rt>x</rt></ruby></rb><rt>z</rt></ruby>'
-                    : mixedEmphasisChildren[i],
-                child = source.startsWith('<ruby style="')
-                    ? source.replaceFirst(
-                        'style="',
-                        'style="background-color:rgba(30,80,140,.37);',
-                      )
-                    : source.replaceFirst(
-                        '<ruby>',
-                        '<ruby style="background-color:rgba(30,80,140,.37)">',
-                      ),
-                c = _cache(entries: 512),
-                s = measureMixedEmphasisAllocatedSource(
-                  MixedEmphasisParentFixture(
-                    child,
-                    direction: direction,
-                    parentStyle: 'text-emphasis:circle;line-height:.4',
-                  ),
-                  c,
-                  scaler: scaler,
-                ),
-                worker = ForumBodyInlineEmphasisChildPreparation(
-                  allocation: s.allocation,
-                  natural: s.natural,
-                  cache: c,
-                  expectedTextScaler: scaler,
-                  ensureOwner: () {},
-                  additionalOwnedLeases: () => [s.source],
-                );
-            late ForumBodyInlineEmphasisChildView children;
-            try {
-              while (!worker.isReady) {
-                worker.advance(maxParts: 1);
-              }
-              children = worker.takeView();
-            } finally {
-              worker.close();
-            }
-            final pictures = children.nativeLeases
-                .whereType<ForumBodyTextPictureLease>()
-                .toList();
-            expect(pictures, isNotEmpty);
-            expect(children.backgroundSurfaces, isNotEmpty);
-            final commands = <ForumBodyTextPictureCommand>[
-                  ForumBodyTextPictureCommand.fillRect(
-                    rect: const Rect.fromLTWH(4, 7, 150, 100),
-                    color: const Color(0x33223355),
-                  ),
-                  for (final surface in children.backgroundSurfaces)
-                    ForumBodyTextPictureCommand.fillRect(
-                      rect: surface.rect,
-                      color: surface.font.background.color,
-                    ),
-                  for (final (j, picture) in pictures.indexed)
-                    ForumBodyTextPictureCommand.fromPicture(
-                      picture,
-                      Offset(10.5 + 3.25 * j, 14.75 + 10.5 * j),
-                    ),
-                ],
-                input = ForumBodyTextPictureInput(commands: commands),
-                r = ui.PictureRecorder(),
-                cv = Canvas(r);
-            cv.drawRect(
-              const Rect.fromLTWH(4, 7, 150, 100),
-              Paint()..color = const Color(0x33223355),
-            );
-            for (final surface in children.backgroundSurfaces) {
-              cv.drawRect(
-                surface.rect,
-                Paint()..color = surface.font.background.color,
-              );
-            }
-            for (final (j, picture) in pictures.indexed) {
-              picture.paint(cv, Offset(10.5 + 3.25 * j, 14.75 + 10.5 * j));
-            }
-            final reference = r.endRecording(),
-                w = _work(c, input, pictures: pictures);
-            _bind(w);
-            children.close();
-            s.natural.release();
-            s.source.release();
-            final parent = _finish(w, c).picture;
-            try {
-              c.clearUnpinned();
-              expect(c.entryCount, 1);
-              for (final dpr in [1.0, 1.25, 3.0]) {
-                expect(
-                  await _pixels((cv) => parent.paint(cv, Offset.zero), dpr),
-                  orderedEquals(
-                    await _pixels((cv) => cv.drawPicture(reference), dpr),
-                  ),
-                );
-              }
-            } finally {
-              parent.release();
-              reference.dispose();
-            }
-            expect(c.activeLeases, 0);
-          },
-        );
-      }
     }
   }
 

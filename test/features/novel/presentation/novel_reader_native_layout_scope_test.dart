@@ -425,7 +425,7 @@ void main() {
     },
   );
   testWidgets(
-    'emphasis mark scaling is frozen and invalidates the reading layout',
+    'ignored emphasis does not add a font scale to the reading layout',
     (tester) async {
       final chapter = await _chapter(
         '<p style="margin:0;font-size:80px;text-emphasis:\'X\' red">AB</p>',
@@ -434,7 +434,7 @@ void main() {
       final environment = await _environment(tester, scaler: scaler);
       final first = await _scope(chapter, environment, width: 400, height: 400);
       expect(first.textScaler.scale(80), 80);
-      expect(first.textScaler.scale(40), 64);
+      expect(first.textScaler.sizes, isNot(contains(40.0)));
       scaler.ratio = 2;
       final second = await _scope(
         chapter,
@@ -443,9 +443,8 @@ void main() {
         height: 400,
       );
       expect(second.textScaler.scale(80), 80);
-      expect(second.textScaler.scale(40), 80);
-      expect(first.textScaler.scale(40), 64);
-      expect(first.paginationKey, isNot(second.paginationKey));
+      expect(second.textScaler.sizes, first.textScaler.sizes);
+      expect(first.paginationKey, second.paginationKey);
       expect(
         first.tryUpdateCanvas(
           environment: environment,
@@ -454,17 +453,11 @@ void main() {
           fontCollectionGeneration: 0,
           isCurrent: () => true,
         ),
-        isNull,
+        isNotNull,
       );
-      await expectLater(
-        _scope(chapter, environment, maxSizes: 2),
-        throwsA(
-          isA<NovelReaderNativeLayoutInputException>().having(
-            (e) => e.failure,
-            'failure',
-            NovelReaderNativeLayoutInputFailure.budget,
-          ),
-        ),
+      expect(
+        (await _scope(chapter, environment, maxSizes: 2)).textScaler.sizes,
+        first.textScaler.sizes,
       );
       final cache = ForumBodyParagraphCache(
         maxEntries: 32,
@@ -480,7 +473,7 @@ void main() {
         cache.close();
       });
       for (var n = 0; !session.isComplete; n++) {
-        if (n > 10000) fail('Emphasis reading session did not finish');
+        if (n > 10000) fail('Reading session did not finish');
         final step = session.advance(
           maxEvents: 2,
           maxLines: 1,
@@ -496,10 +489,9 @@ void main() {
       }
       final binding =
           preparation.takeFragments().single
-              as ForumBodyPreparedEmphasisFragment;
+              as ForumBodyPreparedParagraphFragment;
       preparation.close();
-      expect(binding.view.input.paragraph.effectiveScales[40], 64);
-      expect(binding.view.input.paragraph.effectiveScales[80], 80);
+      expect(binding.lease.content.runs.single.style.textStyle.fontSize, 80);
       expect(binding.projection.text, 'AB');
       expect(binding.glyphBoxes(0, 1), isNotEmpty);
       session.close();
@@ -1110,8 +1102,8 @@ void main() {
     },
   );
 
-  for (final format in ['ordinary', 'emphasis', 'fitted']) {
-    final emphasis = format == 'emphasis', fitted = format == 'fitted';
+  for (final format in ['ordinary', 'ignored-emphasis', 'status']) {
+    final emphasis = format == 'ignored-emphasis', fitted = format == 'status';
     testWidgets(
       'prepared chapter, resolved font scope and real viewport share one layout ($format)',
       (tester) async {
@@ -1127,7 +1119,7 @@ void main() {
             paragraphSpacing: 0,
           ),
         );
-        final pageHeight = emphasis || fitted ? 20.0 : 10.0;
+        final pageHeight = fitted ? 20.0 : 10.0;
         final scope = await _scope(
           chapter,
           environment,
@@ -1196,14 +1188,7 @@ void main() {
         expect(reports.single.anchor.textOffset, 5);
         expect(reports.single.hasUserNavigated, isFalse);
         if (emphasis || fitted) {
-          expect(
-            find.byType(
-              fitted
-                  ? ForumBodyEmphasisLineSurface
-                  : ForumBodyEmphasisFragmentSurface,
-            ),
-            findsWidgets,
-          );
+          expect(find.byType(ForumBodyParagraphSurface), findsWidgets);
           expect(controller.requestPage(fitted ? 1 : 3), isTrue);
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);

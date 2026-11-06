@@ -54,7 +54,7 @@ final class NovelReaderNativeLayoutScope {
        _usesQuoteTheme = usesQuoteTheme,
        _avoidIsolatedLines = avoidIsolatedLines,
        _keepHeadingWithNext = keepHeadingWithNext;
-  static const fingerprintRevision = 16;
+  static const fingerprintRevision = 17;
   final NovelReaderNativePreparedChapter chapter;
   final ForumBodyReaderStyle reader;
   final ForumBodyTextScaleSnapshot textScaler;
@@ -375,7 +375,6 @@ List<int> _nativeRevisions() => [
   ForumBodyEmphasisLineMetrics.revision,
   ForumBodyEmphasisFragmentInput.revision,
   ForumBodyEmphasisFragmentLayout.revision,
-  ForumBodyFittedEmphasisPlan.revision,
   ForumBodyTextPictureInput.revision,
   ForumBodyInlineSpanContent.revision,
   ForumBodyInlineParagraphLayout.revision,
@@ -446,9 +445,6 @@ int _pageHandleLimit(int issued) {
     final size = style.textStyle.fontSize!;
     sizes.add(size);
     sizes.addAll(style.baselineShift.referenceFontSizes);
-    // Marks use half the unscaled author size, then the platform's actual
-    // per-size scale. Sampling only body sizes cannot freeze nonlinear marks.
-    if (style.textEmphasis.isEnabled) sizes.add(size * .5);
     if (sizes.length > limit) {
       throw const NovelReaderNativeLayoutInputException(
         NovelReaderNativeLayoutInputFailure.budget,

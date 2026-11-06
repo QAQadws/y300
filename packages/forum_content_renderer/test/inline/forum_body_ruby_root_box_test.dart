@@ -1,11 +1,17 @@
 import 'dart:math' as math;
-import 'dart:ui' as ui;
-
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
-import 'test_support/ruby_emphasis_fixture.dart';
+final class _RootScaler extends TextScaler {
+  const _RootScaler();
+
+  @override
+  double scale(double size) => size < 20 ? size * 1.45 : size * 1.12;
+
+  @override
+  double get textScaleFactor => throw StateError('Use per-size values');
+}
 
 ForumBodyParagraphCache _cache() {
   final cache = ForumBodyParagraphCache(
@@ -22,19 +28,26 @@ ForumBodyRubyRootFontBox _font(
   double height = 1,
   TextScaler scaler = TextScaler.noScaling,
 }) {
-  final content = rubyEmphasisFixture(
-    text: '',
-    emphasis: 'none',
-    size: size,
-    height: height,
-  ).base;
+  final document = const ForumBodyParser().parse(
+    html: '',
+    sourceId: 'ruby-root-font-box',
+    conversionIdentity: 'none',
+  );
+  final styles = const ForumBodyStyleResolver().resolve(
+    document,
+    ForumBodyReaderStyle(
+      textStyle: TextStyle(fontFamily: 'Ahem', fontSize: size, height: height),
+      fontRevision: 'ahem',
+      linkColor: const Color(0xff0000ff),
+    ),
+  );
   final input = ForumBodyRubyRootBoxInput(
     rootPath: 'root',
     fontStrut: ForumBodyParagraphContent.anonymousInline(
-      identity: content.identity,
-      fontRevision: content.fontRevision,
-      styleRevision: content.styleRevision,
-      style: content.style,
+      identity: styles.identity,
+      fontRevision: styles.fontRevision,
+      styleRevision: styles.resolverRevision,
+      style: styles.root,
     ),
   );
   final lease = cache.acquire(
@@ -64,9 +77,7 @@ void main() {
             _cache(),
             size: 28,
             height: height,
-            scaler: nonlinear
-                ? const RubyEmphasisNonlinearScaler()
-                : TextScaler.noScaling,
+            scaler: nonlinear ? const _RootScaler() : TextScaler.noScaling,
           );
           for (final width in [0.0, 13.125, 16384.0]) {
             for (final size in [20.5, 180.25]) {
@@ -180,84 +191,6 @@ void main() {
           throwsArgumentError,
         );
       }
-    },
-  );
-  test(
-    'actual wide emphasis envelope keeps glyph, mark and root coordinates',
-    () {
-      final cache = _cache();
-      final fixture = rubyEmphasisFixture(text: 'A', emphasis: "'Aःःः' red");
-      final line = measureRubyEmphasisLine(cache, content: fixture);
-      final group = measureRubyEmphasisGroup(
-        cache,
-        line,
-        fixture: fixture,
-        empty: true,
-      );
-      final geometryJob = ForumBodyRubyBaseEmphasisPreparation(
-        line: line,
-        group: group,
-        ensureOwner: () {},
-      );
-      while (!geometryJob.isReady) {
-        geometryJob.advance(maxParts: 1);
-      }
-      final geometry = geometryJob.takeGeometry();
-      expect(geometry.bounds.width, greaterThan(group.size.width));
-      expect(geometry.bounds.left, lessThan(0));
-      final font = _font(cache, height: 3);
-      final frame = font.encloseBounds(
-        childBounds: geometry.bounds,
-        childBaseline: group.baseline,
-      );
-      final planJob = ForumBodyRubyBaseEmphasisPlanPreparation(
-        geometry: geometry,
-        ensureOwner: () {},
-      );
-      while (!planJob.isReady) {
-        planJob.advance(maxParts: 1);
-      }
-      final plan = planJob.takePlan();
-      final scene = ForumBodyRubyBaseEmphasisScenePreparation(
-        input: line.input,
-        plan: plan,
-        cache: cache,
-        ensureOwner: () {},
-        width: line.requestWidth,
-        expectedTextScaler: line.textScaler,
-      );
-      addTearDown(scene.close);
-      while (!scene.isReady) {
-        final step = scene.advance(maxParts: 1);
-        expect(
-          step.nativeLayoutsBuilt + step.picturesRecorded,
-          lessThanOrEqualTo(1),
-        );
-        expect(step.waitingForLayoutBudget, isFalse);
-      }
-      final view = scene.takeLayout();
-      addTearDown(view.close);
-      final offset = frame.childOffset;
-      expect(offset.dx, greaterThan(0));
-      final placed = geometry.bounds.shift(offset);
-      expect(placed.left, 0);
-      expect(placed.right, frame.size.width);
-      expect(offset.dy + group.baseline, closeTo(frame.baseline, 1e-8));
-      final glyph = view.selectionBoxes(0, view.projection.text.length).single;
-      final inRoot = glyph.toRect().shift(offset);
-      final marker = geometry.marks.single.fontBounds.shift(offset);
-      expect(marker.left, greaterThanOrEqualTo(0));
-      expect(marker.right, lessThanOrEqualTo(frame.size.width));
-      // The new root translation is inverted once; it never changes the native
-      // source or interprets marker bytes as reader text.
-      final hit = view.sourceAt(marker.center - offset);
-      expect(hit.isExact, isFalse);
-      expect(hit.displayUtf16, 0);
-      expect(view.selectionBoxes(0, 1).single.toRect().shift(offset), inRoot);
-      final recorder = ui.PictureRecorder();
-      view.paint(Canvas(recorder), offset);
-      recorder.endRecording().dispose();
-      expect(cache.activeLeases, 2);
     },
   );
 }

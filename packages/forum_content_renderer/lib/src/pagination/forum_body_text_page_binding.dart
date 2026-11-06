@@ -5,7 +5,6 @@ import '../paragraph/forum_body_paragraph_layout.dart';
 import 'forum_body_text_page_composer.dart';
 import 'forum_body_source_hint.dart';
 import 'forum_body_prepared_text_fragment.dart';
-import 'forum_body_text_page_content.dart';
 
 enum ForumBodyTextPageSurfaceFailure { generation, leases, identity, geometry }
 
@@ -179,16 +178,6 @@ ForumBodyTextPage validateForumBodyPreparedTextPageBinding({
                 )) {
           _fail(ForumBodyTextPageSurfaceFailure.geometry);
         }
-      case ForumBodyPreparedFittedEmphasisFragment():
-        final view = binding.view, content = binding.plan.content;
-        view.ensureActive();
-        if (content.identity != snapshot.identity ||
-            !identical(view.metrics, binding.plan.metrics)) {
-          _fail(ForumBodyTextPageSurfaceFailure.identity);
-        }
-        ForumBodyFittedEmphasisPageContent(
-          binding.plan,
-        ).nativeHandleCountFor(fragment);
     }
   }
   return page;

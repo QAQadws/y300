@@ -9,10 +9,9 @@ import 'forum_body_length.dart';
 import 'forum_body_language.dart';
 import 'forum_body_box_resolver.dart';
 import 'forum_body_style_options.dart';
-import 'forum_body_text_emphasis_resolver.dart';
 import 'forum_body_list_style_resolver.dart';
 
-const forumBodyStyleRevision = 29;
+const forumBodyStyleRevision = 30;
 ForumBodyLength forumBodyReaderIndent(
   ForumBodyReaderStyle reader,
   double size,
@@ -59,10 +58,15 @@ final class ForumBodyStyleBuilder {
     'word-spacing',
     'text-decoration',
     'text-decoration-line',
+    // Author emphasis is recognized and intentionally omitted from styling.
     'text-emphasis',
     'text-emphasis-style',
     'text-emphasis-color',
     'text-emphasis-position',
+    '-webkit-text-emphasis',
+    '-webkit-text-emphasis-style',
+    '-webkit-text-emphasis-color',
+    '-webkit-text-emphasis-position',
     'color',
     'background',
     'background-color',
@@ -537,21 +541,6 @@ final class ForumBodyStyleBuilder {
               parent.rubyPosition,
             ),
     };
-    var emphasis = resolveForumBodyTextEmphasis(
-      declarations: declarations,
-      inherited: parent.textEmphasis,
-      rubyAnnotation:
-          node.kind == ForumBodyElementKind.rubyText ||
-          node.kind == ForumBodyElementKind.rubyAnnotationContainer,
-      parseColor: (raw) =>
-          _colors.putIfAbsent(raw, () => _colorParser.parseValue(raw)),
-      onUnsupported: (property, value) => _issue(node, property, value),
-    );
-    if (_force(ForumBodyStyleProperty.foreground, role)) {
-      // Keep currentColor as a reference: links and later role changes use
-      // their actual effective foreground, not a baked body-color snapshot.
-      emphasis = emphasis.withColor(null);
-    }
     var baselineAlignment = switch (node.tag) {
       'sup' => ForumBodyBaselineAlignment.superscript,
       'sub' => ForumBodyBaselineAlignment.subscript,
@@ -581,7 +570,6 @@ final class ForumBodyStyleBuilder {
       textDirection: direction,
       whiteSpace: whiteSpace,
       rubyPosition: rubyPosition,
-      textEmphasis: emphasis,
       baselineAlignment: baselineAlignment,
       baselineShift: parent.baselineShift.append(
         display == ForumBodyDisplay.inline

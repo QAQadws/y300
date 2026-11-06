@@ -5,7 +5,6 @@ import '../document/forum_body_document.dart';
 import '../inline/forum_body_inline_span_content.dart';
 import '../inline/forum_body_inline_font_frame_plan.dart';
 import '../inline/forum_body_emphasis_paragraph_metrics.dart';
-import '../inline/forum_body_fitted_emphasis_plan.dart';
 import '../inline/forum_body_inline_paragraph_request.dart';
 import '../inline/forum_body_ruby_atom_plan.dart';
 import '../inline/forum_body_ruby_column_request.dart';
@@ -27,7 +26,6 @@ import 'forum_body_image_frame.dart';
 export '../inline/forum_body_ruby_column_request.dart';
 
 part 'forum_body_emphasis_page_content.dart';
-part 'forum_body_fitted_emphasis_page_content.dart';
 
 /// Retained pure input for one composed paragraph, without a native owner,
 /// preparation cursor, Context or callback. The session controls total input
@@ -41,9 +39,6 @@ sealed class ForumBodyTextPageContent {
   factory ForumBodyTextPageContent.emphasis(
     ForumBodyEmphasisParagraphMetrics paragraph,
   ) = ForumBodyEmphasisPageContent;
-  factory ForumBodyTextPageContent.fittedEmphasis(
-    ForumBodyFittedEmphasisPlan plan,
-  ) = ForumBodyFittedEmphasisPageContent;
   factory ForumBodyTextPageContent.inline({
     required ForumBodyInlineSpanContent content,
     required List<PlaceholderDimensions> dimensions,

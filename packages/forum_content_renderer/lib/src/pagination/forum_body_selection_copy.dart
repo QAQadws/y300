@@ -122,10 +122,6 @@ extension ForumBodySelectionChunkSource on ForumBodyTextPageSession {
           ForumBodyEmphasisPageContent(
             :final content,
           ) => (content.projection, content.runs),
-          ForumBodyFittedEmphasisPageContent(:final plan) => (
-            plan.content.projection,
-            plan.content.runs,
-          ),
           ForumBodyInlinePageContent(:final content) => (
             content.projection.display,
             content.runs,
