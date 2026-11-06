@@ -7,6 +7,7 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 import '../document/forum_body_document.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../style/forum_body_quote_decoration.dart';
+import '../style/forum_body_text_background_style.dart';
 import '../contracts/forum_html_display_image.dart';
 import '../contracts/forum_html_image_host.dart';
 import '../contracts/forum_collapse_header_metrics.dart';
@@ -653,9 +654,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
             if (_bindings.any((binding) => _hasRubyBackground(binding)))
               Positioned.fill(
                 child: IgnorePointer(
-                  child: CustomPaint(
-                    painter: _RubyPageBackgroundPainter(_page, _bindings),
-                  ),
+                  child: _RubyPageBackgrounds(_page, _bindings),
                 ),
               ),
             for (final (index, fragment) in _page.fragments.indexed)
@@ -1048,10 +1047,38 @@ final class _RulePainter extends CustomPainter {
 
 /// One page background plane keeps natural font-box overflow clipped to the
 /// actual content box and underneath every paragraph/annotation glyph.
-final class _RubyPageBackgroundPainter extends CustomPainter {
-  const _RubyPageBackgroundPainter(this.page, this.bindings);
+final class _RubyPageBackgrounds extends StatelessWidget {
+  const _RubyPageBackgrounds(this.page, this.bindings);
+
   final ForumBodyTextPage page;
   final List<ForumBodyPreparedTextFragment> bindings;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = context
+        .dependOnInheritedWidgetOfExactType<ForumBodyTextBackgroundStyle>();
+    return CustomPaint(
+      painter: _RubyPageBackgroundPainter(
+        page,
+        bindings,
+        style?.color,
+        style?.borderRadius ?? 0,
+      ),
+    );
+  }
+}
+
+final class _RubyPageBackgroundPainter extends CustomPainter {
+  const _RubyPageBackgroundPainter(
+    this.page,
+    this.bindings,
+    this.color,
+    this.radius,
+  );
+  final ForumBodyTextPage page;
+  final List<ForumBodyPreparedTextFragment> bindings;
+  final Color? color;
+  final double radius;
   @override
   void paint(Canvas canvas, Size size) {
     canvas.save();
@@ -1068,6 +1095,8 @@ final class _RubyPageBackgroundPainter extends CustomPainter {
           binding.view.paintContainerBackgrounds(
             canvas,
             Offset(fragment.left, fragment.top),
+            color: color,
+            radius: radius,
           );
         }
       }
@@ -1079,5 +1108,7 @@ final class _RubyPageBackgroundPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _RubyPageBackgroundPainter oldDelegate) =>
       !identical(page, oldDelegate.page) ||
-      !identical(bindings, oldDelegate.bindings);
+      !identical(bindings, oldDelegate.bindings) ||
+      color != oldDelegate.color ||
+      radius != oldDelegate.radius;
 }

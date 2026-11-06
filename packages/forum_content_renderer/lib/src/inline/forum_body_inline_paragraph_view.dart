@@ -5,6 +5,7 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
+import '../style/forum_body_text_background_geometry.dart';
 import 'forum_body_inline_paragraph_layout.dart';
 import 'forum_body_inline_span_content.dart';
 import 'forum_body_inline_image_input.dart';
@@ -132,6 +133,8 @@ final class ForumBodyInlineParagraphView {
   Map<int, _RubyBinding> _children;
   Map<int, ForumBodyInlineImageBinding> _images;
   List<({Rect rect, ForumBodyRubyContainerFontBox font})> _backgrounds;
+  List<({Color color, ForumBodyTextBackgroundGeometry geometry})>?
+  _backgroundOutlines;
   List<int> _backgroundRows;
   _InlineFontFrameBinding? _fontFrames;
   bool? _hasExternalOwnerChecks;
@@ -351,14 +354,50 @@ final class ForumBodyInlineParagraphView {
     for (final binding in _children.values) ...binding.nativeLeases,
   ];
 
-  void paintContainerBackgrounds(Canvas canvas, Offset offset) {
+  void paintContainerBackgrounds(
+    Canvas canvas,
+    Offset offset, {
+    Color? color,
+    double radius = 0,
+  }) {
     _ensureActive();
+    if (color != null || radius > 0) {
+      final outlines = _backgroundOutlines ??= _buildBackgroundOutlines();
+      final paint = Paint();
+      canvas.save();
+      try {
+        canvas.translate(offset.dx, offset.dy);
+        for (final outline in outlines) {
+          paint.color = color ?? outline.color;
+          outline.geometry.paint(canvas, paint, radius);
+        }
+      } finally {
+        canvas.restore();
+      }
+      return;
+    }
     for (final region in _backgrounds) {
       canvas.drawRect(
         region.rect.shift(offset),
         Paint()..color = region.font.background.color,
       );
     }
+  }
+
+  List<({Color color, ForumBodyTextBackgroundGeometry geometry})>
+  _buildBackgroundOutlines() {
+    final groups = <(String, Color), List<Rect>>{};
+    for (final region in _backgrounds) {
+      final background = region.font.background;
+      (groups[(background.rootPath, background.color)] ??= []).add(region.rect);
+    }
+    return [
+      for (final group in groups.entries)
+        (
+          color: group.key.$2,
+          geometry: ForumBodyTextBackgroundGeometry(group.value),
+        ),
+    ];
   }
 
   void paint(Canvas canvas, Offset offset, {bool paintBackgrounds = true}) {
@@ -679,6 +718,7 @@ final class ForumBodyInlineParagraphView {
     }
     _children = const {};
     _backgrounds = const [];
+    _backgroundOutlines = null;
     _backgroundRows = const [];
     _fragment = null;
     _fontFrames?.close();

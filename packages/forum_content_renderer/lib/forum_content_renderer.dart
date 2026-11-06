@@ -196,6 +196,7 @@ export 'src/paragraph/forum_body_paragraph_surface.dart';
 export 'src/style/forum_body_length.dart';
 export 'src/style/forum_body_box_style.dart';
 export 'src/style/forum_body_collapse_header_style.dart';
+export 'src/style/forum_body_text_background_style.dart';
 export 'src/style/forum_body_style_options.dart';
 export 'src/style/forum_body_style_resolver.dart';
 export 'src/style/forum_body_style_cursor.dart';

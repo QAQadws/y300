@@ -1,4 +1,5 @@
 import 'dart:ui' as ui;
+import 'dart:typed_data';
 
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
@@ -60,6 +61,104 @@ Rect _rect(ForumBodyTextPageBackground box) =>
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('ruby background overrides reuse the mounted native page', (
+    tester,
+  ) async {
+    final f = _Fixture(
+      '<p><ruby style="background-color:#ff0000;color:transparent;font-size:20px">'
+      '<rb>AB</rb><rt>a</rt></ruby> plain</p>',
+      height: 70,
+    );
+    f.drain();
+    final snapshot = f.session.snapshot;
+    final job = f.session.openPagePreparation(0);
+    final List<ForumBodyPreparedTextFragment> fragments;
+    try {
+      for (var i = 0; !job.isReady && i < 1000; i++) {
+        job.advance(maxFragments: 1, maxParts: 1);
+      }
+      expect(job.isReady, isTrue);
+      fragments = job.takeFragments();
+    } finally {
+      job.close();
+    }
+    final inline = fragments
+        .whereType<ForumBodyPreparedInlineFragment>()
+        .single;
+    expect(inline.view.containerBackgrounds, hasLength(1));
+    final surface = ForumBodyTextPageSurface.prepared(
+      snapshot: snapshot,
+      pageIndex: 0,
+      layoutId: snapshot.layoutId,
+      fragments: fragments,
+    );
+    final key = GlobalKey();
+    final body = RepaintBoundary(key: key, child: surface);
+    Future<Uint8List> show({Color? color, double radius = 0}) async {
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: ForumBodyTextBackgroundStyle(
+              color: color,
+              borderRadius: radius,
+              child: body,
+            ),
+          ),
+        ),
+      );
+      return (await tester.runAsync(() async {
+        final image = await tester
+            .renderObject<RenderRepaintBoundary>(find.byKey(key))
+            .toImage(pixelRatio: 1);
+        try {
+          return (await image.toByteData(
+            format: ui.ImageByteFormat.rawRgba,
+          ))!.buffer.asUint8List();
+        } finally {
+          image.dispose();
+        }
+      }))!;
+    }
+
+    int colored(Uint8List pixels, int channel) {
+      var count = 0;
+      for (var index = 0; index < pixels.length; index += 4) {
+        if (pixels[index + channel] == 255 &&
+            pixels[index + (1 - channel)] == 0) {
+          count++;
+        }
+      }
+      return count;
+    }
+
+    final authored = await show();
+    final element = tester.element(find.byWidget(surface));
+    final work = (
+      f.cache.layoutBuildCount,
+      f.cache.pictureBuildCount,
+      f.cache.activeLeases,
+    );
+    expect(colored(authored, 0), greaterThan(0));
+    expect(colored(authored, 1), 0);
+    const green = Color(0xff00ff00);
+    final square = await show(color: green);
+    final rounded = await show(color: green, radius: 9);
+    expect(colored(square, 0), 0);
+    expect(colored(rounded, 1), greaterThan(0));
+    expect(colored(rounded, 1), lessThan(colored(square, 1)));
+    expect(await show(), orderedEquals(authored));
+    expect(tester.element(find.byWidget(surface)), same(element));
+    expect((
+      f.cache.layoutBuildCount,
+      f.cache.pictureBuildCount,
+      f.cache.activeLeases,
+    ), work);
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(f.cache.activeLeases, 0);
+  });
 
   test(
     'block slices exclude outer margins and repeat neither end padding nor text',
