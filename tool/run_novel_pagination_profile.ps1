@@ -7,7 +7,7 @@ param(
     [switch]$InlineSoftSpace,
     [ValidateSet('native', 'legacy', 'both')]
     [string]$Backend = 'both',
-    [ValidateSet('baseline', 'semantic', 'ruby-gaps', 'language', 'ruby-nested', 'ruby-mixed-nested', 'ruby-nested-columns')]
+    [ValidateSet('baseline', 'long-text', 'semantic', 'ruby-gaps', 'language', 'ruby-nested', 'ruby-mixed-nested', 'ruby-nested-columns')]
     [string]$Corpus = 'baseline',
     [switch]$PrepareOnly
 )

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
+import 'package:html/parser.dart' as html_parser;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
@@ -92,6 +93,21 @@ void main() {
       );
     },
   );
+  test('long-text corpus supplies exactly 10k and 100k visible characters', () {
+    final fixtures = novelMainPageProfileFixtures('long-text');
+    expect(fixtures.map((fixture) => fixture.name), [
+      'long-text-10k',
+      'long-text-100k',
+    ]);
+    for (final (index, fixture) in fixtures.indexed) {
+      final paragraphs = html_parser.parseFragment(fixture.html).children;
+      expect(paragraphs, hasLength(index == 0 ? 100 : 1000));
+      expect(
+        paragraphs.map((paragraph) => paragraph.text.runes.length),
+        everyElement(100),
+      );
+    }
+  });
   test(
     'uncovered target requires business agreement and settled page position',
     () {

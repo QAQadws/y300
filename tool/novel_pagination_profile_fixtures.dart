@@ -13,6 +13,16 @@ final novelProfileFixtures = <({String name, String html})>[
   (name: 'complex', html: novelProfileComplexHtml),
 ];
 
+final novelProfileLongTextFixtures = <({String name, String html})>[
+  (name: 'long-text-10k', html: _longText(100)),
+  (name: 'long-text-100k', html: _longText(1000)),
+];
+
+String _longText(int paragraphs) => List.generate(paragraphs, (index) {
+  final text = '第 ${index + 1} 段正文。'.padRight(100, '文');
+  return '<p>$text</p>';
+}).join();
+
 /// Finite S6 format matrix. Keep the established performance baselines intact;
 /// these exercise ordinary forum containers and single-level annotations only.
 final novelProfileSemanticFixtures = <({String name, String html})>[
@@ -102,6 +112,7 @@ List<({String name, String html})> novelMainPageProfileFixtures(
   String corpus,
 ) => switch (corpus) {
   'baseline' => novelProfileFixtures,
+  'long-text' => novelProfileLongTextFixtures,
   'semantic' => novelProfileSemanticFixtures,
   'ruby-gaps' => novelProfileRubyGapFixtures,
   'language' => novelProfileLanguageFixtures,

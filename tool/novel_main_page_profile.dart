@@ -112,9 +112,10 @@ class _MainPageProfileState extends State<_MainPageProfile> {
     NovelReaderArgs args,
     bool Function(ProfileReaderObservation) accepted, {
     bool Function()? observeOpening,
+    Duration timeout = const Duration(seconds: 25),
   }) async {
     final watch = Stopwatch()..start();
-    while (watch.elapsed < const Duration(seconds: 25)) {
+    while (watch.elapsed < timeout) {
       await _nextFrame();
       final context = key.currentContext;
       if (context == null || !context.mounted) continue;
@@ -490,10 +491,19 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       checkVisiblePage('first', latest);
       if (!latest.complete) {
         begin('background');
-        latest = await _wait(key, args, (value) {
-          observePlanCompletion(value);
-          return value.ready && value.complete;
-        });
+        latest = await _wait(
+          key,
+          args,
+          (value) {
+            observePlanCompletion(value);
+            return value.ready && value.complete;
+          },
+          // The background source yields after sealed pages; a longer corpus
+          // may need hundreds of those slots. Reader deadlines are unchanged.
+          timeout: _corpus == 'long-text'
+              ? const Duration(seconds: 60)
+              : const Duration(seconds: 25),
+        );
         end();
       }
       run['completeUs'] = clock.elapsedMicroseconds;
