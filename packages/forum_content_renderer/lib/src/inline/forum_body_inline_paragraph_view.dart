@@ -277,6 +277,26 @@ final class ForumBodyInlineParagraphView {
   final int coverageEndUtf16;
   ({int startUtf16, int endUtf16})? get engineRange {
     _ensureActive();
+    return _engineRange;
+  }
+
+  /// Read the current page inputs together after one complete owner check.
+  /// Recheck lease liveness after a yield or callback.
+  ({
+    ForumBodyInlineSpanContent content,
+    ({int startUtf16, int endUtf16})? engineRange,
+    Map<int, ForumBodyInlineImageBinding> images,
+  })
+  readPageBinding() {
+    _ensureActive();
+    return (
+      content: _parent!.content,
+      engineRange: _engineRange,
+      images: _images,
+    );
+  }
+
+  ({int startUtf16, int endUtf16})? get _engineRange {
     final fragment = _fragment;
     return fragment == null
         ? null

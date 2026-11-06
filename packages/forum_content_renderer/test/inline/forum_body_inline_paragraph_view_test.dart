@@ -121,10 +121,14 @@ void main() {
         rubyGroups: {0: child},
       );
       addTearDown(subject.close);
-      expect(subject.content, same(input.content));
+      final binding = subject.readPageBinding();
+      expect(binding.content, same(input.content));
+      expect(binding.engineRange, subject.engineRange);
+      expect(binding.images, isEmpty);
       child.close();
       expect(parent.isActive, isTrue);
       expect(() => subject.content, throwsStateError);
+      expect(subject.readPageBinding, throwsStateError);
       expect(() => subject.glyphBoxes(0, 1), throwsStateError);
       subject.close();
       expect(cache.activeLeases, 0);

@@ -76,12 +76,13 @@ ForumBodyTextPage validateForumBodyPreparedTextPageBinding({
       ownerWitness ??= handle;
     }
     final fragment = page.fragments[index];
-    if (delivery.imageCount != fragment.imageCount) {
-      _fail(ForumBodyTextPageSurfaceFailure.geometry);
-    }
     final binding = delivery is ForumBodyPreparedListItemFragment
         ? delivery.body
         : delivery;
+    if (binding is! ForumBodyPreparedInlineFragment &&
+        delivery.imageCount != fragment.imageCount) {
+      _fail(ForumBodyTextPageSurfaceFailure.geometry);
+    }
     if (delivery is ForumBodyPreparedListItemFragment) {
       final baseline = switch (binding) {
         ForumBodyPreparedImageFragment() => delivery.plan.blockTopBaseline,
@@ -119,7 +120,10 @@ ForumBodyTextPage validateForumBodyPreparedTextPageBinding({
           _fail(ForumBodyTextPageSurfaceFailure.identity);
         }
         final view = binding.view;
-        final content = view.content;
+        final (:content, :engineRange, :images) = view.readPageBinding();
+        if (images.length != fragment.imageCount) {
+          _fail(ForumBodyTextPageSurfaceFailure.geometry);
+        }
         if (content.identity != snapshot.identity ||
             content.path != fragment.path ||
             content.fontRevision != fragment.fontRevision ||
@@ -132,13 +136,15 @@ ForumBodyTextPage validateForumBodyPreparedTextPageBinding({
             view.height != fragment.height ||
             view.coverageStartUtf16 != fragment.coverageStartUtf16 ||
             view.coverageEndUtf16 != fragment.coverageEndUtf16 ||
-            view.engineRange != fragment.engineRange ||
-            !listEquals(
-              view.images.values
-                  .map((image) => image.input.element.path)
-                  .toList(growable: false),
-              fragment.imagePaths,
-            ) ||
+            engineRange != fragment.engineRange ||
+            (images.isEmpty
+                ? fragment.imagePaths.isNotEmpty
+                : !listEquals(
+                    images.values
+                        .map((image) => image.input.element.path)
+                        .toList(growable: false),
+                    fragment.imagePaths,
+                  )) ||
             fragment.sourceHint !=
                 forumBodySourceHint(
                   content.projection.display,
