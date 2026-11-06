@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:html/dom.dart' as html_dom;
 import '../style/forum_body_quote_decoration.dart';
 import '../style/forum_html_base_text_style.dart';
@@ -27,7 +26,7 @@ class ForumHtmlRenderStylePolicy {
   TextStyle baseTextStyle(BuildContext context) =>
       resolveForumHtmlBaseTextStyle(context, options: options, theme: theme);
 
-  StylesMap? customStylesFor(html_dom.Element element) {
+  Map<String, String>? customStylesFor(html_dom.Element element) {
     final styles = _elementStyles(element);
     if (contentLayout != ForumHtmlContentLayout.compact ||
         isForumCollapseElement(element) ||
@@ -43,7 +42,7 @@ class ForumHtmlRenderStylePolicy {
     return styles;
   }
 
-  StylesMap? _elementStyles(html_dom.Element element) {
+  Map<String, String>? _elementStyles(html_dom.Element element) {
     if (isForumCollapseElement(element) ||
         isForumCollapseGatherElement(element)) {
       return {'display': 'none'};

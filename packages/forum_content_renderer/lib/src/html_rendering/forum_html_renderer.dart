@@ -18,6 +18,8 @@ import 'forum_html_render_style_policy.dart';
 import 'theme/forum_html_theme_context.dart';
 import 'widgets/forum_collapse_block.dart';
 
+enum ForumHtmlRenderMode { column, listView, sliverList }
+
 /// Rendering only: preparation, localization and image ownership belong to Host.
 class ForumHtmlRenderer extends StatefulWidget {
   const ForumHtmlRenderer({
@@ -35,7 +37,7 @@ class ForumHtmlRenderer extends StatefulWidget {
     this.imageAnchorController,
     this.buildAsync,
     this.enableCaching,
-    this.renderMode = RenderMode.column,
+    this.renderMode = ForumHtmlRenderMode.column,
     this.onBodyBuilt,
     this.bodyPresentation,
     this.collapseExpansion,
@@ -64,7 +66,7 @@ class ForumHtmlRenderer extends StatefulWidget {
   final ForumHtmlImageAnchorController? imageAnchorController;
   final bool? buildAsync;
   final bool? enableCaching;
-  final RenderMode renderMode;
+  final ForumHtmlRenderMode renderMode;
   final VoidCallback? onBodyBuilt;
   final ForumHtmlBodyPresentation? bodyPresentation;
 
@@ -212,7 +214,11 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
               : 'thread-post-html-first-readable-image-${widget.sourceId}',
         ),
         enableCaching: widget.enableCaching,
-        renderMode: widget.renderMode,
+        renderMode: switch (widget.renderMode) {
+          ForumHtmlRenderMode.column => RenderMode.column,
+          ForumHtmlRenderMode.listView => RenderMode.listView,
+          ForumHtmlRenderMode.sliverList => RenderMode.sliverList,
+        },
         rebuildTriggers: [
           widget.options,
           widget.textStyle,
@@ -240,7 +246,8 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
     }
 
     final presentation = widget.bodyPresentation;
-    if (presentation == null || widget.renderMode != RenderMode.column) {
+    if (presentation == null ||
+        widget.renderMode != ForumHtmlRenderMode.column) {
       return buildBody(widget.onBodyBuilt);
     }
     final revision = (

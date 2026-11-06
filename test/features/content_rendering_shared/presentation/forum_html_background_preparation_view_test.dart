@@ -338,7 +338,7 @@ void main() {
                 html: '<p>Sliver fallback</p>',
                 theme: _lightTheme,
                 preparationExecutor: executor,
-                renderMode: RenderMode.sliverList,
+                renderMode: ForumHtmlRenderMode.sliverList,
                 onBodyBuilt: () => ready++,
                 buildAsync: false,
               ),

@@ -3,7 +3,6 @@ import '../../application/forum_html_render_preferences_projection.dart';
 import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -34,7 +33,7 @@ class ForumHtmlWidgetPostRenderer extends StatefulWidget {
     this.textAlign,
     this.buildAsync,
     this.enableCaching,
-    this.renderMode = RenderMode.column,
+    this.renderMode = ForumHtmlRenderMode.column,
     this.onBodyBuilt,
     this.bodyPresentation,
     this.collapseExpansion,
@@ -69,7 +68,7 @@ class ForumHtmlWidgetPostRenderer extends StatefulWidget {
   final bool? enableCaching;
 
   /// Only the outer chapter may be a sliver; nested collapse content stays a box.
-  final RenderMode renderMode;
+  final ForumHtmlRenderMode renderMode;
   final VoidCallback? onBodyBuilt;
   final ForumHtmlBodyPresentation? bodyPresentation;
 
@@ -142,14 +141,16 @@ class _ForumHtmlWidgetPostRendererState
   Widget build(BuildContext context) {
     // Keep the legacy implementation out of the release AOT call graph.
     if (kReleaseMode) {
-      throw UnsupportedError('Legacy HTML comparison requires debug or profile');
+      throw UnsupportedError(
+        'Legacy HTML comparison requires debug or profile',
+      );
     }
     final preferences =
         widget.preferences ?? ForumHtmlReaderPreferences.defaults();
     final document = _resolveDocument(preferences);
     if (document == null) {
       const placeholder = ForumHtmlPreparationPlaceholder();
-      return widget.renderMode == RenderMode.sliverList
+      return widget.renderMode == ForumHtmlRenderMode.sliverList
           ? const SliverToBoxAdapter(child: placeholder)
           : placeholder;
     }

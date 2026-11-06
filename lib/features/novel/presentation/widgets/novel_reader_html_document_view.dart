@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/presentation/services/novel_html_chapter_render_preparer.dart';
@@ -164,8 +163,8 @@ class _NovelReaderHtmlDocumentViewState
                     )
                   : prepared.renderDocument,
               renderMode: widget.asSliver && fragment == null
-                  ? RenderMode.sliverList
-                  : RenderMode.column,
+                  ? ForumHtmlRenderMode.sliverList
+                  : ForumHtmlRenderMode.column,
               // These bounded fragments are created only in the sliver's
               // visible range. No whole-chapter sync HtmlWidget build first.
               buildAsync: fragment == null ? null : false,
