@@ -17,6 +17,7 @@ import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import '../controllers/novel_reader_paged_navigation_controller.dart';
 import '../models/novel_reader_anchor_navigation_request.dart';
 import '../models/novel_reader_chapter_turn.dart';
+import '../models/novel_reader_logical_selection_source.dart';
 import '../models/novel_reader_native_host_status.dart';
 import '../models/novel_reader_paged_indicator_layout.dart';
 import '../models/novel_reader_pagination_exception.dart';
@@ -126,7 +127,12 @@ class NovelReaderNativePagedSurface extends StatefulWidget {
   final VoidCallback? onContentTerminal;
   final ValueChanged<bool>? onScrollActivityChanged;
   final ValueChanged<NovelReaderNativeTextSelection>? onTextSelection;
-  final Widget Function(Object identity, Widget child)? buildTextSelection;
+  final Widget Function(
+    Object identity,
+    NovelReaderLogicalSelectionSource? Function() readSource,
+    Widget child,
+  )?
+  buildTextSelection;
   final NovelReaderNativeLinkHandler? onLinkTap;
   final ValueChanged<NovelReaderNativeImageTap>? onImageTap;
   final ValueChanged<NovelReaderNativeHostStatus>? onStatusChanged;
@@ -517,12 +523,23 @@ class _NativePagedSurfaceState extends State<NovelReaderNativePagedSurface> {
     );
   }
 
+  NovelReaderLogicalSelectionSource? _readSelectionSource() {
+    final status = _status;
+    return status?.isRetainingPreviousLayout == false
+        ? status?.controller?.logicalSelectionSource
+        : null;
+  }
+
   Widget _withTextSelection(Widget child) =>
-      widget.buildTextSelection?.call((
-        widget.readingAuthorityIdentity,
-        _status?.controller,
-        _position?.pageIndex,
-      ), child) ??
+      widget.buildTextSelection?.call(
+        (
+          widget.readingAuthorityIdentity,
+          _status?.controller,
+          _position?.pageIndex,
+        ),
+        _readSelectionSource,
+        child,
+      ) ??
       child;
 
   @override

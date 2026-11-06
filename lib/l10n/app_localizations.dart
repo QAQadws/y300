@@ -6195,6 +6195,54 @@ abstract class AppLocalizations {
   /// **'打开链接'**
   String get selectionOpenForumLink;
 
+  /// No description provided for @novelSelectionStart.
+  ///
+  /// In zh, this message translates to:
+  /// **'设为选区起点'**
+  String get novelSelectionStart;
+
+  /// No description provided for @novelSelectionEnd.
+  ///
+  /// In zh, this message translates to:
+  /// **'延伸选区至此'**
+  String get novelSelectionEnd;
+
+  /// No description provided for @novelSelectionChooseEnd.
+  ///
+  /// In zh, this message translates to:
+  /// **'翻页或滚动后选择另一端'**
+  String get novelSelectionChooseEnd;
+
+  /// No description provided for @novelSelectionCopy.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制跨页选区'**
+  String get novelSelectionCopy;
+
+  /// No description provided for @novelSelectionClear.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消跨页选区'**
+  String get novelSelectionClear;
+
+  /// No description provided for @novelSelectionCopied.
+  ///
+  /// In zh, this message translates to:
+  /// **'已复制选区'**
+  String get novelSelectionCopied;
+
+  /// No description provided for @novelSelectionCopyUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法复制此范围，请缩小选区后重试'**
+  String get novelSelectionCopyUnavailable;
+
+  /// No description provided for @novelSelectionCopyFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制选区失败，请重试'**
+  String get novelSelectionCopyFailed;
+
   /// No description provided for @threadDetailScrollTop.
   ///
   /// In zh, this message translates to:

@@ -34,6 +34,7 @@ import '../services/novel_reader_native_work_scheduler.dart';
 import '../services/novel_reader_pagination_cancellation.dart';
 import '../services/novel_reader_pagination_demand.dart';
 import '../services/novel_reader_pagination_performance_policy.dart';
+import 'novel_reader_logical_selection_region.dart';
 import 'novel_reader_native_paged_viewport.dart';
 
 /// Paged lifecycle assembly for the exact content box supplied by the shell.
@@ -810,10 +811,15 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         },
       );
       final highlight = widget.textHighlight;
+      final selection = _live(request)
+          ? NovelReaderLogicalSelectionRegion.rangeFor(context, request.session)
+          : null;
       return ForumBodyTextHighlight(
-        ranges: highlight == null
-            ? const []
-            : request.scope.chapter.anchors.sourceRanges(highlight),
+        ranges: [
+          if (highlight != null)
+            ...request.scope.chapter.anchors.sourceRanges(highlight),
+          ?selection,
+        ],
         color: Theme.of(context).colorScheme.tertiary.withValues(alpha: .26),
         child: viewport,
       );

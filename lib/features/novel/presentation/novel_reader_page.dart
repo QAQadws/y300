@@ -37,6 +37,7 @@ import 'package:y300/features/novel/presentation/controllers/novel_reader_contro
 import 'package:y300/features/novel/presentation/controllers/novel_chapter_interactions_dock_controller.dart';
 import 'package:y300/features/novel/presentation/novel_text_resolver.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_chapter_turn.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_logical_selection_source.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_paged_indicator_layout.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
@@ -68,6 +69,7 @@ import 'package:y300/features/novel/presentation/widgets/novel_reader_html_docum
 import 'package:y300/features/novel/presentation/widgets/novel_reader_html_paged_surface.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_native_paged_surface.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_native_flow_host.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_logical_selection_region.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_chapter_interactions_button.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
@@ -1540,13 +1542,11 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       activity: _nativeActivity,
       onTextSelection: (selection) =>
           unawaited(_openNativeTextSelection(identity, selection)),
-      buildTextSelection: (layout, child) => ForumContentSelectionRegion(
-        nativeFlow: true,
-        onOpenForumLink: _openSelectedNativeLink,
-        clipboardTextWriter: ref.read(clipboardTextWriterProvider),
+      buildTextSelection: (layout, readSource, child) => _wrapNativeSelection(
+        surfaceIdentity: identity,
         selectionIdentity: (identity, layout),
+        readSource: readSource,
         isCurrent: () => _isReadingVisible && _isCurrentReaderSurface(identity),
-        onSelectionStarted: _cancelPendingReaderTap,
         child: child,
       ),
       onLinkTap: (url, isCurrent) =>
@@ -2048,23 +2048,51 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
               ],
             );
             if (!widget.nativePagination) return scrollView;
-            return ForumContentSelectionRegion(
-              nativeFlow: true,
-              onOpenForumLink: _openSelectedNativeLink,
+            return _wrapNativeSelection(
+              surfaceIdentity: surfaceIdentity,
               selectionIdentity: (surfaceIdentity, viewState.document),
-              readSelectionAuthority: () =>
-                  _nativeFlowKey.currentState?.selectionAuthority,
+              readSource: () => _isCurrentVerticalSession(session)
+                  ? _nativeFlowKey.currentState?.logicalSelectionSource
+                  : null,
               isCurrent: () =>
                   _isReadingVisible &&
                   _isCurrentVerticalSession(session) &&
                   _nativeFlowKey.currentState?.isSelectionCurrent == true,
-              onSelectionStarted: _cancelPendingReaderTap,
-              clipboardTextWriter: ref.read(clipboardTextWriterProvider),
               child: scrollView,
             );
           },
         ),
       ),
+    );
+  }
+
+  Widget _wrapNativeSelection({
+    required String surfaceIdentity,
+    required Object selectionIdentity,
+    required NovelReaderLogicalSelectionSource? Function() readSource,
+    required bool Function() isCurrent,
+    required Widget child,
+  }) {
+    final writer = ref.read(clipboardTextWriterProvider);
+    return NovelReaderLogicalSelectionRegion(
+      surfaceIdentity: surfaceIdentity,
+      readSource: () =>
+          _isCurrentReaderSurface(surfaceIdentity) ? readSource() : null,
+      activity: _nativeActivity,
+      writer: writer,
+      onFeedback: _showReaderSnackBar,
+      buildSelection: (action, content) => ForumContentSelectionRegion(
+        nativeFlow: true,
+        onOpenForumLink: _openSelectedNativeLink,
+        clipboardTextWriter: writer,
+        selectionIdentity: selectionIdentity,
+        readSelectionAuthority: () => readSource()?.session,
+        isCurrent: isCurrent,
+        onSelectionStarted: _cancelPendingReaderTap,
+        rangeAction: action,
+        child: content,
+      ),
+      child: child,
     );
   }
 

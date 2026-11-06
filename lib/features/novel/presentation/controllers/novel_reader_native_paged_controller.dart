@@ -8,6 +8,7 @@ import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 
 import '../models/novel_reader_chapter_turn.dart';
+import '../models/novel_reader_logical_selection_source.dart';
 import '../models/novel_reader_native_anchor_map.dart';
 import '../models/novel_reader_native_page_delivery.dart';
 import '../models/novel_reader_native_page_coverage.dart';
@@ -179,6 +180,18 @@ final class NovelReaderNativePagedController {
   bool get isSuspended => _suspended;
   Object? get error => _error;
   ForumBodyTextPageSnapshot? get snapshot => _snapshot;
+
+  NovelReaderLogicalSelectionSource? get logicalSelectionSource {
+    final session = _session;
+    if (session == null ||
+        isClosed ||
+        session.isClosed ||
+        session.isLayoutOwnerRetired) {
+      return null;
+    }
+    return (session: session, onRetired: _lifetime.onCancel);
+  }
+
   int? get requestedPageIndex => _requestedPage;
 
   /// Intent identity only; actual mounted coverage still owns confirmation.

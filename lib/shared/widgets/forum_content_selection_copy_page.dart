@@ -7,7 +7,10 @@ import 'package:y300/app/navigation/forum_selected_link_policy.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
 import 'package:y300/core/clipboard/clipboard_text_writer.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart'
-    show ForumBodyFlowSelectionScope, ForumBodyFlowSelectionScopeState;
+    show
+        ForumBodyFlowSelectionScope,
+        ForumBodyFlowSelectionScopeState,
+        ForumBodySourceRange;
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
 
@@ -17,6 +20,11 @@ typedef ForumSelectionLinkOpener = Future<void> Function(
   String url,
   bool Function() isCurrent,
 );
+
+typedef ForumSelectionRangeAction = ({
+  String label,
+  bool Function(ForumBodySourceRange) apply,
+});
 
 class ForumContentSelectionCopyPage extends StatelessWidget {
   const ForumContentSelectionCopyPage({
@@ -91,8 +99,10 @@ class ForumContentSelectionRegion extends StatefulWidget {
     this.selectionIdentity,
     this.readSelectionAuthority,
     this.onSelectionStarted,
+    this.rangeAction,
     this.nativeFlow = false,
-  }) : assert(
+  }) : assert(rangeAction == null || nativeFlow),
+       assert(
          nativeFlow
              ? resolveForumLink == null
              : (resolveForumLink == null) == (onOpenForumLink == null),
@@ -108,6 +118,7 @@ class ForumContentSelectionRegion extends StatefulWidget {
   /// Current delivery identity when the same source can reflow independently.
   final Object? Function()? readSelectionAuthority;
   final VoidCallback? onSelectionStarted;
+  final ForumSelectionRangeAction? rangeAction;
   final bool nativeFlow;
 
   @override
@@ -170,6 +181,7 @@ class _ForumContentSelectionRegionState
     }
     if (oldWidget.resolveForumLink != widget.resolveForumLink ||
         oldWidget.onOpenForumLink != widget.onOpenForumLink ||
+        oldWidget.rangeAction != widget.rangeAction ||
         oldWidget.clipboardTextWriter != widget.clipboardTextWriter) {
       _invalidateSelection();
     }
@@ -239,6 +251,28 @@ class _ForumContentSelectionRegionState
                 onPressed: () => unawaited(
                   _open(region, generation, selectedText!, selectedUrl),
                 ),
+              ),
+            );
+          }
+          final action = widget.rangeAction;
+          final range = action == null
+              ? null
+              : _flowKey.currentState?.selectedSourceRange;
+          if (action != null && range != null) {
+            final authority = widget.readSelectionAuthority?.call();
+            items.add(
+              ContextMenuButtonItem(
+                label: action.label,
+                onPressed: () {
+                  if (_menuCurrent(generation, region) &&
+                      action == widget.rangeAction &&
+                      widget.readSelectionAuthority?.call() == authority &&
+                      _flowKey.currentState?.selectedSourceRange == range &&
+                      action.apply(range)) {
+                    region.hideToolbar();
+                    region.clearSelection();
+                  }
+                },
               ),
             );
           }
@@ -324,7 +358,9 @@ class _ForumContentSelectionRegionState
   @override
   Widget build(BuildContext context) {
     final customMenu =
-        widget.onOpenForumLink != null || widget.clipboardTextWriter != null;
+        widget.onOpenForumLink != null ||
+        widget.clipboardTextWriter != null ||
+        widget.rangeAction != null;
     final child = widget.nativeFlow
         ? ForumBodyFlowSelectionScope(key: _flowKey, child: widget.child)
         : widget.child;

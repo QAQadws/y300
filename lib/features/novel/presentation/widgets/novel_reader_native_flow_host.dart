@@ -14,6 +14,7 @@ import '../../domain/models/novel_reader_document.dart';
 import '../../domain/models/novel_reader_marks.dart';
 import '../../domain/models/novel_reader_preferences.dart';
 import '../models/novel_reader_anchor_navigation_request.dart';
+import '../models/novel_reader_logical_selection_source.dart';
 import '../models/novel_reader_native_image_tap.dart';
 import '../models/novel_reader_native_link_handler.dart';
 import '../models/novel_reader_native_prepared_chapter.dart';
@@ -33,6 +34,7 @@ import '../services/novel_reader_pagination_cancellation.dart';
 import '../services/novel_reader_pagination_demand.dart';
 import '../services/novel_reader_pagination_performance_policy.dart';
 import '../services/novel_reading_image_host.dart';
+import 'novel_reader_logical_selection_region.dart';
 
 part 'novel_reader_native_flow_navigation.dart';
 
@@ -201,6 +203,19 @@ final class NovelReaderNativeFlowHostState
     return run != null && _current(run) && _error == null ? run : null;
   }
 
+  NovelReaderLogicalSelectionSource? get logicalSelectionSource {
+    final run = _displayed;
+    final session = run?.session;
+    if (run == null ||
+        !identical(run, selectionAuthority) ||
+        session == null ||
+        session.isClosed ||
+        session.isLayoutOwnerRetired) {
+      return null;
+    }
+    return (session: session, onRetired: run.token.onCancel);
+  }
+
   @override
   Widget build(BuildContext context) {
     final documentKey = (
@@ -314,12 +329,17 @@ final class NovelReaderNativeFlowHostState
       ),
     );
     final highlight = widget.textHighlight;
+    final selection = _current(run) && error == null
+        ? NovelReaderLogicalSelectionRegion.rangeFor(context, session)
+        : null;
     return SliverMainAxisGroup(
       slivers: [
         ForumBodyTextHighlight(
-          ranges: highlight == null
-              ? const []
-              : run.scope!.chapter.anchors.sourceRanges(highlight),
+          ranges: [
+            if (highlight != null)
+              ...run.scope!.chapter.anchors.sourceRanges(highlight),
+            ?selection,
+          ],
           color: Theme.of(context).colorScheme.tertiary.withValues(alpha: .26),
           child: body,
         ),

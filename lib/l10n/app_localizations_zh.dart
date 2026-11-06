@@ -3680,6 +3680,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String get selectionOpenForumLink => '打开链接';
 
   @override
+  String get novelSelectionStart => '设为选区起点';
+
+  @override
+  String get novelSelectionEnd => '延伸选区至此';
+
+  @override
+  String get novelSelectionChooseEnd => '翻页或滚动后选择另一端';
+
+  @override
+  String get novelSelectionCopy => '复制跨页选区';
+
+  @override
+  String get novelSelectionClear => '取消跨页选区';
+
+  @override
+  String get novelSelectionCopied => '已复制选区';
+
+  @override
+  String get novelSelectionCopyUnavailable => '无法复制此范围，请缩小选区后重试';
+
+  @override
+  String get novelSelectionCopyFailed => '复制选区失败，请重试';
+
+  @override
   String get threadDetailScrollTop => '滚动到顶部';
 
   @override
@@ -9655,6 +9679,30 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get selectionOpenForumLink => '開啟連結';
+
+  @override
+  String get novelSelectionStart => '設為選取起點';
+
+  @override
+  String get novelSelectionEnd => '延伸選取範圍至此';
+
+  @override
+  String get novelSelectionChooseEnd => '翻頁或捲動後選擇另一端';
+
+  @override
+  String get novelSelectionCopy => '複製跨頁選取範圍';
+
+  @override
+  String get novelSelectionClear => '取消跨頁選取範圍';
+
+  @override
+  String get novelSelectionCopied => '已複製選取範圍';
+
+  @override
+  String get novelSelectionCopyUnavailable => '無法複製此範圍，請縮小選取範圍後重試';
+
+  @override
+  String get novelSelectionCopyFailed => '複製選取範圍失敗，請重試';
 
   @override
   String get threadDetailScrollTop => '滾動到頂部';
