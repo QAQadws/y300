@@ -110,14 +110,19 @@ class _MainPageProfileState extends State<_MainPageProfile> {
   Future<ProfileReaderObservation> _wait(
     GlobalKey key,
     NovelReaderArgs args,
-    bool Function(ProfileReaderObservation) accepted,
-  ) async {
+    bool Function(ProfileReaderObservation) accepted, {
+    bool Function()? observeOpening,
+  }) async {
     final watch = Stopwatch()..start();
     while (watch.elapsed < const Duration(seconds: 25)) {
       await _nextFrame();
       final context = key.currentContext;
       if (context == null || !context.mounted) continue;
-      final observation = observeProfileReader(context, args);
+      final observation = observeProfileReader(
+        context,
+        args,
+        observeOpening: observeOpening?.call() ?? false,
+      );
       if (observation.failed) {
         throw StateError('Reader reported layout failure');
       }
@@ -196,6 +201,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
     _emit({
       'event': 'suite_method',
       'coldDefinition': 'new route, controller, owner, derived caches and position; warm process/fonts; in-memory synthetic I/O',
+      'openDefinition': 'uncoveredTarget: laid-out matching body without reader cover; firstReadable: existing observation after route settles; planComplete: finalized plan independent of route animation',
       'turnDefinition': 'reader chrome command to settled visible page; excludes hardware gesture recognition',
       'frameAttribution':
           'engine vsync intervals; batched delivery does not select phase',
@@ -285,6 +291,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
           (run) => run['backend'] == backend && run['fixture'] == fixture.name,
         );
         final opens = runs.where((run) => run['kind'] == 'open').toList();
+        final successfulOpens = opens.where((run) => run['passed'] == true);
         final warmups = runs.where((run) => run['kind'] == 'warmup').toList();
         final turns = runs.where((run) => run['kind'] == 'turns').toList();
         final complete =
@@ -302,13 +309,17 @@ class _MainPageProfileState extends State<_MainPageProfile> {
           'successfulWarmups': warmups
               .where((run) => run['passed'] == true)
               .length,
-          'successfulOpens': opens.where((run) => run['passed'] == true).length,
+          'successfulOpens': successfulOpens.length,
           'completedTurns': turns.map((run) => run['completedTurns']).toList(),
-          'firstReadableUs': profileDistribution(
-            opens
-                .where((run) => run['passed'] == true)
-                .map((run) => run['firstReadableUs']! as int),
-          ),
+          for (final metric in [
+            'uncoveredTargetUs',
+            'routeSettledUs',
+            'firstReadableUs',
+            'planCompleteUs',
+          ])
+            metric: profileDistribution(
+              successfulOpens.map((run) => run[metric]! as int),
+            ),
         });
         _emit({'event': 'sample_summary', ...matrix.last});
       }
@@ -405,6 +416,12 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       windowOpen = false;
     }
 
+    void observePlanCompletion(ProfileReaderObservation observation) {
+      if (observation.complete) {
+        run.putIfAbsent('planCompleteUs', () => clock.elapsedMicroseconds);
+      }
+    }
+
     void checkVisiblePage(String phase, ProfileReaderObservation observation) {
       final expected = novelProfileExpectedLanguages(fixture.name);
       if (!native) return;
@@ -439,11 +456,33 @@ class _MainPageProfileState extends State<_MainPageProfile> {
     try {
       begin('open');
       unawaited(navigator.push(route));
-      latest = await _wait(
-        key,
-        args,
-        (value) => value.ready && value.businessConfirmed,
-      );
+      final animation = route.animation!;
+      run['routeTransitionDurationUs'] =
+          route.transitionDuration.inMicroseconds;
+      void observeRoute(AnimationStatus status) {
+        if (status == AnimationStatus.completed) {
+          run['routeSettledUs'] = clock.elapsedMicroseconds;
+        }
+      }
+
+      observeRoute(animation.status);
+      animation.addStatusListener(observeRoute);
+      try {
+        latest = await _wait(key, args, (value) {
+          observePlanCompletion(value);
+          if (value.uncoveredTarget) {
+            run.putIfAbsent(
+              'uncoveredTargetUs',
+              () => clock.elapsedMicroseconds,
+            );
+          }
+          return value.ready &&
+              value.businessConfirmed &&
+              run.containsKey('uncoveredTargetUs');
+        }, observeOpening: () => !run.containsKey('uncoveredTargetUs'));
+      } finally {
+        animation.removeStatusListener(observeRoute);
+      }
       run['firstReadableUs'] = clock.elapsedMicroseconds;
       if (native) _emitPageWork(id, 'first', latest);
       run['firstReadableWasPartial'] = !latest.complete;
@@ -451,11 +490,10 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       checkVisiblePage('first', latest);
       if (!latest.complete) {
         begin('background');
-        latest = await _wait(
-          key,
-          args,
-          (value) => value.ready && value.complete,
-        );
+        latest = await _wait(key, args, (value) {
+          observePlanCompletion(value);
+          return value.ready && value.complete;
+        });
         end();
       }
       run['completeUs'] = clock.elapsedMicroseconds;

@@ -93,7 +93,7 @@ void main() {
     },
   );
   test(
-    'visibility requires business agreement and an uncovered settled page',
+    'uncovered target requires business agreement and settled page position',
     () {
       bool accepts({
         int? mountedPage = 1,
@@ -102,8 +102,7 @@ void main() {
         String? businessKey = 'key',
         bool covered = false,
         bool pending = false,
-        bool routeSettled = true,
-      }) => profileVisiblePageAccepted(
+      }) => profileUncoveredTargetMatches(
         mountedPage: mountedPage,
         pageCount: 3,
         businessPage: businessPage,
@@ -111,7 +110,6 @@ void main() {
         businessKey: businessKey,
         covered: covered,
         pending: pending,
-        routeSettled: routeSettled,
       );
       expect(accepts(), isTrue);
       expect(accepts(mountedPage: null), isFalse);
@@ -121,7 +119,6 @@ void main() {
       expect(accepts(businessKey: 'old'), isFalse);
       expect(accepts(covered: true), isFalse);
       expect(accepts(pending: true), isFalse);
-      expect(accepts(routeSettled: false), isFalse);
     },
   );
 
@@ -289,22 +286,25 @@ void main() {
             ),
           ),
         );
-        unawaitedPush() => navigator.currentState!.push<void>(
-          MaterialPageRoute(
-            builder: (_) => NovelReaderPage(
-              key: key,
-              novelId: source.novelId,
-              initialEpisodeId: source.episodeId,
-              nativePagination: native,
-              nativeIdleScheduler: () async {},
-            ),
-          ),
+        final probeOpening = scenario.fixture == null && !scenario.mixed;
+        Widget buildReader(BuildContext context) => NovelReaderPage(
+          key: key,
+          novelId: source.novelId,
+          initialEpisodeId: source.episodeId,
+          nativePagination: native,
+          nativeIdleScheduler: () async {},
+        );
+        Future<void> unawaitedPush() => navigator.currentState!.push<void>(
+          probeOpening
+              ? _SlowProfileRoute(builder: buildReader)
+              : MaterialPageRoute<void>(builder: buildReader),
         );
         // The returned route future completes only after popping it.
         final popped = unawaitedPush();
         Future<ProfileReaderObservation> wait(
-          bool Function(ProfileReaderObservation) accepts,
-        ) async {
+          bool Function(ProfileReaderObservation) accepts, {
+          bool observeOpening = false,
+        }) async {
           for (var i = 0; i < (scenario.fixture == null ? 200 : 3000); i++) {
             // Native work slices use real Stopwatch time. Do not turn every
             // short yield into 20 ms of fake stall under parallel tester load.
@@ -320,7 +320,11 @@ void main() {
               );
             }
             if (key.currentContext case final context?) {
-              final observation = observeProfileReader(context, args);
+              final observation = observeProfileReader(
+                context,
+                args,
+                observeOpening: observeOpening,
+              );
               expect(
                 observation.failed,
                 isFalse,
@@ -363,6 +367,15 @@ void main() {
           );
         }
 
+        if (probeOpening) {
+          final opening = await wait(
+            (value) => value.uncoveredTarget,
+            observeOpening: true,
+          );
+          expect(opening.page, 0);
+          expect(opening.ready, isFalse);
+          expect(opening.businessConfirmed, isFalse);
+        }
         var observation = await wait((value) => value.ready && value.complete);
         if (scenario.fixture?.name == 'single-ruby-rule') {
           expect(
@@ -493,4 +506,11 @@ void main() {
       },
     );
   }
+}
+
+class _SlowProfileRoute extends MaterialPageRoute<void> {
+  _SlowProfileRoute({required super.builder});
+
+  @override
+  Duration get transitionDuration => const Duration(seconds: 3);
 }

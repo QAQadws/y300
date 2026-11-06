@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_overlay_scaffold.dart';
@@ -26,6 +27,7 @@ final class ProfileReaderObservation {
   bool complete = false;
   bool ready = false;
   bool businessConfirmed = false;
+  bool uncoveredTarget = false;
   bool failed = false;
   NovelReaderNativeOwner? nativeOwner;
   NovelReaderController? businessController;
@@ -75,7 +77,7 @@ Set<String> observeNativeProfileLanguages(
   return Set.unmodifiable(languages);
 }
 
-bool profileVisiblePageAccepted({
+bool profileUncoveredTargetMatches({
   required int? mountedPage,
   required int pageCount,
   required int businessPage,
@@ -83,7 +85,6 @@ bool profileVisiblePageAccepted({
   required String? businessKey,
   required bool covered,
   required bool pending,
-  required bool routeSettled,
 }) =>
     mountedPage != null &&
     mountedPage >= 0 &&
@@ -92,16 +93,17 @@ bool profileVisiblePageAccepted({
     mountedKey != null &&
     mountedKey == businessKey &&
     !covered &&
-    !pending &&
-    routeSettled;
+    !pending;
 
 ProfileReaderObservation observeProfileReader(
   BuildContext context,
-  NovelReaderArgs args,
-) {
+  NovelReaderArgs args, {
+  bool observeOpening = false,
+}) {
   final observation = ProfileReaderObservation();
   NovelReaderNativePagedController? native;
   NovelReaderHtmlPagedSurface? legacy;
+  Element? legacyViewport;
   String? legacySemanticsValue;
   bool covered = false;
   bool scrolling = false;
@@ -148,6 +150,7 @@ ProfileReaderObservation observeProfileReader(
       });
     } else if (widget is PageView &&
         widget.key == const Key('novel-reader-paged-page-view')) {
+      legacyViewport = element;
       observation.count = widget.childrenDelegate.estimatedChildCount ?? 0;
       final controller = widget.controller;
       if (controller != null && controller.hasClients) {
@@ -216,9 +219,9 @@ ProfileReaderObservation observeProfileReader(
         prepared?.isClosed == true &&
         prepared?.estimatedRetainedBytes == 0;
   }
-  final routeSettled =
-      ModalRoute.of(context)?.animation?.status == AnimationStatus.completed;
-  observation.businessConfirmed = profileVisiblePageAccepted(
+  final route = ModalRoute.of(context);
+  final routeSettled = route?.animation?.status == AnimationStatus.completed;
+  final matchesTarget = profileUncoveredTargetMatches(
     mountedPage: observation.page,
     pageCount: observation.count,
     businessPage: snapshot.pageIndex,
@@ -226,8 +229,8 @@ ProfileReaderObservation observeProfileReader(
     businessKey: snapshot.paginationKey,
     covered: covered,
     pending: pending,
-    routeSettled: routeSettled,
   );
+  observation.businessConfirmed = routeSettled && matchesTarget;
   final page = observation.page;
   observation.ready =
       !observation.failed &&
@@ -238,5 +241,39 @@ ProfileReaderObservation observeProfileReader(
       !covered &&
       !pending &&
       routeSettled;
+  if (observeOpening &&
+      matchesTarget &&
+      !observation.failed &&
+      route?.isCurrent == true) {
+    observation.uncoveredTarget =
+        nativeController != null ||
+        _hasLaidOutLegacyText(legacyViewport!, page!);
+  }
   return observation;
+}
+
+bool _hasLaidOutLegacyText(Element viewport, int page) {
+  // A legacy plan and scroll position can precede the HTML widget's layout.
+  // Only inspect the current page and stop as soon as its text is laid out.
+  final pageKey = ValueKey('novel-reader-paged-page-$page');
+  var found = false;
+  void visit(Element element, {bool inPage = false}) {
+    final widget = element.widget;
+    if (found || widget is Offstage && widget.offstage) return;
+    final isPage = inPage || widget.key == pageKey;
+    if (isPage && element is RenderObjectElement) {
+      final paragraph = element.renderObject;
+      if (paragraph is RenderParagraph &&
+          paragraph.attached &&
+          paragraph.hasSize &&
+          !paragraph.size.isEmpty) {
+        found = true;
+        return;
+      }
+    }
+    element.visitChildElements((child) => visit(child, inPage: isPage));
+  }
+
+  viewport.visitChildElements(visit);
+  return found;
 }
