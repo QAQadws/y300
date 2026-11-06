@@ -55,7 +55,6 @@ import 'package:y300/features/novel/domain/models/novel_reading_body_geometry.da
 import 'package:y300/features/novel/presentation/widgets/novel_reading_body_sliver.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_catalog_row.dart';
 
-import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_session_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_owner.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_demand.dart';
@@ -139,8 +138,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       const NovelReaderTypographyResolver();
   final NovelReaderProgressPolicy _progressPolicy =
       const NovelReaderProgressPolicy();
-  NovelReaderPaginationSessionCache _paginationSessionCache =
-      NovelReaderPaginationSessionCache();
+  NovelReaderPaginationSessionCache? _legacyPaginationSessionCache;
   NovelReaderController? _paginationSessionController;
   NovelReaderNativeOwner? _nativeOwner;
   final _nativeFlowKey = GlobalKey<NovelReaderNativeFlowHostState>();
@@ -158,8 +156,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   NovelReaderPaginationPosition? _nativeUnpublishedPosition;
   ({String surface, String key, int count, bool isFinal})? _nativeControls;
   ({String surface, bool previous})? _nativeOverlayTurn;
-  NovelReaderPreparedChapterCache get _preparedChapterCache =>
-      _paginationSessionCache.preparedChapterCache;
+  NovelReaderPaginationSessionCache get _legacyPaginationCache =>
+      _legacyPaginationSessionCache ??= NovelReaderPaginationSessionCache();
   NovelReaderDisplayPreferencesCoordinator? _displayPreferencesCoordinator;
   NovelReaderController? _displayPreferencesOwner;
   Future<void>? _displayCommitTail;
@@ -357,7 +355,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     _bookmarkCapture?.cancel();
     _nativeOwner?.dispose();
     _nativeActivity.dispose();
-    _paginationSessionCache.dispose();
+    _legacyPaginationSessionCache?.dispose();
     _verticalDockVisible.dispose();
     _postRouteSession.dispose();
     WidgetsBinding.instance.removeObserver(this);
@@ -1358,8 +1356,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       _nativePagedEntry = null;
       _nativeFlowEntry = null;
       _nativeMenuSource = null;
-      _paginationSessionCache.dispose();
-      _paginationSessionCache = NovelReaderPaginationSessionCache();
+      _legacyPaginationSessionCache?.dispose();
+      _legacyPaginationSessionCache = null;
       _nativeOwner?.dispose();
       _textHighlight = null;
       _pendingTextNavigation = null;
@@ -1647,15 +1645,16 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           surfaceIdentity,
         );
       }
+      final cache = _legacyPaginationCache;
       return NovelReaderHtmlPagedSurface(
         readingAuthorityIdentity: viewState.readingAuthorityRevision,
         preparationService: ref.watch(
           novelReaderHtmlPreparationServiceProvider,
         ),
-        paginationCache: _paginationSessionCache.paginationCache,
-        paginationMeasureCache: _paginationSessionCache.measureCache,
-        paginationBoundaryCache: _paginationSessionCache.boundaryCache,
-        preparedChapterCache: _preparedChapterCache,
+        paginationCache: cache.paginationCache,
+        paginationMeasureCache: cache.measureCache,
+        paginationBoundaryCache: cache.boundaryCache,
+        preparedChapterCache: cache.preparedChapterCache,
         rawHtml: viewState.currentContent.rawHtml,
         episode: viewState.currentEpisode,
         preferences: viewState.renderPreferences,
@@ -1925,7 +1924,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
             : NovelReaderHtmlDocumentView(
                 preparationService: htmlPreparation,
                 asSliver: true,
-                preparedChapterCache: _preparedChapterCache,
+                preparedChapterCache:
+                    _legacyPaginationCache.preparedChapterCache,
                 rawHtml: viewState.currentContent.rawHtml,
                 episode: viewState.currentEpisode,
                 preferences: viewState.renderPreferences,
