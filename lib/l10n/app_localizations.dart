@@ -3720,6 +3720,54 @@ abstract class AppLocalizations {
   /// **'重置字号策略，保留已选字号'**
   String get novelFontSizePolicyReset;
 
+  /// No description provided for @novelRoleFontSizes.
+  ///
+  /// In zh, this message translates to:
+  /// **'标题、引用和代码字号'**
+  String get novelRoleFontSizes;
+
+  /// No description provided for @novelRoleFontSizeHeading.
+  ///
+  /// In zh, this message translates to:
+  /// **'标题字号'**
+  String get novelRoleFontSizeHeading;
+
+  /// No description provided for @novelRoleFontSizeQuote.
+  ///
+  /// In zh, this message translates to:
+  /// **'引用字号'**
+  String get novelRoleFontSizeQuote;
+
+  /// No description provided for @novelRoleFontSizeCode.
+  ///
+  /// In zh, this message translates to:
+  /// **'代码字号'**
+  String get novelRoleFontSizeCode;
+
+  /// No description provided for @novelRoleFontSizesHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'按比例调整各类文字原有的字号。100% 保留原有大小。'**
+  String get novelRoleFontSizesHint;
+
+  /// No description provided for @novelRoleFontSizesUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'「全部统一」启用时使用统一字号，已保存的比例会保留。'**
+  String get novelRoleFontSizesUnavailable;
+
+  /// No description provided for @novelRoleFontSizesReset.
+  ///
+  /// In zh, this message translates to:
+  /// **'重置标题、引用和代码字号'**
+  String get novelRoleFontSizesReset;
+
+  /// No description provided for @novelRoleFontSizePercent.
+  ///
+  /// In zh, this message translates to:
+  /// **'{percent}%'**
+  String novelRoleFontSizePercent(int percent);
+
   /// No description provided for @novelFirstLineIndent.
   ///
   /// In zh, this message translates to:

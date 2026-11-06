@@ -72,6 +72,7 @@ class DefaultNovelReaderPreferenceImpactAnalyzer
         previous.typography.fontWeight != next.typography.fontWeight ||
         previous.typography.textAlignment != next.typography.textAlignment ||
         previous.typography.fontSizeScope != next.typography.fontSizeScope ||
+        previous.typography.roleFontSizes != next.typography.roleFontSizes ||
         previous.typography.lineHeightScope !=
             next.typography.lineHeightScope ||
         previous.pagePadding != next.pagePadding ||

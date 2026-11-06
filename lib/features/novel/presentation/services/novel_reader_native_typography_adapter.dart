@@ -9,6 +9,7 @@ import '../../domain/models/novel_reader_preferences.dart';
   double paragraphAfter,
   double? letterSpacing,
   double? wordSpacing,
+  ForumBodyRoleFontScales roleFontScales,
   FontWeight? fontWeight,
   TextAlign? textAlign,
   ForumBodyStylePolicy policy,
@@ -36,6 +37,16 @@ resolveNovelReaderNativeTypography(
     throw ArgumentError('Invalid reader word spacing');
   }
   final sizeScope = preferences.typography.fontSizeScope;
+  final roleSizes = preferences.typography.roleFontSizes;
+  final forceAllSizes =
+      sizeScope == NovelReaderStyleScope.forceAll ||
+      (sizeScope == null &&
+          base?.values[ForumBodyStyleProperty.fontSize] ==
+              ForumBodyStyleScope.forceAll);
+  double scale(int? percent) =>
+      (NovelReaderRoleFontSizes.validPercent(percent) ??
+          NovelReaderRoleFontSizes.defaultPercent) /
+      100;
   final heightScope = preferences.typography.lineHeightScope;
   final weight = preferences.typography.fontWeight;
   final alignment = preferences.typography.textAlignment;
@@ -52,6 +63,13 @@ resolveNovelReaderNativeTypography(
           },
     fontWeight: resolveNovelReaderNativeFontWeight(weight),
     wordSpacing: words?.logicalPixels,
+    roleFontScales: forceAllSizes
+        ? ForumBodyReaderStyle.defaultRoleFontScales
+        : (
+            heading: scale(roleSizes.heading),
+            quote: scale(roleSizes.quote),
+            code: scale(roleSizes.code),
+          ),
     letterSpacing: letters?.logicalPixels,
     paragraphBefore: effectiveSpacing.before,
     paragraphAfter: effectiveSpacing.after,

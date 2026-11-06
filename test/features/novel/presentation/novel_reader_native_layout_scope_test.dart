@@ -124,6 +124,80 @@ const _limits = ForumBodyTextPageSessionLimits(
 );
 
 void main() {
+  testWidgets('role sizing changes native rows and invalidates the old scope', (
+    tester,
+  ) async {
+    final chapter = await _chapter(
+      '<h2 style="font-size:20px;line-height:1;margin:0">abcdefgh</h2>'
+      '<p style="margin:0">ab</p>',
+    );
+    final defaults = NovelReaderPreferences.defaults().copyWith(
+      fontSize: 20,
+      lineHeight: 1,
+    );
+    final initial = await _environment(tester, preferences: defaults);
+    final adjusted = await _environment(
+      tester,
+      preferences: defaults.copyWith(
+        typography: const NovelReaderTypographyOverrides(
+          roleFontSizes: NovelReaderRoleFontSizes(heading: 150),
+        ),
+      ),
+    );
+    final base = await _scope(chapter, initial, width: 85, height: 240);
+    final larger = await _scope(chapter, adjusted, width: 85, height: 240);
+    expect(larger.chapter, same(base.chapter));
+    expect(larger.paginationKey, isNot(base.paginationKey));
+    expect(
+      base.tryUpdateCanvas(
+        environment: adjusted,
+        width: base.width,
+        height: base.height,
+        fontCollectionGeneration: 0,
+        isCurrent: () => true,
+      ),
+      isNull,
+    );
+
+    Map<String?, int> rows(
+      NovelReaderNativeLayoutScope scope,
+      ForumBodyTableExtent extent,
+    ) {
+      final cache = ForumBodyParagraphCache(
+        maxEntries: 8,
+        maxEstimatedBytes: 1 << 22,
+      );
+      final session = scope.openSession(
+        cache: cache,
+        layoutId: extent.name,
+        limits: _limits,
+        tableExtent: extent,
+      );
+      try {
+        final counts = <String?, int>{};
+        for (var step = 0; !session.isComplete; step++) {
+          expect(step, lessThan(1000));
+          session.advance(maxEvents: 4, maxLines: 1);
+        }
+        for (final page in session.snapshot) {
+          for (final part in page.fragments) {
+            counts[part.path] =
+                (counts[part.path] ?? 0) + part.endLine - part.startLine;
+          }
+        }
+        return counts;
+      } finally {
+        session.close();
+        cache.close();
+      }
+    }
+
+    for (final extent in ForumBodyTableExtent.values) {
+      expect(rows(base, extent), {'0': 2, '1': 1});
+      expect(rows(larger, extent), {'0': 4, '1': 1});
+    }
+  });
+
   testWidgets(
     'image geometry enters the layout key independently of font and IR',
     (tester) async {

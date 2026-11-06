@@ -5,6 +5,8 @@ import 'package:forum_content_renderer/forum_content_renderer.dart';
 ForumBodyReaderStyle reader({
   ForumBodyStylePolicy? policy,
   ForumBodyLength indent = ForumBodyLength.zero,
+  ForumBodyRoleFontScales roleFontScales =
+      ForumBodyReaderStyle.defaultRoleFontScales,
 }) => ForumBodyReaderStyle(
   textStyle: const TextStyle(
     fontFamily: 'ReaderFont',
@@ -18,6 +20,7 @@ ForumBodyReaderStyle reader({
   fontRevision: 'test-font-v1',
   linkColor: const Color(0xff0044cc),
   firstLineIndent: indent,
+  roleFontScales: roleFontScales,
   policy: policy,
   textAlign: TextAlign.justify,
 );
@@ -51,6 +54,76 @@ ForumBodyResolvedStyle byId(
 }
 
 void main() {
+  test('role font adjustments preserve author sizing and do not compound', () {
+    const html =
+        '<div style="font-size:36px"><p id="body" style="font-size:12px">body</p>'
+        '<h2 id="heading"><span id="half" style="font-size:50%">heading</span></h2>'
+        '<blockquote id="quote" style="font-size:20px">'
+        '<p id="body-in-quote">quote <code id="code" style="font-size:80%">code'
+        '<span id="code-child">x</span></code></p>'
+        '<blockquote id="nested">nested</blockquote>'
+        '<ruby id="base">b<rt id="annotation">r</rt></ruby></blockquote>'
+        '<p id="after">body</p></div>';
+    const scales = (heading: 1.5, quote: .75, code: 1.25);
+    final result = resolve(
+      html,
+      options: reader(
+        roleFontScales: scales,
+        policy: ForumBodyStylePolicy({
+          ForumBodyStyleProperty.fontSize: ForumBodyStyleScope.forceBody,
+        }),
+      ),
+    );
+    expect(
+      {
+        for (final id in [
+          'body',
+          'heading',
+          'half',
+          'quote',
+          'body-in-quote',
+          'code',
+          'code-child',
+          'nested',
+          'base',
+          'annotation',
+          'after',
+        ])
+          id: byId(result, id).textStyle.fontSize,
+      },
+      {
+        'body': 20,
+        'heading': 81,
+        'half': 40.5,
+        'quote': 15,
+        'body-in-quote': 15,
+        'code': 20,
+        'code-child': 20,
+        'nested': 15,
+        'base': 15,
+        'annotation': 7.5,
+        'after': 20,
+      },
+    );
+    expect(byId(result, 'code-child').textStyle.fontFamily, 'monospace');
+    final uniform = resolve(
+      html,
+      options: reader(
+        roleFontScales: scales,
+        policy: ForumBodyStylePolicy({
+          ForumBodyStyleProperty.fontSize: ForumBodyStyleScope.forceAll,
+        }),
+      ),
+    );
+    expect(
+      uniform.styles.byPath.values
+          .map((style) => style.textStyle.fontSize)
+          .toSet(),
+      {20},
+    );
+    expect(uniform.document.identity, result.document.identity);
+  });
+
   test('Discuz float markup retains physical sides, margins and clearance', () {
     final result = resolve(
       '<div dir="rtl"><span id="left" style="float:left;margin-right:5px">'

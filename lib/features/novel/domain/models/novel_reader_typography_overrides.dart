@@ -158,6 +158,46 @@ final class NovelReaderParagraphSpacing {
   int get hashCode => Object.hash(before, after, scope);
 }
 
+/// A missing percentage inherits; 100 explicitly restores the role's base size.
+final class NovelReaderRoleFontSizes {
+  const NovelReaderRoleFontSizes({this.heading, this.quote, this.code});
+
+  static const minimum = 75;
+  static const maximum = 150;
+  static const step = 5;
+  static const defaultPercent = 100;
+  final int? heading;
+  final int? quote;
+  final int? code;
+
+  static int? validPercent(Object? value) =>
+      value is int &&
+          value >= minimum &&
+          value <= maximum &&
+          (value - minimum) % step == 0
+      ? value
+      : null;
+
+  bool get isEmpty => heading == null && quote == null && code == null;
+
+  NovelReaderRoleFontSizes over(NovelReaderRoleFontSizes base) =>
+      NovelReaderRoleFontSizes(
+        heading: heading ?? base.heading,
+        quote: quote ?? base.quote,
+        code: code ?? base.code,
+      );
+
+  @override
+  bool operator ==(Object other) =>
+      other is NovelReaderRoleFontSizes &&
+      other.heading == heading &&
+      other.quote == quote &&
+      other.code == code;
+
+  @override
+  int get hashCode => Object.hash(heading, quote, code);
+}
+
 /// Sparse requests. Absence inherits the preceding scope; explicit author/zero
 /// values remain distinct so a later work override can undo a global setting.
 final class NovelReaderTypographyOverrides {
@@ -170,6 +210,7 @@ final class NovelReaderTypographyOverrides {
     this.lineHeightScope,
     this.fontWeight,
     this.textAlignment,
+    this.roleFontSizes = const NovelReaderRoleFontSizes(),
   });
   final NovelReaderFirstLineIndent? firstLineIndent;
   final NovelReaderParagraphSpacing? paragraphSpacing;
@@ -177,6 +218,7 @@ final class NovelReaderTypographyOverrides {
   final NovelReaderWordSpacing? wordSpacing;
   final NovelReaderFontWeight? fontWeight;
   final NovelReaderTextAlignment? textAlignment;
+  final NovelReaderRoleFontSizes roleFontSizes;
 
   /// Null inherits the preceding scope; asDefault explicitly keeps author sizes.
   final NovelReaderStyleScope? fontSizeScope;
@@ -191,13 +233,15 @@ final class NovelReaderTypographyOverrides {
       fontSizeScope == null &&
       lineHeightScope == null &&
       fontWeight == null &&
-      textAlignment == null;
+      textAlignment == null &&
+      roleFontSizes.isEmpty;
 
   NovelReaderTypographyOverrides withFirstLineIndent(
     NovelReaderFirstLineIndent? value,
   ) => NovelReaderTypographyOverrides(
     firstLineIndent: value,
     textAlignment: textAlignment,
+    roleFontSizes: roleFontSizes,
     fontWeight: fontWeight,
     paragraphSpacing: paragraphSpacing,
     letterSpacing: letterSpacing,
@@ -212,6 +256,7 @@ final class NovelReaderTypographyOverrides {
     firstLineIndent: firstLineIndent,
     paragraphSpacing: value,
     textAlignment: textAlignment,
+    roleFontSizes: roleFontSizes,
     fontWeight: fontWeight,
     letterSpacing: letterSpacing,
     wordSpacing: wordSpacing,
@@ -226,6 +271,7 @@ final class NovelReaderTypographyOverrides {
     paragraphSpacing: paragraphSpacing,
     letterSpacing: value,
     textAlignment: textAlignment,
+    roleFontSizes: roleFontSizes,
     fontWeight: fontWeight,
     wordSpacing: wordSpacing,
     fontSizeScope: fontSizeScope,
@@ -240,6 +286,7 @@ final class NovelReaderTypographyOverrides {
     letterSpacing: letterSpacing,
     wordSpacing: value,
     textAlignment: textAlignment,
+    roleFontSizes: roleFontSizes,
     fontWeight: fontWeight,
     fontSizeScope: fontSizeScope,
     lineHeightScope: lineHeightScope,
@@ -254,6 +301,7 @@ final class NovelReaderTypographyOverrides {
     wordSpacing: wordSpacing,
     fontSizeScope: value,
     textAlignment: textAlignment,
+    roleFontSizes: roleFontSizes,
     fontWeight: fontWeight,
     lineHeightScope: lineHeightScope,
   );
@@ -268,6 +316,7 @@ final class NovelReaderTypographyOverrides {
     fontSizeScope: fontSizeScope,
     lineHeightScope: value,
     textAlignment: textAlignment,
+    roleFontSizes: roleFontSizes,
     fontWeight: fontWeight,
   );
 
@@ -281,6 +330,7 @@ final class NovelReaderTypographyOverrides {
         lineHeightScope: lineHeightScope,
         fontWeight: value,
         textAlignment: textAlignment,
+        roleFontSizes: roleFontSizes,
       );
 
   NovelReaderTypographyOverrides withTextAlignment(
@@ -294,6 +344,21 @@ final class NovelReaderTypographyOverrides {
     lineHeightScope: lineHeightScope,
     fontWeight: fontWeight,
     textAlignment: value,
+    roleFontSizes: roleFontSizes,
+  );
+
+  NovelReaderTypographyOverrides withRoleFontSizes(
+    NovelReaderRoleFontSizes value,
+  ) => NovelReaderTypographyOverrides(
+    firstLineIndent: firstLineIndent,
+    paragraphSpacing: paragraphSpacing,
+    letterSpacing: letterSpacing,
+    wordSpacing: wordSpacing,
+    fontSizeScope: fontSizeScope,
+    lineHeightScope: lineHeightScope,
+    fontWeight: fontWeight,
+    textAlignment: textAlignment,
+    roleFontSizes: value,
   );
 
   NovelReaderTypographyOverrides over(NovelReaderTypographyOverrides base) =>
@@ -306,6 +371,7 @@ final class NovelReaderTypographyOverrides {
         lineHeightScope: lineHeightScope ?? base.lineHeightScope,
         fontWeight: fontWeight ?? base.fontWeight,
         textAlignment: textAlignment ?? base.textAlignment,
+        roleFontSizes: roleFontSizes.over(base.roleFontSizes),
       );
 
   @override
@@ -318,7 +384,8 @@ final class NovelReaderTypographyOverrides {
       other.fontSizeScope == fontSizeScope &&
       other.lineHeightScope == lineHeightScope &&
       other.fontWeight == fontWeight &&
-      other.textAlignment == textAlignment;
+      other.textAlignment == textAlignment &&
+      other.roleFontSizes == roleFontSizes;
   @override
   int get hashCode => Object.hash(
     firstLineIndent,
@@ -329,5 +396,6 @@ final class NovelReaderTypographyOverrides {
     lineHeightScope,
     fontWeight,
     textAlignment,
+    roleFontSizes,
   );
 }

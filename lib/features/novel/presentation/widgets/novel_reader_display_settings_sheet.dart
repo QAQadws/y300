@@ -14,6 +14,7 @@ import 'novel_reader_paragraph_spacing_settings_panel.dart';
 import 'novel_reader_letter_spacing_settings_panel.dart';
 import 'novel_reader_word_spacing_settings_panel.dart';
 import 'novel_reader_font_size_policy_settings_panel.dart';
+import 'novel_reader_role_font_sizes_panel.dart';
 import 'novel_reader_line_height_policy_settings_panel.dart';
 import 'novel_reader_font_weight_settings_panel.dart';
 import 'novel_reader_text_alignment_settings_panel.dart';
@@ -138,6 +139,25 @@ class _NovelReaderDisplaySettingsSheetState
                     ),
                 ],
               ),
+              if (widget.nativeTypography)
+                _SettingsSection(
+                  title: l10n.novelRoleFontSizes,
+                  children: [
+                    NovelReaderRoleFontSizesPanel(
+                      value: _draft.typography.roleFontSizes,
+                      enabled:
+                          _draft.typography.fontSizeScope !=
+                          NovelReaderStyleScope.forceAll,
+                      onChanged: (sizes) => _applyPreferences(
+                        _draft.copyWith(
+                          typography: _draft.typography.withRoleFontSizes(
+                            sizes,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               if (widget.nativeTypography)
                 _SettingsSection(
                   title: l10n.novelFontWeight,

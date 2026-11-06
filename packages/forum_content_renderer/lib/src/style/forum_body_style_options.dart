@@ -33,6 +33,8 @@ enum ForumBodyStyleProperty {
 
 enum ForumBodyTextRole { body, heading, quote, code, list, table, ruby, notice }
 
+typedef ForumBodyRoleFontScales = ({double heading, double quote, double code});
+
 enum ForumBodyFloatSide { none, left, right, unsupported }
 
 enum ForumBodyClear { none, left, right, both, unsupported }
@@ -67,6 +69,12 @@ final class ForumBodyStylePolicy {
 /// Inputs are unscaled; one renderer TextScaler owns the final scaling.
 /// The resolved Host font family is always used, except semantic code fonts.
 final class ForumBodyReaderStyle {
+  static const ForumBodyRoleFontScales defaultRoleFontScales = (
+    heading: 1,
+    quote: 1,
+    code: 1,
+  );
+
   ForumBodyReaderStyle({
     required this.textStyle,
     required this.fontRevision,
@@ -78,6 +86,7 @@ final class ForumBodyReaderStyle {
     this.firstLineIndent = ForumBodyLength.zero,
     this.compressBlankLines = false,
     this.removeSourceIndent = false,
+    this.roleFontScales = defaultRoleFontScales,
     this.theme,
     ForumBodyStylePolicy? policy,
   }) : policy = policy ?? ForumBodyStylePolicy() {
@@ -96,10 +105,16 @@ final class ForumBodyReaderStyle {
         !paragraphAfter.isFinite ||
         paragraphAfter < 0 ||
         !firstLineIndent.value.isFinite ||
-        firstLineIndent.unit == ForumBodyLengthUnit.auto) {
+        firstLineIndent.unit == ForumBodyLengthUnit.auto ||
+        !_validScale(roleFontScales.heading) ||
+        !_validScale(roleFontScales.quote) ||
+        !_validScale(roleFontScales.code)) {
       throw ArgumentError('Invalid body typography');
     }
   }
+  static bool _validScale(double scale) =>
+      scale.isFinite && scale >= .75 && scale <= 1.5;
+
   final TextStyle textStyle;
   final String fontRevision;
   final Color linkColor;
@@ -110,6 +125,7 @@ final class ForumBodyReaderStyle {
   final ForumBodyLength firstLineIndent;
   final bool compressBlankLines;
   final bool removeSourceIndent;
+  final ForumBodyRoleFontScales roleFontScales;
   final ForumBodyStylePolicy policy;
 
   /// The same immutable semantic palette used by the HTML renderer.

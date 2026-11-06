@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/painting.dart';
 
 import '../document/forum_body_document.dart';
@@ -10,7 +12,7 @@ import 'forum_body_style_options.dart';
 import 'forum_body_text_emphasis_resolver.dart';
 import 'forum_body_list_style_resolver.dart';
 
-const forumBodyStyleRevision = 26;
+const forumBodyStyleRevision = 27;
 ForumBodyLength forumBodyReaderIndent(
   ForumBodyReaderStyle reader,
   double size,
@@ -92,12 +94,14 @@ final class ForumBodyStyleBuilder {
     'list-style-position',
   };
 
-  ForumBodyResolvedStyle resolve(
+  ({ForumBodyResolvedStyle style, double unadjustedSize}) resolve(
     ForumBodyElement node,
     ForumBodyResolvedStyle parent, {
     ForumBodyElementKind? parentKind,
     required ForumBodyLength cellPadding,
     bool scopedRoot = false,
+    double? inheritedUnadjustedSize,
+    double fontScale = 1,
   }) {
     final role = _role(node.kind, parent.role);
     final quoteClass =
@@ -119,7 +123,8 @@ final class ForumBodyStyleBuilder {
     }
     final baseSize = reader.textStyle.fontSize!;
     var style = parent.textStyle;
-    var size = style.fontSize ?? baseSize;
+    final inheritedSize = inheritedUnadjustedSize ?? style.fontSize ?? baseSize;
+    var size = inheritedSize;
     final heading = RegExp(r'^h([1-6])$').firstMatch(node.tag);
     if (heading != null) {
       const factors = [2.0, 1.5, 1.25, 1.0, 0.875, 0.75];
@@ -148,9 +153,7 @@ final class ForumBodyStyleBuilder {
     };
     final authorSize = value('font-size');
     if (authorSize != null) {
-      size =
-          _fontSize(node, authorSize, parent.textStyle.fontSize ?? baseSize) ??
-          size;
+      size = _fontSize(node, authorSize, inheritedSize) ?? size;
     } else if (node.tag == 'font' && node.attributes['size'] != null) {
       size =
           DiscuzFontSizePolicy.fontSizeForBase(
@@ -162,6 +165,8 @@ final class ForumBodyStyleBuilder {
     if (_force(ForumBodyStyleProperty.fontSize, role)) {
       size = baseSize;
     }
+    final unadjustedSize = size;
+    if (fontScale != 1) size = math.min(512, size * fontScale);
 
     final strong =
         parent.strong ||
@@ -565,7 +570,7 @@ final class ForumBodyStyleBuilder {
         ),
       };
     }
-    return ForumBodyResolvedStyle(
+    final resolved = ForumBodyResolvedStyle(
       textStyle: style,
       role: role,
       textAlign: alignment,
@@ -646,6 +651,7 @@ final class ForumBodyStyleBuilder {
         onUnsupported: (property, value) => _issue(node, property, value),
       ),
     );
+    return (style: resolved, unadjustedSize: unadjustedSize);
   }
 
   bool _force(ForumBodyStyleProperty property, ForumBodyTextRole role) =>

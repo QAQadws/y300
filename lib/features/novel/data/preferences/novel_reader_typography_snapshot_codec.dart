@@ -57,6 +57,13 @@ final class NovelReaderTypographySnapshotCodec {
     lineHeightScope: input.lineHeightScope,
     fontWeight: input.fontWeight?.isValid == true ? input.fontWeight : null,
     textAlignment: input.textAlignment,
+    roleFontSizes: NovelReaderRoleFontSizes(
+      heading: NovelReaderRoleFontSizes.validPercent(
+        input.roleFontSizes.heading,
+      ),
+      quote: NovelReaderRoleFontSizes.validPercent(input.roleFontSizes.quote),
+      code: NovelReaderRoleFontSizes.validPercent(input.roleFontSizes.code),
+    ),
   );
 
   NovelReaderTypographyOverrides decode(Object? source) {
@@ -69,7 +76,17 @@ final class NovelReaderTypographySnapshotCodec {
     final letters = _letters.decode(source['letterSpacing']);
     final words = _words.decode(source['wordSpacing']);
     final weight = _weight.decode(source['fontWeight']);
+    final roleSizes = source['roleFontSizes'];
     return NovelReaderTypographyOverrides(
+      roleFontSizes: roleSizes is Map<String, dynamic>
+          ? NovelReaderRoleFontSizes(
+              heading: NovelReaderRoleFontSizes.validPercent(
+                roleSizes['heading'],
+              ),
+              quote: NovelReaderRoleFontSizes.validPercent(roleSizes['quote']),
+              code: NovelReaderRoleFontSizes.validPercent(roleSizes['code']),
+            )
+          : const NovelReaderRoleFontSizes(),
       textAlignment: _alignment.decode(source['textAlignment']),
       fontWeight: weight == null
           ? null
@@ -124,6 +141,10 @@ final class NovelReaderTypographySnapshotCodec {
     final words = normalized.wordSpacing;
     final result = <String, Object?>{...?prior, 'schemaVersion': schemaVersion};
     final requests = {
+      'roleFontSizes': _encodeRoleSizes(
+        normalized.roleFontSizes,
+        previous: prior?['roleFontSizes'],
+      ),
       'textAlignment': _alignment.encode(
         normalized.textAlignment,
         previous: prior?['textAlignment'],
@@ -181,6 +202,23 @@ final class NovelReaderTypographySnapshotCodec {
       }
     }
     return result.length == 1 ? null : result;
+  }
+
+  Map<String, Object?>? _encodeRoleSizes(
+    NovelReaderRoleFontSizes sizes, {
+    required Object? previous,
+  }) {
+    if (previous != null && previous is! Map<String, dynamic>) {
+      throw const NovelReaderPreferencesUnsupportedSnapshot();
+    }
+    final result = <String, Object?>{...?previous as Map<String, dynamic>?};
+    result.remove('heading');
+    result.remove('quote');
+    result.remove('code');
+    if (sizes.heading != null) result['heading'] = sizes.heading;
+    if (sizes.quote != null) result['quote'] = sizes.quote;
+    if (sizes.code != null) result['code'] = sizes.code;
+    return result.isEmpty ? null : result;
   }
 }
 

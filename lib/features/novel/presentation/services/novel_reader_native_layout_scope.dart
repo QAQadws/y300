@@ -337,6 +337,7 @@ ForumBodyReaderStyle _freezeReader(ForumBodyReaderStyle original) =>
       firstLineIndent: original.firstLineIndent,
       compressBlankLines: original.compressBlankLines,
       removeSourceIndent: original.removeSourceIndent,
+      roleFontScales: original.roleFontScales,
       policy: ForumBodyStylePolicy(original.policy.values),
       theme: _freezeTheme(original.theme),
     );
@@ -400,6 +401,9 @@ List<Object?> _readerValues(
   reader.firstLineIndent.unit.name,
   reader.compressBlankLines,
   reader.removeSourceIndent,
+  reader.roleFontScales.heading,
+  reader.roleFontScales.quote,
+  reader.roleFontScales.code,
   for (final property in ForumBodyStyleProperty.values)
     (reader.policy.values[property] ?? ForumBodyStyleScope.asDefault).name,
 ];

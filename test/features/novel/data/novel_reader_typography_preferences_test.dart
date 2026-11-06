@@ -21,6 +21,46 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  test('role sizes merge independently, validate and retain unknown keys', () async {
+    const global = NovelReaderTypographyOverrides(
+      roleFontSizes: NovelReaderRoleFontSizes(
+        heading: 150,
+        quote: 75,
+        code: 115,
+      ),
+    );
+    const work = NovelReaderTypographyOverrides(
+      roleFontSizes: NovelReaderRoleFontSizes(quote: 100),
+    );
+    expect(
+      work.over(global).roleFontSizes,
+      const NovelReaderRoleFontSizes(heading: 150, quote: 100, code: 115),
+    );
+    final value = prefs(null).copyWith(typography: work.over(global));
+    await _repository().save(value);
+    expect(await _repository().load(), value);
+    const source =
+        '{"schemaVersion":1,"typography":{"schemaVersion":1,'
+        '"roleFontSizes":{"heading":145,"quote":70,"code":103,"future":"keep"}}}';
+    final decoded = codec.decode(source);
+    expect(
+      decoded.typography.roleFontSizes,
+      const NovelReaderRoleFontSizes(heading: 145),
+    );
+    final reset = decoded.copyWith(
+      typography: decoded.typography.withRoleFontSizes(
+        const NovelReaderRoleFontSizes(),
+      ),
+    );
+    final saved =
+        jsonDecode(codec.encode(reset, previousSource: source)) as Map;
+    expect((saved['typography'] as Map)['roleFontSizes'], {'future': 'keep'});
+    expect(
+      jsonDecode(codec.encode(prefs(null))) as Map,
+      isNot(contains('typography')),
+    );
+  });
+
   test('empty scope, explicit zero and author reset remain distinct', () {
     const global = NovelReaderTypographyOverrides(
       firstLineIndent: NovelReaderFirstLineIndent(em: 2),

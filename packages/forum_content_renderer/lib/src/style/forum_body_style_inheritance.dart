@@ -7,14 +7,19 @@ final class ForumBodyStyleInheritance {
   const ForumBodyStyleInheritance(this.policy);
   final ForumBodyStylePolicy policy;
 
+  bool restores(
+    ForumBodyStyleProperty property, {
+    required ForumBodyTextRole from,
+    required ForumBodyTextRole to,
+  }) => policy.overrides(property, from) && !policy.overrides(property, to);
+
   ForumBodyResolvedStyle parentFor({
     required ForumBodyTextRole role,
     required ForumBodyResolvedStyle author,
     required ForumBodyResolvedStyle effective,
   }) {
     bool restore(ForumBodyStyleProperty property) =>
-        policy.overrides(property, effective.role) &&
-        !policy.overrides(property, role);
+        restores(property, from: effective.role, to: role);
     if (!ForumBodyStyleProperty.values.any(restore)) return effective;
     return ForumBodyResolvedStyle(
       textStyle: effective.textStyle.copyWith(

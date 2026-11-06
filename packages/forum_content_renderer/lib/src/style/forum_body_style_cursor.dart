@@ -11,6 +11,8 @@ typedef _StyleContext = ({
   ForumBodyResolvedStyle author,
   ForumBodyElementKind? kind,
   ForumBodyLength cellPadding,
+  double unadjustedSize,
+  double fontScale,
 });
 
 /// Forward-only style traversal over existing IR. Consumers choose safe block
@@ -26,6 +28,11 @@ final class ForumBodyStyleCursor {
        fontRevision = reader.fontRevision,
        _collapses = collapses,
        _contentRoot = contentRoot,
+       _roleFontScales =
+           reader.policy.values[ForumBodyStyleProperty.fontSize] ==
+               ForumBodyStyleScope.forceAll
+           ? ForumBodyReaderStyle.defaultRoleFontScales
+           : reader.roleFontScales,
        _builder = ForumBodyStyleBuilder(reader),
        _authorBuilder =
            reader.policy.values.values.contains(ForumBodyStyleScope.forceBody)
@@ -48,6 +55,8 @@ final class ForumBodyStyleCursor {
       author: initial,
       kind: null,
       cellPadding: const ForumBodyLength(1),
+      unadjustedSize: reader.textStyle.fontSize!,
+      fontScale: 1,
     );
     var nodes = document.nodes;
     if (contentRoot != null) {
@@ -74,6 +83,7 @@ final class ForumBodyStyleCursor {
   final ForumBodyStyleBuilder _builder;
   final ForumBodyStyleBuilder? _authorBuilder;
   final ForumBodyStyleInheritance _inheritance;
+  final ForumBodyRoleFontScales _roleFontScales;
   ForumBodyCollapseLayout? _collapses;
   ForumBodyElement? _contentRoot;
   final _frames = <({Iterator<ForumBodyNode> nodes, _StyleContext context})>[];
@@ -146,13 +156,15 @@ final class ForumBodyStyleCursor {
 
   _StyleContext _resolve(ForumBodyElement node, _StyleContext context) {
     final author =
-        _authorBuilder?.resolve(
-          node,
-          context.author,
-          parentKind: context.kind,
-          cellPadding: context.cellPadding,
-          scopedRoot: identical(node, _contentRoot),
-        ) ??
+        _authorBuilder
+            ?.resolve(
+              node,
+              context.author,
+              parentKind: context.kind,
+              cellPadding: context.cellPadding,
+              scopedRoot: identical(node, _contentRoot),
+            )
+            .style ??
         context.author;
     final parent = _authorBuilder == null
         ? context.effective
@@ -161,16 +173,38 @@ final class ForumBodyStyleCursor {
             author: context.author,
             effective: context.effective,
           );
+    // Relative author declarations inherit the size before role adjustment.
+    // Only the nearest adjustable role supplies a multiplier, even through
+    // intermediate elements such as a list or inline markup.
+    final scale = switch (node.kind) {
+      ForumBodyElementKind.heading => _roleFontScales.heading,
+      ForumBodyElementKind.quote => _roleFontScales.quote,
+      ForumBodyElementKind.code => _roleFontScales.code,
+      ForumBodyElementKind.editStatus || ForumBodyElementKind.locked => 1.0,
+      _ => context.fontScale,
+    };
+    final restoredSize =
+        _authorBuilder != null &&
+        _inheritance.restores(
+          ForumBodyStyleProperty.fontSize,
+          from: context.effective.role,
+          to: author.role,
+        );
+    final computed = _builder.resolve(
+      node,
+      parent,
+      parentKind: context.kind,
+      cellPadding: context.cellPadding,
+      scopedRoot: identical(node, _contentRoot),
+      inheritedUnadjustedSize: restoredSize ? null : context.unadjustedSize,
+      fontScale: scale,
+    );
     return (
-      effective: _builder.resolve(
-        node,
-        parent,
-        parentKind: context.kind,
-        cellPadding: context.cellPadding,
-        scopedRoot: identical(node, _contentRoot),
-      ),
+      effective: computed.style,
       author: author,
       kind: node.kind,
+      unadjustedSize: computed.unadjustedSize,
+      fontScale: scale,
       cellPadding: node.kind == ForumBodyElementKind.table
           ? forumBodyTableCellPadding(node.attributes['cellpadding'])
           : context.cellPadding,
