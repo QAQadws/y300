@@ -2,17 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:forum_content_renderer/forum_content_renderer.dart';
+import 'package:forum_content_renderer/src/html_rendering/forum_html_fragment_normalizer.dart';
 import 'render_test_support.dart';
 
 void main() {
   test(
     'reader font policy removes author families but retains other styling',
     () {
-      final policy = _policy(
-        renderTestOptions.copyWith(preserveAuthorFontFamily: false),
+      final options = renderTestOptions.copyWith(
+        preserveAuthorFontFamily: false,
       );
       final result = _prepareHtml(
-        policy,
+        options,
         '<p style="font-family: MissingAuthorFont !important; font-size: 24px; '
         'font-weight: 700; font-style: italic; color: red; text-align: center">'
         '<font face="Tahoma" size="5" color="#f00">正文</font></p>',
@@ -230,7 +231,7 @@ void main() {
     final options = renderTestOptions.copyWith(preserveAuthorFontSize: false);
 
     final result = _prepareHtml(
-      _policy(options),
+      options,
       '<p class="keep" style="font-size: 24px; color: red; '
       'background-color: yellow; text-align: center">'
       '<a href="/颜色" style="color: blue; text-decoration: underline">链接</a>'
@@ -250,7 +251,7 @@ void main() {
 
   test('keeps enabled author styles', () {
     final result = _prepareHtml(
-      _policy(renderTestOptions),
+      renderTestOptions,
       '<font size="5" color="#f00">字体</font>'
       '<span style="font-size: 20px; color: red; background: yellow">文本</span>',
     );
@@ -265,7 +266,7 @@ void main() {
 
   test('normalizes Discuz font sizes to explicit percentages', () {
     final result = _prepareHtml(
-      _policy(renderTestOptions),
+      renderTestOptions,
       '<font size="1">一</font>'
       '<font size="2">二</font>'
       '<font size="3">三</font>'
@@ -288,7 +289,7 @@ void main() {
 
   test('font size normalization preserves unrelated inline styles', () {
     final result = _prepareHtml(
-      _policy(renderTestOptions),
+      renderTestOptions,
       '<font size="3" style="color: blue; font-size: 40px">正文</font>',
     );
 
@@ -299,7 +300,7 @@ void main() {
 
   test('normalizes structural breaks immediately after edit status', () {
     final result = _prepareHtml(
-      _policy(renderTestOptions),
+      renderTestOptions,
       '<i class="pstatus">本帖最后由作者编辑</i> \n<br> <br />'
       '正文第一行<br>正文第二行',
     );
@@ -313,7 +314,7 @@ void main() {
     'keeps whitespace after edit status when no structural break exists',
     () {
       final result = _prepareHtml(
-        _policy(renderTestOptions),
+        renderTestOptions,
         '<i class="pstatus">编辑提示</i> 正文',
       );
 
@@ -337,9 +338,9 @@ ForumHtmlRenderStylePolicy _policy(ForumHtmlRenderOptions options) {
   return ForumHtmlRenderStylePolicy(options, theme: _theme);
 }
 
-String _prepareHtml(ForumHtmlRenderStylePolicy policy, String html) {
+String _prepareHtml(ForumHtmlRenderOptions options, String html) {
   const codec = HtmlPackageForumHtmlFragmentCodec();
   final fragment = codec.parse(html);
-  policy.prepareFragment(fragment);
+  ForumHtmlFragmentNormalizer(options).normalize(fragment);
   return codec.serialize(fragment);
 }

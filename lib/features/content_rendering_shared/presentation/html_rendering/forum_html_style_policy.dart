@@ -13,7 +13,6 @@ class ForumHtmlStylePolicy extends ForumHtmlRenderStylePolicy {
     required super.theme,
     super.blockSpacingMode = ForumHtmlBlockSpacingMode.paragraphLikeDivs,
     super.contentLayout = ForumHtmlContentLayout.document,
-    super.inlineStyleDeclarationCodec = const CssInlineStyleDeclarationCodec(),
   }) : super(preferences.renderOptions);
 
   final ForumHtmlReaderPreferences preferences;

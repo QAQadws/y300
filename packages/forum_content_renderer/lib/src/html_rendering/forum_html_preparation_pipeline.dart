@@ -2,15 +2,14 @@ import '../contracts/forum_html_preparation_image_policy.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'forum_html_fragment_codec.dart';
+import 'forum_html_fragment_normalizer.dart';
 import 'forum_html_image_deduplicator.dart';
 import 'forum_html_plain_text_linkifier.dart';
 import 'forum_html_prepared_render_document.dart';
 import '../models/forum_html_render_options.dart';
-import 'forum_html_render_style_policy.dart';
 import 'theme/forum_html_theme_adapter.dart';
 import 'theme/forum_html_color_adaptation_policy.dart';
 import 'theme/forum_html_theme_context.dart';
-import 'theme/css_inline_style_declarations.dart';
 
 /// Shared preparation pipeline; URL and image ownership are supplied by Host.
 class ForumHtmlPreparationPipeline {
@@ -41,14 +40,8 @@ class ForumHtmlPreparationPipeline {
     required String? threadId,
     required String? imageCacheOwnerId,
   }) {
-    final stylePolicy = ForumHtmlRenderStylePolicy(
-      options,
-      theme: theme,
-      inlineStyleDeclarationCodec: CssInlineStyleDeclarationCodec.scoped(),
-    );
     final fragment = _fragmentCodec.parse(html);
-    stylePolicy.normalizeStructure(fragment);
-    stylePolicy.normalizeAuthorStyles(fragment);
+    ForumHtmlFragmentNormalizer(options).normalize(fragment);
     final themeAdaptationStats = _themeAdapter
         .adapt(
           fragment: fragment,
