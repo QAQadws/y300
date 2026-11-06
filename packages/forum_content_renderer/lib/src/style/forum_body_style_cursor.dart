@@ -33,6 +33,13 @@ final class ForumBodyStyleCursor {
                ForumBodyStyleScope.forceAll
            ? ForumBodyReaderStyle.defaultRoleFontScales
            : reader.roleFontScales,
+       _rubyFontScale =
+           reader.policy.overrides(
+             ForumBodyStyleProperty.fontSize,
+             ForumBodyTextRole.ruby,
+           )
+           ? 1
+           : reader.rubyFontScale,
        _builder = ForumBodyStyleBuilder(reader),
        _authorBuilder =
            reader.policy.values.values.contains(ForumBodyStyleScope.forceBody)
@@ -84,6 +91,7 @@ final class ForumBodyStyleCursor {
   final ForumBodyStyleBuilder? _authorBuilder;
   final ForumBodyStyleInheritance _inheritance;
   final ForumBodyRoleFontScales _roleFontScales;
+  final double _rubyFontScale;
   ForumBodyCollapseLayout? _collapses;
   ForumBodyElement? _contentRoot;
   final _frames = <({Iterator<ForumBodyNode> nodes, _StyleContext context})>[];
@@ -174,12 +182,17 @@ final class ForumBodyStyleCursor {
             effective: context.effective,
           );
     // Relative author declarations inherit the size before role adjustment.
-    // Only the nearest adjustable role supplies a multiplier, even through
-    // intermediate elements such as a list or inline markup.
+    // Carry the enclosing role through inline markup. An annotation adds its
+    // factor once on entry, so the default half-size and authored RT styles
+    // are scaled without reapplying the option to each inline descendant.
     final scale = switch (node.kind) {
       ForumBodyElementKind.heading => _roleFontScales.heading,
       ForumBodyElementKind.quote => _roleFontScales.quote,
       ForumBodyElementKind.code => _roleFontScales.code,
+      ForumBodyElementKind.rubyText ||
+      ForumBodyElementKind.rubyAnnotationContainer
+          when context.effective.role != ForumBodyTextRole.ruby =>
+        context.fontScale * _rubyFontScale,
       ForumBodyElementKind.editStatus || ForumBodyElementKind.locked => 1.0,
       _ => context.fontScale,
     };

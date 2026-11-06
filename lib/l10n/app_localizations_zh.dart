@@ -2255,7 +2255,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get novelFontSizePolicyReset => '重置字号策略，保留已选字号';
 
   @override
-  String get novelRoleFontSizes => '标题、引用和代码字号';
+  String get novelRoleFontSizes => '分角色字号';
 
   @override
   String get novelRoleFontSizeHeading => '标题字号';
@@ -2267,13 +2267,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get novelRoleFontSizeCode => '代码字号';
 
   @override
+  String get novelRoleFontSizeRuby => '注音字号';
+
+  @override
   String get novelRoleFontSizesHint => '按比例调整各类文字原有的字号。100% 保留原有大小。';
 
   @override
   String get novelRoleFontSizesUnavailable => '「全部统一」启用时使用统一字号，已保存的比例会保留。';
 
   @override
-  String get novelRoleFontSizesReset => '重置标题、引用和代码字号';
+  String get novelRoleFontSizesReset => '重置分角色字号';
 
   @override
   String novelRoleFontSizePercent(int percent) {
@@ -8306,7 +8309,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get novelFontSizePolicyReset => '重設字級策略，保留已選字級';
 
   @override
-  String get novelRoleFontSizes => '標題、引用和程式碼字級';
+  String get novelRoleFontSizes => '依角色調整字級';
 
   @override
   String get novelRoleFontSizeHeading => '標題字級';
@@ -8318,13 +8321,16 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get novelRoleFontSizeCode => '程式碼字級';
 
   @override
+  String get novelRoleFontSizeRuby => '注音字級';
+
+  @override
   String get novelRoleFontSizesHint => '按比例調整各類文字原有的字級。100% 保留原有大小。';
 
   @override
   String get novelRoleFontSizesUnavailable => '「全部統一」啟用時使用統一字級，已儲存的比例會保留。';
 
   @override
-  String get novelRoleFontSizesReset => '重設標題、引用和程式碼字級';
+  String get novelRoleFontSizesReset => '重設角色字級';
 
   @override
   String novelRoleFontSizePercent(int percent) {

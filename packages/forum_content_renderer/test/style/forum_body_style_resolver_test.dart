@@ -7,6 +7,7 @@ ForumBodyReaderStyle reader({
   ForumBodyLength indent = ForumBodyLength.zero,
   ForumBodyRoleFontScales roleFontScales =
       ForumBodyReaderStyle.defaultRoleFontScales,
+  double rubyFontScale = 1,
 }) => ForumBodyReaderStyle(
   textStyle: const TextStyle(
     fontFamily: 'ReaderFont',
@@ -21,6 +22,7 @@ ForumBodyReaderStyle reader({
   linkColor: const Color(0xff0044cc),
   firstLineIndent: indent,
   roleFontScales: roleFontScales,
+  rubyFontScale: rubyFontScale,
   policy: policy,
   textAlign: TextAlign.justify,
 );
@@ -54,6 +56,45 @@ ForumBodyResolvedStyle byId(
 }
 
 void main() {
+  test(
+    'ruby annotation scale preserves the base and authored inline sizes',
+    () {
+      const html =
+          '<h2 style="font-size:20px"><ruby><rb id="base">字</rb>'
+          '<rt id="plain">じ</rt></ruby>'
+          '<ruby>漢<rt id="styled" style="font-size:8px;color:#107020">'
+          '<span id="relative" style="font-size:150%">かん</span></rt></ruby>'
+          '<span id="after">終</span></h2>';
+      for (final scale in [.75, 1.5]) {
+        final result = resolve(
+          html,
+          options: reader(
+            roleFontScales: (heading: 1.25, quote: 1, code: 1),
+            rubyFontScale: scale,
+          ),
+        );
+        expect(byId(result, 'base').textStyle.fontSize, 25);
+        expect(byId(result, 'after').textStyle.fontSize, 25);
+        expect(byId(result, 'plain').textStyle.fontSize, 12.5 * scale);
+        expect(byId(result, 'styled').textStyle.fontSize, 10 * scale);
+        final relative = byId(result, 'relative');
+        expect(relative.textStyle.fontSize, 15 * scale);
+        expect(relative.textStyle.color, const Color(0xff107020));
+      }
+      final uniform = resolve(
+        html,
+        options: reader(
+          rubyFontScale: 1.5,
+          policy: ForumBodyStylePolicy({
+            ForumBodyStyleProperty.fontSize: ForumBodyStyleScope.forceAll,
+          }),
+        ),
+      );
+      expect(byId(uniform, 'plain').textStyle.fontSize, 20);
+      expect(byId(uniform, 'relative').textStyle.fontSize, 20);
+    },
+  );
+
   test('role font adjustments preserve author sizing and do not compound', () {
     const html =
         '<div style="font-size:36px"><p id="body" style="font-size:12px">body</p>'

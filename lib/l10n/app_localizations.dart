@@ -3723,7 +3723,7 @@ abstract class AppLocalizations {
   /// No description provided for @novelRoleFontSizes.
   ///
   /// In zh, this message translates to:
-  /// **'标题、引用和代码字号'**
+  /// **'分角色字号'**
   String get novelRoleFontSizes;
 
   /// No description provided for @novelRoleFontSizeHeading.
@@ -3744,6 +3744,12 @@ abstract class AppLocalizations {
   /// **'代码字号'**
   String get novelRoleFontSizeCode;
 
+  /// No description provided for @novelRoleFontSizeRuby.
+  ///
+  /// In zh, this message translates to:
+  /// **'注音字号'**
+  String get novelRoleFontSizeRuby;
+
   /// No description provided for @novelRoleFontSizesHint.
   ///
   /// In zh, this message translates to:
@@ -3759,7 +3765,7 @@ abstract class AppLocalizations {
   /// No description provided for @novelRoleFontSizesReset.
   ///
   /// In zh, this message translates to:
-  /// **'重置标题、引用和代码字号'**
+  /// **'重置分角色字号'**
   String get novelRoleFontSizesReset;
 
   /// No description provided for @novelRoleFontSizePercent.

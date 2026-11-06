@@ -87,6 +87,7 @@ final class ForumBodyReaderStyle {
     this.compressBlankLines = false,
     this.removeSourceIndent = false,
     this.roleFontScales = defaultRoleFontScales,
+    this.rubyFontScale = 1,
     this.theme,
     ForumBodyStylePolicy? policy,
   }) : policy = policy ?? ForumBodyStylePolicy() {
@@ -108,7 +109,8 @@ final class ForumBodyReaderStyle {
         firstLineIndent.unit == ForumBodyLengthUnit.auto ||
         !_validScale(roleFontScales.heading) ||
         !_validScale(roleFontScales.quote) ||
-        !_validScale(roleFontScales.code)) {
+        !_validScale(roleFontScales.code) ||
+        !_validScale(rubyFontScale)) {
       throw ArgumentError('Invalid body typography');
     }
   }
@@ -126,6 +128,9 @@ final class ForumBodyReaderStyle {
   final bool compressBlankLines;
   final bool removeSourceIndent;
   final ForumBodyRoleFontScales roleFontScales;
+
+  /// Relative to the annotation's resolved size within its enclosing role.
+  final double rubyFontScale;
   final ForumBodyStylePolicy policy;
 
   /// The same immutable semantic palette used by the HTML renderer.

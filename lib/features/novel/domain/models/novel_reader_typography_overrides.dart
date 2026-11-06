@@ -160,7 +160,12 @@ final class NovelReaderParagraphSpacing {
 
 /// A missing percentage inherits; 100 explicitly restores the role's base size.
 final class NovelReaderRoleFontSizes {
-  const NovelReaderRoleFontSizes({this.heading, this.quote, this.code});
+  const NovelReaderRoleFontSizes({
+    this.heading,
+    this.quote,
+    this.code,
+    this.ruby,
+  });
 
   static const minimum = 75;
   static const maximum = 150;
@@ -169,6 +174,7 @@ final class NovelReaderRoleFontSizes {
   final int? heading;
   final int? quote;
   final int? code;
+  final int? ruby;
 
   static int? validPercent(Object? value) =>
       value is int &&
@@ -178,13 +184,15 @@ final class NovelReaderRoleFontSizes {
       ? value
       : null;
 
-  bool get isEmpty => heading == null && quote == null && code == null;
+  bool get isEmpty =>
+      heading == null && quote == null && code == null && ruby == null;
 
   NovelReaderRoleFontSizes over(NovelReaderRoleFontSizes base) =>
       NovelReaderRoleFontSizes(
         heading: heading ?? base.heading,
         quote: quote ?? base.quote,
         code: code ?? base.code,
+        ruby: ruby ?? base.ruby,
       );
 
   @override
@@ -192,10 +200,11 @@ final class NovelReaderRoleFontSizes {
       other is NovelReaderRoleFontSizes &&
       other.heading == heading &&
       other.quote == quote &&
-      other.code == code;
+      other.code == code &&
+      other.ruby == ruby;
 
   @override
-  int get hashCode => Object.hash(heading, quote, code);
+  int get hashCode => Object.hash(heading, quote, code, ruby);
 }
 
 /// Sparse requests. Absence inherits the preceding scope; explicit author/zero

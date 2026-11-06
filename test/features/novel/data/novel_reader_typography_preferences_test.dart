@@ -27,6 +27,7 @@ void main() {
         heading: 150,
         quote: 75,
         code: 115,
+        ruby: 135,
       ),
     );
     const work = NovelReaderTypographyOverrides(
@@ -34,14 +35,19 @@ void main() {
     );
     expect(
       work.over(global).roleFontSizes,
-      const NovelReaderRoleFontSizes(heading: 150, quote: 100, code: 115),
+      const NovelReaderRoleFontSizes(
+        heading: 150,
+        quote: 100,
+        code: 115,
+        ruby: 135,
+      ),
     );
     final value = prefs(null).copyWith(typography: work.over(global));
     await _repository().save(value);
     expect(await _repository().load(), value);
     const source =
         '{"schemaVersion":1,"typography":{"schemaVersion":1,'
-        '"roleFontSizes":{"heading":145,"quote":70,"code":103,"future":"keep"}}}';
+        '"roleFontSizes":{"heading":145,"quote":70,"code":103,"ruby":160,"future":"keep"}}}';
     final decoded = codec.decode(source);
     expect(
       decoded.typography.roleFontSizes,

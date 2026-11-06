@@ -25,6 +25,7 @@ class NovelReaderRoleFontSizesPanel extends StatelessWidget {
       ('heading', l10n.novelRoleFontSizeHeading, percent(value.heading)),
       ('quote', l10n.novelRoleFontSizeQuote, percent(value.quote)),
       ('code', l10n.novelRoleFontSizeCode, percent(value.code)),
+      ('ruby', l10n.novelRoleFontSizeRuby, percent(value.ruby)),
     ];
     const min = NovelReaderRoleFontSizes.minimum;
     const max = NovelReaderRoleFontSizes.maximum;
@@ -68,6 +69,7 @@ class NovelReaderRoleFontSizesPanel extends StatelessWidget {
                             heading: role == 'heading' ? next : value.heading,
                             quote: role == 'quote' ? next : value.quote,
                             code: role == 'code' ? next : value.code,
+                            ruby: role == 'ruby' ? next : value.ruby,
                           ),
                         );
                       }

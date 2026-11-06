@@ -70,6 +70,7 @@ final class NovelReaderNativeRenderEnvironment {
         compressBlankLines: preferences.compressBlankLines,
         removeSourceIndent: preferences.removeSourceIndent,
         roleFontScales: nativeTypography.roleFontScales,
+        rubyFontScale: nativeTypography.rubyFontScale,
         policy: nativeTypography.policy,
         theme: const NovelForumHtmlRenderThemeFactory().fromPalette(palette),
       ),

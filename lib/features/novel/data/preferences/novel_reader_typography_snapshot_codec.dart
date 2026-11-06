@@ -63,6 +63,7 @@ final class NovelReaderTypographySnapshotCodec {
       ),
       quote: NovelReaderRoleFontSizes.validPercent(input.roleFontSizes.quote),
       code: NovelReaderRoleFontSizes.validPercent(input.roleFontSizes.code),
+      ruby: NovelReaderRoleFontSizes.validPercent(input.roleFontSizes.ruby),
     ),
   );
 
@@ -85,6 +86,7 @@ final class NovelReaderTypographySnapshotCodec {
               ),
               quote: NovelReaderRoleFontSizes.validPercent(roleSizes['quote']),
               code: NovelReaderRoleFontSizes.validPercent(roleSizes['code']),
+              ruby: NovelReaderRoleFontSizes.validPercent(roleSizes['ruby']),
             )
           : const NovelReaderRoleFontSizes(),
       textAlignment: _alignment.decode(source['textAlignment']),
@@ -215,9 +217,11 @@ final class NovelReaderTypographySnapshotCodec {
     result.remove('heading');
     result.remove('quote');
     result.remove('code');
+    result.remove('ruby');
     if (sizes.heading != null) result['heading'] = sizes.heading;
     if (sizes.quote != null) result['quote'] = sizes.quote;
     if (sizes.code != null) result['code'] = sizes.code;
+    if (sizes.ruby != null) result['ruby'] = sizes.ruby;
     return result.isEmpty ? null : result;
   }
 }

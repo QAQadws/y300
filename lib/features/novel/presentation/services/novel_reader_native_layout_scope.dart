@@ -338,6 +338,7 @@ ForumBodyReaderStyle _freezeReader(ForumBodyReaderStyle original) =>
       compressBlankLines: original.compressBlankLines,
       removeSourceIndent: original.removeSourceIndent,
       roleFontScales: original.roleFontScales,
+      rubyFontScale: original.rubyFontScale,
       policy: ForumBodyStylePolicy(original.policy.values),
       theme: _freezeTheme(original.theme),
     );
@@ -404,6 +405,7 @@ List<Object?> _readerValues(
   reader.roleFontScales.heading,
   reader.roleFontScales.quote,
   reader.roleFontScales.code,
+  reader.rubyFontScale,
   for (final property in ForumBodyStyleProperty.values)
     (reader.policy.values[property] ?? ForumBodyStyleScope.asDefault).name,
 ];

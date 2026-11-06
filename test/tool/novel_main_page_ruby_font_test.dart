@@ -113,17 +113,21 @@ ForumBodyInlineParagraphView _completeInline(
       view.content.contexts.any((c) => c.content.projection.text == '345'),
 );
 
+Rect _glyphBounds(ForumBodyInlineParagraphView view, String text) {
+  final window = view.content.contexts.singleWhere(
+    (c) => c.content.projection.text == text,
+  );
+  return view
+      .glyphBoxes(window.startUtf16, window.endUtf16)
+      .map((b) => b.toRect())
+      .reduce((a, b) => a.expandToInclude(b));
+}
+
 Future<Uint8List> _pixels(
   ForumBodyInlineParagraphView view,
   String text,
 ) async {
-  final window = view.content.contexts.singleWhere(
-    (c) => c.content.projection.text == text,
-  );
-  final boxes = view.glyphBoxes(window.startUtf16, window.endUtf16);
-  final region = boxes
-      .map((b) => b.toRect())
-      .reduce((a, b) => a.expandToInclude(b));
+  final region = _glyphBounds(view, text);
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder)
     ..clipRect(
@@ -401,6 +405,45 @@ void main() {
           expect(native, isNot(orderedEquals(beforePixels[text]!)));
         }
 
+        final baseWidth = _glyphBounds(afterInline, '12F').width;
+        final annotationWidth = _glyphBounds(afterInline, '345').width;
+        final importedKey = observation.paginationKey;
+        observation.overlay!.controller!.showMenu();
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip(l10n.novelDisplay));
+        await tester.pumpAndSettle();
+        final rubySlider = find.byKey(
+          const Key('novel-reader-role-font-size-ruby'),
+        );
+        await tester.ensureVisible(rubySlider);
+        expect(tester.widget<Slider>(rubySlider).value, 100);
+        await tester.tapAt(
+          tester.getRect(rubySlider).centerRight - const Offset(1, 0),
+        );
+        await tester.pump();
+        expect(tester.widget<Slider>(rubySlider).value, 150);
+        navigator.currentState!.pop();
+        await waitUntil(() {
+          final current = observeProfileReader(reader.currentContext!, args);
+          return current.ready &&
+              current.complete &&
+              current.paginationKey != importedKey &&
+              state().persistedPreferences.typography.roleFontSizes.ruby == 150;
+        });
+        observation = observeProfileReader(reader.currentContext!, args);
+        final sized = _completeInline(reader.currentContext!, observation);
+        expect(sized.content.projection.display.text, paragraphText);
+        expect(_glyphBounds(sized, '12F').width, closeTo(baseWidth, .01));
+        expect(_glyphBounds(sized, '345').width, greaterThan(annotationWidth));
+        expect(_position(state().progressSnapshot), _position(before));
+        expect(
+          observation.nativeController!
+              .viewForPage(observation.page!)!
+              .coverage
+              .locate(anchor),
+          isNotNull,
+        );
+
         // Exercise reflow through the real Reader after the font has loaded.
         // These requests must reach the native ruby children as well as the
         // parent, while previewing keeps the confirmed semantic position.
@@ -421,6 +464,7 @@ void main() {
                   paragraphSpacing: 18,
                   pagePadding: 24,
                   typography: NovelReaderTypographyOverrides(
+                    roleFontSizes: state().preferences.typography.roleFontSizes,
                     firstLineIndent: NovelReaderFirstLineIndent(em: indent),
                     letterSpacing: const NovelReaderLetterSpacing(
                       logicalPixels: .75,
@@ -479,6 +523,9 @@ void main() {
                 expect(style.textStyle.letterSpacing, .75);
                 expect(style.textStyle.wordSpacing, 1.5);
                 expect(style.textStyle.fontWeight, FontWeight.w600);
+                if (style.role == ForumBodyTextRole.ruby) {
+                  expect(style.textStyle.fontSize, 13.5);
+                }
                 checkedRuby |= style.role == ForumBodyTextRole.ruby;
               }
             }
@@ -539,6 +586,7 @@ void main() {
         popped = open();
         observation = await ready();
         expect(state().bodyFont.id, font.id);
+        expect(state().preferences.typography.roleFontSizes.ruby, 150);
         expect(_position(state().progressSnapshot), _position(before));
         expect(
           observation.nativeController!
