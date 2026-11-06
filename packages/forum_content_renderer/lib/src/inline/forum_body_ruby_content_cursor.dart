@@ -8,9 +8,8 @@ import '../style/forum_body_style_options.dart';
 import 'forum_body_ruby_content.dart';
 
 /// Resumable ruby grammar over the sole styled IR flow. No font is shaped and
-/// no HTML is sliced. Nested ruby stays structured, repeated RTs retain their
-/// actual base, RTC retains annotation levels, and RP/annotation
-/// whitespace retain explicit source records.
+/// no HTML is sliced. The readable entry collects nested bases into their
+/// enclosing text sequence. The structural entry preserves authored units.
 ///
 /// Borrows the cursor exclusively until complete/close. Style diagnostics stay
 /// with the flow's owner, which can drain them between bounded advances.
@@ -22,12 +21,25 @@ final class ForumBodyRubyContentCursor {
     ForumBodyRubyContentLimits limits = const ForumBodyRubyContentLimits(),
   }) => ForumBodyRubyContentCursor._open(flow, paragraphBuilder, limits, 1);
 
+  factory ForumBodyRubyContentCursor.openReadable(
+    ForumBodyStyledFlowCursor flow, {
+    required ForumBodyParagraphContentBuilder paragraphBuilder,
+    required ForumBodyRubyContentLimits limits,
+  }) => ForumBodyRubyContentCursor._open(
+    flow,
+    paragraphBuilder,
+    limits,
+    1,
+    flattenNested: true,
+  );
+
   ForumBodyRubyContentCursor._open(
     this._flow,
     this.paragraphBuilder,
     this.limits,
-    this._depth,
-  ) {
+    this._depth, {
+    bool flattenNested = false,
+  }) : _flattenNested = flattenNested {
     final flow = _flow!;
     if (flow.isClosed) throw StateError('Styled flow cursor is closed');
     final event = flow.current;
@@ -76,6 +88,7 @@ final class ForumBodyRubyContentCursor {
   final ForumBodyParagraphContentBuilder paragraphBuilder;
   final ForumBodyRubyContentLimits limits;
   final int _depth;
+  final bool _flattenNested;
   late final ForumBodyIdentity identity;
   late final String fontRevision;
   late final int styleRevision;
@@ -95,6 +108,7 @@ final class ForumBodyRubyContentCursor {
   ForumBodyStyledFlowEvent? _deferred;
   ForumBodyElement? _skipped;
   _NestedRuby? _nested;
+  int _flattenedDepth = 0;
   bool _annotationMode = false;
   bool _complete = false;
   bool _closed = false;
@@ -268,6 +282,10 @@ final class ForumBodyRubyContentCursor {
       }
       return false;
     }
+    if (_flattenedDepth > 0) {
+      _consumeFlattenedRuby(event);
+      return false;
+    }
     final direct = _parent(node.path) == rootPath;
     if (event.phase == ForumBodyFlowPhase.close) {
       if (_explicitBase?.root.node.path == node.path) {
@@ -380,17 +398,7 @@ final class ForumBodyRubyContentCursor {
       return false;
     }
     if (event.style.hidden) {
-      if (node is ForumBodyElement) {
-        _skip(node, ForumBodyRubyIgnoredReason.hidden);
-      } else {
-        _ignore(
-          ForumBodyRubyIgnoredContent(
-            node.path,
-            node.source,
-            ForumBodyRubyIgnoredReason.hidden,
-          ),
-        );
-      }
+      _ignoreHidden(node);
       return false;
     }
     if (direct && _annotationMode) {
@@ -417,9 +425,12 @@ final class ForumBodyRubyContentCursor {
       _explicitBase = _parts(event);
       return false;
     }
-    final target =
-        _explicitBase ?? _annotation ?? _annotationContainer ?? _base!;
     if (node is ForumBodyElement && node.kind == ForumBodyElementKind.ruby) {
+      if (_flattenNested) {
+        _enterFlattenedRuby();
+        return false;
+      }
+      final target = _activeParts;
       target.flush();
       _nested = _NestedRuby(
         ForumBodyRubyContentCursor._open(
@@ -437,12 +448,77 @@ final class ForumBodyRubyContentCursor {
             node.kind == ForumBodyElementKind.rubyFallback)) {
       _fail(ForumBodyRubyContentFailure.structure);
     }
+    _appendToActiveParts(event);
+    return false;
+  }
+
+  _RubyParts get _activeParts =>
+      _explicitBase ?? _annotation ?? _annotationContainer ?? _base!;
+
+  void _appendToActiveParts(ForumBodyStyledFlowEvent event) {
+    final target = _activeParts;
     target.sequence ??= paragraphBuilder.openInlineSequence(
       _flow!,
       root: target.root,
     );
     target.sequence!.appendEvent(event);
-    return false;
+  }
+
+  void _enterFlattenedRuby() {
+    if (++_flattenedDepth + _depth > limits.maxDepth) {
+      _fail(ForumBodyRubyContentFailure.depthLimit);
+    }
+    _item();
+  }
+
+  void _consumeFlattenedRuby(ForumBodyStyledFlowEvent event) {
+    final node = event.node;
+    if (event.phase == ForumBodyFlowPhase.close) {
+      if (node is ForumBodyElement && node.kind == ForumBodyElementKind.ruby) {
+        _flattenedDepth--;
+      }
+      return;
+    }
+    if (event.style.hidden) {
+      _ignoreHidden(node);
+      return;
+    }
+    if (node is ForumBodyElement) {
+      switch (node.kind) {
+        case ForumBodyElementKind.ruby:
+          _enterFlattenedRuby();
+          return;
+        case ForumBodyElementKind.rubyBase:
+          _item();
+          return;
+        case ForumBodyElementKind.rubyText ||
+            ForumBodyElementKind.rubyAnnotationContainer:
+          _skip(node, ForumBodyRubyIgnoredReason.nestedAnnotation);
+          return;
+        case ForumBodyElementKind.rubyFallback:
+          _skip(node, ForumBodyRubyIgnoredReason.fallback);
+          return;
+        default:
+          break;
+      }
+    }
+    // Keep the same collector open across wrappers so its whitespace and
+    // source-run rules apply to the resulting ordinary text together.
+    _appendToActiveParts(event);
+  }
+
+  void _ignoreHidden(ForumBodyNode node) {
+    if (node is ForumBodyElement) {
+      _skip(node, ForumBodyRubyIgnoredReason.hidden);
+    } else {
+      _ignore(
+        ForumBodyRubyIgnoredContent(
+          node.path,
+          node.source,
+          ForumBodyRubyIgnoredReason.hidden,
+        ),
+      );
+    }
   }
 
   void _publish() {
@@ -539,6 +615,7 @@ final class ForumBodyRubyContentCursor {
     _annotationContainer = null;
     _annotationGap = null;
     _nested = null;
+    _flattenedDepth = 0;
     _flow = null;
     _root = null;
     _last = null;

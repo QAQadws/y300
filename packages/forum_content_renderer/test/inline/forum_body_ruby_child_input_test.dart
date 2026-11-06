@@ -4,6 +4,8 @@ import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:forum_content_renderer/src/inline/forum_body_ruby_child_input.dart';
 import 'package:forum_content_renderer/src/inline/forum_body_inline_plan_input.dart';
 
+import 'test_support/unprojected_ruby_fixture.dart';
+
 final class _Parsed {
   _Parsed(String html) {
     document = const ForumBodyParser().parse(
@@ -17,11 +19,8 @@ final class _Parsed {
       while (!flow.isComplete) {
         flow.advance(maxEvents: 1);
         if (flow.current case ForumBodyTextFlowInline(:final content)) {
-          input = content;
-          group = content.parts
-              .whereType<ForumBodyInlineFlowRuby>()
-              .first
-              .group;
+          group = readAuthoredRuby(document, reader);
+          input = withAuthoredRuby(content, group);
           break;
         }
       }
@@ -282,9 +281,9 @@ void main() {
       final stale = ForumBodyRubyGroupContent(
         identity: parsed.group.identity,
         fontRevision: fontChanged ? 'previous-font' : parsed.group.fontRevision,
-          styleRevision: fontChanged
-              ? parsed.group.styleRevision
-              : parsed.group.styleRevision + 1,
+        styleRevision: fontChanged
+            ? parsed.group.styleRevision
+            : parsed.group.styleRevision + 1,
         style: parsed.group.style,
         rootPath: parsed.group.rootPath,
         index: parsed.group.index,

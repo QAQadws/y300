@@ -210,6 +210,56 @@ void main() {
     },
   );
 
+  test('nested ruby uses the actual flat base and outer copy window', () {
+    final f = _Fixture(
+      '<p><ruby><rb>L<ruby><rb>B</rb><rt>inner</rt></ruby>R</rb>'
+      '<rt>ou<ruby>T<rt>nested</rt></ruby></rt></ruby>Z</p>',
+      width: 160,
+      height: 100,
+    );
+    f.finish();
+    final body = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+    try {
+      expect(body.projection.text, 'LBRouTZ');
+      expect(body.view.atomIndices, [0]);
+      expect(
+        body.nativeLeases.whereType<ForumBodyInlineParagraphLease>(),
+        hasLength(1),
+      );
+      final raw = f.document.sourceText;
+      for (final omitted in ['inner', 'nested']) {
+        final start = raw.indexOf(omitted);
+        expect(
+          body.projection.displayRangesInSource(
+            sourceStart: start,
+            sourceEnd: start + omitted.length,
+            startUtf16: 0,
+            endUtf16: body.projection.text.length,
+          ),
+          isEmpty,
+        );
+      }
+      final page = f.session.snapshot.single;
+      for (final (offset, text, annotation) in [
+        (1, 'LBR', false),
+        (4, 'ouT', true),
+      ]) {
+        final glyph = body.glyphBoxes(offset, offset + 1).single.toRect();
+        final copy = forumBodyTextSelectionAt(
+          binding: body,
+          fragment: page.fragments.single,
+          pageSize: const Size(160, 100),
+          point: Offset(glyph.left + .01, glyph.center.dy),
+        );
+        expect(copy?.text, text);
+        expect(copy?.isAnnotation, annotation);
+      }
+    } finally {
+      body.close();
+    }
+    expect(f.cache.activeLeases, 0);
+  });
+
   for (final html in [
     'AB H<sup>2</sup>O',
     'AB A<sub>n</sub>z',
@@ -2843,26 +2893,21 @@ void main() {
     });
   }
 
-  test(
-    'admitted nested extra annotation still obeys the actual page height',
-    () {
-      final f = _Fixture(
-        '<ruby>A<rt>a</rt><rt><ruby>B<rt>b</rt></ruby></rt></ruby>',
-      );
-      expect(
-        f.finish,
-        throwsA(
-          isA<ForumBodyTextPageException>().having(
-            (e) => e.failure,
-            'failure',
-            ForumBodyTextPageFailure.oversizedGroup,
-          ),
+  test('a tall retained annotation obeys the actual page height', () {
+    final f = _Fixture('<ruby>A<rt style="font-size:40px">a</rt></ruby>');
+    expect(
+      f.finish,
+      throwsA(
+        isA<ForumBodyTextPageException>().having(
+          (e) => e.failure,
+          'failure',
+          ForumBodyTextPageFailure.oversizedGroup,
         ),
-      );
-      expect(f.session.snapshot, isEmpty);
-      expect(f.cache.activeLeases, 0);
-    },
-  );
+      ),
+    );
+    expect(f.session.snapshot, isEmpty);
+    expect(f.cache.activeLeases, 0);
+  });
 
   for (final (text, runs, failure) in [
     (1, 100, ForumBodyTextPageSessionFailure.textLimit),

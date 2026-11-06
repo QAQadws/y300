@@ -43,8 +43,8 @@ final class ForumBodyInlineFlowClear extends ForumBodyInlineFlowExclusion {
 }
 
 /// One unmeasured formatting context from the sole styled traversal. Ordinary
-/// fragments retain collapsible edges for the parent format planner; ruby
-/// retains nested/multiple annotations and each independent source context.
+/// fragments retain collapsible edges for the parent format planner; readable
+/// ruby retains the independent source contexts of the base and selected level.
 /// This is neither a concatenated display projection nor a readable page plan.
 final class ForumBodyInlineFlowContent {
   ForumBodyInlineFlowContent({

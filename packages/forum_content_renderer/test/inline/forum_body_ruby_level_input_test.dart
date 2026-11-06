@@ -252,7 +252,6 @@ void main() {
 
   for (final html in [
     '<ruby>A<rtc style="white-space:pre"><rt>x</rt> <rt>y</rt></rtc><rt>z</rt></ruby>',
-    '<ruby>A<rtc><rt>x<ruby>B<rt>b</rt></ruby></rt></rtc><rt>z</rt></ruby>',
   ]) {
     test('unsupported content in the readable level is rejected: $html', () {
       expect(

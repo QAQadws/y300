@@ -9,6 +9,8 @@ import 'package:forum_content_renderer/src/inline/forum_body_inline_plan_prepara
 import 'package:forum_content_renderer/src/inline/forum_body_ruby_child_input.dart';
 import 'package:forum_content_renderer/src/pagination/forum_body_inline_page_preparation.dart';
 
+import 'test_support/unprojected_ruby_fixture.dart';
+
 ({ForumBodyInlineFlowContent outer, ForumBodyRubySequenceChildInput child})
 _child(
   String content, {
@@ -23,24 +25,19 @@ _child(
     sourceId: 'intrinsic-ruby-child',
     conversionIdentity: 'none',
   );
-  final cursor = ForumBodyTextFlowCursor(
-    document: doc,
-    reader: ForumBodyReaderStyle(
-      textStyle: const TextStyle(fontFamily: 'Ahem', fontSize: 20, height: 1),
-      fontRevision: 'intrinsic-ahem',
-      linkColor: const Color(0xff0000ff),
-    ),
+  final reader = ForumBodyReaderStyle(
+    textStyle: const TextStyle(fontFamily: 'Ahem', fontSize: 20, height: 1),
+    fontRevision: 'intrinsic-ahem',
+    linkColor: const Color(0xff0000ff),
   );
+  final cursor = ForumBodyTextFlowCursor(document: doc, reader: reader);
   try {
     while (!cursor.isComplete) {
       cursor.advance(maxEvents: 1);
       if (cursor.current case ForumBodyTextFlowInline(:final content)) {
-        final group = content.parts
-            .whereType<ForumBodyInlineFlowRuby>()
-            .single
-            .group;
+        final group = readAuthoredRuby(doc, reader);
         return (
-          outer: content,
+          outer: withAuthoredRuby(content, group),
           child:
               (annotation
                       ? ForumBodyRubyChildInput.annotation(

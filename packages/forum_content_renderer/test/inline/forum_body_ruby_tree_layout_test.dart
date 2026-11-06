@@ -8,41 +8,30 @@ import 'package:forum_content_renderer/src/inline/forum_body_ruby_tree_input.dar
 import 'package:forum_content_renderer/src/inline/forum_body_ruby_tree_layout.dart';
 import 'package:forum_content_renderer/src/inline/forum_body_ruby_tree_metrics_preparation.dart';
 
+import 'test_support/unprojected_ruby_fixture.dart';
+
 ForumBodyRubyTreeInput _input(String html) {
   final document = const ForumBodyParser().parse(
     html: html,
     sourceId: 'visible-nested-tree',
     conversionIdentity: 'none',
   );
-  final flow = ForumBodyTextFlowCursor(
-    document: document,
-    reader: ForumBodyReaderStyle(
+  final group = readAuthoredRuby(
+    document,
+    ForumBodyReaderStyle(
       textStyle: const TextStyle(fontFamily: 'Ahem', fontSize: 20, height: 1),
       fontRevision: 'ahem',
       linkColor: const Color(0xff0000ff),
     ),
   );
+  final work = ForumBodyRubyTreeInputPreparation(group: group, maxWidth: 500);
   try {
-    while (!flow.isComplete) {
-      flow.advance(maxEvents: 1);
-      if (flow.current case ForumBodyTextFlowInline(:final content)) {
-        final work = ForumBodyRubyTreeInputPreparation(
-          group: content.parts.whereType<ForumBodyInlineFlowRuby>().first.group,
-          maxWidth: 500,
-        );
-        try {
-          while (!work.isReady) {
-            work.advance(maxParts: 1);
-          }
-          return work.takeInput();
-        } finally {
-          work.close();
-        }
-      }
+    while (!work.isReady) {
+      work.advance(maxParts: 1);
     }
-    throw StateError('Missing tree');
+    return work.takeInput();
   } finally {
-    flow.close();
+    work.close();
   }
 }
 

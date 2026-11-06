@@ -102,7 +102,7 @@ final class ForumBodyTextFlowCursor {
          collapses: collapses,
          contentRoot: contentRoot,
        );
-  static const revision = 17;
+  static const revision = 18;
   final bool dedicatedTables;
 
   /// Requires a consumer for exclusion controls, including clearance BRs.
@@ -416,7 +416,7 @@ final class ForumBodyTextFlowCursor {
                   ForumBodyElementKind.ruby) {
             target.startRuby();
             _rubyTarget = target;
-            _ruby = ForumBodyRubyContentCursor.openCurrent(
+            _ruby = ForumBodyRubyContentCursor.openReadable(
               _flow,
               paragraphBuilder: paragraphBuilder,
               limits: rubyLimits,

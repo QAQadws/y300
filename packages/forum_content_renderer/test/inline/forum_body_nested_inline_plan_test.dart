@@ -8,25 +8,25 @@ import 'package:forum_content_renderer/src/inline/forum_body_ruby_atom_request.d
 import 'package:forum_content_renderer/src/inline/forum_body_ruby_tree_layout.dart';
 import 'package:forum_content_renderer/src/inline/forum_body_ruby_tree_metrics_preparation.dart';
 
+import 'test_support/unprojected_ruby_fixture.dart';
+
 ForumBodyInlineFlowContent _flow(String html) {
   final doc = const ForumBodyParser().parse(
     html: html,
     sourceId: 'nested-inline-plan',
     conversionIdentity: 'none',
   );
-  final cursor = ForumBodyTextFlowCursor(
-    document: doc,
-    reader: ForumBodyReaderStyle(
-      textStyle: const TextStyle(fontFamily: 'Ahem', fontSize: 20, height: 1),
-      fontRevision: 'nested-ahem',
-      linkColor: const Color(0xff0000ff),
-    ),
+  final reader = ForumBodyReaderStyle(
+    textStyle: const TextStyle(fontFamily: 'Ahem', fontSize: 20, height: 1),
+    fontRevision: 'nested-ahem',
+    linkColor: const Color(0xff0000ff),
   );
+  final cursor = ForumBodyTextFlowCursor(document: doc, reader: reader);
   try {
     while (!cursor.isComplete) {
       cursor.advance(maxEvents: 1);
       if (cursor.current case ForumBodyTextFlowInline(:final content)) {
-        return content;
+        return withAuthoredRubies(content, readAuthoredRubies(doc, reader));
       }
     }
     throw StateError('Missing inline flow');

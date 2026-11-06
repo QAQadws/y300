@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:forum_content_renderer/src/inline/forum_body_inline_plan_preparation.dart';
 
+import 'test_support/unprojected_ruby_fixture.dart';
+
 const _fixtures = [
   '<ruby>A<rt>x</rt></ruby>',
   '<ruby><rb>A</rb><rb>B</rb><rtc>word</rtc></ruby>',
@@ -36,6 +38,7 @@ _Fixture _fixture(
   TextDirection direction = TextDirection.ltr,
   TextScaler scaler = TextScaler.noScaling,
   double width = 300,
+  bool authoredRuby = false,
 }) {
   final cache = ForumBodyParagraphCache(
     maxEntries: 512,
@@ -47,25 +50,25 @@ _Fixture _fixture(
     sourceId: 'child-bands',
     conversionIdentity: 'none',
   );
-  final flow = ForumBodyTextFlowCursor(
-    document: doc,
-    reader: ForumBodyReaderStyle(
-      textStyle: const TextStyle(
-        fontFamily: 'Ahem',
-        fontSize: 20,
-        color: Color(0xff123456),
-      ),
-      fontRevision: 'child-bands',
-      linkColor: const Color(0xff0000ff),
-      textDirection: direction,
+  final reader = ForumBodyReaderStyle(
+    textStyle: const TextStyle(
+      fontFamily: 'Ahem',
+      fontSize: 20,
+      color: Color(0xff123456),
     ),
+    fontRevision: 'child-bands',
+    linkColor: const Color(0xff0000ff),
+    textDirection: direction,
   );
+  final flow = ForumBodyTextFlowCursor(document: doc, reader: reader);
   ForumBodyInlineFlowContent? content;
   try {
     while (!flow.isComplete) {
       flow.advance(maxEvents: 1);
       if (flow.current case ForumBodyTextFlowInline(content: final value)) {
-        content = value;
+        content = authoredRuby
+            ? withAuthoredRuby(value, readAuthoredRuby(doc, reader))
+            : value;
         break;
       }
     }
@@ -230,6 +233,7 @@ void main() {
               direction: direction,
               scaler: scaler,
               width: width,
+              authoredRuby: index == 2,
             );
             final atoms = f.page.rubyAtoms;
             expect(

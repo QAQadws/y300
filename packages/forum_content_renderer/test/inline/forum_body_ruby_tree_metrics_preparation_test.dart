@@ -8,6 +8,8 @@ import 'package:forum_content_renderer/src/inline/forum_body_ruby_group_metrics.
 import 'package:forum_content_renderer/src/inline/forum_body_ruby_tree_input.dart';
 import 'package:forum_content_renderer/src/inline/forum_body_ruby_tree_metrics_preparation.dart';
 
+import 'test_support/unprojected_ruby_fixture.dart';
+
 final class _Parsed {
   _Parsed(String html) {
     final document = const ForumBodyParser().parse(
@@ -15,23 +17,18 @@ final class _Parsed {
       sourceId: 'nested-native-tree',
       conversionIdentity: 'none',
     );
-    final flow = ForumBodyTextFlowCursor(
-      document: document,
-      reader: ForumBodyReaderStyle(
-        textStyle: const TextStyle(fontFamily: 'Ahem', fontSize: 20, height: 1),
-        fontRevision: 'ahem',
-        linkColor: const Color(0xff0000ff),
-      ),
+    final reader = ForumBodyReaderStyle(
+      textStyle: const TextStyle(fontFamily: 'Ahem', fontSize: 20, height: 1),
+      fontRevision: 'ahem',
+      linkColor: const Color(0xff0000ff),
     );
+    final flow = ForumBodyTextFlowCursor(document: document, reader: reader);
     try {
       while (!flow.isComplete) {
         flow.advance(maxEvents: 1);
         if (flow.current case ForumBodyTextFlowInline(:final content)) {
-          input = content;
-          group = content.parts
-              .whereType<ForumBodyInlineFlowRuby>()
-              .first
-              .group;
+          group = readAuthoredRuby(document, reader);
+          input = withAuthoredRuby(content, group);
           break;
         }
       }
@@ -136,6 +133,7 @@ void main() {
         'a',
         'B',
         'b',
+        'c',
       ]);
       final base = parsed.group.base.single as ForumBodyRubyBaseContent;
       final nested = base.parts.single as ForumBodyRubyNestedContent;
@@ -163,8 +161,11 @@ void main() {
       }
       final root = tree.nodes.last as ForumBodyRubyTreeGroup;
       expect(root.group, same(parsed.group));
-      expect(root.annotations.single.side, ForumBodyRubySide.over);
-      expect(tree.nativeRequests, hasLength(4));
+      expect(root.annotations.map((annotation) => annotation.side), [
+        ForumBodyRubySide.over,
+        ForumBodyRubySide.under,
+      ]);
+      expect(tree.nativeRequests, hasLength(5));
       expect(() => tree.nodes.clear(), throwsUnsupportedError);
       expect(() => tree.nativeRequests.clear(), throwsUnsupportedError);
       // Numeric preparation is not permission to publish a page without binding.

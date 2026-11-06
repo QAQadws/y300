@@ -5,6 +5,8 @@ import 'package:forum_content_renderer/src/inline/forum_body_inline_plan_input.d
 import 'package:forum_content_renderer/src/inline/forum_body_inline_plan_preparation.dart';
 import 'package:forum_content_renderer/src/inline/forum_body_inline_source_preparation.dart';
 
+import 'unprojected_ruby_fixture.dart';
+
 const mixedEmphasisChildren = [
   '<ruby style="text-emphasis:none">A<rt>x</rt></ruby>',
   '<ruby>A<rt style="text-emphasis:triangle">x</rt></ruby>',
@@ -102,6 +104,7 @@ final class MixedEmphasisParentFixture {
     String parentStyle = 'text-emphasis:circle;line-height:.4',
     String prefix = 'P',
     String suffix = 'Q',
+    bool authoredRuby = false,
     TextStyle readerTextStyle = const TextStyle(
       fontFamily: 'Ahem',
       fontSize: 20,
@@ -114,21 +117,21 @@ final class MixedEmphasisParentFixture {
       sourceId: 'mixed-emphasis-parent',
       conversionIdentity: 'none',
     );
-    final flow = ForumBodyTextFlowCursor(
-      document: doc,
-      reader: ForumBodyReaderStyle(
-        textStyle: readerTextStyle,
-        fontRevision: 'mixed-emphasis-parent',
-        linkColor: const Color(0xff0000ff),
-        textDirection: direction,
-      ),
+    final reader = ForumBodyReaderStyle(
+      textStyle: readerTextStyle,
+      fontRevision: 'mixed-emphasis-parent',
+      linkColor: const Color(0xff0000ff),
+      textDirection: direction,
     );
+    final flow = ForumBodyTextFlowCursor(document: doc, reader: reader);
     ForumBodyInlineFlowContent? actual;
     try {
       while (!flow.isComplete) {
         flow.advance(maxEvents: 1);
         if (flow.current case ForumBodyTextFlowInline(:final content)) {
-          actual = content;
+          actual = authoredRuby
+              ? withAuthoredRubies(content, readAuthoredRubies(doc, reader))
+              : content;
           break;
         }
       }

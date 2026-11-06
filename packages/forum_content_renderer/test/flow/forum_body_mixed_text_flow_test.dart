@@ -172,27 +172,49 @@ void main() {
     expect(_signature(unit.content), startsWith('text:前 粗 |ruby:漢:かん'));
   });
 
-  test('multiple, nested and orphan annotations keep their actual grammar', () {
-    final unit = _drain(
-      _cursor(
-        '前<ruby>漢<ruby>字<rt>ji</rt></ruby><rt>kan<ruby>音<rt>on</rt></ruby></rt><rt>second</rt></ruby>'
-        '<ruby><rt>orphan</rt></ruby>后',
-      ),
-    ).whereType<ForumBodyTextFlowInline>().single;
-    final rubies = unit.content.parts
-        .whereType<ForumBodyInlineFlowRuby>()
-        .toList();
-    expect(rubies, hasLength(2));
-    expect(rubies.first.group.base[1], isA<ForumBodyRubyNestedContent>());
-    expect(rubies.first.group.annotations, hasLength(2));
-    expect(
-      rubies.first.group.annotations.first.parts[1],
-      isA<ForumBodyRubyNestedContent>(),
-    );
-    expect(rubies.last.group.base, isEmpty);
-    expect(_text(rubies.last.group.annotations.single.parts), 'orphan');
-    expect(rubies.first.group.rootPath, isNot(rubies.last.group.rootPath));
-  });
+  for (final budget in [1, 7]) {
+    test('nested wrappers project bases with original sources ($budget)', () {
+      const html =
+          'P<ruby><rb>L <ruby><rb style="color:red"> B</rb><rp>(</rp>'
+          '<rt>inner</rt><rp>)</rp></ruby> R</rb>'
+          '<rt>ou<ruby>T<ruby>V<rt>deep</rt></ruby><rt>nested</rt></ruby></rt></ruby>'
+          '<ruby><ruby>A<rt>a</rt>B<rt>b</rt></ruby></ruby>Z';
+      final unit = _drain(
+        _cursor(html),
+        budget: budget,
+      ).whereType<ForumBodyTextFlowInline>().single;
+      final groups = unit.content.parts.whereType<ForumBodyInlineFlowRuby>();
+      expect(groups, hasLength(2));
+      final base = groups.first.group.base.single as ForumBodyRubyBaseContent;
+      final body = (base.parts.single as ForumBodyRubyTextContent).content;
+      expect(body.projection.text, 'L B R');
+      final original = _document(html).sourceText;
+      expect(
+        body.projection.sourceAtUtf16(2).sourceRune,
+        original.indexOf('B'),
+      );
+      final styled = body.projection.parts.singleWhere(
+        (p) => p.text.contains('B'),
+      );
+      expect(
+        body.runs[styled.runIndex].style.textStyle.color,
+        const Color(0xffff0000),
+      );
+      expect(_text(groups.first.group.annotations.single.parts), 'ouTV');
+      expect(_text(groups.last.group.base), 'AB');
+      expect(groups.last.group.annotations, isEmpty);
+      final ignored = unit.content.ignored.where(
+        (node) => node.reason == ForumBodyRubyIgnoredReason.nestedAnnotation,
+      );
+      expect(
+        ignored.map(
+          (node) =>
+              original.substring(node.source.runeStart, node.source.runeEnd),
+        ),
+        ['inner', 'deep', 'nested', 'a', 'b'],
+      );
+    });
+  }
 
   test(
     'RP, hidden and annotation whitespace are omissions with source only',

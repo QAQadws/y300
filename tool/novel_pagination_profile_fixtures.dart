@@ -133,8 +133,7 @@ final novelProfileNestedColumnFixtures = <({String name, String html})>[
   (name: 'ruby-nested-columns-rtl', html: _nestedColumns(rtl: true)),
 ];
 
-// Deliberately exceeds the reader's issued-handle budget within one page.
-// Keep this independent failure fixture when profiling the admitted corpus.
+// Dense authored input for the explicit issued-handle quota regression.
 final novelProfileRubyGapOverflowHtml = _rubyGaps(
   ranks: 24,
   paragraphs: 3,

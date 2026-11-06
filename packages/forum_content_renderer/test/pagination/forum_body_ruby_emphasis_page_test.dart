@@ -296,7 +296,7 @@ void main() {
   test('only actual visible trees are acquired on each physical page', () {
     final f = RubyEmphasisPageFixture(
       html: '$rubyTreeEmphasisSceneNested<br>$rubyTreeEmphasisSceneMixed',
-      height: 110,
+      height: 65,
     );
     addTearDown(f.close);
     expect(f.snapshot.length, greaterThan(1));

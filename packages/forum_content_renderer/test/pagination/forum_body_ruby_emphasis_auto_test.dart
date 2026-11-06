@@ -332,7 +332,6 @@ void main() {
   for (final html in [
     '<ruby>A<rt style="text-emphasis:sesame">x</rt></ruby>',
     '<ruby><rb><span style="text-emphasis:circle">A</span></rb><rt>x</rt></ruby>',
-    '<ruby><ruby>A<rt style="text-emphasis:circle">x</rt></ruby><rt>y</rt></ruby>',
   ]) {
     test(
       'actual root/rank/run emphasis is discovered without a root flag $html',
@@ -446,42 +445,30 @@ void main() {
       }
     },
   );
-  test(
-    'active mixed opaque parents and parent-line emphasis remain explicitly gated',
-    () {
-      final cache = _cache();
-      addTearDown(cache.close);
-      for (final html in [
-        '<ruby style="text-emphasis:circle"><rb>L<ruby>A<rt>x</rt></ruby>R</rb><rt>y</rt></ruby>',
-      ]) {
-        expect(
-          () => _plan(_flow(_doc(html), TextDirection.ltr), cache),
-          throwsA(isA<ForumBodyParagraphInputException>()),
-        );
-        expect(cache.activeLeases, 0);
-      }
-      expect(
-        () => _plan(
-          _flow(
-            _doc(
-              '<span style="text-emphasis:circle">A'
-              '<ruby>B<rt>b</rt></ruby>C</span>',
-            ),
-            TextDirection.ltr,
+  test('parent-line emphasis beside ruby remains explicitly gated', () {
+    final cache = _cache();
+    addTearDown(cache.close);
+    expect(
+      () => _plan(
+        _flow(
+          _doc(
+            '<span style="text-emphasis:circle">A'
+            '<ruby>B<rt>b</rt></ruby>C</span>',
           ),
-          cache,
+          TextDirection.ltr,
         ),
-        throwsA(
-          isA<ForumBodyParagraphLayoutException>().having(
-            (e) => e.failure,
-            'failure',
-            ForumBodyParagraphLayoutFailure.emphasis,
-          ),
+        cache,
+      ),
+      throwsA(
+        isA<ForumBodyParagraphLayoutException>().having(
+          (e) => e.failure,
+          'failure',
+          ForumBodyParagraphLayoutFailure.emphasis,
         ),
-      );
-      expect(cache.activeLeases, 0);
-    },
-  );
+      ),
+    );
+    expect(cache.activeLeases, 0);
+  });
 
   test(
     'a later glyph band retry invalidates earlier complete formats before publication',
@@ -635,10 +622,7 @@ void main() {
   test(
     'automatic planning retains no visible leases while the numeric session completes',
     () {
-      final doc = _doc(
-            '$rubyTreeEmphasisSceneNested<br>$rubyTreeEmphasisSceneMixed',
-          ),
-          cache = _cache();
+      final doc = _doc('<p>$_aligned</p><p>$_aligned</p>'), cache = _cache();
       addTearDown(cache.close);
       final session = ForumBodyTextPageSession(
         document: doc,
@@ -652,9 +636,8 @@ void main() {
       );
       addTearDown(session.close);
       _finish(session, cache);
-      // The real block flow omits each context's trailing empty physical BR
-      // row. These two readable contexts total 103px, so an 80px viewport must
-      // paginate them without treating that omitted row as body content.
+      // Each retained single-level group fits, but both contexts cannot share
+      // this page. Numeric pagination must not retain the visible handles.
       expect(session.snapshot.length, greaterThan(1));
       expect(
         session.snapshot

@@ -129,6 +129,7 @@ enum ForumBodyRubyIgnoredReason {
   annotationWhitespace,
   hidden,
   unselectedAnnotationLevel,
+  nestedAnnotation,
 }
 
 /// Structural omission only, not evidence that the enclosed source was read.

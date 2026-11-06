@@ -237,7 +237,7 @@ void main() {
         maxParagraphs: 100,
         maxTextCodeUnits: 100000,
         maxRuns: 10000,
-        maxIssuedLeases: 512,
+        maxIssuedLeases: 16,
       ),
       layoutId: 'profile-gap-overflow',
       width: 320,

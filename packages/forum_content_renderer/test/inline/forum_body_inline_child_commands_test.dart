@@ -21,6 +21,7 @@ ForumBodyInlineEmphasisChildView _children(
   String child, {
   TextDirection direction = TextDirection.ltr,
   TextScaler scaler = TextScaler.noScaling,
+  bool authoredRuby = false,
 }) {
   final source = measureMixedEmphasisAllocatedSource(
         MixedEmphasisParentFixture(
@@ -29,6 +30,7 @@ ForumBodyInlineEmphasisChildView _children(
           width: 140,
           prefix: 'P P P P ',
           suffix: ' Q Q Q',
+          authoredRuby: authoredRuby,
         ),
         c,
         scaler: scaler,
@@ -217,6 +219,7 @@ void main() {
                   _background(samples[i]),
                   direction: direction,
                   scaler: scaler,
+                  authoredRuby: i == 4,
                 ),
                 captured = _Commands();
             const origin = Offset(7.3, 11.9);
@@ -278,7 +281,7 @@ void main() {
     'cancel every input step keeps all borrowed native ownership untouched',
     () {
       final c = _cache(),
-          view = _children(c, _background(samples[4])),
+          view = _children(c, _background(samples[4]), authoredRuby: true),
           captured = _Commands();
       _collect(c, captured, view.paintCommands(Offset.zero));
       final before = (c.layoutBuildCount, c.pictureBuildCount, c.activeLeases);
@@ -303,7 +306,7 @@ void main() {
     'source retirement during traversal or before dependency adoption fails',
     () {
       final c = _cache(),
-          view = _children(c, samples[4]),
+          view = _children(c, samples[4], authoredRuby: true),
           captured = _Commands(),
           work = captured.compose(view.paintCommands(Offset.zero));
       work.advance(maxParts: 4);
