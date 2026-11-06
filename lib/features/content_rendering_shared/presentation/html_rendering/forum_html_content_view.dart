@@ -1,25 +1,25 @@
-import 'package:y300/features/content_rendering_shared/presentation/contracts/forum_html_render_preparer.dart';
-import 'package:y300/features/content_rendering_shared/application/forum_html_reader_preferences_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/clipboard/clipboard_providers.dart';
-import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
-import 'package:y300/features/content_rendering_shared/domain/models/forum_html_reader_preferences.dart';
-import 'package:y300/features/content_rendering_shared/application/forum_html_render_preparer.dart';
+import 'package:y300/core/clipboard/clipboard_providers.dart';
+import 'package:y300/core/config/app_config.dart';
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 import '../../application/forum_html_image_host_provider.dart';
 import '../../application/forum_html_preparation_controller.dart';
 import '../../application/forum_html_preparation_executor.dart';
 import '../../application/forum_html_reader_font_binding.dart';
+import '../../application/forum_html_reader_preferences_controller.dart';
+import '../../application/forum_html_render_preparer.dart';
+import '../../domain/models/forum_html_reader_preferences.dart';
+import '../contracts/forum_html_render_preparer.dart';
 import 'forum_html_preparation_placeholder.dart';
 import 'forum_html_reader_text_style.dart';
 import 'forum_html_style_policy.dart';
 import 'forum_native_body_flow.dart';
 
-import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_widget_post_renderer.dart';
-
+/// Prepared HTML rendered as native document or compact content flow.
 class ForumHtmlContentView extends ConsumerStatefulWidget {
   const ForumHtmlContentView({
     super.key,
@@ -38,10 +38,9 @@ class ForumHtmlContentView extends ConsumerStatefulWidget {
     this.preparationExecutor,
     this.linkBaseUri,
     this.useSharedReaderFont = false,
-    this.nativeBody = false,
     this.selectEntireBody = false,
     this.isCurrent,
-  }) : assert(!selectEntireBody || nativeBody);
+  });
 
   final String html;
   final String sourceId;
@@ -59,7 +58,6 @@ class ForumHtmlContentView extends ConsumerStatefulWidget {
   final ForumHtmlPreparationExecutor? preparationExecutor;
   final Uri? linkBaseUri;
   final bool useSharedReaderFont;
-  final bool nativeBody;
   final bool selectEntireBody;
   final bool Function()? isCurrent;
 
@@ -69,8 +67,9 @@ class ForumHtmlContentView extends ConsumerStatefulWidget {
 }
 
 class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
+  static final _forumBaseUri = Uri.parse('${AppConfig.siteBaseUrl}/');
   late var _preparation = _createPreparation();
-  late var _nativePreparer = DefaultForumHtmlRenderPreparer(
+  late var _defaultPreparer = DefaultForumHtmlRenderPreparer(
     contentImageKind: widget.contentImageKind,
   );
   Object? _nativeSource;
@@ -94,7 +93,7 @@ class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
       _preparation = _createPreparation();
     }
     if (oldWidget.contentImageKind != widget.contentImageKind) {
-      _nativePreparer = DefaultForumHtmlRenderPreparer(
+      _defaultPreparer = DefaultForumHtmlRenderPreparer(
         contentImageKind: widget.contentImageKind,
       );
     }
@@ -144,19 +143,15 @@ class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
       sourceId: sourceId,
       threadId: ownerId,
       imageCacheOwnerId: ownerId,
-      preparer:
-          widget.renderPreparer ??
-          (widget.nativeBody
-              ? _nativePreparer
-              : const DefaultForumHtmlRenderPreparer()),
+      preparer: widget.renderPreparer ?? _defaultPreparer,
     );
     ForumHtmlPreparedRenderDocument? document;
     try {
       document = _preparation.resolve(request);
     } catch (_) {
-      if (!widget.nativeBody) rethrow;
       final l10n = AppLocalizations.of(context);
       return Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Text(l10n.threadHtmlRenderFailed),
           TextButton(
@@ -168,96 +163,59 @@ class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
     }
     if (document == null) return const ForumHtmlPreparationPlaceholder();
     final sequence = document.sequence;
-    final onOpenImage = widget.onOpenImage;
-    if (widget.nativeBody) {
-      final source = (trimmedHtml, sourceId, ownerId, request.preparer);
-      if (_nativeSource != source) {
-        _nativeSource = source;
-        _expansion = {};
-      }
-      final requestIdentity = request.identity;
-      bool current() =>
-          mounted &&
-          _preparation.identity == requestIdentity &&
-          (widget.isCurrent?.call() ?? true);
-      return ForumNativeBodyFlow(
-        key: ObjectKey(_expansion),
-        prepared: document,
-        preferences: preferences,
-        contentLayout: widget.contentLayout,
-        theme: renderTheme,
-        textStyle: fontBinding == null
-            ? ForumHtmlStylePolicy(
-                preferences,
-                theme: renderTheme,
-              ).baseTextStyle(context)
-            : resolveForumHtmlReaderTextStyle(
-                context,
-                preferences: preferences,
-                theme: renderTheme,
-                font: fontBinding.resolvedFont,
-              ),
-        fontRevision: fontBinding?.cacheKey ?? '',
-        imageHost: _resolveImageHost(document, ownerId),
-        expansion: _expansion,
-        callbacks: ForumHtmlRenderCallbacks(
-          onTapImage: onOpenImage == null
-              ? null
-              : (image) {
-                  if (current()) widget.onOpenImage?.call(sequence, image);
-                },
-          onTapUrl: widget.onOpenLink == null
-              ? null
-              : (url) {
-                  if (!current()) return false;
-                  final uri = Uri.tryParse(url.trim());
-                  if (uri == null) return false;
-                  final base =
-                      widget.linkBaseUri ??
-                      ForumHtmlWidgetPostRenderer.forumBaseUri;
-                  widget.onOpenLink?.call(base.resolveUri(uri).toString());
-                  return true;
-                },
-        ),
-        clipboardTextWriter: ref.read(clipboardTextWriterProvider),
-        selectionEnabled: widget.selectEntireBody,
-        selectEntireBody: widget.selectEntireBody,
-        isSelectionCurrent: current,
-        errorBuilder: (context) =>
-            Text(AppLocalizations.of(context).threadHtmlRenderFailed),
-      );
+    final source = (trimmedHtml, sourceId, ownerId, request.preparer);
+    if (_nativeSource != source) {
+      _nativeSource = source;
+      _expansion = {};
     }
-    return ForumHtmlWidgetPostRenderer(
-      html: trimmedHtml,
-      theme: renderTheme,
-      sourceId: sourceId,
-      threadId: ownerId,
-      imageReferer: widget.imageReferer,
-      imageCacheOwnerId: ownerId,
+    final requestIdentity = request.identity;
+    bool current() =>
+        mounted &&
+        _preparation.identity == requestIdentity &&
+        (widget.isCurrent?.call() ?? true);
+    return ForumNativeBodyFlow(
+      key: ObjectKey(_expansion),
+      prepared: document,
       preferences: preferences,
-      preparedDocument: document,
+      contentLayout: widget.contentLayout,
+      theme: renderTheme,
       textStyle: fontBinding == null
-          ? null
+          ? ForumHtmlStylePolicy(
+              preferences,
+              theme: renderTheme,
+            ).baseTextStyle(context)
           : resolveForumHtmlReaderTextStyle(
               context,
               preferences: preferences,
               theme: renderTheme,
               font: fontBinding.resolvedFont,
             ),
-      contentImageKind: widget.contentImageKind,
-      linkBaseUri: widget.linkBaseUri,
-      contentLayout: widget.contentLayout,
+      fontRevision: fontBinding?.cacheKey ?? '',
+      imageHost: _resolveImageHost(document, ownerId),
+      expansion: _expansion,
       callbacks: ForumHtmlRenderCallbacks(
-        onTapImage: onOpenImage == null
+        onTapImage: widget.onOpenImage == null
             ? null
             : (image) {
-                if (mounted) onOpenImage(sequence, image);
+                if (current()) widget.onOpenImage?.call(sequence, image);
               },
-        onTapUrl: (url) {
-          widget.onOpenLink?.call(url);
-          return true;
-        },
+        onTapUrl: widget.onOpenLink == null
+            ? null
+            : (url) {
+                if (!current()) return false;
+                final uri = Uri.tryParse(url.trim());
+                if (uri == null) return false;
+                final base = widget.linkBaseUri ?? _forumBaseUri;
+                widget.onOpenLink?.call(base.resolveUri(uri).toString());
+                return true;
+              },
       ),
+      clipboardTextWriter: ref.read(clipboardTextWriterProvider),
+      selectionEnabled: widget.selectEntireBody,
+      selectEntireBody: widget.selectEntireBody,
+      isSelectionCurrent: current,
+      errorBuilder: (context) =>
+          Text(AppLocalizations.of(context).threadHtmlRenderFailed),
     );
   }
 

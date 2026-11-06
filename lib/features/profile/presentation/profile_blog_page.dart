@@ -1252,7 +1252,6 @@ class _BlogDetailCard extends ConsumerWidget {
                   ?.copyWith(color: palette.body, height: 1.5),
               child: ForumHtmlContentView(
                 key: ObjectKey(accountOwner),
-                nativeBody: true,
                 isCurrent: () =>
                     identical(ref.read(blogMutationBusProvider), accountOwner),
                 html: display.html(data.bodyHtml),
@@ -1373,7 +1372,6 @@ class _CommentCard extends ConsumerWidget {
                   ?.copyWith(color: palette.body, height: 1.5),
               child: ForumHtmlContentView(
                 key: ObjectKey(accountOwner),
-                nativeBody: true,
                 isCurrent: () =>
                     identical(ref.read(blogMutationBusProvider), accountOwner),
                 html: display.html(comment.bodyHtml),

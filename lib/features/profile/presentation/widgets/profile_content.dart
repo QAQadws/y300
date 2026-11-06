@@ -133,7 +133,6 @@ class ProfileContent extends StatelessWidget {
             ProfileSurface(
               key: const Key('user-profile-signature'),
               child: ForumHtmlContentView(
-                nativeBody: true,
                 html: profile.signatureHtml!,
                 sourceId: 'user-profile-signature-${profile.identity.userId}',
                 imageCacheOwnerId: profile.identity.userId,

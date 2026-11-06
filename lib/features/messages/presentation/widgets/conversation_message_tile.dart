@@ -143,7 +143,6 @@ class ConversationMessageTile extends ConsumerWidget {
                               ),
                               child: ForumHtmlContentView(
                                 key: ValueKey(owner),
-                                nativeBody: true,
                                 isCurrent: isCurrent,
                                 html: _item.message,
                                 sourceId: _identity,
@@ -324,7 +323,6 @@ class _ConversationMessageDetails extends StatelessWidget {
                       ),
                       const SizedBox(height: 16),
                       ForumHtmlContentView(
-                        nativeBody: true,
                         selectEntireBody: true,
                         isCurrent: isCurrent,
                         html: item.message,

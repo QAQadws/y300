@@ -414,7 +414,6 @@ class _NotificationRow extends ConsumerWidget {
             ),
             ForumHtmlContentView(
               key: ValueKey(owner),
-              nativeBody: true,
               isCurrent: () =>
                   ref.read(messageAccountIdProvider) == accountId &&
                   ref.read(messageAttentionOwnerProvider) == owner,

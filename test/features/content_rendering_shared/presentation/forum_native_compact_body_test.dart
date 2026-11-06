@@ -72,7 +72,6 @@ Future<void> _pump(
               child: ForumHtmlContentView(
                 html: html,
                 sourceId: 'compact',
-                nativeBody: true,
                 contentLayout: ForumHtmlContentLayout.compact,
                 onOpenLink: onOpenLink,
               ),

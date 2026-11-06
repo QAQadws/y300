@@ -36,7 +36,6 @@ class BlogEditorPreview extends ConsumerWidget {
     return BlogSurface(
       child: ForumHtmlContentView(
         key: ObjectKey(accountOwner),
-        nativeBody: true,
         html: '<h2>$title</h2>${display.html(draft.bodyHtml)}',
         sourceId: 'blog-editor-preview-$ownerId',
         theme: const ForumHtmlRenderThemeFactory().fromNativeTheme(

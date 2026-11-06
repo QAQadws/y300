@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+
 import '../../../../test_support/localized_test_app.dart';
+import '../../../../test_support/native_body_finders.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
@@ -36,39 +38,34 @@ void main() {
     const html = '<font size="5">First line</font><p>Second line</p>';
     await tester.pumpWidget(host(html));
     await tester.pumpAndSettle();
-    ForumHtmlWidgetPostRenderer renderer() =>
-        tester.widget(find.byType(ForumHtmlWidgetPostRenderer));
-    final original = renderer().preparedDocument!;
-    final firstHeight = tester
-        .getSize(find.text('First line', findRichText: true))
-        .height;
+    ForumNativeBodyFlow renderer() =>
+        tester.widget(findNativeBody('shared-typography'));
+    final original = renderer().prepared;
+    final firstHeight = tester.getSize(findNativeBodyText('First line')).height;
     final controller = container.read(
       forumHtmlReaderPreferencesControllerProvider.notifier,
     );
     await controller.setTypography(
-      renderer().preferences!.typography.copyWith(
+      renderer().preferences.typography.copyWith(
         fontScale: 1.8,
         lineHeightScale: 2.0,
       ),
     );
     await tester.pumpAndSettle();
-    expect(renderer().preparedDocument, same(original));
+    expect(renderer().prepared, same(original));
     expect(codec.parseCount, 1);
     expect(
-      tester.getSize(find.text('First line', findRichText: true)).height,
+      tester.getSize(findNativeBodyText('First line')).height,
       greaterThan(firstHeight),
     );
     await controller.setPreserveAuthorFontSize(false);
     await tester.pumpAndSettle();
-    expect(renderer().preparedDocument, isNot(same(original)));
+    expect(renderer().prepared, isNot(same(original)));
     expect(codec.parseCount, 2);
-    expect(
-      renderer().preparedDocument!.preparedHtml,
-      isNot(contains('font-size')),
-    );
+    expect(renderer().prepared.preparedHtml, isNot(contains('font-size')));
     await tester.pumpWidget(host(''));
     await tester.pumpAndSettle();
-    expect(find.byType(ForumHtmlWidgetPostRenderer), findsNothing);
+    expect(find.byType(ForumNativeBodyFlow), findsNothing);
     await tester.pumpWidget(host(html));
     await tester.pumpAndSettle();
     expect(codec.parseCount, 3);
@@ -102,13 +99,13 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('scale: 1.15', findRichText: true), findsOneWidget);
+      expect(findNativeBodyText('scale: 1.15'), findsOneWidget);
       await container
           .read(forumHtmlReaderPreferencesControllerProvider.notifier)
           .setFontScale(1.8);
       await tester.pumpAndSettle();
-      expect(find.text('scale: 1.8', findRichText: true), findsOneWidget);
-      expect(find.text('scale: 1.15', findRichText: true), findsNothing);
+      expect(findNativeBodyText('scale: 1.8'), findsOneWidget);
+      expect(findNativeBodyText('scale: 1.15'), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );
@@ -147,10 +144,11 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        final renderer = tester.widget<HtmlWidget>(find.byType(HtmlWidget));
-        expect(renderer.baseUrl, base);
-        expect(renderer.rebuildTriggers, contains(contentLayout));
-        await tester.tap(find.text('link', findRichText: true));
+        final renderer = tester.widget<ForumNativeBodyFlow>(
+          findNativeBody('current-document'),
+        );
+        expect(renderer.contentLayout, contentLayout);
+        await tapNativeBodyText(tester, 'link');
         await tester.pumpAndSettle();
       }
 
@@ -189,10 +187,9 @@ void main() {
 
       expect(preparer.callCount, 1);
       final darkHtml = tester
-          .widget<HtmlWidget>(
-            find.byKey(const Key('forum-html-renderer-shared-content')),
-          )
-          .html;
+          .widget<ForumNativeBodyFlow>(findNativeBody('shared-content'))
+          .prepared
+          .preparedHtml;
       final darkText = const CsslibAuthorColorParser().parseOwn(
         html_parser.parseFragment(darkHtml).querySelector('#body')!,
       );
@@ -219,10 +216,9 @@ void main() {
 
       expect(preparer.callCount, 2);
       final lightHtml = tester
-          .widget<HtmlWidget>(
-            find.byKey(const Key('forum-html-renderer-shared-content')),
-          )
-          .html;
+          .widget<ForumNativeBodyFlow>(findNativeBody('shared-content'))
+          .prepared
+          .preparedHtml;
       final lightText = const CsslibAuthorColorParser().parseOwn(
         html_parser.parseFragment(lightHtml).querySelector('#body')!,
       );
@@ -244,6 +240,9 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(preparer.callCount, 1);
+      final body = findNativeBody('shared-content');
+      final original = tester.widget<ForumNativeBodyFlow>(body).prepared;
+      final width = tester.getSize(body).width;
       await tester.pumpWidget(
         _host(
           theme: theme,
@@ -254,10 +253,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(preparer.callCount, 1);
-      expect(
-        tester.widget<HtmlWidget>(find.byType(HtmlWidget)).rebuildTriggers,
-        contains(ForumHtmlContentLayout.compact),
-      );
+      expect(tester.widget<ForumNativeBodyFlow>(body).prepared, same(original));
+      expect(tester.getSize(body).width, lessThan(width));
     },
   );
 }

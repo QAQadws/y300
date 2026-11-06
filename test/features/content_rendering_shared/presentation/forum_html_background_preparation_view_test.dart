@@ -5,10 +5,43 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 import '../../../test_support/localized_test_app.dart';
+import '../../../test_support/native_body_finders.dart';
 
 void main() {
+  testWidgets('failed shared preparation retries through the native body', (
+    tester,
+  ) async {
+    final worker = _Worker();
+    final executor = _executor(worker);
+    await tester.pumpWidget(
+      _Scope().host(
+        ForumHtmlContentView(
+          html: '<p>Recovered body</p>',
+          sourceId: 'recovered',
+          theme: _lightTheme,
+          preparationExecutor: executor,
+        ),
+      ),
+    );
+    worker.jobs.single.result.completeError(StateError('fixture failure'));
+    await tester.pumpAndSettle();
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(ForumHtmlContentView)),
+    );
+    expect(find.text(l10n.threadHtmlRenderFailed), findsOneWidget);
+    expect(find.byType(HtmlWidget), findsNothing);
+    await tester.tap(find.text(l10n.commonRetry));
+    await _frames(tester);
+    expect(worker.jobs, hasLength(2));
+    worker.complete(1);
+    await tester.pumpAndSettle();
+    expect(findNativeBodyText('Recovered body'), findsOneWidget);
+    expect(find.byType(HtmlWidget), findsNothing);
+  });
+
   testWidgets(
     'content view replaces the previous body with a pending placeholder',
     (tester) async {
@@ -27,19 +60,19 @@ void main() {
       await _frames(tester);
       expect(worker.jobs, hasLength(1));
       expect(find.byType(ForumHtmlPreparationPlaceholder), findsOneWidget);
-      expect(find.byType(ForumHtmlRenderer), findsNothing);
+      expect(find.byType(ForumNativeBodyFlow), findsNothing);
       worker.complete(0);
-      await _frames(tester);
-      expect(find.text('First body', findRichText: true), findsOneWidget);
+      await tester.pumpAndSettle();
+      expect(findNativeBodyText('First body'), findsOneWidget);
 
       await tester.pumpWidget(scene('<p>Next body</p>'));
       await _frames(tester);
       expect(find.byType(ForumHtmlPreparationPlaceholder), findsOneWidget);
-      expect(find.text('First body', findRichText: true), findsNothing);
-      expect(find.byType(ForumHtmlRenderer), findsNothing);
+      expect(findNativeBodyText('First body'), findsNothing);
+      expect(find.byType(ForumNativeBodyFlow), findsNothing);
       worker.complete(1);
-      await _frames(tester);
-      expect(find.text('Next body', findRichText: true), findsOneWidget);
+      await tester.pumpAndSettle();
+      expect(findNativeBodyText('Next body'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -77,18 +110,18 @@ void main() {
       worker.complete(index);
       await _frames(tester);
       expect(find.byType(ForumHtmlPreparationPlaceholder), findsOneWidget);
-      expect(find.byType(ForumHtmlRenderer), findsNothing);
+      expect(find.byType(ForumNativeBodyFlow), findsNothing);
     }
     expect(worker.jobs.last.input.imageCacheOwnerId, 'owner-B');
     expect(worker.jobs.last.input.theme.signature, _darkTheme.signature);
     worker.complete(3);
-    await _frames(tester);
-    expect(find.text('Current body', findRichText: true), findsOneWidget);
-    expect(find.text('Retired body', findRichText: true), findsNothing);
+    await tester.pumpAndSettle();
+    expect(findNativeBodyText('Current body'), findsOneWidget);
+    expect(findNativeBodyText('Retired body'), findsNothing);
     expect(
       tester
-          .widget<ForumHtmlRenderer>(find.byType(ForumHtmlRenderer))
-          .preparedDocument
+          .widget<ForumNativeBodyFlow>(findNativeBody('body'))
+          .prepared
           .themeSignature,
       _darkTheme.signature,
     );
@@ -119,7 +152,7 @@ void main() {
       expect(find.byType(ForumHtmlPreparationPlaceholder), findsNothing);
       first.complete(0);
       await _frames(tester);
-      expect(find.byType(ForumHtmlRenderer), findsNothing);
+      expect(find.byType(ForumNativeBodyFlow), findsNothing);
 
       await tester.pumpWidget(scene('<p>Rebound body</p>', firstExecutor));
       await tester.pumpWidget(scene('<p>Rebound body</p>', secondExecutor));
@@ -127,14 +160,14 @@ void main() {
       await _frames(tester);
       expect(find.byType(ForumHtmlPreparationPlaceholder), findsOneWidget);
       second.complete(0);
-      await _frames(tester);
-      expect(find.text('Rebound body', findRichText: true), findsOneWidget);
+      await tester.pumpAndSettle();
+      expect(findNativeBodyText('Rebound body'), findsOneWidget);
 
       await tester.pumpWidget(scene('<p>Disposed body</p>', secondExecutor));
       await tester.pumpWidget(const SizedBox.shrink());
       second.complete(1);
       await _frames(tester);
-      expect(find.text('Disposed body', findRichText: true), findsNothing);
+      expect(findNativeBodyText('Disposed body'), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );
@@ -156,11 +189,11 @@ void main() {
         ),
       ),
     );
-    await _frames(tester);
+    await tester.pumpAndSettle();
     expect(worker.jobs, isEmpty);
     expect(preparer.calls, 1);
     expect(find.byType(ForumHtmlPreparationPlaceholder), findsNothing);
-    expect(find.text('Custom body', findRichText: true), findsOneWidget);
+    expect(findNativeBodyText('Custom body'), findsOneWidget);
   });
 
   testWidgets(

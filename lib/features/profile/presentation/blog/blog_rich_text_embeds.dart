@@ -89,7 +89,6 @@ class BlogPreservedHtml extends ConsumerWidget {
   final String id;
   @override
   Widget build(BuildContext context, WidgetRef ref) => ForumHtmlContentView(
-    nativeBody: true,
     html: html,
     sourceId: 'blog-editor-preserved-$id',
     theme: const ForumHtmlRenderThemeFactory().fromNativeTheme(
