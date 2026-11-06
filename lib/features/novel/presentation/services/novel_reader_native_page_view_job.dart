@@ -47,8 +47,9 @@ final class NovelReaderNativeViewJobLimits {
 }
 
 /// One published-page task, subordinate to a layout's cancellation token.
-/// Work starts outside build after a frame, and coverage shares the prepared
-/// native layouts. The Host serializes priority; this task does not own source
+/// Coverage shares the prepared native layouts. A resumed target may use the
+/// current slice for cached work; cold work always starts after a frame.
+/// The Host serializes priority; this task does not own source
 /// pagination, deadlines, reading mode, navigation or persisted positions.
 final class NovelReaderNativePageViewJob {
   factory NovelReaderNativePageViewJob({
@@ -166,7 +167,7 @@ final class NovelReaderNativePageViewJob {
     }
   }
 
-  Future<NovelReaderNativePageView> run() {
+  Future<NovelReaderNativePageView> run({bool resumeTarget = false}) {
     final current = _running;
     if (current != null) return current;
     if (_state != NovelReaderNativeViewJobState.pending) {
@@ -176,7 +177,7 @@ final class NovelReaderNativePageViewJob {
     _running = completion.future;
     _state = NovelReaderNativeViewJobState.preparing;
     unawaited(
-      _drive().then<void>(
+      _drive(resumeTarget).then<void>(
         completion.complete,
         onError: (Object error, StackTrace stack) =>
             completion.completeError(error, stack),
@@ -185,7 +186,7 @@ final class NovelReaderNativePageViewJob {
     return completion.future;
   }
 
-  Future<NovelReaderNativePageView> _drive() async {
+  Future<NovelReaderNativePageView> _drive(bool resumeTarget) async {
     final elapsed = Stopwatch()..start();
     final preparationWork = NovelReaderNativeAdvanceMeter(
       budget: limits.frameBudget,
@@ -196,16 +197,30 @@ final class NovelReaderNativePageViewJob {
     var layoutsBuilt = 0;
     var picturesBuilt = 0;
     try {
-      await _yieldFrame();
-      // The previous origin loses keepAlive when arrival is confirmed. Let
-      // that frame unmount it before reserving aliases for another dense page.
-      // This is the task's existing initial yield, not an extra wait/retry.
-      final preparation = _session!.openPagePreparation(_pageIndex);
-      _preparation = preparation;
+      _guard();
+      if (resumeTarget && _session!.isComplete) {
+        _clock.start();
+        _preparation = _tryReserveResumedPage();
+      }
+      if (_preparation == null) {
+        // Let a former mounted page unpin its handles before reserving more.
+        await _yieldFrame();
+        _preparation = _session!.openPagePreparation(_pageIndex);
+      }
+      final preparation = _preparation!;
       _guard();
       while (!preparation.isReady) {
         await _beforeStep();
         final start = elapsed.elapsedMicroseconds;
+        if (_frames == 0) {
+          preparation.tryPrepareCached(maxParts: limits.preparationFragments);
+          preparationWork.record(elapsed.elapsedMicroseconds - start);
+          _guard();
+          if (preparation.cacheMiss || preparation.waitingForLayoutBudget) {
+            await _yieldFrame();
+          }
+          continue;
+        }
         final step = preparation.advance(
           maxFragments: limits.preparationFragments,
         );
@@ -300,6 +315,23 @@ final class NovelReaderNativePageViewJob {
       elapsed.stop();
       _cleanup();
       _running = null;
+    }
+  }
+
+  ForumBodyTextPagePreparation? _tryReserveResumedPage() {
+    try {
+      return _session!.openPagePreparation(_pageIndex);
+    } on ForumBodyTextPageSessionException catch (error) {
+      // Mounted handles can retire at the next frame. Retry via the same
+      // admission path as other deliveries, with its normal error handling.
+      switch (error.failure) {
+        case ForumBodyTextPageSessionFailure.leaseLimit:
+        case ForumBodyTextPageSessionFailure.imageLimit:
+        case ForumBodyTextPageSessionFailure.preparationLimit:
+          return null;
+        default:
+          rethrow;
+      }
     }
   }
 

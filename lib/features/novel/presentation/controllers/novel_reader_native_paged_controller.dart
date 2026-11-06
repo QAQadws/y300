@@ -167,6 +167,7 @@ final class NovelReaderNativePagedController {
   bool _readOnly = true;
   bool _prefixNavigation = false;
   bool _suspended = false;
+  int? _settledBeforeSuspend;
   Object? _error;
   NovelReaderNativePagedPhase _phase = NovelReaderNativePagedPhase.created;
   StreamController<void>? _changes;
@@ -612,6 +613,7 @@ final class NovelReaderNativePagedController {
         _phase == NovelReaderNativePagedPhase.created) {
       return false;
     }
+    _settledBeforeSuspend = _ticket == null ? _visible?.pageIndex : null;
     _suspended = true;
     _resolvedEntryEdge = null;
     _cancelAnchorWork();
@@ -645,8 +647,10 @@ final class NovelReaderNativePagedController {
 
   /// Continue the same immutable prefix/cursor after Host validates the scope.
   /// Source failure remains paused; only explicit retry can replace that source.
-  bool resume() {
+  bool resume({bool afterLayoutFrame = false}) {
     if (isClosed || !_suspended) return false;
+    final resumedPage = afterLayoutFrame ? _settledBeforeSuspend : null;
+    _settledBeforeSuspend = null;
     _suspended = false;
     if (_error != null || _phase == NovelReaderNativePagedPhase.empty) {
       _notify();
@@ -670,7 +674,10 @@ final class NovelReaderNativePagedController {
     _phase = NovelReaderNativePagedPhase.loading;
     _resolveStartEntry();
     _syncDemand();
-    _restartProducer(resumeFinalPlan: _snapshot?.isComplete == true);
+    _restartProducer(
+      resumeFinalPlan: _snapshot?.isComplete == true,
+      resumedPage: resumedPage,
+    );
     _notify();
     return true;
   }
@@ -995,7 +1002,7 @@ final class NovelReaderNativePagedController {
     }
   }
 
-  void _restartProducer({bool resumeFinalPlan = false}) {
+  void _restartProducer({bool resumeFinalPlan = false, int? resumedPage}) {
     final epoch = ++_producerEpoch;
     _source?.close();
     try {
@@ -1004,7 +1011,8 @@ final class NovelReaderNativePagedController {
         demand: _demand!,
         parent: _lifetime,
         scheduler: _scheduler!,
-        onPublication: (prefix, token) => _publication(epoch, prefix, token),
+        onPublication: (prefix, token) =>
+            _publication(epoch, prefix, token, resumedPage: resumedPage),
       );
       _source = source;
       unawaited(
@@ -1025,8 +1033,9 @@ final class NovelReaderNativePagedController {
   Future<void> _publication(
     int epoch,
     ForumBodyTextPageSnapshot prefix,
-    NovelReaderPaginationCancellationToken token,
-  ) async {
+    NovelReaderPaginationCancellationToken token, {
+    required int? resumedPage,
+  }) async {
     _guard(epoch, token);
     final verifier = _verifier;
     if (verifier != null) {
@@ -1099,7 +1108,9 @@ final class NovelReaderNativePagedController {
         );
       }
       _window!.setCenter(requested);
-      await _window!.prepareAvailable();
+      await _window!.prepareAvailable(
+        resumeTarget: prefix.isComplete && requested == resumedPage,
+      );
       _guard(epoch, token);
       _offerTarget();
     }

@@ -158,28 +158,111 @@ void main() {
     }
   });
 
-  test('the existing first frame lets former view handles retire before reservation', () async {
-    final fixture = NativeReaderTestFixture('<p>a</p>', maxIssuedLeases: 1);
-    final preparation = fixture.session.openPagePreparation(0);
-    while (!preparation.isReady) {
-      preparation.advance(maxFragments: 1);
-    }
-    final former = preparation.takeFragments().single;
-    final frames = _Frames();
-    final job = _job(fixture, frames);
-    expect(fixture.session.pendingPreparationCount, 0);
-    expect(fixture.session.reservedViewLeases, 0);
-    final running = job.run();
-    expect(frames.calls, 1);
-    expect(fixture.session.pendingPreparationCount, 0);
-    expect(former.isActive, isTrue);
-    former.close();
-    await frames.until(
-      () => job.state == NovelReaderNativeViewJobState.complete,
+  test('resumed target uses only cached work before its first frame', () async {
+    final fixture = NativeReaderTestFixture('<p><ruby>A<rt>x</rt></ruby></p>');
+    const limits = NovelReaderNativeViewJobLimits(
+      frameBudget: Duration(days: 1),
     );
-    (await running).close();
+    final frames = _Frames();
+    final cold = _job(fixture, frames, limits: limits);
+    addTearDown(cold.close);
+    final layouts = fixture.cache.layoutBuildCount;
+    final pictures = fixture.cache.pictureBuildCount;
+    final pending = cold.run(resumeTarget: true);
+    await Future<void>.delayed(Duration.zero);
+    expect(frames.calls, 1);
+    expect(cold.state, NovelReaderNativeViewJobState.preparing);
+    expect(fixture.cache.layoutBuildCount, layouts);
+    expect(fixture.cache.pictureBuildCount, pictures);
+    await frames.until(
+      () => cold.state == NovelReaderNativeViewJobState.complete,
+    );
+    final first = await pending;
+    expect(first.work!.picturesBuilt, greaterThan(0));
+    first.close();
+
+    final warmFrames = _Frames();
+    final warm = _job(fixture, warmFrames, limits: limits);
+    addTearDown(warm.close);
+    final resumed = warm.run(resumeTarget: true);
+    await Future<void>.delayed(Duration.zero);
+    expect(warmFrames.calls, 0);
+    expect(warm.state, NovelReaderNativeViewJobState.complete);
+    final visible = await resumed;
+    expect(visible, isNot(same(first)));
+    expect(visible.snapshot, same(first.snapshot));
+    expect(visible.work!.layoutsBuilt, 0);
+    expect(visible.work!.picturesBuilt, 0);
+    expect(visible.work!.checkedGraphemes, 2);
+    visible.close();
     expect(fixture.session.activeIssuedLeases, 0);
   });
+
+  test(
+    'resumed reservation waits for a former mounted page to release',
+    () async {
+      final fixture = NativeReaderTestFixture('<p>a</p>', maxIssuedLeases: 1);
+      final preparation = fixture.session.openPagePreparation(0);
+      while (!preparation.isReady) {
+        preparation.advance(maxFragments: 1);
+      }
+      final former = preparation.takeFragments().single;
+      final frames = _Frames();
+      final job = _job(fixture, frames);
+      expect(fixture.session.pendingPreparationCount, 0);
+      expect(fixture.session.reservedViewLeases, 0);
+      final running = job.run(resumeTarget: true);
+      expect(frames.calls, 1);
+      expect(fixture.session.pendingPreparationCount, 0);
+      expect(former.isActive, isTrue);
+      former.close();
+      await frames.until(
+        () => job.state == NovelReaderNativeViewJobState.complete,
+      );
+      (await running).close();
+      expect(fixture.session.activeIssuedLeases, 0);
+    },
+  );
+
+  test(
+    'cancelling an early resume releases only its new reservation',
+    () async {
+      final fixture = NativeReaderTestFixture('<p>a</p>', maxIssuedLeases: 2);
+      final former = fixture.session.preparePageFragments(0).single;
+      addTearDown(former.close);
+      final frames = _Frames();
+      final job = _job(fixture, frames);
+      final pending = job.run(resumeTarget: true);
+      final cancelled = expectLater(pending, _cancelled);
+      expect(fixture.session.reservedViewLeases, 1);
+      fixture.parent.cancel();
+      await cancelled;
+      expect(frames.calls, 0);
+      expect(fixture.session.pendingPreparationCount, 0);
+      expect(fixture.session.reservedViewLeases, 0);
+      expect(former.isActive, isTrue);
+    },
+  );
+
+  test(
+    'cancelling an early resume releases only its new reservation',
+    () async {
+      final fixture = NativeReaderTestFixture('<p>a</p>', maxIssuedLeases: 2);
+      final former = fixture.session.preparePageFragments(0).single;
+      addTearDown(former.close);
+      final frames = _Frames();
+      final job = _job(fixture, frames);
+      final pending = job.run(resumeTarget: true);
+      final cancelled = expectLater(pending, _cancelled);
+      expect(fixture.session.reservedViewLeases, 1);
+      fixture.parent.cancel();
+      await cancelled;
+      expect(frames.calls, 0);
+      expect(fixture.session.pendingPreparationCount, 0);
+      expect(fixture.session.reservedViewLeases, 0);
+      expect(former.isActive, isTrue);
+    },
+  );
 
   test('cancellation before the first frame never reserves or releases another view', () async {
     final fixture = NativeReaderTestFixture('<p>a</p>', maxIssuedLeases: 1);

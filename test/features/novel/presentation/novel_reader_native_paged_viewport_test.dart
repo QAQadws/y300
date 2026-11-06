@@ -642,7 +642,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(reports, hasLength(1));
       await tester.pump(const Duration(seconds: 1));
-      if (interruption == 'suspended') controller.resume();
+      if (interruption == 'suspended') {
+        controller.resume(afterLayoutFrame: true);
+      }
       await tester.pumpWidget(reader());
       await tester.pumpAndSettle();
       expect(_physicalPage(tester), from);

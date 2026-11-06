@@ -977,7 +977,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
           old.scope = reused;
           old.reverse =
               config.preferences.flowMode == NovelReaderFlowMode.pagedRtl;
-          old.controller.resume();
+          old.controller.resume(afterLayoutFrame: true);
           setState(() {
             _busy = false;
             _empty = false;
