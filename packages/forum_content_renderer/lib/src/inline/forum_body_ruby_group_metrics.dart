@@ -5,7 +5,6 @@ import 'package:flutter/painting.dart';
 
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
-import '../paragraph/forum_body_text_layout.dart';
 import '../style/forum_body_style_options.dart' show ForumBodyRubySide;
 import 'forum_body_ruby_group_contract.dart';
 import 'forum_body_ruby_band_stack.dart';
@@ -57,7 +56,7 @@ final class ForumBodyRubyAnnotationMetrics {
       child: lease == null
           ? null
           : ForumBodyRubyChildMetrics(
-              bounds: ForumBodyRubyGroupMetrics._textBounds(lease),
+              bounds: lease.fontBounds,
               alphabeticBaseline: lease.layout.alphabeticBaseline,
             ),
       side: side,
@@ -299,10 +298,6 @@ final class ForumBodyRubyGroupMetrics {
     baseline: TextBaseline.alphabetic,
     baselineOffset: baseline,
   );
-
-  static Rect _textBounds(ForumBodyTextLease lease) {
-    return forumBodyTextLayoutBounds(lease.layout);
-  }
 
   static Never _invalid() => throw const ForumBodyRubyGroupException(
     ForumBodyRubyGroupFailure.geometry,

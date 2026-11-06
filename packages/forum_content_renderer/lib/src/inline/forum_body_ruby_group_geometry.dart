@@ -20,7 +20,7 @@ final class ForumBodyRubyChildMetrics {
       );
     }
     return ForumBodyRubyChildMetrics(
-      bounds: ForumBodyRubyGroupMetrics._textBounds(lease),
+      bounds: lease.fontBounds,
       alphabeticBaseline: lease.layout.alphabeticBaseline,
     );
   }

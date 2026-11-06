@@ -1165,6 +1165,15 @@ sealed class ForumBodyTextLease extends ForumBodyNativeParagraphLease {
   ForumBodyTextLease._(super.owner, super.entry) : super._();
   ForumBodyParagraphContent get content;
   ForumBodyTextLayout get layout;
+
+  /// The native text frame and glyph overhang in this lease's coordinates.
+  Rect get fontBounds {
+    final current = layout;
+    // Band admission already measured the exact full child range.
+    return current is ForumBodyTextBandChildLayout
+        ? current.geometry.fontBounds
+        : forumBodyTextLayoutBounds(current);
+  }
 }
 
 /// Decoration resources expose neither source content nor text-selection API.

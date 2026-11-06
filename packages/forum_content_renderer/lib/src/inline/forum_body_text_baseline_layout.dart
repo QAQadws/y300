@@ -78,7 +78,7 @@ final class ForumBodyTextBaselineLayout implements ForumBodyTextLayout {
       }
       final layout = lease.layout;
       final metrics = ForumBodyTextBaselineMetrics(
-        childBounds: forumBodyTextLayoutBounds(layout),
+        childBounds: lease.fontBounds,
         childBaseline: layout.alphabeticBaseline,
         baselineShift: baselineShift,
       );
