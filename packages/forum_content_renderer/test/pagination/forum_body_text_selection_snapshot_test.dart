@@ -419,6 +419,85 @@ void main() {
     expect(fixture.cache.activeLeases, 0);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('nested selection registers a slice after returning to it', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      '<p>Alpha</p>${'<p>${'middle ' * 8}</p>' * 30}<p>Omega</p>',
+      height: 160,
+      tableExtent: ForumBodyTableExtent.natural,
+    );
+    final scroll = ScrollController();
+    final listener = SelectionListenerNotifier();
+    final selection = GlobalKey<ForumBodyFlowSelectionScopeState>();
+    addTearDown(scroll.dispose);
+    addTearDown(listener.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SelectionArea(
+            child: SelectionListener(
+              selectionNotifier: listener,
+              child: ForumBodyFlowSelectionScope(
+                key: selection,
+                child: Align(
+                  alignment: Alignment.topLeft,
+                  child: SizedBox(
+                    width: 200,
+                    height: 120,
+                    child: CustomScrollView(
+                      controller: scroll,
+                      slivers: [
+                        ForumBodyFlowSliver(
+                          session: fixture.session,
+                          prefix: fixture.session.snapshot,
+                          onFailure: (error, _) => fail(error.toString()),
+                          buildSlice: (_, snapshot, index, fragments) =>
+                              ForumBodyTextPageSurface.prepared(
+                                snapshot: snapshot,
+                                pageIndex: index,
+                                layoutId: snapshot.layoutId,
+                                fragments: fragments,
+                                compactHeight: true,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    final head = ForumBodySourceRange(fixture.document.identity, 0, 1);
+    final pages = find.byType(ForumBodyTextPageSurface);
+    Iterable<Offset> headGlyph() sync* {
+      for (final page in pages.evaluate()) {
+        final surface = page.widget as ForumBodyTextPageSurface;
+        for (final rect in surface.locateSourceRanges([head])) {
+          yield (page.findRenderObject()! as RenderBox).localToGlobal(
+            rect.center,
+          );
+        }
+      }
+    }
+
+    await tester.pumpAndSettle();
+    expect(headGlyph(), isNotEmpty);
+    scroll.jumpTo(scroll.position.maxScrollExtent);
+    await tester.pumpAndSettle();
+    expect(headGlyph(), isEmpty);
+    scroll.jumpTo(0);
+    await tester.pumpAndSettle();
+    await tester.longPressAt(headGlyph().single);
+    expect(selection.currentState!.selectedText, 'Alpha');
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(fixture.cache.activeLeases, 0);
+  });
+
   test(
     'code copy preserves whitespace, excludes hidden text and source-free numbers',
     () {

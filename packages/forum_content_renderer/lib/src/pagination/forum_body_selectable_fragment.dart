@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import 'package:html_pagination_core/html_pagination_core.dart';
 
@@ -88,6 +89,28 @@ final class _FlowSelectionDelegate extends StaticSelectionContainerDelegate {
 
   @override
   SelectedContent? getSelectedContent() => _joinSelected(_selected);
+
+  @override
+  void add(Selectable selectable) {
+    super.add(selectable);
+    final binding = SchedulerBinding.instance;
+    // A nested scroll container can register after a frame's microtasks.
+    // The delegate queues the update but an idle viewport may need a frame.
+    if (binding.schedulerPhase == SchedulerPhase.idle) {
+      binding.ensureVisualUpdate();
+    }
+  }
+
+  @override
+  void didChangeSelectables() {
+    final hadContent = value.hasContent;
+    super.didChangeSelectables();
+    if (!hadContent && value.hasContent) {
+      // The enclosing selection listener and region can still need to
+      // register after this callback makes the first slice selectable.
+      SchedulerBinding.instance.ensureVisualUpdate();
+    }
+  }
 
   ForumBodySourceRange? get selectedSourceRange {
     final selected = _selected;
