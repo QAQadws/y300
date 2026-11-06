@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:y300/app/content_rendering/native_forum_html_render_theme_factory.dart';
 import 'package:y300/core/media/device_memory_profile.dart';
-import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/foundation.dart' show ValueListenable, kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
@@ -88,8 +88,8 @@ class ThreadDetailContent extends ConsumerStatefulWidget {
     this.onLoadMoreComments,
     this.displayExtraCommentsByPostId = const {},
     this.enableBodyChunking = true,
-    this.nativeBody = false,
-  });
+    bool nativeBody = false,
+  }) : nativeBody = kReleaseMode || nativeBody;
 
   final ThreadDetailPageState state;
   final ThreadDetailContentProjection? projection;

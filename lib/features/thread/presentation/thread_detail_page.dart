@@ -3,6 +3,7 @@ import 'package:y300/features/thread/presentation/services/thread_image_reader_r
 import 'package:y300/features/thread/presentation/services/thread_post_actions.dart';
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:y300/features/thread/domain/services/thread_post_navigation_session.dart';
 import 'package:flutter/widget_previews.dart';
@@ -62,8 +63,9 @@ class ThreadDetailPage extends ConsumerStatefulWidget {
     this.landing = ThreadPostLanding.top,
     this.initialForumName,
     this.bodyReadingObserver,
-    this.nativeBody = true,
-  }) : assert(
+    bool nativeBody = true,
+  }) : nativeBody = kReleaseMode || nativeBody,
+       assert(
          landing == ThreadPostLanding.top ||
              (targetPid != null && targetPid != ''),
          'A body-end landing requires a target post.',
@@ -78,7 +80,7 @@ class ThreadDetailPage extends ConsumerStatefulWidget {
   final String? initialForumName;
   final ThreadBodyReadingObserver? bodyReadingObserver;
 
-  /// Selects the renderer for the entire route, including comparison runs.
+  /// Release routes use the native renderer. Debug and profile can compare.
   final bool nativeBody;
 
   @override

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:y300/features/fonts/fonts.dart';
 import 'package:flutter/scheduler.dart';
@@ -99,16 +100,15 @@ class NovelReaderPage extends ConsumerStatefulWidget {
     required this.novelId,
     required this.initialEpisodeId,
     this.openPolicy = NovelEpisodeOpenPolicy.resumeLastRead,
-    this.nativePagination = true,
+    bool nativePagination = true,
     this.nativeIdleScheduler,
-  });
+  }) : nativePagination = kReleaseMode || nativePagination;
 
   final String novelId;
   final String initialEpisodeId;
   final NovelEpisodeOpenPolicy openPolicy;
 
-  /// Selects one backend for the entire route. The explicit legacy choice is
-  /// used by the comparison harness and its regression tests.
+  /// Release routes use the native renderer. Debug and profile can compare.
   final bool nativePagination;
   final NovelReaderPaginationIdleScheduler? nativeIdleScheduler;
 

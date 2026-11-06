@@ -1,5 +1,6 @@
 import '../../application/forum_html_render_preferences_projection.dart';
 
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
@@ -139,6 +140,10 @@ class _ForumHtmlWidgetPostRendererState
 
   @override
   Widget build(BuildContext context) {
+    // Keep the legacy implementation out of the release AOT call graph.
+    if (kReleaseMode) {
+      throw UnsupportedError('Legacy HTML comparison requires debug or profile');
+    }
     final preferences =
         widget.preferences ?? ForumHtmlReaderPreferences.defaults();
     final document = _resolveDocument(preferences);
