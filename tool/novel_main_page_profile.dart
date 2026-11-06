@@ -55,6 +55,12 @@ final _opens = _memoryMode && !_transitionCycle
     ? _memoryOpens
     : (_baseline ? _config.opensPerFixture : 1);
 final _turnGroups = _memoryMode ? 0 : (_baseline ? _config.turnGroups : 1);
+const _nativeOpenMilestones = [
+  'nativeViewportUs',
+  'nativeFirstPagePublishedUs',
+  'nativeTargetPreparedUs',
+  'nativeTargetConfirmedUs',
+];
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -242,6 +248,10 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       'event': 'suite_method',
       'coldDefinition': 'new route, controller, owner, derived caches and position; warm process/fonts; in-memory synthetic I/O',
       'openDefinition': 'uncoveredTarget: laid-out matching body without reader cover; firstReadable: existing observation after route settles; planComplete: finalized plan independent of route animation',
+      if (!_memoryMode) ...{
+        'openObservation': 'every frame after push',
+        'nativeOpenMilestones': 'viewport mounted, first stable page published, target prepared, target confirmed by viewport',
+      },
       'turnDefinition': 'reader chrome command to settled visible page; excludes hardware gesture recognition',
       'frameAttribution':
           'engine vsync intervals; batched delivery does not select phase',
@@ -382,6 +392,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
           'completedTurns': turns.map((run) => run['completedTurns']).toList(),
           if (!_memoryMode)
             for (final metric in [
+              if (backend == 'native') ..._nativeOpenMilestones,
               'uncoveredTargetUs',
               'routeSettledUs',
               'firstReadableUs',
@@ -605,6 +616,23 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       }
     }
 
+    void observeNativeOpening(ProfileReaderObservation observation) {
+      final controller = observation.nativeController;
+      if (controller == null) return;
+      final elapsed = clock.elapsedMicroseconds;
+      run.putIfAbsent('nativeViewportUs', () => elapsed);
+      if (observation.count > 0) {
+        run.putIfAbsent('nativeFirstPagePublishedUs', () => elapsed);
+      }
+      // The viewport may consume the prepared delivery in the same frame.
+      if (controller.readyTarget != null || observation.page != null) {
+        run.putIfAbsent('nativeTargetPreparedUs', () => elapsed);
+      }
+      if (observation.page != null) {
+        run.putIfAbsent('nativeTargetConfirmedUs', () => elapsed);
+      }
+    }
+
     void checkVisiblePage(String phase, ProfileReaderObservation observation) {
       final expected = novelProfileExpectedLanguages(fixture.name);
       if (!native) return;
@@ -651,18 +679,25 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       observeRoute(animation.status);
       animation.addStatusListener(observeRoute);
       try {
-        latest = await _wait(key, args, (value) {
-          observePlanCompletion(value);
-          if (value.uncoveredTarget) {
-            run.putIfAbsent(
-              'uncoveredTargetUs',
-              () => clock.elapsedMicroseconds,
-            );
-          }
-          return value.ready &&
-              value.businessConfirmed &&
-              run.containsKey('uncoveredTargetUs');
-        }, observeOpening: () => !run.containsKey('uncoveredTargetUs'));
+        latest = await _wait(
+          key,
+          args,
+          (value) {
+            observePlanCompletion(value);
+            if (native && !_memoryMode) observeNativeOpening(value);
+            if (value.uncoveredTarget) {
+              run.putIfAbsent(
+                'uncoveredTargetUs',
+                () => clock.elapsedMicroseconds,
+              );
+            }
+            return value.ready &&
+                value.businessConfirmed &&
+                run.containsKey('uncoveredTargetUs');
+          },
+          observeOpening: () => !run.containsKey('uncoveredTargetUs'),
+          sampleEveryFrame: !_memoryMode,
+        );
       } finally {
         animation.removeStatusListener(observeRoute);
       }
