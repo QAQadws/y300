@@ -2789,6 +2789,7 @@ void main() {
       await tester.pumpAndSettle();
       final actual = reader.positions.last;
       final prefix = controller.snapshot;
+      final previousView = controller.visibleView!;
       final surface = tester.renderObject(
         find.byType(ForumBodyTextPageSurface),
       );
@@ -2808,6 +2809,11 @@ void main() {
       await tester.pump(const Duration(seconds: 10));
       expect(reader.positions.last, same(actual));
       await _show(tester, reader);
+      final resumed = controller.visibleView!;
+      expect(resumed, isNot(same(previousView)));
+      expect(resumed.coverage, same(previousView.coverage));
+      expect(resumed.work!.coverageSteps, 0);
+      expect(controller.hasPendingNavigation, isFalse);
       await tester.pumpAndSettle();
       expect(reader.statuses.last.controller, same(controller));
       expect(controller.snapshot, same(prefix));

@@ -204,6 +204,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
   bool _selectAnchorNavigation = false;
   int _navigationFrameRevision = 0;
   late bool _lastActive;
+  _LayoutRequest? _residentResume;
   ForumBodyIdentity? _collapseIdentity;
   final _collapseExpansion = <String, bool>{};
   NovelReaderTextAnchor? _collapseRestoreHint;
@@ -378,6 +379,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         imageBindingChanged ||
         beginningChanged;
     if (inputsChanged || oldWidget.preferences != widget.preferences) {
+      _residentResume = null;
       _selectionRevision++;
       // Only color requests may join the context paint check. The immutable
       // scope still rejects foreground/link changes before accepting a canvas.
@@ -409,6 +411,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
 
   void _ownerChanged() {
     if (_disposed) return;
+    _residentResume = null;
     _pending?.cancel();
     _epoch++;
     if (widget.owner.isClosed) _closeAll();
@@ -428,6 +431,18 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
   bool _applyActivity() {
     final active = _active;
     if (active == _lastActive) return false;
+    if (!active) {
+      final request = _current;
+      _residentResume =
+          !_busy &&
+              !_force &&
+              _pending == null &&
+              request?.confirmed != null &&
+              request!.controller.snapshot?.isComplete == true &&
+              !request.controller.hasPendingNavigation
+          ? request
+          : null;
+    }
     _lastActive = active;
     _pending?.cancel();
     _epoch++;
@@ -543,6 +558,64 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
     }
   }
 
+  void _tryResumeResident(BuildContext context, Size box) {
+    if (!_active || _residentResume == null) return;
+    final request = _residentResume!;
+    _residentResume = null;
+    if (!identical(request, _current) ||
+        !request.controller.isSuspended ||
+        request.controller.error != null ||
+        _force ||
+        _box != box ||
+        widget.navigationRequest != null ||
+        widget.pageSeekRequest != null ||
+        request.scope.chapter.document.imageElements.isNotEmpty ||
+        request.scope.collapses != null) {
+      return;
+    }
+    final epoch = _epoch;
+    bool current() =>
+        mounted &&
+        !_disposed &&
+        _active &&
+        _epoch == epoch &&
+        !request.closed &&
+        !request.session.isClosed &&
+        request.handle.isCurrent &&
+        identical(request, _current) &&
+        identical(request.owner, widget.owner) &&
+        identical(request.authority, widget.readingAuthorityIdentity);
+    final NovelReaderNativeLayoutScope? reused;
+    try {
+      final environment = NovelReaderNativeRenderEnvironment.capture(
+        context,
+        preferences: widget.preferences,
+        resolvedFont: widget.resolvedFont,
+        policy: widget.stylePolicy,
+      );
+      reused = request.scope.tryUpdateCanvas(
+        environment: environment,
+        width: box.width,
+        height: box.height,
+        columns: widget.columns,
+        fontCollectionGeneration: widget.owner.fontGeneration,
+        isCurrent: current,
+      );
+    } catch (_) {
+      // Let normal preparation validate and report incompatible inputs.
+      return;
+    }
+    if (reused == null || !current()) return;
+    request.epoch = epoch;
+    request.scope = reused;
+    _needsLayout = false;
+    _paintOnlyCandidate = false;
+    _busy = false;
+    _empty = false;
+    request.controller.resume(afterLayoutFrame: true, residentText: true);
+    _notifyStatus();
+  }
+
   void _notifyStatus() {
     final request = _current;
     if (request == null || !_live(request)) _chapterHintChanged(null);
@@ -616,6 +689,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
             const SizedBox.shrink();
       }
       _invalidBox = false;
+      _tryResumeResident(context, box);
       _tryCanvas(context, box);
       if (widget.owner.isClosed) {
         return widget.placeholderBuilder?.call(context, _status) ??
@@ -1378,6 +1452,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
   }
 
   void _closeAll() {
+    _residentResume = null;
     _resetCollapses();
     _imageGeometryIdentity = null;
     _imageLayouts.clear();

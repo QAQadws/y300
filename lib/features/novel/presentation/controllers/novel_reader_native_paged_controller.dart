@@ -647,9 +647,9 @@ final class NovelReaderNativePagedController {
 
   /// Continue the same immutable prefix/cursor after Host validates the scope.
   /// Source failure remains paused; only explicit retry can replace that source.
-  bool resume({bool afterLayoutFrame = false}) {
+  bool resume({bool afterLayoutFrame = false, bool residentText = false}) {
     if (isClosed || !_suspended) return false;
-    final resumedPage = afterLayoutFrame ? _settledBeforeSuspend : null;
+    final settledPage = _settledBeforeSuspend;
     _settledBeforeSuspend = null;
     _suspended = false;
     if (_error != null || _phase == NovelReaderNativePagedPhase.empty) {
@@ -674,9 +674,17 @@ final class NovelReaderNativePagedController {
     _phase = NovelReaderNativePagedPhase.loading;
     _resolveStartEntry();
     _syncDemand();
+    final previous = _visible?.view;
+    if (residentText &&
+        settledPage != null &&
+        _requestedPage == settledPage &&
+        previous?.pageIndex == settledPage) {
+      _window!.tryPrepareResidentText(previous!);
+      _offerTarget();
+    }
     _restartProducer(
       resumeFinalPlan: _snapshot?.isComplete == true,
-      resumedPage: resumedPage,
+      resumedPage: afterLayoutFrame ? settledPage : null,
     );
     _notify();
     return true;

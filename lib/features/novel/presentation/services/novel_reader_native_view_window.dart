@@ -4,6 +4,8 @@ import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 import '../models/novel_reader_native_anchor_map.dart';
 import '../models/novel_reader_native_page_view.dart';
+import '../models/novel_reader_native_page_work.dart';
+import 'novel_reader_native_advance_meter.dart';
 import 'novel_reader_native_page_view_job.dart';
 import 'novel_reader_native_work_scheduler.dart';
 import 'novel_reader_pagination_cancellation.dart';
@@ -113,6 +115,92 @@ final class NovelReaderNativeViewWindow {
   NovelReaderNativePageView? viewForPage(int index) {
     final view = _views[index];
     return view != null && _usable(view) ? view : null;
+  }
+
+  /// Issue a fresh delivery for the same sealed text page. The confirmed
+  /// coverage is immutable geometry and survives closing the old window.
+  /// Its transferred leases still belong to the old mount.
+  void tryPrepareResidentText(NovelReaderNativePageView confirmed) {
+    final session = _session;
+    final snapshot = session?.snapshot;
+    final coverage = confirmed.coverage;
+    if (_closed ||
+        _running != null ||
+        _views.isNotEmpty ||
+        session == null ||
+        snapshot == null ||
+        !snapshot.isComplete ||
+        confirmed.pageIndex != _center ||
+        _center >= snapshot.length ||
+        confirmed.state == NovelReaderNativePageViewState.owned ||
+        coverage.identity != snapshot.identity ||
+        coverage.layoutId != snapshot.layoutId ||
+        !identical(confirmed.snapshot[_center], snapshot[_center]) ||
+        snapshot[_center].table != null ||
+        snapshot[_center].floatedTables.isNotEmpty ||
+        coverage.hasImages ||
+        coverage.hasClippedResources ||
+        coverage.hasClippedGlyphs ||
+        !coverage.hasLocations) {
+      return;
+    }
+    final clock = Stopwatch()..start();
+    final meter = NovelReaderNativeAdvanceMeter(budget: jobLimits.frameBudget);
+    ForumBodyTextPagePreparation? preparation;
+    List<ForumBodyPreparedTextFragment> fragments = const [];
+    NovelReaderNativePageView? view;
+    try {
+      preparation = session.openPagePreparation(_center);
+      for (var step = 0; !preparation.isReady; step++) {
+        if (step >= jobLimits.maxStepsPerFrame ||
+            clock.elapsed >= jobLimits.frameBudget) {
+          return;
+        }
+        final start = clock.elapsedMicroseconds;
+        preparation.tryPrepareCached(maxParts: jobLimits.preparationFragments);
+        meter.record(clock.elapsedMicroseconds - start);
+        if (preparation.cacheMiss || preparation.waitingForLayoutBudget) return;
+      }
+      if (clock.elapsed >= jobLimits.frameBudget) return;
+      fragments = preparation.takeFragments();
+      view = NovelReaderNativePageView.ownPrepared(
+        session: session,
+        pageIndex: _center,
+        fragments: fragments,
+        coverage: coverage,
+        parent: _parent!,
+        work: NovelReaderNativePageWork(
+          preparationUs: clock.elapsedMicroseconds,
+          coverageUs: 0,
+          preparationAdvances: meter.snapshot,
+          coverageAdvances: NovelReaderNativeAdvanceMeter(
+            budget: jobLimits.frameBudget,
+          ).snapshot,
+          preparationFrames: 0,
+          coverageFrames: 0,
+          layoutsBuilt: 0,
+          picturesBuilt: 0,
+          checkedGraphemes: 0,
+        ),
+      );
+      fragments = const [];
+      adoptTarget(view);
+      view = null;
+    } on ForumBodyTextPageSessionException {
+      // The ordinary driver owns pressure handling and reports terminal errors.
+    } on ForumBodyTextPagePreparationException {
+      // Retry after a frame with the ordinary preparation budget handling.
+    } on ForumBodyTextPageSurfaceException {
+      // The ordinary driver verifies a delivery again if binding changed.
+    } on NovelReaderNativeViewWindowBudgetException {
+      // The normal driver will apply the same window limits.
+    } finally {
+      preparation?.close();
+      view?.close();
+      for (final fragment in fragments) {
+        fragment.close();
+      }
+    }
   }
 
   /// Accept a target already prepared and proved by the same actual session.

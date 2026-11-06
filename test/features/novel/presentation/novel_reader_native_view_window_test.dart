@@ -480,6 +480,29 @@ void main() {
     },
   );
 
+  test('resident text preparation leaves mounted handles intact under lease pressure', () async {
+    final fixture = NativeReaderTestFixture('<p>text</p>', maxIssuedLeases: 1);
+    final oldWindow = _window(fixture);
+    await oldWindow.prepareAvailable();
+    final previous = oldWindow.viewForPage(0)!;
+    expect(previous.coverage.hasLocations, isTrue);
+    expect(previous.coverage.hasClippedGlyphs, isFalse);
+    final mounted = previous.takeFragments().single;
+    addTearDown(mounted.close);
+    oldWindow.close();
+
+    final resumed = _window(fixture);
+    resumed.tryPrepareResidentText(previous);
+    expect(resumed.viewForPage(0), isNull);
+    expect(mounted.isActive, isTrue);
+    expect(fixture.session.activeIssuedLeases, 1);
+    expect(fixture.session.reservedViewLeases, 0);
+
+    mounted.close();
+    await resumed.prepareAvailable();
+    expect(resumed.viewForPage(0)!.isReady, isTrue);
+  });
+
   test('terminal retirement closes pending work and drops owned views without closing the source', () async {
     final fixture = NativeReaderTestFixture(_html, width: 20, height: 10);
     final frame = Completer<void>();
