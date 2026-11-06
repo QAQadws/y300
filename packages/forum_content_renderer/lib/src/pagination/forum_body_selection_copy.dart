@@ -20,7 +20,7 @@ final class ForumBodySelectionCopyCursor {
 
   ForumBodyTextPageSession? _session;
   Iterator<ForumBodySelectionChunk?>? _chunks;
-  final ForumBodySourceRange _range;
+  final ForumBodySourceRange? _range;
   final int _maxCodeUnits;
   int _remainingWork;
   int _codeUnits = 0;
@@ -62,8 +62,11 @@ final class ForumBodySelectionCopyCursor {
   void _finish() {
     // A float or table cell may be laid out independently of source order.
     _accepted.sort((a, b) => a.sourceStart.compareTo(b.sourceStart));
-    if (_accepted.firstOrNull?.sourceStart != _range.startRune ||
-        _accepted.lastOrNull?.sourceEnd != _range.endRune) {
+    final range = _range;
+    if (_accepted.isEmpty ||
+        (range != null &&
+            (_accepted.first.sourceStart != range.startRune ||
+                _accepted.last.sourceEnd != range.endRune))) {
       close();
       return;
     }

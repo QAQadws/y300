@@ -292,6 +292,7 @@ final class ForumBodyTextPageSession {
         composer,
         cache,
         limits,
+        document.sourceMap.runeLength,
         textScaler,
         imageResolver,
         contentRoot != null,
@@ -386,6 +387,7 @@ final class ForumBodyTextPageSession {
     this._composer,
     this._cache,
     this.limits,
+    this._sourceRuneLength,
     this._textScaler,
     this._imageResolver,
     this._scopedBody,
@@ -399,6 +401,7 @@ final class ForumBodyTextPageSession {
   final ForumBodyBlockFlowCursor _flow;
   final ForumBodyTextPageComposer _composer;
   final ForumBodyParagraphCache _cache;
+  final int _sourceRuneLength;
   final TextScaler _textScaler;
   final ForumBodyImageResolver? _imageResolver;
   final bool _scopedBody;
@@ -561,6 +564,28 @@ final class ForumBodyTextPageSession {
     return ForumBodySelectionCopyCursor._(
       this,
       range,
+      selectionChunks(prefix, range).iterator,
+      maxCodeUnits,
+      maxWork,
+    );
+  }
+
+  /// Reads all copyable text in a finished layout, including unmounted slices.
+  /// Source edges may contain invisible text, whitespace, or non-text nodes.
+  ForumBodySelectionCopyCursor? openWholeBodyCopy({
+    required int maxCodeUnits,
+    required int maxWork,
+  }) {
+    _ensureUsable();
+    if (maxCodeUnits <= 0 || maxWork <= 0) {
+      throw ArgumentError('Invalid whole-body copy budget');
+    }
+    final prefix = snapshot;
+    if (!prefix.isComplete || _sourceRuneLength == 0) return null;
+    final range = ForumBodySourceRange(prefix.identity, 0, _sourceRuneLength);
+    return ForumBodySelectionCopyCursor._(
+      this,
+      null,
       selectionChunks(prefix, range).iterator,
       maxCodeUnits,
       maxWork,

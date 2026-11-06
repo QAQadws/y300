@@ -190,6 +190,33 @@ void main() {
     expect(f.cache.activeLeases, 0);
   });
 
+  test(
+    'whole-body copy waits for completion and skips invisible source edges',
+    () {
+      final f = _Fixture(
+        '<p><span style="visibility:hidden">secret</span>start</p>'
+        '<p><ruby>字<rt>note</rt></ruby>🦊</p>'
+        '<p>middle</p><p>next</p>'
+        '<p>end<span style="visibility:hidden">private</span></p>',
+        height: 40,
+        initialPages: 1,
+      );
+      ForumBodySelectionCopyCursor? whole({int maxCodeUnits = 64}) =>
+          f.session.openWholeBodyCopy(maxCodeUnits: maxCodeUnits, maxWork: 256);
+
+      expect(whole(), isNull);
+      f.publish();
+      expect(f.copy(f.session.openSelectionCopy(f.entireSource)), isNull);
+      expect(f.copy(whole()!), 'start\n字🦊\nmiddle\nnext\nend');
+      expect(f.copy(whole(maxCodeUnits: 8)!), isNull);
+      final retired = whole()!;
+      retired.advance(maxWork: 2);
+      f.session.close();
+      expect(f.copy(retired), isNull);
+      expect(f.cache.activeLeases, 0);
+    },
+  );
+
   testWidgets('source highlight only paints complete visible graphemes', (
     tester,
   ) async {
