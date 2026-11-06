@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
+import 'package:y300/features/messages/application/message_attention_providers.dart';
 import 'package:y300/features/messages/presentation/conversation_message_presentation.dart';
 import 'package:y300/features/messages/presentation/message_feed_providers.dart';
 import 'package:y300/features/messages/presentation/widgets/conversation_message_tile.dart';
@@ -13,10 +14,12 @@ import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 import '../../../test_support/localized_test_app.dart';
+import '../../../test_support/native_body_finders.dart';
 
 void main() {
   late ProviderContainer container;
   late String currentAccount;
+  late int sourceGeneration;
   final links = <String>[];
   const direct = ForumConversationTarget.direct('20');
   const group = ForumConversationTarget.group('91');
@@ -24,10 +27,17 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     currentAccount = '10';
+    sourceGeneration = 0;
     links.clear();
     container = ProviderContainer.test(
       overrides: [
         messageAccountIdProvider.overrideWith((ref) => currentAccount),
+        messageAttentionOwnerProvider.overrideWith(
+          (ref) => (
+            sessionOwner: (uid: currentAccount, revision: 0),
+            sourceGeneration: sourceGeneration,
+          ),
+        ),
         forumImageRefererProvider.overrideWithValue('https://bbs.yamibo.com/'),
       ],
     );
@@ -97,6 +107,7 @@ void main() {
       );
       expect(content.contentLayout, ForumHtmlContentLayout.compact);
       expect(content.imageCacheOwnerId, 'private:10:direct:20:1');
+      expect(findNativeBody(content.sourceId), findsOneWidget);
 
       await tester.tap(find.byKey(const ValueKey('message-avatar:1')));
       expect(links, ['home.php?mod=space&uid=20']);
@@ -192,8 +203,17 @@ void main() {
       expect(details.imageCacheOwnerId, 'private:10:direct:20:1');
       expect(details.imageReferer, 'https://bbs.yamibo.com/');
       expect(
-        find.ancestor(of: detailsFinder, matching: find.byType(SelectionArea)),
+        find.descendant(
+          of: detailsFinder,
+          matching: find.byType(SelectionArea),
+        ),
         findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<ForumNativeBodyFlow>(findNativeBody(details.sourceId))
+            .selectEntireBody,
+        isTrue,
       );
 
       currentAccount = '30';
@@ -203,6 +223,22 @@ void main() {
       expect(find.text(l10n(tester).messageDetails), findsNothing);
     },
   );
+
+  testWidgets('a new source generation closes the old message details', (
+    tester,
+  ) async {
+    await pumpTiles(tester, [_item('1')]);
+    await tester.longPress(bubble('1'));
+    await tester.pumpAndSettle();
+    const details = 'private:10:direct:20:1:details';
+    expect(findNativeBody(details), findsOneWidget);
+
+    sourceGeneration++;
+    container.invalidate(messageAttentionOwnerProvider);
+    await tester.pumpAndSettle();
+    expect(findNativeBody(details), findsNothing);
+    expect(find.text(l10n(tester).messageDetails), findsNothing);
+  });
 
   testWidgets(
     'unknown time remains in details and supplied raw time is preserved',

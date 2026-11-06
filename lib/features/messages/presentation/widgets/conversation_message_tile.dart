@@ -5,13 +5,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/app/theme/app_theme_semantics.dart';
+import 'package:y300/features/messages/application/message_attention_providers.dart';
+import 'package:y300/features/messages/application/message_attention_state.dart';
 import 'package:y300/features/messages/presentation/conversation_message_presentation.dart';
 import 'package:y300/features/messages/presentation/message_feed_providers.dart';
 import 'package:y300/features/messages/presentation/widgets/message_avatar.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
-class ConversationMessageTile extends StatelessWidget {
+class ConversationMessageTile extends ConsumerWidget {
   const ConversationMessageTile({
     super.key,
     required this.presentation,
@@ -32,7 +34,16 @@ class ConversationMessageTile extends StatelessWidget {
       'private:$accountId:${target.kind.name}:${target.id}:${_item.messageId}';
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final owner = ref.watch(messageAttentionOwnerProvider);
+    bool isCurrent() =>
+        context.mounted &&
+        ref.read(messageAccountIdProvider) == accountId &&
+        ref.read(messageAttentionOwnerProvider) == owner;
+    void openDetails() {
+      if (isCurrent()) _showDetails(context, owner);
+    }
+
     final theme = Theme.of(context);
     final palette = theme.y300NativeContent;
     final l10n = AppLocalizations.of(context);
@@ -107,7 +118,7 @@ class ConversationMessageTile extends StatelessWidget {
                         container: true,
                         label:
                             '$author · ${_fullTimestampLabel(context, _item)}',
-                        onLongPress: () => _showDetails(context),
+                        onLongPress: openDetails,
                         onLongPressHint: l10n.messageDetails,
                         child: Material(
                           key: ValueKey(
@@ -120,7 +131,7 @@ class ConversationMessageTile extends StatelessWidget {
                           clipBehavior: Clip.antiAlias,
                           child: InkWell(
                             excludeFromSemantics: true,
-                            onLongPress: () => _showDetails(context),
+                            onLongPress: openDetails,
                             borderRadius: BorderRadius.circular(16),
                             overlayColor: WidgetStatePropertyAll(
                               palette.subtleStateLayer,
@@ -131,6 +142,9 @@ class ConversationMessageTile extends StatelessWidget {
                                 vertical: 8,
                               ),
                               child: ForumHtmlContentView(
+                                key: ValueKey(owner),
+                                nativeBody: true,
+                                isCurrent: isCurrent,
                                 html: _item.message,
                                 sourceId: _identity,
                                 imageCacheOwnerId: _identity,
@@ -164,7 +178,7 @@ class ConversationMessageTile extends StatelessWidget {
     );
   }
 
-  void _showDetails(BuildContext context) {
+  void _showDetails(BuildContext context, MessageAttentionOwner? owner) {
     FocusScope.of(context).unfocus();
     showModalBottomSheet<void>(
       context: context,
@@ -174,7 +188,8 @@ class ConversationMessageTile extends StatelessWidget {
       backgroundColor: Theme.of(context).y300NativeContent.card,
       builder: (context) => Consumer(
         builder: (context, ref, _) {
-          if (ref.watch(messageAccountIdProvider) != accountId) {
+          if (ref.watch(messageAccountIdProvider) != accountId ||
+              ref.watch(messageAttentionOwnerProvider) != owner) {
             // A modal is a separate route and can outlive the account's page.
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (context.mounted &&
@@ -189,6 +204,10 @@ class ConversationMessageTile extends StatelessWidget {
             identity: _identity,
             imageReferer: imageReferer,
             onOpenLink: onOpenLink,
+            isCurrent: () =>
+                context.mounted &&
+                ref.read(messageAccountIdProvider) == accountId &&
+                ref.read(messageAttentionOwnerProvider) == owner,
           );
         },
       ),
@@ -216,9 +235,8 @@ class _ConversationAvatar extends StatelessWidget {
     );
     if (!RegExp(r'^[1-9]\d*$').hasMatch(item.fromUserId)) return avatar;
     return Tooltip(
-      message: AppLocalizations.of(
-        context,
-      ).messageOpenProfile(_authorLabel(context, item)),
+      message: AppLocalizations.of(context)
+          .messageOpenProfile(_authorLabel(context, item)),
       child: InkWell(
         key: ValueKey('message-avatar:${item.messageId}'),
         customBorder: const CircleBorder(),
@@ -236,12 +254,14 @@ class _ConversationMessageDetails extends StatelessWidget {
     required this.identity,
     required this.imageReferer,
     required this.onOpenLink,
+    required this.isCurrent,
   });
 
   final ForumPrivateMessageItem item;
   final String identity;
   final String imageReferer;
   final void Function(BuildContext context, String url) onOpenLink;
+  final bool Function() isCurrent;
 
   @override
   Widget build(BuildContext context) {
@@ -279,35 +299,43 @@ class _ConversationMessageDetails extends StatelessWidget {
               ),
               Flexible(
                 child: SingleChildScrollView(
-                  child: SelectionArea(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _authorLabel(context, item),
-                          style: theme.textTheme.labelLarge?.copyWith(
-                            color: palette.author,
-                          ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SelectionArea(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _authorLabel(context, item),
+                              style: theme.textTheme.labelLarge?.copyWith(
+                                color: palette.author,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _fullTimestampLabel(context, item),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: palette.soft,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _fullTimestampLabel(context, item),
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: palette.soft,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        ForumHtmlContentView(
-                          html: item.message,
-                          sourceId: '$identity:details',
-                          imageCacheOwnerId: identity,
-                          imageReferer: imageReferer,
-                          surfaceColor: palette.card,
-                          foregroundColor: palette.body,
-                          onOpenLink: (url) => onOpenLink(context, url),
-                        ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(height: 16),
+                      ForumHtmlContentView(
+                        nativeBody: true,
+                        selectEntireBody: true,
+                        isCurrent: isCurrent,
+                        html: item.message,
+                        sourceId: '$identity:details',
+                        imageCacheOwnerId: identity,
+                        imageReferer: imageReferer,
+                        surfaceColor: palette.card,
+                        foregroundColor: palette.body,
+                        onOpenLink: (url) => onOpenLink(context, url),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -341,9 +369,8 @@ String _timestampLabel(BuildContext context, ForumPrivateMessageItem item) {
   if (day == DateTime(today.year, today.month, today.day - 1)) {
     return AppLocalizations.of(context).messageYesterdayTime(clock);
   }
-  final date = DateFormat.yMd(
-    AppLocalizations.of(context).localeName,
-  ).format(time);
+  final date = DateFormat.yMd(AppLocalizations.of(context).localeName)
+      .format(time);
   return '$date · $clock';
 }
 

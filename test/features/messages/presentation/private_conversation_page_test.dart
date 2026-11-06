@@ -14,6 +14,7 @@ import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 import '../../../test_support/localized_test_app.dart';
+import '../../../test_support/native_body_finders.dart';
 import '../support/message_test_repository.dart';
 import '../support/message_input_test_helper.dart';
 
@@ -306,18 +307,16 @@ void main() {
         find.byType(ForumHtmlContentView),
       );
       expect(view.imageCacheOwnerId, 'private:10:direct:20:1');
-      view.onOpenLink!('forum.php?mod=viewthread&tid=42');
-      expect(links.single, contains('tid=42'));
+      await tapNativeBodyText(tester, 'Thread link');
+      expect(links, ['https://bbs.yamibo.com/forum.php?mod=viewthread&tid=42']);
       await container
           .read(forumHtmlReaderPreferencesControllerProvider.notifier)
           .setFontScale(1.6);
       await tester.pumpAndSettle();
       expect(
         tester
-            .widget<ForumHtmlWidgetPostRenderer>(
-              find.byType(ForumHtmlWidgetPostRenderer),
-            )
-            .preferences!
+            .widget<ForumNativeBodyFlow>(findNativeBody(view.sourceId))
+            .preferences
             .typography
             .fontScale,
         1.6,
@@ -499,7 +498,7 @@ void main() {
           ], anchor: '100'),
         );
         await tester.pumpAndSettle();
-        expect(find.text('sent reply', findRichText: true), findsOneWidget);
+        expect(findNativeBodyText('sent reply'), findsOneWidget);
         expect(
           find.byKey(const ValueKey('conversation-bubble-100')).hitTestable(),
           findsOneWidget,
@@ -556,10 +555,7 @@ void main() {
       ]),
     );
     await tester.pumpAndSettle();
-    expect(
-      find.text('sent while refreshing', findRichText: true),
-      findsOneWidget,
-    );
+    expect(findNativeBodyText('sent while refreshing'), findsOneWidget);
     expect(repository.reads, hasLength(3));
     expect(repository.sends, hasLength(1));
     expect(tester.takeException(), isNull);
@@ -628,7 +624,7 @@ void main() {
       ]),
     );
     await tester.pumpAndSettle();
-    expect(find.text('background reply', findRichText: true), findsOneWidget);
+    expect(findNativeBodyText('background reply'), findsOneWidget);
     expect(repository.reads, hasLength(2));
     expect(tester.takeException(), isNull);
   });
@@ -840,7 +836,7 @@ void main() {
     await tester.longPress(find.byType(ForumHtmlContentView));
     await tester.pumpAndSettle();
     expect(find.text(l10n(tester).messageDetails), findsOneWidget);
-    expect(find.byType(SelectionArea), findsOneWidget);
+    expect(findNativeBody('private:10:direct:20:1:details'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -1088,7 +1084,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.longPress(find.byType(ForumHtmlContentView));
     await tester.pumpAndSettle();
-    expect(find.byType(SelectionArea), findsOneWidget);
+    expect(findNativeBody('private:10:direct:20:1:details'), findsOneWidget);
     container.updateOverrides([
       messageAttentionOwnerProvider.overrideWithValue(null),
       messageAccountIdProvider.overrideWithValue('11'),
@@ -1100,7 +1096,7 @@ void main() {
     repository.reads.last.result.complete(messageTestPage([], owner: '11'));
     await tester.pumpAndSettle();
     expect(find.byType(SelectionArea), findsNothing);
-    expect(find.text('旧账号私信', findRichText: true), findsNothing);
+    expect(findNativeBodyText('旧账号私信', skipOffstage: false), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }
