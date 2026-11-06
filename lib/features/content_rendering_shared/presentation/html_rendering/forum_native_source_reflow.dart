@@ -1,32 +1,32 @@
-part of 'thread_post_native_flow.dart';
+part of 'forum_native_body_flow.dart';
 
-typedef _ThreadTableSource = ({
+typedef _TableSource = ({
   String path,
   String areaPath,
   ForumBodyTableVisibleWindow window,
 });
 
-typedef _ThreadTableResult = ({
+typedef _TableResult = ({
   int index,
   String path,
   double offset,
   ForumBodyTablePreparedSlice slice,
 });
 
-typedef _ThreadTableWindow = ({
+typedef _TableWindow = ({
   ForumBodyTextPageTable frame,
   ForumBodyTableVisibleWindow window,
 });
 
-typedef _ThreadSourceCandidate = ({
+typedef _SourceCandidate = ({
   ForumBodyTextPageSnapshot snapshot,
   int page,
   ForumBodyTableAreaLayout? area,
   ForumBodyTextPageTable? frame,
 });
 
-final class _ThreadSourceReflowProbe {
-  _ThreadSourceReflowProbe(this.anchor, this.before, this.position, this.table)
+final class _SourceReflowProbe {
+  _SourceReflowProbe(this.anchor, this.before, this.position, this.table)
     : pixels = position.pixels {
     position.addListener(_cancel);
     position.isScrollingNotifier.addListener(_scrolling);
@@ -36,12 +36,12 @@ final class _ThreadSourceReflowProbe {
   final Rect before;
   final ScrollPosition position;
   final double pixels;
-  final _ThreadTableSource? table;
+  final _TableSource? table;
   bool done = false;
   bool _cancelled = false;
   double? newTop;
   ForumBodyFlowPreparedSlice? slice;
-  _ThreadTableResult? tableResult;
+  _TableResult? tableResult;
 
   bool isAt(ScrollPosition candidate) =>
       !_cancelled &&
@@ -56,7 +56,7 @@ final class _ThreadSourceReflowProbe {
     return result;
   }
 
-  _ThreadTableResult? takeTable() {
+  _TableResult? takeTable() {
     final result = tableResult;
     tableResult = null;
     return result;
@@ -77,17 +77,17 @@ final class _ThreadSourceReflowProbe {
   }
 }
 
-extension on _ThreadPostNativeFlowState {
-  _ThreadSourceReflowProbe? _beginSourceProbe(
-    _ThreadFlowRun old,
-    _ThreadFlowRun next,
+extension on _ForumNativeBodyFlowState {
+  _SourceReflowProbe? _beginSourceProbe(
+    _FlowRun old,
+    _FlowRun next,
     ScrollPosition position,
   ) {
     final window = ForumBodyFlowBox.borrowPaintedTextWindow(old.boundsKey);
     ({ForumBodyFlowSourceAnchor anchor, Rect bounds})? point = window == null
         ? null
         : ForumBodyFlowTextAnchor.firstVisible(window);
-    _ThreadTableSource? table;
+    _TableSource? table;
     for (final entry in old.tableWindows.entries) {
       final (:frame, :window) = entry.value;
       final tableTop = old.pageTops[entry.key.$1] + frame.bounds.top;
@@ -105,7 +105,7 @@ extension on _ThreadPostNativeFlowState {
       table = (path: frame.path, areaPath: hit.areaPath, window: window);
     }
     if (point == null) return null;
-    final probe = next.sourceProbe = _ThreadSourceReflowProbe(
+    final probe = next.sourceProbe = _SourceReflowProbe(
       point.anchor,
       point.bounds,
       position,
@@ -116,9 +116,9 @@ extension on _ThreadPostNativeFlowState {
   }
 
   Future<void> _measureSourceProbe(
-    _ThreadFlowRun old,
-    _ThreadFlowRun next,
-    _ThreadSourceReflowProbe probe,
+    _FlowRun old,
+    _FlowRun next,
+    _SourceReflowProbe probe,
   ) async {
     final session = next.session!;
     bool current() =>
@@ -261,11 +261,11 @@ extension on _ThreadPostNativeFlowState {
   }
 }
 
-Iterable<_ThreadSourceCandidate?> _sourceCandidates(
+Iterable<_SourceCandidate?> _sourceCandidates(
   ForumBodyTextPageSession session,
   ForumBodyTextPageSnapshot prefix,
   int index,
-  _ThreadSourceReflowProbe probe,
+  _SourceReflowProbe probe,
 ) sync* {
   final page = prefix[index];
   final source = probe.table;

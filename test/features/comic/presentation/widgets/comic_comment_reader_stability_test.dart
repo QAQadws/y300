@@ -7,7 +7,6 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/thread/data/repositories/thread_post_ratings_repository.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
-import 'package:y300/features/thread/presentation/html_rendering/thread_post_native_flow.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -429,7 +428,7 @@ void main() {
       );
       expect(find.byKey(const Key('comic-comment-list')), findsOneWidget);
       final body = tester
-          .widget<ThreadPostNativeFlow>(find.byType(ThreadPostNativeFlow).first)
+          .widget<ForumNativeBodyFlow>(find.byType(ForumNativeBodyFlow).first)
           .prepared;
       expect(body.preparedHtml, contains('fixture comment paragraph'));
       expect(body.preparedHtml, isNot(contains('comic-page.jpg')));

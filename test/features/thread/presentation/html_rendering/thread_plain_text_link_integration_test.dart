@@ -11,7 +11,6 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/domain/repositories/thread_post_locator.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
-import 'package:y300/features/thread/presentation/html_rendering/thread_post_native_flow.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_actions.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
@@ -158,8 +157,8 @@ void main() {
     expect(events, isEmpty);
     await tapBodyText('Linked');
     expect(events, [existing]);
-    final body = tester.widget<ThreadPostNativeFlow>(
-      find.byType(ThreadPostNativeFlow),
+    final body = tester.widget<ForumNativeBodyFlow>(
+      find.byType(ForumNativeBodyFlow),
     );
     final fragment = html_parser.parseFragment(body.prepared.preparedHtml);
     expect(fragment.querySelectorAll('a'), hasLength(1));
@@ -212,8 +211,8 @@ void main() {
         find.byKey(const Key('thread-post-html-selection-copy-page')),
         findsOneWidget,
       );
-      final body = tester.widget<ThreadPostNativeFlow>(
-        find.byType(ThreadPostNativeFlow),
+      final body = tester.widget<ForumNativeBodyFlow>(
+        find.byType(ForumNativeBodyFlow),
       );
       final link = html_parser.parseFragment(body.prepared.preparedHtml);
       expect(link.querySelector('a')!.attributes['href'], url);

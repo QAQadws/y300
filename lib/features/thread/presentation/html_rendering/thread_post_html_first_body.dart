@@ -15,8 +15,6 @@ import 'package:y300/features/thread/presentation/services/thread_body_reading_c
 import 'package:y300/features/thread/presentation/services/thread_body_reading_image_host.dart';
 import 'package:y300/features/thread/presentation/services/thread_body_presentation.dart';
 
-import 'thread_post_native_flow.dart';
-
 typedef ThreadPostHtmlFirstImageFallback = void Function(
   ThreadPost post,
   ForumHtmlImageRequest request,
@@ -506,7 +504,7 @@ class _ThreadPostHtmlFirstBodyState
       final body = KeyedSubtree(
         key: Key('thread-post-html-first-body-${sourcePost.pid}'),
         child: widget.nativeBody
-            ? ThreadPostNativeFlow(
+            ? ForumNativeBodyFlow(
                 key: widget.bodyPresentation == null
                     ? null
                     : ObjectKey(widget.bodyPresentation),

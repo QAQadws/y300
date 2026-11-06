@@ -1,4 +1,5 @@
 import '../../application/forum_html_render_preferences_projection.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
@@ -12,9 +13,13 @@ import 'package:y300/features/content_rendering_shared/application/forum_html_im
 import 'package:y300/features/content_rendering_shared/application/host/cache_forum_html_image_host.dart';
 import 'package:y300/features/content_rendering_shared/domain/models/forum_html_reader_preferences.dart';
 import 'package:y300/features/content_rendering_shared/application/forum_html_render_preparer.dart';
+
 import '../../application/forum_html_preparation_controller.dart';
 import '../../application/forum_html_preparation_executor.dart';
+
 import 'package:y300/l10n/app_localizations.dart';
+
+import 'forum_html_preparation_placeholder.dart';
 
 class ForumHtmlWidgetPostRenderer extends StatefulWidget {
   const ForumHtmlWidgetPostRenderer({
@@ -231,20 +236,4 @@ class _ForumHtmlWidgetPostRendererState
       ),
     );
   }
-}
-
-/// Preparation is pending; renderer readiness is reported only by real content.
-class ForumHtmlPreparationPlaceholder extends StatelessWidget {
-  const ForumHtmlPreparationPlaceholder({super.key});
-
-  @override
-  Widget build(BuildContext context) => const SizedBox(
-    height: 48,
-    child: Center(
-      child: SizedBox.square(
-        dimension: 18,
-        child: CircularProgressIndicator(strokeWidth: 2),
-      ),
-    ),
-  );
 }

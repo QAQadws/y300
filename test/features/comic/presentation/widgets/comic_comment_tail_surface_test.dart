@@ -21,7 +21,7 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 import 'package:y300/features/comic/presentation/widgets/comic_comment_tail_surface.dart';
 import 'package:y300/features/comic/presentation/widgets/comic_comment_surface.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_tail_surface.dart';
-import 'package:y300/features/thread/presentation/html_rendering/thread_post_native_flow.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 void main() {
   setUp(() {
@@ -221,8 +221,8 @@ void main() {
     expect(find.text('回复者'), findsOneWidget);
     expect(find.text('回覆者'), findsNothing);
     expect(find.text('剛剛'), findsOneWidget);
-    final renderer = tester.widget<ThreadPostNativeFlow>(
-      find.byType(ThreadPostNativeFlow),
+    final renderer = tester.widget<ForumNativeBodyFlow>(
+      find.byType(ForumNativeBodyFlow),
     );
     expect(renderer.prepared.preparedHtml, contains('評論正文'));
   });

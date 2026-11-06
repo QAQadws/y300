@@ -12,7 +12,6 @@ import 'package:y300/features/fonts/fonts.dart';
 import 'package:y300/features/thread/domain/contracts/thread_body_reading_observer.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_selection_copy_page.dart';
-import 'package:y300/features/thread/presentation/html_rendering/thread_post_native_flow.dart';
 import 'package:y300/features/thread/presentation/services/thread_body_reading_coordinator.dart';
 
 import '../../../../test_support/localized_test_app.dart';
@@ -188,7 +187,7 @@ void main() {
         fontFamily: _first.id,
         typography: preferences.value.typography.copyWith(fontScale: 1.4),
       );
-      final body = find.byType(ThreadPostNativeFlow);
+      final body = find.byType(ForumNativeBodyFlow);
       final paragraph = find.byWidgetPredicate(
         (widget) =>
             widget is ForumBodyParagraphSurface &&
@@ -210,7 +209,7 @@ void main() {
       await ready(FontIdentity.runtimeFamily(_first.id));
       final selectionElement = tester.element(find.byType(SelectionArea));
       final bodyElement = tester.element(body);
-      final document = tester.widget<ThreadPostNativeFlow>(body).prepared;
+      final document = tester.widget<ForumNativeBodyFlow>(body).prepared;
       final loadedFont = Completer<void>();
       runtime.gates[_second.id] = loadedFont;
       final selection = _controller(container).setFontFamily(_second.id);
@@ -227,10 +226,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(preferences.value.fontFamily, FontIdentity.system);
       expect(preferences.value.typography.fontScale, 1.4);
-      expect(
-        tester.widget<ThreadPostNativeFlow>(body).prepared,
-        same(document),
-      );
+      expect(tester.widget<ForumNativeBodyFlow>(body).prepared, same(document));
       expect(
         tester.element(find.byType(SelectionArea)),
         same(selectionElement),

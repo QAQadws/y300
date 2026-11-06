@@ -1,7 +1,7 @@
-part of 'thread_post_native_flow.dart';
+part of 'forum_native_body_flow.dart';
 
-extension on _ThreadPostNativeFlowState {
-  bool _preserveImageReflow(_ThreadFlowRun old, _ThreadFlowRun next) {
+extension on _ForumNativeBodyFlowState {
+  bool _preserveImageReflow(_FlowRun old, _FlowRun next) {
     final scrollable = Scrollable.maybeOf(context, axis: Axis.vertical);
     final controller = scrollable?.widget.controller;
     final position = scrollable?.position;
@@ -88,11 +88,7 @@ extension on _ThreadPostNativeFlowState {
   }
 }
 
-double? _afterBlockReflow(
-  _ThreadFlowRun old,
-  _ThreadFlowRun next,
-  double point,
-) {
+double? _afterBlockReflow(_FlowRun old, _FlowRun next, double point) {
   if (point <= 0) return 0;
   if (point >= old.height) {
     return next.prefix!.isComplete ? next.height : null;

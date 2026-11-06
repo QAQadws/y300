@@ -2,11 +2,11 @@ import 'dart:math' as math;
 
 import 'package:flutter/painting.dart';
 import 'package:y300/core/network/site_url_resolver.dart';
-import 'package:y300/features/content_rendering_shared/content_rendering.dart';
+import 'package:forum_content_renderer/forum_content_renderer.dart';
 
-/// Frozen resources for the same prepared post that supplies the viewer list.
-final class ThreadNativeBodyImages {
-  ThreadNativeBodyImages(this.document);
+/// Frozen resources for the prepared body that supplies the viewer list.
+final class ForumNativeBodyImages {
+  ForumNativeBodyImages(this.document);
 
   final ForumBodyDocument document;
   final _sources = <String, ForumBodyInlineImageSource>{};

@@ -18,7 +18,6 @@ import 'package:flutter/services.dart';
 import 'package:y300/features/comic/presentation/comic_comment_body_projector.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_selection_copy_page.dart';
-import 'package:y300/features/thread/presentation/html_rendering/thread_post_native_flow.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 
@@ -318,10 +317,10 @@ void main() {
       );
       expect(selection.sourcePost, same(post));
       expect(selection.post.message, displayedHtml);
-      final selectionRenderer = tester.widget<ThreadPostNativeFlow>(
+      final selectionRenderer = tester.widget<ForumNativeBodyFlow>(
         find.descendant(
           of: find.byType(ThreadPostHtmlSelectionCopyPage),
-          matching: find.byType(ThreadPostNativeFlow),
+          matching: find.byType(ForumNativeBodyFlow),
         ),
       );
       expect(selectionRenderer.prepared.sequence.entries, hasLength(1));
@@ -645,8 +644,8 @@ void main() {
   );
 }
 
-ThreadPostNativeFlow _nativeBody(WidgetTester tester) =>
-    tester.widget<ThreadPostNativeFlow>(find.byType(ThreadPostNativeFlow));
+ForumNativeBodyFlow _nativeBody(WidgetTester tester) =>
+    tester.widget<ForumNativeBodyFlow>(find.byType(ForumNativeBodyFlow));
 
 ComicCommentItemProjection _filteredFirstPost(ThreadPost post) =>
     ComicCommentBodyProjector(['https://example.test/comic-page.jpg'])
