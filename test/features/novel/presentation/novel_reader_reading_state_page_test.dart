@@ -1747,7 +1747,8 @@ void main() {
     'source menu actual body reading returns to the latest common position',
     (tester) async {
       final repository = _ReadingRepository(
-        '<div style="height: 1800px">小说与原帖公共正文。</div>',
+        List.generate(100, (index) => '<p>小说与原帖公共正文第 $index 段。</p>')
+            .join(),
       );
       final sourceRepository = _SourceThreadRepository(repository.html);
       final locator = _SourcePostLocator();
@@ -1777,6 +1778,7 @@ void main() {
       expect(sourcePage.targetPid, '5001');
       expect(sourcePage.landing, ThreadPostLanding.top);
       expect(sourcePage.bodyReadingObserver, isNotNull);
+      expect(sourcePage.nativeBody, isTrue);
       expect(locator.calls, 1);
       final priorSource = repository.progress[_chapter]!;
       expect(priorSource.progressPercent, greaterThan(0));
@@ -1801,11 +1803,12 @@ void main() {
       await tester.pumpAndSettle();
       await tester.pump(const Duration(milliseconds: 300));
       final geometry = _bodyLayout(tester);
-      final expected =
-          geometry.bodyTop +
-          sourceProgress.progressPercent * geometry.bodyRange -
-          geometry.topChrome;
-      expect(_verticalPosition(tester).pixels, closeTo(expected, 1));
+      final restored = _verticalPosition(tester).pixels;
+      final restoredFraction =
+          (restored + geometry.topChrome - geometry.bodyTop) /
+          geometry.bodyRange;
+      // The comparison list estimates offscreen heights until they are laid out.
+      expect(restoredFraction, closeTo(sourceProgress.progressPercent, .002));
       expect(_verticalPosition(tester).pixels, greaterThan(before));
       expect(repository.progress[_chapter], same(sourceProgress));
       expect(repository.completed, isEmpty);
