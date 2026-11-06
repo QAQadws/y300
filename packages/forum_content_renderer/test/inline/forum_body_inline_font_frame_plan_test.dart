@@ -118,7 +118,6 @@ void main() {
         expect(cache.activeLeases, 0);
         expect(cache.pictureBuildCount, 0);
         expect(plan.source, same(fixture.input));
-        expect(plan.allocation.marks, isEmpty);
         final natural = plan.allocation.input.natural;
         expect(natural.text.units, isEmpty);
         expect(plan.lines.length, natural.geometry.lines.length);
@@ -467,7 +466,6 @@ void main() {
         _finish(work, cache, quantum: 32);
         final plan = work.takePlan();
         final page = plan.allocation.input.natural.page;
-        expect(plan.allocation.marks, isEmpty);
         expect(plan.allocation.children, hasLength(page.rubyAtoms.length));
         expect(
           page.rubyAtoms.any(

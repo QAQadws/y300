@@ -154,9 +154,6 @@ final class ForumBodyInlineFontFramePreparation {
             _parentWork = null;
             _parentMetrics = ready.metrics;
             _natural = ready.parent;
-            if (ready.metrics.text.units.isNotEmpty) {
-              throw ArgumentError('Font-frame text must have no parent marks');
-            }
             _isolationWork = ForumBodyInlineEmphasisIsolationPreparation(
               metrics: ready.metrics,
               natural: ready.parent,
@@ -196,9 +193,6 @@ final class ForumBodyInlineFontFramePreparation {
             if (!_allocationWork!.isReady) break;
             final allocation = _allocation = _allocationWork!.takeAllocation();
             _allocationWork = null;
-            if (allocation.marks.isNotEmpty) {
-              throw StateError('Unexpected font-frame marks');
-            }
             _paintWork = ForumBodyInlineEmphasisPaintPreparation(
               allocation: allocation,
               source: _isolated!,

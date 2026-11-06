@@ -457,11 +457,8 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
       super._() {
     if (source.fontFrames != null ||
         source.layoutMode != ForumBodyParagraphLayoutMode.wrap ||
-        !identical(source.content, plan.source.content) ||
-        plan.allocation.marks.isNotEmpty) {
-      throw ArgumentError(
-        'Font frames require their original mark-free source',
-      );
+        !identical(source.content, plan.source.content)) {
+      throw ArgumentError('Font frames require their original source');
     }
   }
   final ForumBodyInlineFontFramePlan? fontFrames;

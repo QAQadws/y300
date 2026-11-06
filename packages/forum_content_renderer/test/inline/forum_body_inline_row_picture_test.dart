@@ -126,7 +126,6 @@ ForumBodyTextPicturePreparation _job(
   ForumBodyParagraphCache c,
   List<ForumBodyInlinePaintRowView> rows, {
   ForumBodyTextPictureInput? input,
-  Iterable<ForumBodyEmphasisMarkLease> marks = const [],
   void Function()? guard,
   Iterable<ForumBodyNativeParagraphLease> Function()? owned,
   bool immediate = false,
@@ -136,7 +135,6 @@ ForumBodyTextPicturePreparation _job(
         input: input ?? _input(rows),
         text: const [],
         inlineRows: rows,
-        marks: marks,
         ensureOwner: guard ?? () {},
         additionalOwnedLeases: owned,
       )
@@ -145,7 +143,6 @@ ForumBodyTextPicturePreparation _job(
         input: input ?? _input(rows),
         text: const [],
         inlineRows: rows,
-        marks: marks,
         ensureOwner: guard ?? () {},
         additionalOwnedLeases: owned,
       );
@@ -336,120 +333,6 @@ void main() {
           );
         }
       }
-    }
-  }
-
-  for (final direction in TextDirection.values) {
-    for (final scaler in [TextScaler.noScaling, const MixedEmphasisCurve()]) {
-      test(
-        'physical parent phases and markers share one scene $direction/$scaler',
-        () async {
-          final c = _cache(),
-              s = _source(
-                c,
-                logical: true,
-                direction: direction,
-                scaler: scaler,
-                prefix:
-                    '<span style="font-size:33px;text-emphasis:triangle;text-emphasis-position:under">P</span> Q Q Q ',
-              ),
-              b = _phases(s, c, scaler),
-              rows = _rows(s, phases: b),
-              mw = ForumBodyInlineEmphasisMarkerPreparation(
-                allocation: s.allocation,
-                natural: s.natural,
-                cache: c,
-                expectedTextScaler: scaler,
-                ensureOwner: () {},
-                additionalOwnedLeases: () => [s.source, ...b.nativeLeases],
-              );
-          late ForumBodyInlineEmphasisMarkerBinding markers;
-          try {
-            while (!mw.isReady) {
-              mw.advance(maxParts: 1);
-            }
-            markers = mw.takeBinding();
-          } finally {
-            mw.close();
-          }
-          addTearDown(markers.close);
-          final a = s.allocation,
-              m = a.input.natural,
-              placement = m.reflow.placement,
-              byKey = {
-                for (final font in markers.fonts)
-                  font.nativeInputIdentity: font,
-              },
-              input = ForumBodyTextPictureInput(
-                commands: [
-                  for (var i = 0; i < a.rows.length; i++) ...[
-                    for (final row in rows.where(
-                      (r) => r.selector.lineIndex == i,
-                    ))
-                      ForumBodyTextPictureCommand.fromInlineRow(
-                        row,
-                        Offset.zero,
-                      ),
-                    for (var j = 0; j < a.marks.length; j++)
-                      if (a.marks[j].lineIndex == i)
-                        markers.pictureInput!.commands[j],
-                  ],
-                ],
-                maxCommands: 8192,
-              ),
-              reference = _record((cv) {
-                for (var i = 0; i < a.rows.length; i++) {
-                  for (final layer in _layers) {
-                    b.view.paintPhaseRow(cv, Offset.zero, i, layer);
-                  }
-                  for (final mark in placement.marks.where(
-                    (mark) => mark.lineIndex == i,
-                  )) {
-                    final shift = a.rows[i].naturalOffset,
-                        f = placement.input.fonts.fonts[mark.fontIndex];
-                    cv.save();
-                    cv.translate(shift.dx, shift.dy);
-                    cv.translate(0, m.reflow.baselineDeltas[i]);
-                    cv.translate(
-                      mark.baselineOrigin.dx,
-                      mark.baselineOrigin.dy,
-                    );
-                    byKey[f.nativeInputIdentity]!.layout.paint(
-                      cv,
-                      mark.fontOffset,
-                    );
-                    cv.restore();
-                  }
-                }
-              }),
-              work = _job(c, rows, input: input, marks: markers.fonts);
-          _bind(work);
-          expect(work.nativeLeases.length, 3 + markers.fonts.length);
-          markers.close();
-          b.close();
-          s.natural.release();
-          s.source.release();
-          final picture = _finish(work, c).picture,
-              actual = _record((cv) => picture.paint(cv, Offset.zero));
-          try {
-            c.clearUnpinned();
-            expect(c.activeLeases, 1);
-            expect(c.entryCount, 1);
-            final size = Size(250, a.height + 80);
-            for (final dpr in [1.25, 3.0]) {
-              expect(
-                await _pixels(actual, size, dpr),
-                orderedEquals(await _pixels(reference, size, dpr)),
-              );
-            }
-          } finally {
-            picture.release();
-            actual.dispose();
-            reference.dispose();
-          }
-          expect(c.activeLeases, 0);
-        },
-      );
     }
   }
 

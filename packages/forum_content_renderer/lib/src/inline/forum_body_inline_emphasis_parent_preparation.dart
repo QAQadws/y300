@@ -9,25 +9,21 @@ import '../paragraph/forum_body_paragraph_geometry.dart';
 import 'forum_body_emphasis_line_layout.dart';
 import 'forum_body_emphasis_text_geometry.dart';
 import 'forum_body_emphasis_text_input.dart';
-import 'forum_body_inline_emphasis_child_bands.dart';
-import 'forum_body_inline_emphasis_reflow_preparation.dart';
-import 'forum_body_inline_emphasis_reflow_reference.dart';
-import 'forum_body_inline_emphasis_row_placement.dart';
 import 'forum_body_inline_paragraph_request.dart';
 import 'forum_body_inline_plan_input.dart';
 import 'forum_body_inline_plan_preparation.dart';
 
 /// Complete natural-parent measurement, with immutable source/child plans and
-/// the actual final geometry. Isolation, row allocation and visible admission
+/// actual row geometry. Isolation, row allocation and visible admission
 /// still belong to the containing format; this is not readable page content.
 final class ForumBodyInlineEmphasisParentMetrics {
   const ForumBodyInlineEmphasisParentMetrics._(
-    this.reflow,
+    this.page,
     this.geometry,
     this.textScaler,
     this.requestWidth,
   );
-  final ForumBodyInlineEmphasisReflowReference reflow;
+  final ForumBodyInlinePageContent page;
   final ForumBodyInlineEmphasisTextGeometry geometry;
   final TextScaler textScaler;
 
@@ -35,7 +31,6 @@ final class ForumBodyInlineEmphasisParentMetrics {
   final double requestWidth;
   Map<double, double> get effectiveScales =>
       (textScaler as _CapturedInlineScaler).values;
-  ForumBodyInlinePageContent get page => reflow.placement.input.page;
   ForumBodyInlineEmphasisTextInput get text => geometry.input;
   ForumBodyInlineParagraphRequest get parentRequest =>
       ForumBodyInlineParagraphRequest(
@@ -52,19 +47,13 @@ enum _ParentPhase {
   parentFonts,
   initial,
   geometry,
-  fonts,
-  bands,
-  rows,
-  reflow,
-  releaseOriginal,
   ready,
   transferred,
   closed,
 }
 
-/// One cooperative measurement transaction from source to the final natural
-/// parent. Freezes all parent/child/marker font sizes before native work, and
-/// delegates to the existing workers/cache without introducing a scheduler.
+/// Measures the natural inline parent and captures its actual row geometry.
+/// Native work shares the caller's cache and frozen per-size scaling.
 final class ForumBodyInlineEmphasisParentPreparation {
   ForumBodyInlineEmphasisParentPreparation({
     required ForumBodyInlinePlanInput input,
@@ -173,12 +162,8 @@ final class ForumBodyInlineEmphasisParentPreparation {
   _CapturedInlineScaler? _scaler;
   ForumBodyInlinePlanPreparation? _initialWork;
   ForumBodyInlinePageContent? _initialPage;
-  ForumBodyInlineParagraphLease? _original, _final;
+  ForumBodyInlineParagraphLease? _natural;
   ForumBodyInlineEmphasisGeometryPreparation? _geometryWork;
-  ForumBodyInlineEmphasisFontPreparation? _fontWork;
-  ForumBodyInlineEmphasisChildBandsPreparation? _bandWork;
-  ForumBodyInlineEmphasisRowPlacementPreparation? _rowWork;
-  ForumBodyInlineEmphasisReflowPreparation? _reflowWork;
   ForumBodyInlineEmphasisParentMetrics? _result;
   var _phase = _ParentPhase.text;
   bool _operating = false, _cacheMiss = false;
@@ -186,11 +171,8 @@ final class ForumBodyInlineEmphasisParentPreparation {
   bool get isReady => _phase == _ParentPhase.ready;
   bool get cacheMiss => _cacheMiss;
   Iterable<ForumBodyNativeParagraphLease> get nativeLeases => [
-    ?_original,
-    ?_final,
+    ?_natural,
     if (_initialWork != null) ..._initialWork!.nativeLeases,
-    if (_fontWork != null) ..._fontWork!.nativeLeases,
-    if (_reflowWork != null) ..._reflowWork!.nativeLeases,
   ];
 
   ForumBodyEmphasisLineStep advance({
@@ -242,6 +224,9 @@ final class ForumBodyInlineEmphasisParentPreparation {
             if (work.isReady) {
               _text = work.takeInput();
               _textWork = null;
+              if (_text!.units.isNotEmpty) {
+                throw ArgumentError('Inline font frames require plain text');
+              }
               _samples = _input!.nativeFontSizes.iterator;
               _phase = _ParentPhase.inputFonts;
             }
@@ -287,13 +272,13 @@ final class ForumBodyInlineEmphasisParentPreparation {
                 value.lease.release();
                 rethrow;
               }
-              _original = value.lease;
+              _natural = value.lease;
               _initialPage = value.plan;
               _initialWork = null;
               _input = null; // The mutable band input is never published.
               _geometryWork = ForumBodyInlineEmphasisGeometryPreparation(
                 input: _text!,
-                parent: _original!,
+                parent: _natural!,
                 ensureOwner: _guard,
                 maxBoxes: maxBoxes,
                 maxGlyphQueries: maxGlyphQueries,
@@ -308,115 +293,21 @@ final class ForumBodyInlineEmphasisParentPreparation {
             if (work.isReady) {
               final geometry = work.takeGeometry();
               _geometryWork = null;
-              _fontWork = ForumBodyInlineEmphasisFontPreparation(
-                geometry: geometry,
-                parentRequest: ForumBodyInlineParagraphRequest(
-                  content: _text!.glyphInput.glyphs,
-                  dimensions: _initialPage!.dimensions,
-                  layoutMode: _initialPage!.layoutMode,
-                ),
-                parent: _original!,
-                cache: cache,
-                ensureOwner: _guard,
-                expectedTextScaler: _scaler!,
-                width: width,
-                additionalOwnedLeases: _additionalOwned,
-              );
-              _phase = _ParentPhase.fonts;
-            }
-            continue;
-          case _ParentPhase.fonts:
-            final work = _fontWork!;
-            final s = work.advance(
-              maxParts: maxParts - used,
-              cachedOnly: cachedOnly,
-            );
-            used += s.partsPrepared;
-            _guard();
-            _cacheMiss = work.cacheMiss;
-            if (s.waitingForLayoutBudget) return wait();
-            if (_cacheMiss) return step();
-            if (work.isReady) {
-              final fonts = work.takeMetrics();
-              _fontWork = null;
-              _bandWork = ForumBodyInlineEmphasisChildBandsPreparation(
-                fonts: fonts,
-                page: _initialPage!,
-                parent: _original!,
-                ensureOwner: _guard,
-              );
-              _phase = _ParentPhase.bands;
-            }
-            continue;
-          case _ParentPhase.bands:
-            final work = _bandWork!;
-            used += work.advance(maxParts: maxParts - used);
-            _guard();
-            if (work.isReady) {
-              final bands = work.takeBands();
-              _bandWork = null;
-              _rowWork = ForumBodyInlineEmphasisRowPlacementPreparation(
-                input: bands,
-                ensureOwner: _guard,
-              );
-              _phase = _ParentPhase.rows;
-            }
-            continue;
-          case _ParentPhase.rows:
-            final work = _rowWork!;
-            used += work.advance(maxParts: maxParts - used);
-            _guard();
-            if (work.isReady) {
-              final placement = work.takePlacement();
-              _rowWork = null;
-              _reflowWork = ForumBodyInlineEmphasisReflowPreparation(
-                placement: placement,
-                original: _original!,
-                cache: cache,
-                ensureOwner: _guard,
-                additionalOwnedLeases: _additionalOwned,
-                maxBoxes: maxBoxes,
-                maxGlyphQueries: maxGlyphQueries,
-              );
-              _phase = _ParentPhase.reflow;
-            }
-            continue;
-          case _ParentPhase.reflow:
-            final work = _reflowWork!;
-            final s = work.advance(
-              maxParts: maxParts - used,
-              cachedOnly: cachedOnly,
-            );
-            used += s.partsPrepared;
-            _guard();
-            _cacheMiss = work.cacheMiss;
-            if (s.waitingForLayoutBudget) return wait();
-            if (_cacheMiss) return step();
-            if (work.isReady) {
-              final value = work.takeMeasurement();
-              try {
-                _guard();
-              } catch (_) {
-                value.parent.release();
-                rethrow;
+              final page = _initialPage!;
+              if (!identical(page.content, geometry.input.content)) {
+                throw const ForumBodyEmphasisGeometryException(
+                  ForumBodyEmphasisGeometryFailure.source,
+                );
               }
-              _final = value.parent;
-              _reflowWork = null;
               _result = ForumBodyInlineEmphasisParentMetrics._(
-                value.reference,
-                value.geometry,
+                page,
+                geometry,
                 _scaler!,
                 width,
               );
-              _phase = _ParentPhase.releaseOriginal;
+              _phase = _ParentPhase.ready;
             }
             continue;
-          case _ParentPhase.releaseOriginal:
-            _original!.release();
-            _original = null;
-            _initialPage = null;
-            _text = null;
-            _phase = _ParentPhase.ready;
           case _ParentPhase.ready:
           case _ParentPhase.transferred:
           case _ParentPhase.closed:
@@ -444,8 +335,8 @@ final class ForumBodyInlineEmphasisParentPreparation {
     try {
       _guard();
       if (!isReady) throw StateError('Mixed parent measurement is incomplete');
-      final result = (metrics: _result!, parent: _final!);
-      _final = null;
+      final result = (metrics: _result!, parent: _natural!);
+      _natural = null;
       _phase = _ParentPhase.transferred;
       _drop();
       return result;
@@ -492,8 +383,7 @@ final class ForumBodyInlineEmphasisParentPreparation {
     if (_phase == _ParentPhase.closed ||
         _phase == _ParentPhase.transferred ||
         _cache!.isClosed ||
-        (_original != null && !_cache!.ownsLease(_original!)) ||
-        (_final != null && !_cache!.ownsLease(_final!))) {
+        (_natural != null && !_cache!.ownsLease(_natural!))) {
       throw StateError('Mixed parent measurement owner is retired');
     }
   }
@@ -504,11 +394,9 @@ final class ForumBodyInlineEmphasisParentPreparation {
     }
     _phase = _ParentPhase.closed;
     try {
-      _original?.release();
-      _final?.release();
+      _natural?.release();
     } finally {
-      _original = null;
-      _final = null;
+      _natural = null;
       _drop();
     }
   }
@@ -521,14 +409,6 @@ final class ForumBodyInlineEmphasisParentPreparation {
     _initialWork = null;
     _geometryWork?.close();
     _geometryWork = null;
-    _fontWork?.close();
-    _fontWork = null;
-    _bandWork?.close();
-    _bandWork = null;
-    _rowWork?.close();
-    _rowWork = null;
-    _reflowWork?.close();
-    _reflowWork = null;
     _input = null;
     _initialPage = null;
     _text = null;

@@ -22,12 +22,9 @@ import 'forum_body_emphasis_text_input.dart';
 import 'forum_body_emphasis_row_input.dart';
 import 'forum_body_emphasis_row_allocation.dart';
 import 'forum_body_emphasis_paragraph_metrics.dart';
-import 'forum_body_inline_paragraph_request.dart';
 
 part 'forum_body_emphasis_line_preparation.dart';
 part 'forum_body_emphasis_line_metrics.dart';
-part 'forum_body_inline_emphasis_font_metrics.dart';
-part 'forum_body_inline_emphasis_font_preparation.dart';
 part 'forum_body_emphasis_allocated_layout.dart';
 part 'forum_body_emphasis_allocated_preparation.dart';
 part 'forum_body_emphasis_allocated_scene_input.dart';

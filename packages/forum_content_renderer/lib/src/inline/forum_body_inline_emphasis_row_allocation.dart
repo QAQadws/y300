@@ -31,13 +31,6 @@ final class ForumBodyInlineEmphasisAllocatedRow {
   final Rect? parentFontBounds, bounds, paintBounds;
 }
 
-typedef ForumBodyInlineEmphasisAllocatedMark = ({
-  int unitIndex,
-  int lineIndex,
-  int fontIndex,
-  Offset offset,
-  Rect fontBounds,
-});
 typedef ForumBodyInlineEmphasisAllocatedChild = ({
   int atomIndex,
   int lineIndex,
@@ -46,31 +39,27 @@ typedef ForumBodyInlineEmphasisAllocatedChild = ({
 });
 
 /// Complete mixed physical allocation over the actual final natural/isolated
-/// pair. Pure measured coordinates only; no source group is split and no live
-/// child/mark/scene or readable page admission is established by this value.
+/// pair. Only numeric coordinates survive, with the original child slots.
 final class ForumBodyInlineEmphasisRowAllocation {
   ForumBodyInlineEmphasisRowAllocation._(
     this.input,
     List<ForumBodyInlineEmphasisAllocatedRow> rows,
-    List<ForumBodyInlineEmphasisAllocatedMark> marks,
     List<ForumBodyInlineEmphasisAllocatedChild?> children,
     this.height,
     this.paintBounds,
     this.requiresParentPaintPhases,
   ) : rows = UnmodifiableListView(rows),
-      marks = UnmodifiableListView(marks),
       children = UnmodifiableListView(children);
-  static const revision = 3;
+  static const revision = 4;
   final ForumBodyInlineEmphasisIsolationMetrics input;
   final List<ForumBodyInlineEmphasisAllocatedRow> rows;
-  final List<ForumBodyInlineEmphasisAllocatedMark> marks;
 
   /// Null only for a truly trimmed soft slot; original indices are retained.
   final List<ForumBodyInlineEmphasisAllocatedChild?> children;
   final double height;
 
-  /// Conservative parent glyph/logical paint plus complete child and marker
-  /// frames. It can overflow logical flow, as authored shadows do.
+  /// Conservative parent glyph and logical paint plus complete child frames.
+  /// It can overflow logical flow, as authored shadows do.
   final Rect? paintBounds;
 
   /// Logical backgrounds/decorations need their own physical paint offsets.
@@ -83,9 +72,7 @@ enum _AllocationPhase {
   isolatedFrames,
   fonts,
   childBounds,
-  markBounds,
   rows,
-  marks,
   children,
   publish,
   ready,
@@ -93,7 +80,7 @@ enum _AllocationPhase {
 }
 
 /// Borrows the qualified current native pair to capture actual flow frames.
-/// Every part queries once, visits one native box/row/child/marker, or publishes.
+/// Every part queries once, visits one native box, row or child, or publishes.
 /// No cache acquire, shaping, recording or caller handle release occurs here.
 final class ForumBodyInlineEmphasisRowAllocationPreparation {
   ForumBodyInlineEmphasisRowAllocationPreparation({
@@ -103,7 +90,6 @@ final class ForumBodyInlineEmphasisRowAllocationPreparation {
     required void Function() ensureOwner,
     this.maxLines = 4096,
     this.maxAtoms = 512,
-    this.maxMarks = 32768,
     this.maxBoxes = 32768,
     this.maxHeight = 1048576,
   }) : _input = input,
@@ -112,7 +98,6 @@ final class ForumBodyInlineEmphasisRowAllocationPreparation {
        _ensureOwner = ensureOwner {
     if (maxLines <= 0 ||
         maxAtoms < 0 ||
-        maxMarks < 0 ||
         maxBoxes < 0 ||
         !maxHeight.isFinite ||
         maxHeight <= 0) {
@@ -120,28 +105,25 @@ final class ForumBodyInlineEmphasisRowAllocationPreparation {
     }
     try {
       _guard();
-      final ref = input.reference, reflow = input.natural.reflow;
+      final ref = input.reference;
       if (!natural.hasSameSourceAndInputsExceptRowIsolation(isolated) ||
           natural.nativeInputIdentity != ref.naturalInputIdentity ||
           isolated.nativeInputIdentity != ref.isolatedInputIdentity ||
           !identical(natural.layout.lines, ref.naturalLines) ||
           !identical(isolated.layout.lines, ref.isolatedLines) ||
-          !identical(reflow.finalLines, ref.naturalLines) ||
+          !identical(input.natural.geometry.lines, ref.naturalLines) ||
           !identical(input.geometry.lines, ref.isolatedLines)) {
         _source();
       }
-      final page = input.natural.page, placement = reflow.placement;
-      if (ref.lineCount > maxLines ||
-          page.rubyAtoms.length > maxAtoms ||
-          placement.marks.length > maxMarks) {
+      final page = input.natural.page;
+      if (ref.lineCount > maxLines || page.rubyAtoms.length > maxAtoms) {
         _limit();
       }
       if (input.rows.rows.length != ref.lineCount ||
           input.natural.geometry.parentFontBounds.length != ref.lineCount ||
           input.logicalRows.rows.length != ref.lineCount ||
           !identical(input.logicalRows.geometry, input.geometry) ||
-          page.rubyAtoms.length != ref.atomLineIndices.length ||
-          placement.marks.length != input.natural.text.units.length) {
+          page.rubyAtoms.length != ref.atomLineIndices.length) {
         _source();
       }
       _framesWork = _NativeFrames(natural, _guard, maxLines, maxBoxes);
@@ -150,7 +132,7 @@ final class ForumBodyInlineEmphasisRowAllocationPreparation {
       rethrow;
     }
   }
-  final int maxLines, maxAtoms, maxMarks, maxBoxes;
+  final int maxLines, maxAtoms, maxBoxes;
   final double maxHeight;
   ForumBodyInlineEmphasisIsolationMetrics? _input;
   ForumBodyInlineParagraphLease? _natural, _isolated;
@@ -159,7 +141,6 @@ final class ForumBodyInlineEmphasisRowAllocationPreparation {
   _NativeFlowFrames? _naturalFrames, _isolatedFrames;
   List<Rect?> _extents = [];
   List<ForumBodyInlineEmphasisAllocatedRow> _rows = [];
-  List<ForumBodyInlineEmphasisAllocatedMark> _marks = [];
   List<ForumBodyInlineEmphasisAllocatedChild?> _children = [];
   ForumBodyInlineEmphasisRowAllocation? _result;
   var _phase = _AllocationPhase.naturalFrames;
@@ -178,10 +159,7 @@ final class ForumBodyInlineEmphasisRowAllocationPreparation {
       _guard();
       while (!isReady && used < maxParts) {
         _guard();
-        final input = _input!,
-            reflow = input.natural.reflow,
-            placement = reflow.placement,
-            page = input.natural.page;
+        final input = _input!, page = input.natural.page;
         switch (_phase) {
           case _AllocationPhase.naturalFrames:
           case _AllocationPhase.isolatedFrames:
@@ -237,53 +215,11 @@ final class ForumBodyInlineEmphasisRowAllocationPreparation {
                 );
               }
             } else {
-              _next(_AllocationPhase.markBounds);
-            }
-          case _AllocationPhase.markBounds:
-            if (_index < placement.marks.length) {
-              final mark = placement.marks[_index++];
-              if (mark.unitIndex != _index - 1 ||
-                  mark.lineIndex !=
-                      input
-                          .natural
-                          .geometry
-                          .targets[mark.unitIndex]
-                          .lineIndex) {
-                _source();
-              }
-              _include(
-                mark.lineIndex,
-                mark.fontBounds.shift(
-                  Offset(0, reflow.baselineDeltas[mark.lineIndex]),
-                ),
-              );
-            } else {
               _next(_AllocationPhase.rows);
             }
           case _AllocationPhase.rows:
             if (_index < input.reference.lineCount) {
               _allocate(_index++);
-            } else {
-              _next(_AllocationPhase.marks);
-            }
-          case _AllocationPhase.marks:
-            if (_index < placement.marks.length) {
-              final mark = placement.marks[_index++],
-                  row = _rows[mark.lineIndex];
-              final shift = Offset(
-                0,
-                reflow.baselineDeltas[mark.lineIndex] + row.naturalOffset.dy,
-              );
-              final bounds = mark.fontBounds.shift(shift);
-              _rect(bounds);
-              _marks.add((
-                unitIndex: mark.unitIndex,
-                lineIndex: mark.lineIndex,
-                fontIndex: mark.fontIndex,
-                offset: mark.baselineOrigin + mark.fontOffset + shift,
-                fontBounds: bounds,
-              ));
-              _paintBounds = _union(_paintBounds, bounds);
             } else {
               _next(_AllocationPhase.children);
             }
@@ -313,14 +249,12 @@ final class ForumBodyInlineEmphasisRowAllocationPreparation {
             _result = ForumBodyInlineEmphasisRowAllocation._(
               input,
               _rows,
-              _marks,
               _children,
               _height,
               _paintBounds,
               input.logicalRows.hasLogicalPaint,
             );
             _rows = [];
-            _marks = [];
             _children = [];
             _phase = _AllocationPhase.ready;
           case _AllocationPhase.ready:
@@ -450,7 +384,6 @@ final class ForumBodyInlineEmphasisRowAllocationPreparation {
     _isolatedFrames = null;
     _extents = [];
     _rows = [];
-    _marks = [];
     _children = [];
     _result = null;
     _paintBounds = null;
@@ -459,7 +392,7 @@ final class ForumBodyInlineEmphasisRowAllocationPreparation {
 
 /// Borrows the current already-prepared isolated parent. Replays only its
 /// ordinary glyph strips at the allocated native glyph offsets. Actual child
-/// and marker bindings plus background/decorative phase order are still needed.
+/// bindings and logical background phases are assembled separately.
 final class ForumBodyInlineEmphasisAllocatedParentView {
   ForumBodyInlineEmphasisAllocatedParentView.bind({
     required this.parent,
