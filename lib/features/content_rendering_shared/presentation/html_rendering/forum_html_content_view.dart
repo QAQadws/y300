@@ -11,12 +11,12 @@ import '../../application/forum_html_preparation_controller.dart';
 import '../../application/forum_html_preparation_executor.dart';
 import '../../application/forum_html_reader_font_binding.dart';
 import '../../application/forum_html_reader_preferences_controller.dart';
+import '../../application/forum_html_render_preferences_projection.dart';
 import '../../application/forum_html_render_preparer.dart';
 import '../../domain/models/forum_html_reader_preferences.dart';
 import '../contracts/forum_html_render_preparer.dart';
 import 'forum_html_preparation_placeholder.dart';
 import 'forum_html_reader_text_style.dart';
-import 'forum_html_style_policy.dart';
 import 'forum_native_body_flow.dart';
 
 /// Prepared HTML rendered as native document or compact content flow.
@@ -180,10 +180,11 @@ class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
       contentLayout: widget.contentLayout,
       theme: renderTheme,
       textStyle: fontBinding == null
-          ? ForumHtmlStylePolicy(
-              preferences,
+          ? resolveForumHtmlBaseTextStyle(
+              context,
+              options: preferences.renderOptions,
               theme: renderTheme,
-            ).baseTextStyle(context)
+            )
           : resolveForumHtmlReaderTextStyle(
               context,
               preferences: preferences,

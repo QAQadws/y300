@@ -49,7 +49,11 @@ void main() {
         ),
         home: Builder(
           builder: (context) {
-            style = _policy(options).baseTextStyle(context);
+            style = resolveForumHtmlBaseTextStyle(
+              context,
+              options: options,
+              theme: _theme,
+            );
             return const SizedBox.shrink();
           },
         ),

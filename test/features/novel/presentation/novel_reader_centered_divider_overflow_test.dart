@@ -1,8 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/services/novel_forum_html_render_theme_factory.dart';
@@ -12,7 +12,8 @@ import 'package:y300/features/novel/presentation/services/novel_reader_html_prep
 import 'package:y300/features/novel/presentation/services/novel_reader_hybrid_pagination_planner.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_renderer_validator.dart';
-import 'package:y300/features/content_rendering_shared/content_rendering.dart';
+
+import '../../../test_support/localized_test_app.dart';
 
 const _contentWidth = 418.0;
 const _contentHeight = 746.8;
@@ -66,11 +67,11 @@ void main() {
         ),
       ))!;
       const blockSpacingMode = ForumHtmlBlockSpacingMode.discuzLineDivs;
-      final baseStyle = ForumHtmlStylePolicy(
-        htmlPreferences,
+      final baseStyle = resolveForumHtmlBaseTextStyle(
+        hostContext,
+        options: htmlPreferences.renderOptions,
         theme: htmlTheme,
-        blockSpacingMode: blockSpacingMode,
-      ).baseTextStyle(hostContext);
+      );
       final key = NovelReaderPaginationKey(
         episodeId: chapter.episodeId,
         contentHash: chapter.contentHash,

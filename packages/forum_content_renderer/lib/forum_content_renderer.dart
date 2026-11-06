@@ -198,6 +198,7 @@ export 'src/style/forum_body_box_style.dart';
 export 'src/style/forum_body_style_options.dart';
 export 'src/style/forum_body_style_resolver.dart';
 export 'src/style/forum_body_style_cursor.dart';
+export 'src/style/forum_html_base_text_style.dart';
 
 export 'src/helpers/discuz_font_size_policy.dart' show DiscuzFontSizePolicy;
 export 'src/helpers/forum_collapse_chrome.dart' show ForumCollapseChrome;

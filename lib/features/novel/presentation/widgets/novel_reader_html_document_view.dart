@@ -102,10 +102,11 @@ class _NovelReaderHtmlDocumentViewState
   @override
   Widget build(BuildContext context) {
     final preferences = widget.preferencesAdapter.map(widget.preferences);
-    final bodyStyle = ForumHtmlStylePolicy(
-      preferences,
+    final bodyStyle = resolveForumHtmlBaseTextStyle(
+      context,
+      options: preferences.renderOptions,
       theme: widget.theme,
-    ).baseTextStyle(context).merge(widget.typography.body);
+    ).merge(widget.typography.body);
     return KeyedSubtree(
       key: const Key('novel-reader-html-document-view'),
       child: DefaultTextStyle.merge(

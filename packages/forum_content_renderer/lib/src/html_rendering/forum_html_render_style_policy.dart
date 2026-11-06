@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:html/dom.dart' as html_dom;
 import '../style/forum_body_quote_decoration.dart';
+import '../style/forum_html_base_text_style.dart';
 import '../models/forum_html_content_layout.dart';
 import '../models/forum_html_render_options.dart';
 import 'theme/forum_html_theme_context.dart';
@@ -23,15 +24,8 @@ class ForumHtmlRenderStylePolicy {
   final ForumHtmlContentLayout contentLayout;
   final bool hasTrailingContent;
 
-  TextStyle baseTextStyle(BuildContext context) {
-    final fallback = Theme.of(context).textTheme.bodyMedium;
-    final baseFontSize = fallback?.fontSize ?? 14;
-    return (fallback ?? const TextStyle()).copyWith(
-      color: theme.foreground,
-      fontSize: baseFontSize * options.fontScale,
-      height: options.lineHeightScale,
-    );
-  }
+  TextStyle baseTextStyle(BuildContext context) =>
+      resolveForumHtmlBaseTextStyle(context, options: options, theme: theme);
 
   StylesMap? customStylesFor(html_dom.Element element) {
     final styles = _elementStyles(element);

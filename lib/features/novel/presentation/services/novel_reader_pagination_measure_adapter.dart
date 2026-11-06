@@ -308,11 +308,11 @@ final class NovelReaderHtmlPaginationMeasureAdapter
            renderEnvironment ??
            NovelReaderPaginationRenderEnvironment.capture(
              hostContext,
-             textStyle: ForumHtmlStylePolicy(
-               preferences,
+             textStyle: resolveForumHtmlBaseTextStyle(
+               hostContext,
+               options: preferences.renderOptions,
                theme: theme,
-               blockSpacingMode: blockSpacingMode,
-             ).baseTextStyle(hostContext),
+             ),
              textAlign: TextAlign.start,
            );
 

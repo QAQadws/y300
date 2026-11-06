@@ -308,11 +308,11 @@ class _NovelReaderHtmlPagedSurfaceState
           final renderEnvironment =
               NovelReaderPaginationRenderEnvironment.capture(
                 context,
-                textStyle: ForumHtmlStylePolicy(
-                  htmlPreferences,
+                textStyle: resolveForumHtmlBaseTextStyle(
+                  context,
+                  options: htmlPreferences.renderOptions,
                   theme: widget.theme,
-                  blockSpacingMode: ForumHtmlBlockSpacingMode.discuzLineDivs,
-                ).baseTextStyle(context).merge(widget.typography.body),
+                ).merge(widget.typography.body),
                 textAlign: widget.typography.textAlign,
               );
           // Knob lives in NovelReaderSpacing.pagedPagePadding (via prefs
