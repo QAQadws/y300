@@ -40,6 +40,7 @@ final class ForumNativeBodyFlow extends StatefulWidget {
     this.onLayoutPhase,
     required this.errorBuilder,
     this.imageAnchorController,
+    this.contentLayout = ForumHtmlContentLayout.document,
   });
 
   final ForumHtmlPreparedRenderDocument prepared;
@@ -59,6 +60,7 @@ final class ForumNativeBodyFlow extends StatefulWidget {
   final ValueChanged<ForumHtmlBodyLayoutPhase>? onLayoutPhase;
   final WidgetBuilder errorBuilder;
   final ForumHtmlImageAnchorController? imageAnchorController;
+  final ForumHtmlContentLayout contentLayout;
 
   @override
   State<ForumNativeBodyFlow> createState() => _ForumNativeBodyFlowState();
@@ -141,6 +143,10 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
     builder: (context, constraints) {
       final document = _document;
       final width = constraints.maxWidth;
+      final compact = widget.contentLayout == ForumHtmlContentLayout.compact;
+      final compactMinWidth = compact && constraints.minWidth < width
+          ? constraints.minWidth
+          : null;
       final scaler = MediaQuery.textScalerOf(context);
       final direction = Directionality.of(context);
       final style = widget.textStyle.copyWith(
@@ -149,6 +155,7 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
       final inputs = (
         document,
         width,
+        compactMinWidth,
         scaler,
         direction,
         style,
@@ -174,7 +181,17 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!_current(run)) return;
           widget.onGeometry?.call(false, false);
-          unawaited(_start(run, document, width, scaler, direction, style));
+          unawaited(
+            _start(
+              run,
+              document,
+              width,
+              scaler,
+              direction,
+              style,
+              compactMinWidth,
+            ),
+          );
         });
       }
       final run = _shown;
@@ -192,7 +209,8 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
             ? ForumHtmlBodyLayoutPhase.built
             : ForumHtmlBodyLayoutPhase.preparing,
       );
-      return Column(
+      final body = Column(
+        mainAxisSize: compact ? MainAxisSize.min : MainAxisSize.max,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (run != null)
@@ -245,6 +263,14 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
           ],
         ],
       );
+      return compact
+          ? SizedBox(
+              width:
+                  run?.prefix?.width ??
+                  (error == null ? math.min(width, 48) : width),
+              child: body,
+            )
+          : body;
     },
   );
 
@@ -274,6 +300,7 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
     TextScaler scaler,
     TextDirection direction,
     TextStyle style,
+    double? compactMinWidth,
   ) async {
     try {
       final config = widget;
@@ -309,40 +336,60 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
       }
       run.images = images;
       run.host = config.imageHost;
-      final session = run.session = ForumBodyTextPageSession(
+      final reader = ForumBodyReaderStyle(
+        textStyle: style,
+        fontRevision: config.fontRevision,
+        linkColor: config.theme.link,
+        textDirection: direction,
+        paragraphAfter: config.preferences.typography.paragraphSpacing,
+        theme: config.theme,
+      );
+      ForumBodyTextPageSession openSession(
+        double bodyWidth, {
+        bool probe = false,
+      }) => ForumBodyTextPageSession(
         document: document,
-        width: width,
+        width: bodyWidth,
         height: _sliceHeight,
         layoutId: 'forum-flow-${identityHashCode(run)}',
-        reader: ForumBodyReaderStyle(
-          textStyle: style,
-          fontRevision: config.fontRevision,
-          linkColor: config.theme.link,
-          textDirection: direction,
-          paragraphAfter: config.preferences.typography.paragraphSpacing,
-          theme: config.theme,
-        ),
+        reader: reader,
         textScaler: scaler,
         cache: _cache,
         limits: _limits,
         collapses: collapses,
         tableExtent: ForumBodyTableExtent.natural,
+        intrinsicAvailableWidth: probe ? width : null,
         captureFloats: true,
         imageResolver: images.block,
         inlineImageResolver: (identity, element, style) =>
             images.inline(identity, element, style, scaler, _sliceHeight),
       );
+      if (compactMinWidth != null) {
+        run.compactProbe = (
+          min: compactMinWidth,
+          max: width,
+          open: openSession,
+        );
+      }
       run.step = () => _advance(run);
-      run.budget = session.layoutBudgetChanges.listen((_) {
-        if (_current(run) && run.waiting) {
-          run.waiting = false;
-          _FlowQueue.add(run.step!);
-        }
-      });
-      _FlowQueue.add(run.step!);
+      _useSession(run, openSession(width, probe: compactMinWidth != null));
     } catch (error, stack) {
       if (_current(run)) _fail(error, stack);
     }
+  }
+
+  void _useSession(_FlowRun run, ForumBodyTextPageSession session) {
+    unawaited(run.budget?.cancel());
+    run.session?.close();
+    run.session = session;
+    run.waiting = false;
+    run.budget = session.layoutBudgetChanges.listen((_) {
+      if (_current(run) && run.waiting) {
+        run.waiting = false;
+        _FlowQueue.add(run.step!);
+      }
+    });
+    _FlowQueue.add(run.step!);
   }
 
   void _advance(_FlowRun run) {
@@ -350,6 +397,24 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
     final session = run.session!;
     try {
       final step = session.advance(maxEvents: 16, maxLines: 4);
+      run.waiting = step.waitingForLayoutBudget;
+      if (run.compactProbe case final probe?) {
+        // Measure with the same formatting and resource inputs as the visible
+        // body. Probe slices must never appear at a provisional width.
+        if (!step.isComplete) {
+          if (!run.waiting) _FlowQueue.add(run.step!);
+          return;
+        }
+        run.compactProbe = null;
+        final preferred = session.intrinsicWidths!.preferred;
+        final width = preferred.isFinite && preferred > 0
+            ? preferred.ceilToDouble().clamp(probe.min, probe.max).toDouble()
+            : probe.max;
+        if (width < probe.max) {
+          _useSession(run, probe.open(width));
+          return;
+        }
+      }
       final snapshot = session.snapshot;
       if (snapshot.length != run.prefix?.length ||
           snapshot.isComplete != run.prefix?.isComplete) {
@@ -359,7 +424,6 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
         run.prefix = snapshot;
         _present(run);
       }
-      run.waiting = step.waitingForLayoutBudget;
       if (!step.isComplete && !run.waiting) _FlowQueue.add(run.step!);
     } catch (error, stack) {
       _fail(error, stack);
@@ -583,6 +647,12 @@ final class _FlowRun {
   _TableResult? initialTable;
 
   ForumBodyTextPageSession? session;
+  ({
+    double min,
+    double max,
+    ForumBodyTextPageSession Function(double width) open,
+  })?
+  compactProbe;
   ForumBodyTextPageSnapshot? prefix;
   ForumHtmlImageHost? host;
   ForumNativeBodyImages? images;
@@ -627,6 +697,7 @@ final class _FlowRun {
   void close() {
     _FlowQueue.remove(step);
     unawaited(budget?.cancel());
+    compactProbe = null;
     cancelSourceProbe();
     initialSlice?.close();
     initialTable?.slice.close();

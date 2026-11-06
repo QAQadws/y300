@@ -184,6 +184,7 @@ class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
         key: ObjectKey(_expansion),
         prepared: document,
         preferences: preferences,
+        contentLayout: widget.contentLayout,
         theme: renderTheme,
         textStyle: fontBinding == null
             ? ForumHtmlStylePolicy(
