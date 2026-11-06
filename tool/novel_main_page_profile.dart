@@ -12,6 +12,7 @@ import 'package:y300/features/novel/presentation/novel_reader_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 import 'novel_inline_soft_space_profile.dart';
+import 'novel_main_page_mode_cycle.dart';
 import 'novel_main_page_profile_data.dart';
 import 'novel_main_page_profile_observation.dart';
 import 'novel_main_page_profile_timings.dart';
@@ -23,6 +24,8 @@ import 'novel_profile_memory.dart';
 const _baseline = bool.fromEnvironment('PROFILE_BASELINE');
 const _memoryMode = bool.fromEnvironment('PROFILE_MEMORY');
 const _chapterCycle = bool.fromEnvironment('PROFILE_CHAPTER_CYCLE');
+const _modeCycle = bool.fromEnvironment('PROFILE_MODE_CYCLE');
+const _transitionCycle = _chapterCycle || _modeCycle;
 const _inlineSoftSpace = bool.fromEnvironment('PROFILE_INLINE_SOFT_SPACE');
 const _warmReturn = bool.fromEnvironment('PROFILE_WARM_RETURN');
 const _corpus = String.fromEnvironment(
@@ -45,10 +48,10 @@ const _config = NovelProfileBaselineConfig(
 final _runtimeErrors = <String>[];
 const _memoryOpens = 20;
 const _memorySettle = Duration(milliseconds: 250);
-final _warmups = _baseline || (_memoryMode && !_chapterCycle)
+final _warmups = _baseline || (_memoryMode && !_transitionCycle)
     ? _config.warmupsPerFixture
     : 0;
-final _opens = _memoryMode && !_chapterCycle
+final _opens = _memoryMode && !_transitionCycle
     ? _memoryOpens
     : (_baseline ? _config.opensPerFixture : 1);
 final _turnGroups = _memoryMode ? 0 : (_baseline ? _config.turnGroups : 1);
@@ -68,10 +71,13 @@ void main() {
       'Memory sampling requires one backend and no timing diagnostics',
     );
   }
-  if (_chapterCycle &&
-      (!_memoryMode || _backend != 'native' || _corpus != 'baseline')) {
+  if (_transitionCycle &&
+      ((_chapterCycle && _modeCycle) ||
+          !_memoryMode ||
+          _backend != 'native' ||
+          _corpus != 'baseline')) {
     throw ArgumentError(
-      'Chapter cycling uses the native memory profile and built-in chapters',
+      'Select one native memory transition cycle with the built-in corpus',
     );
   }
   final previousError = FlutterError.onError;
@@ -243,6 +249,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       'baseline': _baseline,
       'memoryMode': _memoryMode,
       if (_chapterCycle) 'chapterCycle': true,
+      if (_modeCycle) 'modeCycle': true,
       'sampleConfig': _memoryMode
           ? {
               'warmupsPerFixture': _warmups,
@@ -251,6 +258,10 @@ class _MainPageProfileState extends State<_MainPageProfile> {
               if (_chapterCycle) ...{
                 'chapterWarmups': _config.warmupsPerFixture,
                 'chapterRoundTrips': _memoryOpens,
+              },
+              if (_modeCycle) ...{
+                'modeWarmups': _config.warmupsPerFixture,
+                'modeRoundTrips': _memoryOpens,
               },
             }
           : _config.toJson(),
@@ -287,7 +298,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
               throw StateError('Memory warmup failed');
             }
           }
-          if (_memoryMode && !_chapterCycle) {
+          if (_memoryMode && !_transitionCycle) {
             await _sampleMemory('warmed', native, fixture.name);
           }
           for (var i = 0; i < _opens; i++) {
@@ -415,7 +426,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       if (_memoryMode)
         'expectedMemorySamples':
             matrix.length *
-            (_chapterCycle ? 2 + _memoryOpens : 1 + 2 * _memoryOpens),
+            (_transitionCycle ? 2 + _memoryOpens : 1 + 2 * _memoryOpens),
       'hasRequiredSampleCounts': _baseline && _config.hasRequiredSampleCounts,
       'baselineSamplingCompleted':
           passed && _baseline && _config.hasRequiredSampleCounts,
@@ -453,7 +464,6 @@ class _MainPageProfileState extends State<_MainPageProfile> {
     final first = episodes.first.episodeId;
     final second = episodes.last.episodeId;
     final owner = initial.nativeOwner!;
-    final id = run['id']! as int;
     var current = initial;
     Future<void> hop(String target, {required bool forward}) async {
       final previous = current.nativeController!;
@@ -483,11 +493,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
             owner.activeCacheHandles == 1 &&
             owner.retainedCacheGenerations == 1 &&
             owner.preparationCache.inFlightCount == 0 &&
-            previous.isClosed &&
-            previous.snapshot == null &&
-            previous.visibleView == null &&
-            previous.readyTarget == null &&
-            !previous.hasPendingNavigation;
+            profilePagedControllerRetired(previous);
       });
       final coverage = current.nativeController!.visibleView!.coverage;
       if (!coverage.hasLocations || coverage.hasClippedGlyphs) {
@@ -496,15 +502,29 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       run['chapterTransitions'] = (run['chapterTransitions'] as int? ?? 0) + 1;
     }
 
-    final warmups = _config.warmupsPerFixture;
-    for (var i = 1; i <= warmups + _memoryOpens; i++) {
+    return _sampleRoundTrips(run, 'chapter', () async {
       await hop(second, forward: true);
       await hop(first, forward: false);
+      return current;
+    });
+  }
+
+  Future<ProfileReaderObservation> _sampleRoundTrips(
+    Map<String, Object?> run,
+    String scenario,
+    Future<ProfileReaderObservation> Function() next,
+  ) async {
+    final id = run['id']! as int;
+    final warmups = _config.warmupsPerFixture;
+    late ProfileReaderObservation current;
+    for (var i = 1; i <= warmups + _memoryOpens; i++) {
+      current = await next();
       if (i < warmups) continue;
       final round = i - warmups;
-      run['chapterRoundTrips'] = round;
+      final owner = current.nativeOwner!;
+      run['${scenario}RoundTrips'] = round;
       _emit({
-        'event': 'chapter_round_trip',
+        'event': '${scenario}_round_trip',
         'run': id,
         'round': round,
         'activeCacheHandles': owner.activeCacheHandles,
@@ -513,7 +533,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
         'estimatedRetainedBytes': owner.estimatedRetainedBytes,
       });
       await _sampleMemory(
-        round == 0 ? 'chapter_warmed' : 'chapter_returned',
+        round == 0 ? '${scenario}_warmed' : '${scenario}_returned',
         true,
         run['fixture']! as String,
         run: id,
@@ -672,6 +692,19 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       run['pageCount'] = latest.count;
       if (_chapterCycle) {
         latest = await _cycleChapters(key, args, latest, run);
+      } else if (_modeCycle) {
+        final cycle = NovelProfileModeCycle(
+          readerRoute: route,
+          waitForReader: (accepted) => _wait(key, args, accepted),
+          nextFrame: _nextFrame,
+          loadProgress: () => widget.data.getChapterProgress(
+            novelId: args.novelId,
+            episodeId: args.episodeId,
+          ),
+          recordStep: (step) => run['modeStep'] = step,
+        );
+        await cycle.seed(latest);
+        latest = await _sampleRoundTrips(run, 'mode', cycle.roundTrip);
       } else if (_memoryMode && kind == 'open') {
         await _sampleMemory('visible', native, fixture.name, run: id);
       }

@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_overlay_scaffold.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_preferences.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_native_paged_controller.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_native_page_work.dart';
@@ -13,6 +14,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_native_page
 import 'package:y300/features/novel/presentation/services/novel_reader_native_owner.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_delayed_loading_boundary.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_html_paged_surface.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_native_flow_host.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_native_paged_surface.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_native_paged_viewport.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -36,6 +38,10 @@ final class ProfileReaderObservation {
   bool Function()? legacyCachesReleased;
   NovelReaderNativePageWork? nativeWork;
   NovelReaderNativePagedController? nativeController;
+  NovelReaderNativeFlowHostState? nativeFlow;
+  ForumBodyTextPageSession? flowSession;
+  bool flowReady = false;
+  NovelReaderFlowMode? persistedFlowMode;
   Object? _completePlan;
   Object? _planOwner;
 
@@ -48,6 +54,15 @@ final class ProfileReaderObservation {
       page == previous.page &&
       count == previous.count;
 }
+
+bool profilePagedControllerRetired(
+  NovelReaderNativePagedController controller,
+) =>
+    controller.isClosed &&
+    controller.snapshot == null &&
+    controller.visibleView == null &&
+    controller.readyTarget == null &&
+    !controller.hasPendingNavigation;
 
 /// Read current typed inputs only for the exact mounted delivery, outside frame
 /// timing windows. This proves input propagation, not glyph coverage/locl by
@@ -131,6 +146,18 @@ ProfileReaderObservation observeProfileReader(
     } else if (widget is NovelReaderNativePagedViewport) {
       native = widget.controller;
       return;
+    } else if (widget is NovelReaderNativeFlowHost) {
+      observation.nativeOwner = widget.owner;
+      observation.nativeFlow =
+          (element as StatefulElement).state as NovelReaderNativeFlowHostState;
+    } else if (widget is ForumBodyFlowSliver) {
+      final boundary = element.renderObject;
+      observation.flowSession = widget.session;
+      observation.flowReady =
+          widget.isCurrentLayout &&
+          boundary is RenderForumBodyFlowBoundary &&
+          boundary.finalBoundaryKnown;
+      return;
     } else if (widget is NovelReaderHtmlPagedSurface) {
       legacy = widget;
     } else if (widget is Semantics &&
@@ -188,6 +215,7 @@ ProfileReaderObservation observeProfileReader(
   observation.failed |= asyncState.hasError;
   final state = asyncState.asData?.value;
   if (state == null) return observation;
+  observation.persistedFlowMode = state.persistedPreferences.flowMode;
   observation.businessController = container.read(provider.notifier);
   final snapshot = state.progressSnapshot;
   final nativeController = native;
@@ -246,6 +274,8 @@ ProfileReaderObservation observeProfileReader(
   final route = ModalRoute.of(context);
   observation.frontmost = route?.isCurrent == true;
   final routeSettled = route?.animation?.status == AnimationStatus.completed;
+  observation.flowReady &=
+      observation.frontmost && routeSettled && !covered && !pending;
   final matchesTarget = profileUncoveredTargetMatches(
     mountedPage: observation.page,
     pageCount: observation.count,

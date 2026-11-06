@@ -6,6 +6,7 @@ param(
     [switch]$MainPage,
     [switch]$Memory,
     [switch]$ChapterCycle,
+    [switch]$ModeCycle,
     [switch]$InlineSoftSpace,
     [switch]$WarmReturn,
     [ValidateSet('native', 'legacy', 'both')]
@@ -42,8 +43,8 @@ if ($Memory) {
     }
     . (Join-Path $PSScriptRoot 'novel_profile_android_memory.ps1')
 }
-if ($ChapterCycle -and (-not $Memory -or $Backend -ne 'native' -or $Corpus -ne 'baseline')) {
-    throw '-ChapterCycle requires -Memory, -Backend native and the built-in chapters.'
+if (($ChapterCycle -or $ModeCycle) -and (($ChapterCycle -and $ModeCycle) -or -not $Memory -or $Backend -ne 'native' -or $Corpus -ne 'baseline')) {
+    throw 'Select one of -ChapterCycle and -ModeCycle with -Memory, -Backend native and the built-in corpus.'
 }
 
 function Read-Utf8([string]$Path) {
@@ -160,6 +161,7 @@ flutter:
         if ($Baseline) { $runArguments += '--dart-define=PROFILE_BASELINE=true' }
         if ($Memory) { $runArguments += '--dart-define=PROFILE_MEMORY=true' }
         if ($ChapterCycle) { $runArguments += '--dart-define=PROFILE_CHAPTER_CYCLE=true' }
+        if ($ModeCycle) { $runArguments += '--dart-define=PROFILE_MODE_CYCLE=true' }
         if ($MainPage) { $runArguments += "--dart-define=PROFILE_BACKEND=$Backend" }
         if ($MainPage) { $runArguments += "--dart-define=PROFILE_CORPUS=$Corpus" }
         if ($InlineSoftSpace) { $runArguments += '--dart-define=PROFILE_INLINE_SOFT_SPACE=true' }
