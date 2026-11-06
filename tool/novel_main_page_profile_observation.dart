@@ -28,6 +28,7 @@ final class ProfileReaderObservation {
   bool ready = false;
   bool businessConfirmed = false;
   bool uncoveredTarget = false;
+  bool frontmost = false;
   bool failed = false;
   NovelReaderNativeOwner? nativeOwner;
   NovelReaderController? businessController;
@@ -35,6 +36,17 @@ final class ProfileReaderObservation {
   bool Function()? legacyCachesReleased;
   NovelReaderNativePageWork? nativeWork;
   NovelReaderNativePagedController? nativeController;
+  Object? _completePlan;
+  Object? _planOwner;
+
+  bool retainsCompletePlanFrom(ProfileReaderObservation previous) =>
+      _completePlan != null &&
+      identical(_completePlan, previous._completePlan) &&
+      identical(_planOwner, previous._planOwner) &&
+      identical(businessController, previous.businessController) &&
+      paginationKey == previous.paginationKey &&
+      page == previous.page &&
+      count == previous.count;
 }
 
 /// Read current typed inputs only for the exact mounted delivery, outside frame
@@ -186,8 +198,13 @@ ProfileReaderObservation observeProfileReader(
     if (observation.page case final page?) {
       observation.nativeWork = nativeController.viewForPage(page)?.work;
     }
-    observation.count = nativeController.snapshot?.length ?? 0;
-    observation.complete = nativeController.snapshot?.isComplete ?? false;
+    final plan = nativeController.snapshot;
+    observation.count = plan?.length ?? 0;
+    observation.complete = plan?.isComplete ?? false;
+    if (observation.complete && observation.nativeOwner != null) {
+      observation._completePlan = plan;
+      observation._planOwner = observation.nativeOwner;
+    }
     observation.paginationKey = nativeController.paginationKey;
     observation.failed |= nativeController.error != null;
     pending |=
@@ -209,6 +226,13 @@ ProfileReaderObservation observeProfileReader(
     final measures = surface.paginationMeasureCache;
     final boundaries = surface.paginationBoundaryCache;
     final prepared = surface.preparedChapterCache;
+    // The comparison route starts with an empty per-reader cache and uses
+    // one chapter/geometry here. Require its single final plan and the same
+    // mounted keyed PageView, which consumes that plan.
+    if (observation.complete && plans?.length == 1) {
+      observation._completePlan = legacyViewport;
+      observation._planOwner = plans;
+    }
     observation.legacyCachesReleased = () =>
         plans?.isClosed == true &&
         plans?.estimatedRetainedBytes == 0 &&
@@ -220,6 +244,7 @@ ProfileReaderObservation observeProfileReader(
         prepared?.estimatedRetainedBytes == 0;
   }
   final route = ModalRoute.of(context);
+  observation.frontmost = route?.isCurrent == true;
   final routeSettled = route?.animation?.status == AnimationStatus.completed;
   final matchesTarget = profileUncoveredTargetMatches(
     mountedPage: observation.page,
@@ -244,7 +269,7 @@ ProfileReaderObservation observeProfileReader(
   if (observeOpening &&
       matchesTarget &&
       !observation.failed &&
-      route?.isCurrent == true) {
+      observation.frontmost) {
     observation.uncoveredTarget =
         nativeController != null ||
         _hasLaidOutLegacyText(legacyViewport!, page!);

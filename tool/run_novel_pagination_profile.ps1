@@ -5,6 +5,7 @@ param(
     [switch]$Baseline,
     [switch]$MainPage,
     [switch]$InlineSoftSpace,
+    [switch]$WarmReturn,
     [ValidateSet('native', 'legacy', 'both')]
     [string]$Backend = 'both',
     [ValidateSet('baseline', 'long-text', 'semantic', 'ruby-gaps', 'language', 'ruby-nested', 'ruby-mixed-nested', 'ruby-nested-columns')]
@@ -26,6 +27,9 @@ if (-not $PrepareOnly -and [string]::IsNullOrWhiteSpace($Device)) {
 }
 if ($InlineSoftSpace -and -not $MainPage) {
     throw '-InlineSoftSpace requires -MainPage.'
+}
+if ($WarmReturn -and -not $MainPage) {
+    throw '-WarmReturn requires -MainPage.'
 }
 if ($Corpus -ne 'baseline' -and -not $MainPage) {
     throw "-Corpus $Corpus requires -MainPage."
@@ -146,6 +150,7 @@ flutter:
         if ($MainPage) { $runArguments += "--dart-define=PROFILE_BACKEND=$Backend" }
         if ($MainPage) { $runArguments += "--dart-define=PROFILE_CORPUS=$Corpus" }
         if ($InlineSoftSpace) { $runArguments += '--dart-define=PROFILE_INLINE_SOFT_SPACE=true' }
+        if ($WarmReturn) { $runArguments += '--dart-define=PROFILE_WARM_RETURN=true' }
         $script:profileSuiteResult = $null
         $script:profileFrameReports = 0
         & flutter @runArguments 2>&1 | ForEach-Object {

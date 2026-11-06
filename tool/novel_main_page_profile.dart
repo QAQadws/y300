@@ -21,6 +21,7 @@ import 'novel_pagination_profile_fixtures.dart';
 
 const _baseline = bool.fromEnvironment('PROFILE_BASELINE');
 const _inlineSoftSpace = bool.fromEnvironment('PROFILE_INLINE_SOFT_SPACE');
+const _warmReturn = bool.fromEnvironment('PROFILE_WARM_RETURN');
 const _corpus = String.fromEnvironment(
   'PROFILE_CORPUS',
   defaultValue: 'baseline',
@@ -113,10 +114,15 @@ class _MainPageProfileState extends State<_MainPageProfile> {
     bool Function(ProfileReaderObservation) accepted, {
     bool Function()? observeOpening,
     Duration timeout = const Duration(seconds: 25),
+    bool sampleEveryFrame = false,
   }) async {
     final watch = Stopwatch()..start();
     while (watch.elapsed < timeout) {
-      await _nextFrame();
+      if (sampleEveryFrame) {
+        await SchedulerBinding.instance.endOfFrame;
+      } else {
+        await _nextFrame();
+      }
       final context = key.currentContext;
       if (context == null || !context.mounted) continue;
       final observation = observeProfileReader(
@@ -210,6 +216,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       'baseline': _baseline,
       'sampleConfig': _config.toJson(),
       'inlineSoftSpaceRequested': _inlineSoftSpace,
+      'warmReturnRequested': _warmReturn,
       'corpus': _corpus,
     });
     var inlineSoftSpaceCases = 0;
@@ -317,6 +324,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
             'routeSettledUs',
             'firstReadableUs',
             'planCompleteUs',
+            if (_warmReturn) 'warmReturnUs',
           ])
             metric: profileDistribution(
               successfulOpens.map((run) => run[metric]! as int),
@@ -508,6 +516,44 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       }
       run['completeUs'] = clock.elapsedMicroseconds;
       run['pageCount'] = latest.count;
+      if (_warmReturn && kind != 'turns') {
+        final before = latest;
+        final cover = PageRouteBuilder<void>(
+          transitionDuration: Duration.zero,
+          reverseTransitionDuration: Duration.zero,
+          pageBuilder: (_, _, _) => const Scaffold(body: SizedBox.expand()),
+        );
+        unawaited(navigator.push(cover));
+        try {
+          await _wait(
+            key,
+            args,
+            (value) =>
+                cover.isCurrent &&
+                !value.frontmost &&
+                (!native || value.nativeController?.isSuspended == true),
+          );
+          begin('warm-return');
+          final returnClock = Stopwatch()..start();
+          navigator.pop();
+          latest = await _wait(
+            key,
+            args,
+            (value) => value.uncoveredTarget && value.ready,
+            observeOpening: () => true,
+            sampleEveryFrame: true,
+          );
+          run['warmReturnUs'] = returnClock.elapsedMicroseconds;
+          end();
+        } finally {
+          if (cover.isCurrent) navigator.pop();
+        }
+        if (!latest.retainsCompletePlanFrom(before)) {
+          throw StateError('Reader did not return to its resident plan');
+        }
+        if (native) _emitPageWork(id, 'warm-return', latest);
+        checkVisiblePage('warm-return', latest);
+      }
       final turnUs = <int>[];
       var forward = true;
       for (var i = 0; i < turns; i++) {

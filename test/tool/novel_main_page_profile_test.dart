@@ -439,6 +439,31 @@ void main() {
           expect(advances.maxUs, inInclusiveRange(1, advances.totalUs));
           expect(advances.overBudgetSteps, inInclusiveRange(0, advances.steps));
         }
+        if (probeOpening) {
+          final before = observation;
+          final cover = PageRouteBuilder<void>(
+            transitionDuration: Duration.zero,
+            reverseTransitionDuration: Duration.zero,
+            pageBuilder: (_, _, _) => const Scaffold(),
+          );
+          final covered = navigator.currentState!.push(cover);
+          final hidden = await wait(
+            (value) =>
+                cover.isCurrent &&
+                !value.frontmost &&
+                (!native || value.nativeController?.isSuspended == true),
+            observeOpening: true,
+          );
+          expect(hidden.uncoveredTarget, isFalse);
+          navigator.currentState!.pop();
+          await covered;
+          observation = await wait(
+            (value) => value.uncoveredTarget && value.ready,
+            observeOpening: true,
+          );
+          expect(observation.retainsCompletePlanFrom(before), isTrue);
+        }
+        final beforeReflow = observation;
         final originalKey = observation.paginationKey;
         observation.businessController!.previewPreferences(
           profileReaderPreferences.copyWith(fontSize: 22),
@@ -452,6 +477,7 @@ void main() {
         // Read-only reflow may keep the old business key. The tool observes the
         // new mounted layout without asking the reader to confirm a new anchor.
         expect(observation.paginationKey, isNot(originalKey));
+        expect(observation.retainsCompletePlanFrom(beforeReflow), isFalse);
         checkLanguages(observation);
         for (final page
             in scenario.fixture == null || stored ? [1] : [1, 2, 3, 2, 1]) {
