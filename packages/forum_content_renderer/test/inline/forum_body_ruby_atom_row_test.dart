@@ -239,7 +239,7 @@ void main() {
           final fragment =
               visible.takeFragments().single as ForumBodyPreparedInlineFragment;
           expect(fragment.nativeLeases.length, 203);
-          expect(page.cache.pictureBuildCount, 202);
+          expect(page.cache.pictureBuildCount, 4);
           final baselines = <(int, int), double>{};
           for (final (column, parts) in source.parts.indexed) {
             for (final (rank, part) in parts.indexed) {

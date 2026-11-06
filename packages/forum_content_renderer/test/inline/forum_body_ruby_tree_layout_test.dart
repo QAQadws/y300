@@ -926,7 +926,7 @@ void main() {
         expect(raw.calls, calls);
         expect(cache.entryCount, 1);
         expect(cache.activeLeases, 3);
-        expect(cache.preparedPictureCount, 3);
+        expect(cache.preparedPictureCount, 1);
         expect(
           view.nativeLeases.every((l) => l is ForumBodyTextBandChildLease),
           isTrue,
@@ -1057,7 +1057,7 @@ void main() {
         expect(view.members, hasLength(31));
         expect(view.nativeLeases, hasLength(31));
         expect(cache.entryCount, 1);
-        expect(cache.preparedPictureCount, 31);
+        expect(cache.preparedPictureCount, 1);
         expect(view.members.map((m) => m.content.path).toSet(), hasLength(31));
         for (final member in view.members) {
           final boxes = view.selectionBoxes(

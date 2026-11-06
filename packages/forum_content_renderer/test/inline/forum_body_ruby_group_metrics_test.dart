@@ -192,7 +192,7 @@ void main() {
       );
       expect(group.placeholderDimensions, metrics.placeholderDimensions);
       expect(cache.layoutBuildCount, 1);
-      expect(cache.pictureBuildCount, 2);
+      expect(cache.pictureBuildCount, 1);
       group.close();
       cache.close();
       // Numeric plan data does not retain its owner or claim readable content.

@@ -82,7 +82,7 @@ void main() {
           expect(layout.nativeLeases.length, request.nativeHandleCount);
           expect(layout.isOwnedBy(fixture.cache), isTrue);
           expect(layout.size, metrics.size);
-          expect(fixture.cache.pictureBuildCount, request.nativeHandleCount);
+          expect(fixture.cache.pictureBuildCount, dense ? 2 : 1);
           for (var i = 0; i < request.spans.length; i++) {
             expect(
               layout.contentForSpan(i),

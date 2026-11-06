@@ -541,12 +541,29 @@ void main() {
       accepted.close();
       expect(band.preparePaint(0), isFalse);
       expect(band.approximatePictureBytes, bytes);
+      final borrowed = band.recordPaint(1);
+      expect(borrowed.recordsPicture, isFalse);
+      expect(borrowed.approximateBytes, 0);
+      expect(band.isPaintPrepared(1), isFalse);
+      borrowed.close();
+      expect(band.approximatePictureBytes, bytes);
       expect(band.preparePaint(1), isTrue);
-      expect(band.preparedPictureCount, 2);
+      expect(band.preparedPictureCount, 1);
       final painted = ui.PictureRecorder();
       child.paint(Canvas(painted), Offset.zero);
       painted.endRecording().dispose();
-      band.dispose();
+      final previousDispose = ui.Picture.onDispose;
+      var disposed = 0;
+      ui.Picture.onDispose = (picture) {
+        previousDispose?.call(picture);
+        disposed++;
+      };
+      try {
+        band.dispose();
+      } finally {
+        ui.Picture.onDispose = previousDispose;
+      }
+      expect(disposed, 1);
       expect(band.preparedPictureCount, 0);
       expect(band.approximatePictureBytes, 0);
       expect(child.isPaintPrepared, isFalse);
@@ -578,6 +595,27 @@ void main() {
       expect(second.isDisposed, isFalse);
     },
   );
+
+  test('independent pending slots can still be admitted out of order', () {
+    final band = ForumBodyTextBandLayout.create(
+      content: ForumBodyTextBandContent(
+        contexts: contexts(['<span>AB</span>', '<b>xy</b>', '<i>cd</i>']),
+      ),
+    );
+    addTearDown(band.dispose);
+    final first = band.recordPaint(0);
+    final second = band.recordPaint(1);
+    expect((first.recordsPicture, second.recordsPicture), (true, true));
+    expect(band.pendingPictureCount, 2);
+    final bytes = first.approximateBytes + second.approximateBytes;
+    band.adoptPaint(second);
+    expect((band.isPaintPrepared(0), band.isPaintPrepared(1)), (false, true));
+    band.adoptPaint(first);
+    expect(band.preparePaint(2), isTrue);
+    expect(band.preparedPictureCount, 2);
+    expect(band.pendingPictureCount, 0);
+    expect(band.approximatePictureBytes, bytes);
+  });
 
   test(
     'owner retirement inside Picture.onCreate releases the unadmitted allocation',

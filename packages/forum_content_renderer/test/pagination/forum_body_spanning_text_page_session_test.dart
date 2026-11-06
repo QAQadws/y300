@@ -143,7 +143,10 @@ void main() {
                   ? (annotationGap ? 184 : 103)
                   : (annotationGap ? 8 : 7);
               expect(fragment.nativeLeases.length, handles + extra);
-              expect(f.cache.pictureBuildCount, handles - 1 + extra);
+              expect(
+                f.cache.pictureBuildCount,
+                dense ? (annotationGap ? 3 : 2) : 1,
+              );
               for (final window in fragment.view.content.contexts) {
                 final text = window.content.projection.text;
                 if (text.isEmpty) continue;
@@ -250,7 +253,7 @@ void main() {
         try {
           final nonempty = (left.isEmpty ? 0 : 1) + (right.isEmpty ? 0 : 1);
           expect(fragment.nativeLeases.length, 5 + nonempty);
-          expect(f.cache.pictureBuildCount, 2 + nonempty);
+          expect(f.cache.pictureBuildCount, 1);
           final window = fragment.view.content.contexts.singleWhere(
             (w) => w.content.projection.text == ' ',
           );
@@ -285,7 +288,7 @@ void main() {
         final fragment = fragments.single as ForumBodyPreparedInlineFragment;
         expect(fragment.projection.text, 'wordxy');
         expect(fragment.nativeLeases.length, 6);
-        expect(f.cache.pictureBuildCount, 3);
+        expect(f.cache.pictureBuildCount, 1);
       } finally {
         for (final f in fragments) {
           f.close();

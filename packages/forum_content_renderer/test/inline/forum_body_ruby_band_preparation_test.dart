@@ -10,39 +10,36 @@ void ownerAlive() {}
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test(
-    'one shared glyph build and two picture records use three distinct advances',
-    () {
-      final owner = ForumBodyParagraphCache(
-        maxEntries: 1,
-        maxEstimatedBytes: 1 << 20,
-      );
-      addTearDown(owner.close);
-      final input = rubyPairInput();
-      final band = ForumBodyTextBandContent(
-        contexts: [input.base, input.annotation],
-      );
-      final prepare = ForumBodyRubyGroupPreparation.fromRequests(
-        cache: owner,
-        base: ForumBodyTextRequest.bandChild(band: band, childIndex: 0),
-        annotation: ForumBodyTextRequest.bandChild(band: band, childIndex: 1),
-        ensureOwner: ownerAlive,
-      );
-      addTearDown(prepare.close);
-      final steps = [prepare.advance(), prepare.advance(), prepare.advance()];
-      expect(steps.map((step) => step.layoutsBuilt), [1, 0, 0]);
-      expect(steps.map((step) => step.picturesBuilt), [0, 1, 1]);
-      expect(steps.map((step) => step.partsPrepared), [0, 1, 1]);
-      expect(steps.map((step) => step.madeProgress), everyElement(isTrue));
-      expect(steps.map((step) => step.isReady), [false, false, true]);
-      expect(prepare.preparedPartCount, 2);
-      expect(owner.activeLeases, 2);
-      final group = prepare.takeLayout();
-      expect(group.size.width, 40);
-      group.close();
-      expect(owner.activeLeases, 0);
-    },
-  );
+  test('one band picture serves both independently prepared children', () {
+    final owner = ForumBodyParagraphCache(
+      maxEntries: 1,
+      maxEstimatedBytes: 1 << 20,
+    );
+    addTearDown(owner.close);
+    final input = rubyPairInput();
+    final band = ForumBodyTextBandContent(
+      contexts: [input.base, input.annotation],
+    );
+    final prepare = ForumBodyRubyGroupPreparation.fromRequests(
+      cache: owner,
+      base: ForumBodyTextRequest.bandChild(band: band, childIndex: 0),
+      annotation: ForumBodyTextRequest.bandChild(band: band, childIndex: 1),
+      ensureOwner: ownerAlive,
+    );
+    addTearDown(prepare.close);
+    final steps = [prepare.advance(), prepare.advance(), prepare.advance()];
+    expect(steps.map((step) => step.layoutsBuilt), [1, 0, 0]);
+    expect(steps.map((step) => step.picturesBuilt), [0, 1, 0]);
+    expect(steps.map((step) => step.partsPrepared), [0, 1, 1]);
+    expect(steps.map((step) => step.madeProgress), everyElement(isTrue));
+    expect(steps.map((step) => step.isReady), [false, false, true]);
+    expect(prepare.preparedPartCount, 2);
+    expect(owner.activeLeases, 2);
+    final group = prepare.takeLayout();
+    expect(group.size.width, 40);
+    group.close();
+    expect(owner.activeLeases, 0);
+  });
 
   test(
     'cached-only preparation neither shapes nor records even with a glyph-only hit',
@@ -73,7 +70,7 @@ void main() {
       expect(owner.pictureBuildCount, 0);
       expect(prepare.preparedPartCount, 0);
       expect(prepare.advance().picturesBuilt, 1);
-      expect(prepare.advance().picturesBuilt, 1);
+      expect(prepare.advance().picturesBuilt, 0);
       prepare.takeLayout().close();
       final warm = ForumBodyRubyGroupPreparation.fromRequests(
         cache: owner,
@@ -84,7 +81,7 @@ void main() {
       addTearDown(warm.close);
       expect(warm.tryPrepareCached(), isTrue);
       expect(owner.layoutBuildCount, 1);
-      expect(owner.pictureBuildCount, 2);
+      expect(owner.pictureBuildCount, 1);
       warm.takeLayout().close();
       expect(owner.activeLeases, 0);
     },

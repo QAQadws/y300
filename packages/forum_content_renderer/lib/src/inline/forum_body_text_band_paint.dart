@@ -2,13 +2,14 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
 
-/// Internal ownership for one band's bounded drawing slots, not an independent
-/// cache/budget. The owner cache must admit each ticket before committing it.
+/// Own the band's admitted display lists. A complete recording supplies all
+/// slots; concurrent unadmitted tickets can still record one slot separately.
 final class ForumBodyTextBandPaintStore {
   ForumBodyTextBandPaintStore(int slots, this._draw)
     : _pictures = List<ui.Picture?>.filled(slots, null);
   void Function(Canvas)? _draw;
   final List<ui.Picture?> _pictures;
+  ui.Picture? _bandPicture;
   final _pending = <int, ForumBodyTextBandPaint>{};
   int _preparedCount = 0;
   int _bytes = 0;
@@ -26,13 +27,24 @@ final class ForumBodyTextBandPaintStore {
     return !_disposed && _pictures[index] != null;
   }
 
-  ForumBodyTextBandPaint record(int index, Rect clip) {
+  ForumBodyTextBandPaint record(int index, Rect slotClip, Rect bandClip) {
     _ensureOpen();
     RangeError.checkValidIndex(index, _pictures, 'index');
-    if (_recording || _pending.containsKey(index) || _pictures[index] != null) {
+    if (_recording || _pending.containsKey(index) || isPrepared(index)) {
       throw StateError('Text band paint is already prepared or recording');
     }
+    if (_bandPicture != null) {
+      return _pending[index] = ForumBodyTextBandPaint._(
+        this,
+        index,
+        null,
+        0,
+        wholeBand: false,
+      );
+    }
     _recording = true;
+    final wholeBand = _pictures.length > 1 && _pending.isEmpty;
+    final clip = wholeBand ? bandClip : slotClip;
     final recorder = ui.PictureRecorder();
     ui.Picture? picture;
     try {
@@ -46,6 +58,7 @@ final class ForumBodyTextBandPaintStore {
         index,
         picture,
         picture.approximateBytesUsed,
+        wholeBand: wholeBand,
       );
       _pending[index] = ticket;
       _bytes += ticket.approximateBytes;
@@ -69,8 +82,12 @@ final class ForumBodyTextBandPaintStore {
         throw StateError('Text band paint ticket does not belong to this slot');
       }
       _pending.remove(ticket.index);
-      _pictures[ticket.index] = ticket._picture;
-      _preparedCount++;
+      final picture = ticket._picture;
+      if (ticket._wholeBand) {
+        _bandPicture = picture;
+      }
+      _pictures[ticket.index] = picture ?? _bandPicture!;
+      if (picture != null) _preparedCount++;
       ticket._picture = null;
       ticket._owner = null;
     } catch (_) {
@@ -86,7 +103,7 @@ final class ForumBodyTextBandPaintStore {
     }
   }
 
-  void paint(int index, Canvas canvas, Offset translation) {
+  void paint(int index, Canvas canvas, Offset translation, Rect slotClip) {
     _ensureOpen();
     final picture = _pictures[index];
     if (picture == null) {
@@ -95,6 +112,7 @@ final class ForumBodyTextBandPaintStore {
     canvas.save();
     try {
       canvas.translate(translation.dx, translation.dy);
+      if (identical(picture, _bandPicture)) canvas.clipRect(slotClip);
       canvas.drawPicture(picture);
     } finally {
       canvas.restore();
@@ -105,9 +123,11 @@ final class ForumBodyTextBandPaintStore {
     if (_disposed) return;
     _disposed = true;
     final pending = _pending.values.toList();
-    final pictures = _pictures.whereType<ui.Picture>().toList();
+    final pictures = Set<ui.Picture>.identity()
+      ..addAll(_pictures.whereType<ui.Picture>());
     _pending.clear();
     _pictures.fillRange(0, _pictures.length, null);
+    _bandPicture = null;
     _preparedCount = 0;
     _bytes = 0;
     _draw = null;
@@ -132,20 +152,25 @@ final class ForumBodyTextBandPaintStore {
   }
 }
 
-/// A single uncommitted native picture. Closing rejects just this allocation;
-/// adopting transfers it to its band. Neither closes the shared glyph owner.
+/// A pending slot admission. It either owns a new picture or borrows the
+/// band's admitted recording. Closing it never retires the shared glyph owner.
 final class ForumBodyTextBandPaint {
   ForumBodyTextBandPaint._(
     this._owner,
     this.index,
     this._picture,
-    this.approximateBytes,
-  );
+    this.approximateBytes, {
+    required bool wholeBand,
+  }) : _wholeBand = wholeBand;
   ForumBodyTextBandPaintStore? _owner;
   ui.Picture? _picture;
   final int index;
   final int approximateBytes;
-  bool get isActive => _picture != null && _owner?._disposed == false;
+  final bool _wholeBand;
+
+  /// True when this ticket adds a native allocation to the owner's budget.
+  bool get recordsPicture => _picture != null;
+  bool get isActive => _owner?._disposed == false;
   void close() {
     final owner = _owner;
     final picture = _picture;

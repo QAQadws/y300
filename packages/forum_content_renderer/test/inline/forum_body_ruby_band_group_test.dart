@@ -306,7 +306,8 @@ void main() {
       }
       expect(owner.layoutBuildCount, 4);
       expect(owner.entryCount, 4);
-      expect(owner.preparedPictureCount, 240);
+      expect(owner.preparedPictureCount, bands.length);
+      expect(owner.pictureBuildCount, bands.length);
       expect(owner.activeLeases, 240);
       groups.first.close();
       expect(groups[1].isActive, isTrue);

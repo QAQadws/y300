@@ -176,7 +176,7 @@ void main() {
             cache.pictureBuildCount,
             cache.activeLeases,
           ), before);
-          expect(before, (1, 4, 4));
+          expect(before, (1, 1, 4));
         } finally {
           for (final painter in painters) {
             painter.dispose();

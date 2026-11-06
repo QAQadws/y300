@@ -64,7 +64,7 @@ void main() {
         );
         expect(
           fixture.cache.pictureBuildCount - pictures,
-          page == columnPage ? 101 : 0,
+          page == columnPage ? 2 : 0,
         );
         final view = (fragments.single as ForumBodyPreparedInlineFragment).view;
         expect(view.atomIndices, page == columnPage ? [0] : isEmpty);
@@ -144,7 +144,7 @@ void main() {
           job.takeFragments().single as ForumBodyPreparedInlineFragment;
       expect(fragment.nativeLeases.length, 8);
       // The empty base is a real native font strut, not a recorded glyph picture.
-      expect(fixture.cache.pictureBuildCount, 6);
+      expect(fixture.cache.pictureBuildCount, 1);
       final last = fixture.raw.parts[86];
       final window = fixture.raw.content.contexts.singleWhere(
         (context) => identical(context.content, last),

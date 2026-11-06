@@ -263,7 +263,7 @@ void main() {
         expect(view.view.atomIndices, [0, 1, 2]);
         expect(view.nativeLeases.length, 243);
         expect(page.cache.layoutBuildCount, 5);
-        expect(page.cache.pictureBuildCount, 242);
+        expect(page.cache.pictureBuildCount, 4);
         view.close();
         expect(page.cache.activeLeases, 0);
       },

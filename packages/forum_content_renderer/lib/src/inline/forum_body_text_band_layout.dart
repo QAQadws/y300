@@ -253,12 +253,17 @@ final class ForumBodyTextBandLayout implements ForumBodyNativeParagraphLayout {
   bool isPaintPrepared(int index) =>
       !_disposed && _paintStore.isPrepared(index);
 
-  /// Records one native drawing outside visible paint. Cache adapters inspect
-  /// the ticket's cost and admit it in their shared budget before adoption.
+  /// Records native drawing outside visible paint. Cache adapters inspect
+  /// the ticket's cost before adopting it. One admitted band recording can
+  /// serve multiple children, each with its own physical clip and source.
   ForumBodyTextBandPaint recordPaint(int index) {
     _ensureOpen();
     RangeError.checkValidIndex(index, children, 'index');
-    return _paintStore.record(index, children[index]._clip);
+    return _paintStore.record(
+      index,
+      children[index]._clip,
+      children.first._clip.expandToInclude(children.last._clip),
+    );
   }
 
   /// Consumes the ticket on success and failure; does not take a glyph lease.
@@ -320,7 +325,12 @@ final class ForumBodyTextBandChildLayout implements ForumBodyTextLayout {
   @override
   void paint(Canvas canvas, Offset offset) {
     _ensureOpen();
-    _band._paintStore.paint(index, canvas, offset - geometry._origin);
+    _band._paintStore.paint(
+      index,
+      canvas,
+      offset - geometry._origin,
+      geometry._clip,
+    );
   }
 
   @override

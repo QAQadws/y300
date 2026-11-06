@@ -1333,7 +1333,7 @@ void main() {
           expect(prepared.view.atomIndices, [page]);
           expect(prepared.nativeLeases, hasLength(4));
           expect(f.cache.activeLeases, 4);
-          if (page == 0) expect(f.cache.preparedPictureCount, 3);
+          if (page == 0) expect(f.cache.preparedPictureCount, 1);
           validateForumBodyPreparedTextPageBinding(
             snapshot: f.session.snapshot,
             pageIndex: page,

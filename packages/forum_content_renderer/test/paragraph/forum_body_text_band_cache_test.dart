@@ -179,6 +179,11 @@ void main() {
     expect(owner.prepareBandChildPaint(leases[0]), isFalse);
     expect(leases[0].layout.isPaintPrepared, isTrue);
     expect(leases[1].layout.isPaintPrepared, isFalse);
+    final withPicture = owner.estimatedRetainedBytes;
+    expect(owner.prepareBandChildPaint(leases[1]), isFalse);
+    expect(leases[1].layout.isPaintPrepared, isTrue);
+    expect(owner.estimatedRetainedBytes, withPicture);
+    expect(owner.preparedPictureCount, 1);
     expect(owner.pictureBuildCount, 1);
     final alias = owner.tryAcquireBandChildCached(
       content: input,
@@ -487,19 +492,18 @@ void main() {
     final first = generous.acquireBandChild(content: input, childIndex: 0);
     final second = generous.acquireBandChild(content: input, childIndex: 1);
     final initialBytes = generous.estimatedRetainedBytes;
-    generous.prepareBandChildPaint(first);
-    generous.prepareBandChildPaint(second);
+    expect(generous.prepareBandChildPaint(first), isTrue);
     final finalBytes = generous.estimatedRetainedBytes;
     expect(finalBytes, greaterThan(initialBytes));
+    expect(generous.prepareBandChildPaint(second), isFalse);
+    expect(generous.estimatedRetainedBytes, finalBytes);
 
     final limited = cache(bytes: finalBytes - 1);
     addTearDown(limited.close);
     final a = limited.acquireBandChild(content: input, childIndex: 0);
     final b = limited.acquireBandChild(content: input, childIndex: 1);
-    limited.prepareBandChildPaint(a);
-    final committedBytes = limited.estimatedRetainedBytes;
     expect(
-      () => limited.prepareBandChildPaint(b),
+      () => limited.prepareBandChildPaint(a),
       throwsA(
         isA<ForumBodyParagraphBudgetException>().having(
           (error) => error.failure,
@@ -508,11 +512,11 @@ void main() {
         ),
       ),
     );
-    expect(a.layout.isPaintPrepared, isTrue);
+    expect(a.layout.isPaintPrepared, isFalse);
     expect(b.layout.isPaintPrepared, isFalse);
-    expect(limited.preparedPictureCount, 1);
-    expect(limited.pictureBuildCount, 1);
-    expect(limited.estimatedRetainedBytes, committedBytes);
+    expect(limited.preparedPictureCount, 0);
+    expect(limited.pictureBuildCount, 0);
+    expect(limited.estimatedRetainedBytes, initialBytes);
     a.release();
     b.release();
     limited.clearUnpinned();
@@ -525,30 +529,34 @@ void main() {
     'foreign pins can block picture growth and release unblocks the same band',
     () {
       final input = heavyBand();
+      final foreignBand = band(['<span>foreign</span>']);
       final generous = cache();
       final full = generous.acquireBandChild(content: input, childIndex: 0);
-      final fullOther = generous.acquireBandChild(
-        content: input,
-        childIndex: 1,
+      final samplePin = generous.acquireBandChild(
+        content: foreignBand,
+        childIndex: 0,
       );
+      final initialWithPin = generous.estimatedRetainedBytes;
+      samplePin.release();
+      generous.clearUnpinned();
       generous.prepareBandChildPaint(full);
-      generous.prepareBandChildPaint(fullOther);
       final fullBytes = generous.estimatedRetainedBytes;
       full.release();
-      fullOther.release();
       generous.close();
-      final owner = cache(entries: 2, bytes: fullBytes);
+      final owner = cache(
+        entries: 2,
+        bytes: fullBytes > initialWithPin ? fullBytes : initialWithPin,
+      );
       addTearDown(owner.close);
       final a = owner.acquireBandChild(content: input, childIndex: 0);
       final b = owner.acquireBandChild(content: input, childIndex: 1);
-      owner.prepareBandChildPaint(a);
       final foreign = owner.acquireBandChild(
-        content: band(['<span>foreign</span>']),
+        content: foreignBand,
         childIndex: 0,
       );
       late ForumBodyParagraphBudgetException rejection;
       try {
-        owner.prepareBandChildPaint(b);
+        owner.prepareBandChildPaint(a);
         fail('Picture must be blocked by a foreign pin');
       } on ForumBodyParagraphBudgetException catch (error) {
         rejection = error;
@@ -556,11 +564,12 @@ void main() {
       expect(rejection.failure, ForumBodyParagraphBudgetFailure.pinned);
       expect(rejection.requiredAdditionalEntries, 0);
       expect(owner.isBlockedByExternalPins(rejection, [a, b]), isTrue);
-      expect(owner.preparedPictureCount, 1);
+      expect(owner.preparedPictureCount, 0);
       foreign.release();
-      expect(owner.prepareBandChildPaint(b), isTrue);
+      expect(owner.prepareBandChildPaint(a), isTrue);
+      expect(owner.prepareBandChildPaint(b), isFalse);
       expect(owner.entryCount, 1);
-      expect(owner.preparedPictureCount, 2);
+      expect(owner.preparedPictureCount, 1);
       expect(owner.estimatedRetainedBytes, fullBytes);
       expect(owner.layoutBuildCount, 2);
       a.release();

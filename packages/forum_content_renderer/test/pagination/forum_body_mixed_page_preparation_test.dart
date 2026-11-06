@@ -28,7 +28,7 @@ void main() {
       );
       expect(steps.every((step) => step.madeProgress), isTrue);
       expect(input.cache.layoutBuildCount, 2);
-      expect(input.cache.pictureBuildCount, 6);
+      expect(input.cache.pictureBuildCount, 1);
       expect(input.cache.activeLeases, 7);
       expect(input.transfers, 0);
       expect(prepare.takeLeases, throwsStateError);
@@ -80,7 +80,7 @@ void main() {
       final prepare = input.open(1);
       expect(prepare.expectedNativeLeaseCount, 3);
       input.finish(prepare);
-      expect(input.cache.pictureBuildCount, 2);
+      expect(input.cache.pictureBuildCount, 1);
       expect(input.cache.layoutBuildCount, 2);
       final binding =
           prepare.takeFragments().single as ForumBodyPreparedInlineFragment;
@@ -146,7 +146,7 @@ void main() {
       foreign.release();
       input.finish(prepare, maxParts: 1);
       expect(input.cache.layoutBuildCount, 3);
-      expect(input.cache.pictureBuildCount, 6);
+      expect(input.cache.pictureBuildCount, 1);
       prepare.takeFragments().single.close();
     },
   );
@@ -257,7 +257,7 @@ void main() {
       final prepare = input.open(0);
       expect(prepare.expectedNativeLeaseCount, 4);
       input.finish(prepare);
-      expect(input.cache.pictureBuildCount, 3);
+      expect(input.cache.pictureBuildCount, 1);
       final binding =
           prepare.takeFragments().single as ForumBodyPreparedInlineFragment;
       expect(binding.view.height, 20);

@@ -135,7 +135,7 @@ void main() {
             try {
               expect(group.annotationCount, 100);
               expect(group.nativeLeases.length, 101);
-              expect(cache.pictureBuildCount, 101);
+              expect(cache.pictureBuildCount, 2);
               expect(
                 group.size.height,
                 closeTo(

@@ -144,7 +144,7 @@ void main() {
             );
             expect(f.cache.layoutBuildCount, builds);
             expect(f.cache.pictureBuildCount, pictures + 1);
-            expect(f.cache.preparedPictureCount, band ? 3 : 1);
+            expect(f.cache.preparedPictureCount, band ? 2 : 1);
             // The scene owns its display list. Source paragraphs can be released
             // and evicted without retaining a painter outside the owner's budget.
             for (final text in f.text) {

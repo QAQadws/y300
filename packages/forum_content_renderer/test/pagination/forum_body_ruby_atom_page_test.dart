@@ -62,7 +62,7 @@ void main() {
               job.takeFragments().single as ForumBodyPreparedInlineFragment;
           expect(fragment.nativeLeases.length, expected);
           expect(fragment.view.atomIndices, [0]);
-          expect(fixture.cache.pictureBuildCount, dense ? 102 : 6);
+          expect(fixture.cache.pictureBuildCount, dense ? 2 : 1);
           final window = fixture.input.content.contexts.last;
           final box = fragment
               .glyphBoxes(window.startUtf16 + 1, window.startUtf16 + 2)
@@ -496,7 +496,7 @@ void main() {
           job.takeFragments().single as ForumBodyPreparedInlineFragment;
       expect(job.expectedNativeLeaseCount, 6);
       expect(fragment.view.atomIndices, [0, 1]);
-      expect(fixture.cache.pictureBuildCount, 5);
+      expect(fixture.cache.pictureBuildCount, 1);
       for (final window in content.contexts) {
         final box = fragment
             .glyphBoxes(window.startUtf16, window.startUtf16 + 1)

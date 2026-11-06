@@ -560,8 +560,9 @@ final class ForumBodyParagraphCache {
     }
   }
 
-  /// Cooperative work outside paint: record one child, admit its measured
-  /// display-list cost, then publish. A rejection drops only the new ticket.
+  /// Cooperative work outside paint: admit a measured display list before
+  /// making its clipped child views readable. A rejection drops the ticket.
+  /// Returns true only when an actual native picture was recorded.
   bool prepareBandChildPaint(ForumBodyTextBandChildLease lease) {
     if (!ownsLease(lease)) {
       throw StateError('Text band lease is retired or foreign');
@@ -575,6 +576,10 @@ final class ForumBodyParagraphCache {
     try {
       ticket = band.recordPaint(lease.childIndex);
       if (!ownsLease(lease)) throw StateError('Text band lease is retired');
+      if (!ticket.recordsPicture) {
+        band.adoptPaint(ticket);
+        return false;
+      }
       final reserve = (entry.key as ForumBodyTextBandCacheKey).pictureReserve;
       final extra = band.approximatePictureBytes - reserve;
       final target = entry.initialBytes + (extra > 0 ? extra : 0);

@@ -909,7 +909,7 @@ void main() {
       final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
       try {
         expect(fragment.nativeLeases.length, 203);
-        expect(f.cache.pictureBuildCount, 202);
+        expect(f.cache.pictureBuildCount, 4);
         final last = fragment.projection.text.lastIndexOf('y99');
         final box = fragment.glyphBoxes(last + 1, last + 2).single;
         final hit = fragment.view.sourceAt(
@@ -1006,7 +1006,7 @@ void main() {
       final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
       try {
         expect(fragment.nativeLeases.length, 102);
-        expect(f.cache.pictureBuildCount, 101);
+        expect(f.cache.pictureBuildCount, 2);
         final last = fragment.projection.text.lastIndexOf('r99');
         final box = fragment.glyphBoxes(last + 1, last + 2).single;
         final hit = fragment.view.sourceAt(
@@ -1228,7 +1228,7 @@ void main() {
     try {
       expect(fragment.nativeLeases, hasLength(121));
       expect(f.cache.layoutBuildCount, 5);
-      expect(f.cache.pictureBuildCount, 120);
+      expect(f.cache.pictureBuildCount, 2);
     } finally {
       fragment.close();
     }
@@ -1535,7 +1535,7 @@ void main() {
       try {
         expect(fragment.nativeLeases, hasLength(121));
         expect(f.cache.layoutBuildCount, 5);
-        expect(f.cache.pictureBuildCount, 120);
+        expect(f.cache.pictureBuildCount, 2);
       } finally {
         fragment.close();
       }
@@ -1683,7 +1683,7 @@ void main() {
           expect(prepared.view.atomIndices, hasLength(60));
           expect(prepared.nativeLeases, hasLength(121));
           expect(f.cache.entryCount, lessThanOrEqualTo(4));
-          expect(f.cache.pictureBuildCount, 60);
+          expect(f.cache.pictureBuildCount, 1);
         } finally {
           prepared.close();
         }
@@ -1899,7 +1899,7 @@ void main() {
         expect(fragment.view.atomIndices, hasLength(60));
         expect(fragment.nativeLeases, hasLength(121));
         expect(f.cache.entryCount, lessThanOrEqualTo(4));
-        expect(f.cache.pictureBuildCount, 120);
+        expect(f.cache.pictureBuildCount, 2);
       } finally {
         fragment.close();
       }
@@ -2033,7 +2033,7 @@ void main() {
         expect(fragment.projection.text, 'Az');
         expect(fragment.view.atomIndices, [0, 1]);
         expect(fragment.nativeLeases, hasLength(4));
-        expect(f.cache.pictureBuildCount, 2);
+        expect(f.cache.pictureBuildCount, 1);
         expect(fragment.glyphBoxes(0, 2), hasLength(2));
       } finally {
         fragment.close();
@@ -2057,7 +2057,7 @@ void main() {
       expect(fragment.view.atomIndices, hasLength(60));
       expect(fragment.nativeLeases, hasLength(121));
       expect(f.cache.entryCount, lessThanOrEqualTo(4));
-      expect(f.cache.pictureBuildCount, 61);
+      expect(f.cache.pictureBuildCount, 1);
     } finally {
       fragment.close();
     }
@@ -2115,7 +2115,7 @@ void main() {
         expect(first.view.atomIndices, [0]);
         expect(first.nativeLeases, hasLength(3));
         expect(f.session.activeIssuedLeases, 3);
-        expect(f.cache.pictureBuildCount, 2);
+        expect(f.cache.pictureBuildCount, 1);
         expect(first.view.sourceAt(const Offset(21, 20)).sourceRune, 1);
         expect(first.view.sourceAt(const Offset(31, 5)).sourceRune, 3);
         expect(first.view.sourceAt(const Offset(31, 5)).isExact, isTrue);
@@ -2189,7 +2189,7 @@ void main() {
         expect(visible, greaterThan(0));
         expect(visible, lessThan(120));
         expect(prepared.nativeLeases.length, 1 + visible * 2);
-        expect(f.cache.pictureBuildCount, visible * 2);
+        expect(f.cache.pictureBuildCount, 1);
         expect(f.cache.layoutBuildCount, 7);
         expect(f.cache.entryCount, lessThanOrEqualTo(4));
       } finally {

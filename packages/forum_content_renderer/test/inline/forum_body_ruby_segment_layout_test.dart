@@ -231,7 +231,7 @@ void main() {
       addTearDown(fixture.close);
       final layout = fixture.prepare(fixture.compose(quantum: 7));
       expect(layout.nativeLeases.length, 102);
-      expect(fixture.cache.pictureBuildCount, 102);
+      expect(fixture.cache.pictureBuildCount, 2);
       for (var i = 0; i < 100; i++) {
         final box = layout
             .selectionBoxesForSpan(spanIndex: i, startUtf16: 1, endUtf16: 2)
