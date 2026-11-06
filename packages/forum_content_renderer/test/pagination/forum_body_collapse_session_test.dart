@@ -220,7 +220,7 @@ void main() {
     expect(cache.activeLeases, 0);
   });
 
-  testWidgets('the prepared header toggles its actual fragment and retires', (
+  testWidgets('prepared header styling preserves interaction and layout', (
     tester,
   ) async {
     final document = _parse();
@@ -239,30 +239,52 @@ void main() {
     );
     final prepared = session.preparePageFragments(0);
     final toggled = <ForumBodyTextPageFragment>[];
-    await tester.pumpWidget(
+    final surface = ForumBodyTextPageSurface.prepared(
+      snapshot: session.snapshot,
+      pageIndex: 0,
+      layoutId: 'collapse-session',
+      fragments: prepared,
+      collapseLabels: const ForumHtmlCollapseLabels(
+        fallbackTitle: 'Fold',
+        expandedSemanticsLabel: 'Close fold',
+        collapsedSemanticsLabel: 'Open fold',
+      ),
+      onCollapseToggle: toggled.add,
+    );
+    final body = Align(child: surface);
+    Future<void> show({
+      Color? backgroundColor,
+      Color? borderColor,
+      BorderRadiusGeometry? borderRadius,
+    }) => tester.pumpWidget(
       MaterialApp(
-        home: Align(
-          child: ForumBodyTextPageSurface.prepared(
-            snapshot: session.snapshot,
-            pageIndex: 0,
-            layoutId: 'collapse-session',
-            fragments: prepared,
-            collapseLabels: const ForumHtmlCollapseLabels(
-              fallbackTitle: 'Fold',
-              expandedSemanticsLabel: 'Close fold',
-              collapsedSemanticsLabel: 'Open fold',
-            ),
-            onCollapseToggle: toggled.add,
-          ),
+        home: ForumBodyCollapseHeaderStyle(
+          backgroundColor: backgroundColor,
+          borderColor: borderColor,
+          borderRadius: borderRadius,
+          child: body,
         ),
       ),
     );
+    await show();
     final toggle = find.byKey(
       ValueKey(
         'forum-native-collapse-toggle-${title.collapseHeader!.id}-${title.paragraphIndex}',
       ),
     );
     expect(tester.getSize(toggle), title.collapseHeader!.bounds.size);
+    final header = tester.element(toggle);
+    BoxDecoration decoration() =>
+        tester
+                .element(toggle)
+                .findAncestorWidgetOfExactType<DecoratedBox>()!
+                .decoration
+            as BoxDecoration;
+    final defaultDecoration = BoxDecoration(
+      border: Border.all(color: Theme.of(header).colorScheme.outlineVariant),
+      borderRadius: BorderRadius.circular(8),
+    );
+    expect(decoration(), defaultDecoration);
     final node = tester.getSemantics(find.bySemanticsLabel('Open fold'));
     final data = node.getSemanticsData();
     expect(node.rect.size, tester.getSize(toggle));
@@ -283,6 +305,38 @@ void main() {
     );
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     expect(toggled.removeLast(), same(title));
+
+    final work = (
+      cache.layoutBuildCount,
+      cache.pictureBuildCount,
+      cache.activeLeases,
+    );
+    final originalBounds = tester.getRect(toggle);
+    const fill = Color(0xffaabbcc);
+    await show(backgroundColor: fill);
+    expect(decoration(), defaultDecoration.copyWith(color: fill));
+    const outline = Color(0xff445566);
+    const radius = BorderRadiusDirectional.only(topStart: Radius.circular(14));
+    await show(borderColor: outline, borderRadius: radius);
+    expect(
+      decoration(),
+      BoxDecoration(
+        border: Border.all(color: outline),
+        borderRadius: radius,
+      ),
+    );
+    expect(tester.element(toggle), same(header));
+    expect(tester.getRect(toggle), originalBounds);
+    expect(tester.getSemantics(find.bySemanticsLabel('Open fold')), same(node));
+    expect(
+      node.getSemanticsData().flagsCollection.isFocused,
+      ui.Tristate.isTrue,
+    );
+    expect((
+      cache.layoutBuildCount,
+      cache.pictureBuildCount,
+      cache.activeLeases,
+    ), work);
 
     final onTap = tester.widget<InkWell>(toggle).onTap!;
     await tester.tap(toggle);

@@ -1,11 +1,37 @@
 import 'package:flutter/material.dart';
 
 import '../contracts/forum_collapse_header_metrics.dart';
+import '../style/forum_body_collapse_header_style.dart';
 
-BoxDecoration forumCollapseOutline(Color outline) => BoxDecoration(
+BoxDecoration _collapseOutline(
+  Color outline, {
+  Color? background,
+  BorderRadiusGeometry? radius,
+}) => BoxDecoration(
+  color: background,
   border: Border.all(color: outline),
-  borderRadius: BorderRadius.circular(8),
+  borderRadius: radius ?? BorderRadius.circular(8),
 );
+
+class ForumBodyCollapseHeaderDecoration extends StatelessWidget {
+  const ForumBodyCollapseHeaderDecoration({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = context
+        .dependOnInheritedWidgetOfExactType<ForumBodyCollapseHeaderStyle>();
+    return DecoratedBox(
+      decoration: _collapseOutline(
+        style?.borderColor ?? Theme.of(context).colorScheme.outlineVariant,
+        background: style?.backgroundColor,
+        radius: style?.borderRadius,
+      ),
+      child: child,
+    );
+  }
+}
 
 class ForumCollapseHeaderControl extends StatelessWidget {
   const ForumCollapseHeaderControl({
@@ -169,7 +195,7 @@ class _ForumCollapseChromeState extends State<ForumCollapseChrome>
     );
     return DecoratedBox(
       key: Key(baseKey),
-      decoration: forumCollapseOutline(colorScheme.outlineVariant),
+      decoration: _collapseOutline(colorScheme.outlineVariant),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,

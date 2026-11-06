@@ -484,10 +484,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
           textDirection: header.direction,
           child: Material(
             type: MaterialType.transparency,
-            child: DecoratedBox(
-              decoration: forumCollapseOutline(
-                Theme.of(context).colorScheme.outlineVariant,
-              ),
+            child: ForumBodyCollapseHeaderDecoration(
               child: ForumCollapseHeaderControl(
                 toggleKey: ValueKey(
                   'forum-native-collapse-toggle-${header.id}-${fragment.paragraphIndex}',
