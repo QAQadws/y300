@@ -41,17 +41,17 @@ void main() {
     'one discarded break does not shift the next real gap or its original span',
     () {
       final input = _input(
-        '<ruby><rb>A</rb><rb>B</rb><rt>漢</rt>\n<rt>字</rt> <rt>語</rt><rtc>whole</rtc></ruby>',
+        '<ruby><rb>A</rb><rb>B</rb><rb>C</rb><rt>漢</rt>\n<rt>字</rt> <rt>語</rt><rtc>whole</rtc></ruby>',
       );
       final columns = input.atoms.whereType<ForumBodyRubyColumnAtomRequest>();
       expect(columns, hasLength(3));
-      expect(columns.last.value.base.content.isSourceFree, isTrue);
+      expect(columns.last.value.base.content.projection.text, 'C');
       final gap = input.atoms
           .whereType<ForumBodyRubySoftSpaceAtomRequest>()
           .single;
       expect(gap.value.beforeColumn, 2);
       expect(gap.value.members.single.request.content.projection.text, ' ');
-      expect(input.content.projection.display.text, 'A漢B字 語');
+      expect(input.content.projection.display.text, 'A漢B字 C語');
       input.content.resolveAtomicContexts(
         input.atoms.indexOf(gap),
         gap.value.nativeRequests.map((r) => r.content).toList(),

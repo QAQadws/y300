@@ -1,8 +1,11 @@
 import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../document/forum_body_document.dart';
-import '../inline/forum_body_ruby_content.dart';
 import '../inline/forum_body_inline_image_input.dart';
+import '../inline/forum_body_inline_text_window.dart';
+import '../inline/forum_body_ruby_annotation_input.dart';
+import '../inline/forum_body_ruby_base_input.dart';
+import '../inline/forum_body_ruby_content.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_first_line_indent.dart';
 import '../style/forum_body_style_options.dart';
@@ -130,44 +133,102 @@ final class ForumBodyTextFlowSequence {
   void addRuby(ForumBodyRubyGroupContent group) {
     _ensureOpen();
     final readable = _readableRuby(group);
+    if (readable == null) {
+      // No level can be associated with the real bases. Use their original
+      // styled text windows so ordinary wrapping and hit testing still apply.
+      for (final part in group.base) {
+        switch (part) {
+          case ForumBodyRubyTextContent(:final content):
+            _addUnannotatedText(content);
+          case ForumBodyRubyBaseContent(:final parts):
+            for (final text in parts.whereType<ForumBodyRubyTextContent>()) {
+              _addUnannotatedText(text.content);
+            }
+          default:
+            break;
+        }
+      }
+      return;
+    }
     if (readable.base.isEmpty && readable.annotations.isEmpty) return;
     _parts.add(ForumBodyInlineFlowRuby(readable));
     _visible = true;
   }
 
-  ForumBodyRubyGroupContent _readableRuby(ForumBodyRubyGroupContent group) {
-    final annotations = group.annotations;
-    if (annotations.length < 2) return group;
-    var start = 0;
-    while (start < annotations.length &&
-        annotations[start] is ForumBodyRubyAnnotationContainerContent &&
-        annotations[start].parts.isEmpty) {
-      start++;
+  void _addUnannotatedText(ForumBodyParagraphContent content) {
+    if (content.projection.text.isEmpty) return;
+    if (_removeSourceIndent) {
+      _firstProtectedTextRune ??= content.projection
+          .sourceAtUtf16(0)
+          .sourceRune;
     }
-    // Consecutive direct RTs belong to one level, even with several bases.
-    // RTCs are separate levels and keep their actual box and style together.
-    var end = start;
-    if (start < annotations.length) {
-      if (annotations[start] is ForumBodyRubyAnnotationContainerContent) {
-        end++;
+    _parts.add(ForumBodyInlineFlowText(content));
+    _visible = true;
+  }
+
+  ForumBodyRubyGroupContent? _readableRuby(ForumBodyRubyGroupContent group) {
+    final annotations = group.annotations;
+    if (annotations.isEmpty) return group;
+    final bases = resolveForumBodyRubyBaseInputs(group);
+    var baseColumns = 0;
+    for (final base in bases) {
+      if (base.kind == ForumBodyRubyBaseInputKind.gap) continue;
+      final text = base.content.projection.text;
+      if (text.isEmpty ||
+          (base.kind == ForumBodyRubyBaseInputKind.implicit &&
+              text == ' ' &&
+              forumBodyInlineHasCollapsibleEdge(
+                base.content,
+                leading: false,
+              ))) {
+        baseColumns = 0;
+        break;
+      }
+      baseColumns++;
+    }
+    var start = 0;
+    var end = 0;
+    while (start < annotations.length) {
+      end = start + 1;
+      final first = annotations[start];
+      var spansBase = false;
+      int boxes;
+      if (first is ForumBodyRubyAnnotationContainerContent) {
+        final columns = resolveForumBodyRubyAnnotationColumns(first).boxes;
+        boxes = columns.length;
+        spansBase =
+            boxes == 1 &&
+            columns.single is ForumBodyRubyAnonymousAnnotationInput;
       } else {
+        // Direct RT siblings are one ordinal level. A later RTC starts a
+        // different level, so it can still qualify independently.
         while (end < annotations.length &&
             annotations[end] is ForumBodyRubyTextAnnotationContent) {
           end++;
         }
+        boxes = end - start;
       }
-    }
-    if (start == 0 && end == annotations.length) return group;
-    for (final (index, annotation) in annotations.indexed) {
-      if (index >= start && index < end) continue;
-      _ignored.add(
-        ForumBodyRubyIgnoredContent(
-          annotation.path,
-          annotation.source,
-          ForumBodyRubyIgnoredReason.unselectedAnnotationLevel,
-        ),
+      if (baseColumns > 0 && boxes > 0 && (spansBase || boxes <= baseColumns)) {
+        break;
+      }
+      _omitAnnotations(
+        annotations,
+        start,
+        end,
+        boxes == 0
+            ? ForumBodyRubyIgnoredReason.unselectedAnnotationLevel
+            : ForumBodyRubyIgnoredReason.unpairedAnnotation,
       );
+      start = end;
     }
+    if (start == annotations.length) return null;
+    if (start == 0 && end == annotations.length) return group;
+    _omitAnnotations(
+      annotations,
+      end,
+      annotations.length,
+      ForumBodyRubyIgnoredReason.unselectedAnnotationLevel,
+    );
     return ForumBodyRubyGroupContent(
       identity: group.identity,
       fontRevision: group.fontRevision,
@@ -187,6 +248,20 @@ final class ForumBodyTextFlowSequence {
             ),
       ],
     );
+  }
+
+  void _omitAnnotations(
+    List<ForumBodyRubyAnnotationContent> annotations,
+    int start,
+    int end,
+    ForumBodyRubyIgnoredReason reason,
+  ) {
+    for (var index = start; index < end; index++) {
+      final annotation = annotations[index];
+      _ignored.add(
+        ForumBodyRubyIgnoredContent(annotation.path, annotation.source, reason),
+      );
+    }
   }
 
   void addIgnored(List<ForumBodyRubyIgnoredContent> ignored) {

@@ -318,33 +318,36 @@ void main() {
     expect(f.cache.activeLeases, 0);
   });
 
-  for (final base in ['', 'A', ' A ']) {
-    test(
-      'actual orphan annotation gap keeps missing base separate and omitted outer whitespace source ($base)',
-      () {
-        final f = _open('<ruby>$base<rt>x</rt> <rt>y</rt></ruby>', entries: 4);
-        _finish(f.session, f.cache);
-        final fragments = _page(f.session, f.cache, 0, 1);
-        try {
-          final fragment = fragments.single as ForumBodyPreparedInlineFragment;
-          expect(fragment.view.atomIndices, [0, 1, 2]);
-          expect(fragment.nativeLeases.length, 6);
-          final gap = fragment.view.content.contexts.singleWhere(
-            (w) =>
-                w.content.projection.text == ' ' &&
-                w.content.projection.sourceAtUtf16(0).sourceRune ==
-                    base.length + 1,
-          );
-          expect(fragment.glyphBoxes(gap.startUtf16, gap.endUtf16), isNotEmpty);
-          expect(fragment.projection.text, base.isEmpty ? 'x y' : 'Ax y');
-        } finally {
-          for (final fragment in fragments) {
-            fragment.close();
-          }
+  for (final base in ['', ' ', 'A', ' A ']) {
+    test('omitted annotation gaps cannot affect ordinary wrapping ($base)', () {
+      final f = _open(
+        '<p>X <ruby>$base<rt>x</rt> <rt>y</rt></ruby> Y</p>',
+        entries: 4,
+      );
+      _finish(f.session, f.cache);
+      final fragments = _page(f.session, f.cache, 0, 1);
+      try {
+        final fragment = fragments.single as ForumBodyPreparedInlineFragment;
+        expect(fragment.view.atomIndices, isEmpty);
+        expect(fragment.nativeLeases.length, 1);
+        expect(fragment.projection.text, base.trim().isEmpty ? 'X Y' : 'X A Y');
+        final omitted = 2 + base.length;
+        expect(
+          fragment.projection.displayRangesInSource(
+            sourceStart: omitted,
+            sourceEnd: omitted + 3,
+            startUtf16: 0,
+            endUtf16: fragment.projection.text.length,
+          ),
+          isEmpty,
+        );
+      } finally {
+        for (final fragment in fragments) {
+          fragment.close();
         }
-        expect(f.cache.activeLeases, 0);
-      },
-    );
+      }
+      expect(f.cache.activeLeases, 0);
+    });
   }
 
   test('cancel actual raw-gap format retires metrics before publication', () {

@@ -94,7 +94,7 @@ List<ForumBodyRubyAnnotationInput> resolveForumBodyRubyAnnotationInputs(
         implicit.add(ForumBodyRubyExplicitAnnotationInput(entry));
       case ForumBodyRubyAnnotationContainerContent():
         flush();
-        final contents = _columns(entry);
+        final contents = resolveForumBodyRubyAnnotationColumns(entry);
         append(
           contents.boxes,
           entry.style.rubyPosition,
@@ -116,7 +116,9 @@ List<ForumBodyRubyAnnotationInput> resolveForumBodyRubyAnnotationInputs(
   List<ForumBodyRubyAnnotationBoxInput> boxes,
   List<ForumBodyRubyAnnotationGapInput> gaps,
 })
-_columns(ForumBodyRubyAnnotationContainerContent container) {
+resolveForumBodyRubyAnnotationColumns(
+  ForumBodyRubyAnnotationContainerContent container,
+) {
   final boxes = <ForumBodyRubyAnnotationBoxInput>[];
   final gaps = <ForumBodyRubyAnnotationGapInput>[];
   final pending = <ForumBodyParagraphContent>[];

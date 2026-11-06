@@ -22,12 +22,12 @@ final class _Parsed {
       fontRevision: 'ahem',
       linkColor: const Color(0xff0000ff),
     );
+    group = readAuthoredRuby(document, reader);
     final flow = ForumBodyTextFlowCursor(document: document, reader: reader);
     try {
       while (!flow.isComplete) {
         flow.advance(maxEvents: 1);
         if (flow.current case ForumBodyTextFlowInline(:final content)) {
-          group = readAuthoredRuby(document, reader);
           input = withAuthoredRuby(content, group);
           break;
         }

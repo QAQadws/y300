@@ -404,18 +404,10 @@ void main() {
     }
   }
   test('a zero-text child cannot invent a source-bound atomic range', () {
-    expect(
-      () => _fixture(
-        '<ruby style="text-emphasis:circle"><rb></rb><rt></rt></ruby>',
-      ),
-      throwsA(
-        isA<ForumBodyParagraphInputException>().having(
-          (e) => e.failure,
-          'failure',
-          ForumBodyParagraphInputFailure.structure,
-        ),
-      ),
+    final fixture = _fixture(
+      '<ruby style="text-emphasis:circle"><rb></rb><rt></rt></ruby>',
     );
+    expect(fixture.page.rubyAtoms, isEmpty);
   });
   test(
     'real indivisible overflow remains a layout failure before band capture',

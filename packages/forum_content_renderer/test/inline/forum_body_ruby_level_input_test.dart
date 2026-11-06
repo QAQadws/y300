@@ -49,11 +49,11 @@ void main() {
       ],
     ),
     (
-      '<ruby>A<rtc>&nbsp;<rt>x</rt></rtc></ruby>',
-      'A\u00a0x',
+      '<ruby><rb>A</rb><rb>B</rb><rtc>&nbsp;<rt>x</rt></rtc></ruby>',
+      'A\u00a0Bx',
       [
         ['A', '\u00a0'],
-        ['', 'x'],
+        ['B', 'x'],
       ],
     ),
     (
@@ -79,11 +79,10 @@ void main() {
       ],
     ),
     (
-      '<ruby><rt>x</rt><rt>y</rt><rtc><rt>u</rt></rtc></ruby>',
-      'xy',
+      '<ruby>A<rt>x</rt><rt>y</rt><rtc><rt>u</rt></rtc></ruby>',
+      'Au',
       [
-        ['', 'x'],
-        ['', 'y'],
+        ['A', 'u'],
       ],
     ),
     (
@@ -108,14 +107,6 @@ void main() {
       [
         ['A', 'xx'],
         ['B', ''],
-      ],
-    ),
-    (
-      '<ruby><rt>xx</rt><rt>yy</rt><rtc><rt>uu</rt><rt>vv</rt></rtc></ruby>',
-      'xxyy',
-      [
-        ['', 'xx'],
-        ['', 'yy'],
       ],
     ),
     (
@@ -251,7 +242,7 @@ void main() {
   });
 
   for (final html in [
-    '<ruby>A<rtc style="white-space:pre"><rt>x</rt> <rt>y</rt></rtc><rt>z</rt></ruby>',
+    '<ruby><rb>A</rb><rb>B</rb><rtc style="white-space:pre"><rt>x</rt> <rt>y</rt></rtc><rt>z</rt></ruby>',
   ]) {
     test('unsupported content in the readable level is rejected: $html', () {
       expect(

@@ -70,12 +70,15 @@ void main() {
     },
   );
 
-  for (final html in [
-    '<ruby><rb></rb><rt></rt></ruby>',
-    '<ruby style="ruby-position:inter-character">A<rt>x</rt></ruby>',
-    '<ruby><rb>A</rb><rb>B</rb><rtc style="white-space:pre"><rt>x</rt> <rt>y</rt></rtc></ruby>',
+  for (final (html, omit) in [
+    ('<ruby><rb></rb><rt>orphan</rt></ruby>', true),
+    ('<ruby style="ruby-position:inter-character">A<rt>x</rt></ruby>', false),
+    (
+      '<ruby><rb>A</rb><rb>B</rb><rtc style="white-space:pre"><rt>x</rt> <rt>y</rt></rtc></ruby>',
+      false,
+    ),
   ]) {
-    test('leaf planning cannot flatten explicit structure: $html', () {
+    test('orphan omission and unsupported layout stay distinct: $html', () {
       final cache = ForumBodyParagraphCache(
         maxEntries: 4,
         maxEstimatedBytes: 1 << 20,
@@ -97,11 +100,18 @@ void main() {
         height: 100,
       );
       try {
-        expect(() {
+        void finish() {
           for (var i = 0; !session.isComplete && i < 100; i++) {
             session.advance(maxEvents: 1, maxLines: 1);
           }
-        }, throwsA(isA<ForumBodyParagraphInputException>()));
+        }
+
+        if (omit) {
+          finish();
+          expect(session.isComplete, isTrue);
+        } else {
+          expect(finish, throwsA(isA<ForumBodyParagraphInputException>()));
+        }
         expect(session.snapshot, isEmpty);
         expect(cache.layoutBuildCount, 0);
         expect(cache.activeLeases, 0);

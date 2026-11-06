@@ -1010,10 +1010,8 @@ void main() {
 
   for (final (html, display, handles) in [
     ('<ruby>A<rtc>word</rtc></ruby>', 'Aword', 3),
-    ('<ruby><rtc>word</rtc></ruby>', 'word', 3),
     ('<ruby>A<rtc> </rtc></ruby>', 'A', 2),
     ('<ruby>A<rtc>word<b>bold</b></rtc></ruby>', 'Awordbold', 3),
-    ('<ruby>A<rtc>pre<rt>xx</rt>post</rtc></ruby>', 'Aprexxpost', 7),
     (
       '<ruby><rb>A</rb><rb>B</rb><rtc>pre<rt>xx</rt></rtc></ruby>',
       'ApreBxx',
@@ -1024,11 +1022,6 @@ void main() {
       '<ruby><rb>A</rb><rb>B</rb><rtc><rt></rt><rt>yy</rt></rtc><rtc><rt>uu</rt></rtc></ruby>',
       'AByy',
       4,
-    ),
-    (
-      '<ruby><rt>xx</rt><rt>yy</rt><rtc><rt>uu</rt><rt>vv</rt></rtc></ruby>',
-      'xxyy',
-      5,
     ),
     (
       '<ruby><rb>A</rb><rb>B</rb><rtc><rt>xx</rt></rtc><rtc><rt>uu</rt><rt>vv</rt><rt>ww</rt></rtc></ruby>',
@@ -1191,8 +1184,7 @@ void main() {
       5,
       false,
     ),
-    ('<ruby>A<rtc><rt>x</rt><rt>y</rt></rtc></ruby>', 'Axy', 2, true),
-    ('<ruby><rtc><rt>x</rt><rt>y</rt></rtc></ruby>', 'xy', 1, true),
+    ('<ruby>A<rtc><rt>x</rt><rt>y</rt></rtc></ruby>', 'A', 0, true),
     ('<ruby>A<rtc></rtc></ruby>', 'A', 0, true),
   ]) {
     test(
@@ -1622,185 +1614,32 @@ void main() {
     },
   );
 
-  test(
-    'orphan RT uses a real empty font strut without invented display text',
-    () {
-      final f = _Fixture('<ruby><rt>xy</rt></ruby>', width: 200, height: 100);
-      f.finish();
-      final prepared = f.prepare(0).single as ForumBodyPreparedInlineFragment;
-      try {
-        expect(prepared.view.content.projection.display.text, 'xy');
-        expect(prepared.view.content.projection.engineText, '\uFFFC');
-        final leases = prepared.nativeLeases.toList();
-        expect(leases, hasLength(3));
-        final base = leases[1] as ForumBodyTextLease;
-        expect(base.content.projection.text, isEmpty);
-        expect(base.layout.width, 0);
-        expect(base.layout.height, 20);
-        expect(base.layout.alphabeticBaseline, greaterThan(0));
-        expect(base.layout.selectionBoxes(0, 0), isEmpty);
-        expect(prepared.glyphBoxes(0, 2).single.top, 0);
-        expect(prepared.glyphBoxes(0, 2).single.bottom, 10);
-        expect(prepared.view.height, 30);
-      } finally {
-        prepared.close();
-      }
-      expect(f.cache.activeLeases, 0);
-      expect(f.session.activeIssuedLeases, 0);
-    },
-  );
-
-  test(
-    'empty base space is approximate while actual RT hits keep their source',
-    () {
-      final f = _Fixture(
-        '<p>X<ruby><rt>xy</rt></ruby>Y</p>',
-        width: 200,
-        height: 100,
+  test('orphan notes create no painted columns or native note leases', () {
+    final html =
+        '<p>X<ruby>${List.generate(60, (index) => '<rt>omitted$index</rt>').join()}</ruby>Y</p>';
+    final f = _Fixture(html, width: 200, height: 100);
+    f.finish();
+    final prepared = f.prepare(0).single as ForumBodyPreparedInlineFragment;
+    try {
+      expect(prepared.projection.text, 'XY');
+      expect(prepared.view.atomIndices, isEmpty);
+      expect(prepared.nativeLeases, hasLength(1));
+      final raw = f.document.sourceText;
+      expect(
+        prepared.projection.displayRangesInSource(
+          sourceStart: 1,
+          sourceEnd: raw.length - 1,
+          startUtf16: 0,
+          endUtf16: 2,
+        ),
+        isEmpty,
       );
-      f.finish();
-      final prepared = f.prepare(0).single as ForumBodyPreparedInlineFragment;
-      try {
-        final leases = prepared.nativeLeases.toList();
-        final parent = leases[0] as ForumBodyInlineParagraphLease;
-        final base = leases[1] as ForumBodyTextLease;
-        final rt = leases[2] as ForumBodyTextLease;
-        final metrics = ForumBodyRubyGroupMetrics.measure(
-          cache: f.cache,
-          baseLease: base,
-          annotation: rt.content,
-          annotationLease: rt,
-          maxWidth: 200,
-        );
-        final origin = parent.layout.atomBoxes.single.toRect().topLeft;
-        final glyph = rt.layout.selectionBoxes(1, 2).single.toRect();
-        final hit = prepared.view.sourceAt(
-          origin +
-              metrics.annotationOffset +
-              Offset(glyph.left + .1, (glyph.top + glyph.bottom) / 2),
-        );
-        expect(hit.isExact, isTrue);
-        expect(hit.sourceRune, 2);
-        final blank = prepared.view.sourceAt(
-          origin + Offset(.1, metrics.size.height - .1),
-        );
-        expect(blank.isExact, isFalse);
-        expect(blank.sourceRune, inInclusiveRange(1, 3));
-      } finally {
-        prepared.close();
-      }
-      expect(f.cache.activeLeases, 0);
-    },
-  );
-
-  test('anonymous font metrics never pollute later actual source envelopes', () {
-    final f = _Fixture(
-      '<p><span style="display:none">hidden</span><ruby><rt>xy</rt></ruby></p>',
-      width: 200,
-      height: 100,
-    );
-    f.finish();
-    expect(f.session.snapshot.single.fragments.single.sourceHint, (
-      runeStart: 6,
-      runeEnd: 8,
-    ));
-    final prepared = f.prepare(0).single as ForumBodyPreparedInlineFragment;
-    try {
-      expect(prepared.projection.text, 'xy');
-      expect(prepared.projection.sourceAtUtf16(0).sourceRune, 6);
-      final hit = prepared.view.sourceAt(Offset(.1, prepared.view.height - .1));
-      expect(hit.isExact, isFalse);
-      expect(hit.sourceRune, inInclusiveRange(6, 8));
+      expect(prepared.projection.sourceAtUtf16(1).sourceRune, raw.length - 1);
     } finally {
       prepared.close();
     }
     expect(f.cache.activeLeases, 0);
-  });
-
-  test('anonymous base and RT retain independent nonlinear font scaling', () {
-    final f = _Fixture(
-      '<ruby><rt>xy</rt></ruby>',
-      width: 200,
-      height: 100,
-      textScaler: _Scaler((size) => size >= 20 ? size * 2 : size),
-    );
-    f.finish();
-    final prepared = f.prepare(0).single as ForumBodyPreparedInlineFragment;
-    try {
-      final leases = prepared.nativeLeases.toList();
-      final base = leases[1] as ForumBodyTextLease;
-      final rt = leases[2] as ForumBodyTextLease;
-      expect(base.layout.height, 40);
-      expect(rt.layout.height, 10);
-      expect(prepared.view.height, 50);
-      expect(prepared.projection.text, 'xy');
-    } finally {
-      prepared.close();
-    }
-    expect(f.cache.activeLeases, 0);
-  });
-
-  for (final singleRoot in [false, true]) {
-    test(
-      'dense orphan RT shares its font strut and bounds annotation bands (singleRoot=$singleRoot)',
-      () {
-        final f = _Fixture(
-          singleRoot
-              ? '<p><ruby>${List.generate(60, (index) => '<rt>r$index</rt>').join()}</ruby></p>'
-              : '<p>${List.generate(60, (index) => '<ruby><rt>r$index</rt></ruby>').join()}</p>',
-          width: 600,
-          height: 100,
-          entries: 4,
-        );
-        f.finish();
-        expect(f.session.snapshot, hasLength(1));
-        expect(f.cache.layoutBuildCount, 3);
-        expect(f.cache.pictureBuildCount, 0);
-        final prepared = f.prepare(0).single as ForumBodyPreparedInlineFragment;
-        try {
-          expect(prepared.view.atomIndices, hasLength(60));
-          expect(prepared.nativeLeases, hasLength(121));
-          expect(f.cache.entryCount, lessThanOrEqualTo(4));
-          expect(f.cache.pictureBuildCount, 1);
-        } finally {
-          prepared.close();
-        }
-        expect(f.cache.activeLeases, 0);
-        expect(f.session.activeIssuedLeases, 0);
-      },
-    );
-  }
-
-  test('consecutive orphan columns wrap with actual per-page RT sources', () {
-    final f = _Fixture(
-      '<ruby><rt>xy</rt><rt>zw</rt></ruby>',
-      width: 20,
-      height: 30,
-    );
-    f.finish();
-    expect(f.session.snapshot, hasLength(2));
-    for (var page = 0; page < 2; page++) {
-      final fragment =
-          f.prepare(page).single as ForumBodyPreparedInlineFragment;
-      try {
-        expect(fragment.view.atomIndices, [page]);
-        expect(f.session.snapshot[page].fragments.single.sourceHint, (
-          runeStart: page * 2,
-          runeEnd: page * 2 + 2,
-        ));
-        final glyph = fragment.glyphBoxes(page * 2 + 1, page * 2 + 2).single;
-        final hit = fragment.view.sourceAt(
-          Offset(glyph.left + .1, (glyph.top + glyph.bottom) / 2),
-        );
-        expect(hit.sourceRune, page * 2 + 1);
-        expect(hit.isExact, isTrue);
-        expect(fragment.nativeLeases, hasLength(3));
-      } finally {
-        fragment.close();
-      }
-      expect(f.cache.activeLeases, 0);
-      expect(f.session.activeIssuedLeases, 0);
-    }
+    expect(f.session.activeIssuedLeases, 0);
   });
 
   test(
@@ -1913,22 +1752,26 @@ void main() {
     );
   }
 
-  test('an actual empty RB retains its own native font metrics', () {
+  test('empty and ambiguous base columns display only original base text', () {
     final f = _Fixture(
-      '<ruby><rb style="font-size:30px"></rb><rt>xy</rt></ruby>',
+      '<p>X<ruby><rb></rb><rb style="color:red">A</rb>'
+      '<rt>orphan</rt><rt>possible</rt></ruby>Y</p>',
       width: 200,
       height: 100,
     );
     f.finish();
     final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
     try {
-      final base = fragment.nativeLeases.elementAt(1) as ForumBodyTextLease;
-      expect(base.content.isSourceFree, isFalse);
-      expect(base.content.projection.text, isEmpty);
-      expect(base.layout.height, 30);
-      expect(fragment.projection.text, 'xy');
-      expect(fragment.view.height, 40);
-      expect(f.cache.pictureBuildCount, 1);
+      expect(fragment.projection.text, 'XAY');
+      expect(fragment.view.atomIndices, isEmpty);
+      final retained = fragment.view.content.contexts.singleWhere(
+        (window) => window.content.projection.text == 'A',
+      );
+      expect(
+        retained.content.runs.single.style.textStyle.color,
+        const Color(0xffff0000),
+      );
+      expect(fragment.nativeLeases, hasLength(1));
     } finally {
       fragment.close();
     }
@@ -1937,7 +1780,7 @@ void main() {
 
   for (final (html, text, handles, end) in [
     ('<ruby><rb>A</rb><rb>B</rb><rt>xx</rt></ruby>', 'AxxB', 4, 4),
-    ('<ruby><rb>A</rb><rt>xx</rt><rt>yy</rt></ruby>', 'Axxyy', 5, 5),
+    ('<ruby><rb>A</rb><rt>xx</rt><rt>yy</rt></ruby>', 'A', 1, 1),
   ]) {
     test(
       'missing and excess RT units retain actual base/source coverage: $html',
@@ -1986,89 +1829,27 @@ void main() {
     },
   );
 
-  test('consecutive RTs pair with one actual and one anonymous base', () {
+  test('base trailing space follows the annotation with original source', () {
     final f = _Fixture(
-      '<ruby>AB<rt>xy</rt><rt>z</rt></ruby>',
+      '<p>X<ruby>AB <rt>xyz</rt></ruby>Y</p>',
       width: 200,
       height: 100,
     );
     f.finish();
     final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
     try {
-      expect(fragment.projection.text, 'ABxyz');
-      expect(fragment.view.content.projection.engineText, '\uFFFC\uFFFC');
-      final leases = fragment.nativeLeases.toList();
-      expect(leases, hasLength(5));
-      expect((leases[1] as ForumBodyTextLease).content.projection.text, 'AB');
-      expect((leases[3] as ForumBodyTextLease).content.isSourceFree, isTrue);
-      expect(fragment.view.height, 30);
-      final first = fragment.glyphBoxes(2, 3).single;
-      final last = fragment.glyphBoxes(4, 5).single;
-      expect(last.left, greaterThan(first.right));
-      expect(last.top, first.top);
-      final hit = fragment.view.sourceAt(
-        Offset(last.left + .1, (last.top + last.bottom) / 2),
-      );
-      expect(hit.sourceRune, 4);
-      expect(hit.isExact, isTrue);
-    } finally {
-      fragment.close();
-    }
-    expect(f.cache.activeLeases, 0);
-  });
-
-  test(
-    'base trailing space follows the whole annotation range with original source',
-    () {
-      final f = _Fixture(
-        '<p>X<ruby>AB <rt>xy</rt><rt>z</rt></ruby>Y</p>',
-        width: 200,
-        height: 100,
-      );
-      f.finish();
-      final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
-      try {
-        expect(fragment.projection.text, 'XABxyz Y');
-        expect(fragment.view.content.projection.engineText, 'X\uFFFC\uFFFC Y');
-        expect(fragment.projection.sourceAtUtf16(6).sourceRune, 3);
-        expect(f.session.snapshot.single.fragments.single.sourceHint, (
-          runeStart: 0,
-          runeEnd: 8,
-        ));
-        final glyph = fragment.glyphBoxes(5, 6).single;
-        final hit = fragment.view.sourceAt(
-          Offset(glyph.left + .1, (glyph.top + glyph.bottom) / 2),
-        );
-        expect(hit.sourceRune, 6);
-        expect(hit.isExact, isTrue);
-      } finally {
-        fragment.close();
-      }
-      expect(f.cache.activeLeases, 0);
-    },
-  );
-
-  test('extra annotation source retains fallback and hidden gaps', () {
-    final f = _Fixture(
-      '<ruby>AB<rt>xy</rt><rp>(</rp><span hidden>hidden</span><rt>zw</rt></ruby>',
-      width: 200,
-      height: 100,
-    );
-    f.finish();
-    final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
-    try {
-      expect(fragment.projection.text, 'ABxyzw');
-      expect(fragment.projection.sourceAtUtf16(4).sourceRune, 11);
-      expect(fragment.projection.sourceAtUtf16(4).isExact, isFalse);
+      expect(fragment.projection.text, 'XABxyz Y');
+      expect(fragment.view.content.projection.engineText, 'X\uFFFC Y');
+      expect(fragment.projection.sourceAtUtf16(6).sourceRune, 3);
       expect(f.session.snapshot.single.fragments.single.sourceHint, (
         runeStart: 0,
-        runeEnd: 13,
+        runeEnd: 8,
       ));
       final glyph = fragment.glyphBoxes(5, 6).single;
       final hit = fragment.view.sourceAt(
         Offset(glyph.left + .1, (glyph.top + glyph.bottom) / 2),
       );
-      expect(hit.sourceRune, 12);
+      expect(hit.sourceRune, 6);
       expect(hit.isExact, isTrue);
     } finally {
       fragment.close();
@@ -2076,104 +1857,31 @@ void main() {
     expect(f.cache.activeLeases, 0);
   });
 
-  test('actual and anonymous columns retain independent nonlinear scaling', () {
-    final f = _Fixture(
-      '<ruby>AB<rt>xy</rt><rt>z</rt></ruby>',
-      width: 200,
-      height: 100,
-      textScaler: _Scaler((size) => size >= 20 ? size * 2 : size),
-    );
-    f.finish();
-    final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
-    try {
-      final leases = fragment.nativeLeases.toList();
-      expect((leases[1] as ForumBodyTextLease).layout.height, 40);
-      expect((leases[3] as ForumBodyTextLease).layout.height, 40);
-      expect((leases[4] as ForumBodyTextLease).layout.height, 10);
-      expect(fragment.view.height, 50);
-    } finally {
-      fragment.close();
-    }
-    expect(f.cache.activeLeases, 0);
-  });
-
   test(
-    'an empty first RT preserves its base before the next annotation column',
+    'base text from an ambiguous ruby can wrap and continue across pages',
     () {
       final f = _Fixture(
-        '<ruby>A<rt></rt><rt>z</rt></ruby>',
-        width: 200,
-        height: 100,
+        '<ruby><rb>AA BB CC</rb><rt>one</rt><rt>two</rt></ruby>',
+        width: 50,
+        height: 20,
       );
       f.finish();
-      final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
-      try {
-        expect(fragment.projection.text, 'Az');
-        expect(fragment.view.atomIndices, [0, 1]);
-        expect(fragment.nativeLeases, hasLength(4));
-        expect(f.cache.pictureBuildCount, 1);
-        expect(fragment.glyphBoxes(0, 2), hasLength(2));
-      } finally {
-        fragment.close();
-      }
-      expect(f.cache.activeLeases, 0);
-    },
-  );
-
-  test('one base with sixty RTs shares existing bounded native requests', () {
-    final f = _Fixture(
-      '<p><ruby>A${List.generate(60, (index) => '<rt>r$index</rt>').join()}</ruby></p>',
-      width: 600,
-      height: 100,
-      entries: 4,
-    );
-    f.finish();
-    expect(f.cache.layoutBuildCount, 3);
-    expect(f.cache.pictureBuildCount, 0);
-    final fragment = f.prepare(0).single as ForumBodyPreparedInlineFragment;
-    try {
-      expect(fragment.view.atomIndices, hasLength(60));
-      expect(fragment.nativeLeases, hasLength(121));
-      expect(f.cache.entryCount, lessThanOrEqualTo(4));
-      expect(f.cache.pictureBuildCount, 1);
-    } finally {
-      fragment.close();
-    }
-    expect(f.cache.activeLeases, 0);
-    expect(f.session.activeIssuedLeases, 0);
-  });
-
-  test(
-    'consecutive RTs preserve actual source when their columns cross a page',
-    () {
-      final f = _Fixture(
-        '<ruby>A<rt>xy</rt><rt>zw</rt></ruby>',
-        width: 20,
-        height: 30,
-      );
-      f.finish();
-      expect(f.session.snapshot, hasLength(2));
-      for (var page = 0; page < 2; page++) {
+      expect(f.session.snapshot, hasLength(3));
+      for (var page = 0; page < 3; page++) {
         final fragment =
             f.prepare(page).single as ForumBodyPreparedInlineFragment;
         try {
-          expect(fragment.view.atomIndices, [page]);
-          expect(f.session.snapshot[page].fragments.single.sourceHint, (
-            runeStart: page == 0 ? 0 : 3,
-            runeEnd: page == 0 ? 3 : 5,
-          ));
-          final glyph = fragment.glyphBoxes(page * 2 + 2, page * 2 + 3).single;
-          final hit = fragment.view.sourceAt(
-            Offset(glyph.left + .1, (glyph.top + glyph.bottom) / 2),
-          );
-          expect(hit.sourceRune, page * 2 + 2);
-          expect(hit.isExact, isTrue);
+          expect(fragment.projection.text, 'AA BB CC');
+          expect(fragment.view.atomIndices, isEmpty);
+          final span = f.session.snapshot[page].fragments.single.sourceHint!;
+          expect(span.runeStart, page * 3);
+          expect(span.runeEnd, lessThanOrEqualTo(8));
+          expect(fragment.nativeLeases, hasLength(1));
         } finally {
           fragment.close();
         }
-        expect(f.cache.activeLeases, 0);
-        expect(f.session.activeIssuedLeases, 0);
       }
+      expect(f.cache.activeLeases, 0);
     },
   );
 
@@ -2879,8 +2587,6 @@ void main() {
   }
 
   for (final html in [
-    '<ruby> <rt>a</rt></ruby>',
-    '<ruby><rt> </rt></ruby>',
     '<ruby style="ruby-position:inter-character">A<rt>a</rt></ruby>',
   ]) {
     test('pending complex format never flattens or loses source: $html', () {

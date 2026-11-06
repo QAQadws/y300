@@ -260,18 +260,19 @@ void main() {
     );
   }
 
-  test('orphan fallback does not expose annotations from a second level', () {
+  test('neither orphan level paints without an actual base', () {
     final f = _open(
-      '<ruby><rtc>word</rtc><rtc><rt>x</rt><rt>y</rt></rtc></ruby>',
+      '<p>A<ruby><rtc>word</rtc><rtc><rt>x</rt><rt>y</rt></rtc></ruby>B</p>',
       entries: 3,
     );
     _finish(f.session, f.cache);
     final fragments = _page(f.session, f.cache, 0, 1);
     try {
       final fragment = fragments.single as ForumBodyPreparedInlineFragment;
-      expect(fragment.projection.text, 'word');
-      expect(fragment.nativeLeases.length, 3);
-      expect(f.cache.pictureBuildCount, 1);
+      expect(fragment.projection.text, 'AB');
+      expect(fragment.view.atomIndices, isEmpty);
+      expect(fragment.nativeLeases.length, 1);
+      expect(f.cache.pictureBuildCount, 0);
     } finally {
       for (final f in fragments) {
         f.close();

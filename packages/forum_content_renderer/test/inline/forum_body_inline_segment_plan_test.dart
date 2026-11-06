@@ -471,15 +471,11 @@ void main() {
   }
 
   test('an omitted span leaves implicit base spaces and actual columns', () {
-    final input = _input(
-      'X<ruby> A <rt>xx</rt><rt>yy</rt><rtc>word</rtc></ruby>Z',
-    );
-    expect(input.content.projection.display.text, 'X Axxyy Z');
+    final input = _input('X<ruby> A <rt>xx</rt><rtc>word</rtc></ruby>Z');
+    expect(input.content.projection.display.text, 'X Axx Z');
     expect(input.groups.map((column) => column.base.content.projection.text), [
       'A',
-      '',
     ]);
-    expect(input.groups.last.base.content.isSourceFree, isTrue);
     final contexts = [
       for (final (index, column) in input.groups.indexed)
         ...input.content.resolveAtomicContexts(
@@ -487,12 +483,7 @@ void main() {
           column.nativeRequests.map((r) => r.content).toList(),
         ),
     ];
-    expect(contexts.map((c) => c.content.projection.text), [
-      'A',
-      'xx',
-      '',
-      'yy',
-    ]);
+    expect(contexts.map((c) => c.content.projection.text), ['A', 'xx']);
     for (final window in contexts) {
       if (window.content.isSourceFree) {
         expect(window.startUtf16, window.endUtf16);

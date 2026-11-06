@@ -130,6 +130,7 @@ enum ForumBodyRubyIgnoredReason {
   hidden,
   unselectedAnnotationLevel,
   nestedAnnotation,
+  unpairedAnnotation,
 }
 
 /// Structural omission only, not evidence that the enclosed source was read.

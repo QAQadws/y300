@@ -69,7 +69,9 @@ void main() {
   test(
     'RTC remains a typed layer through the same mixed text-flow consumer',
     () {
-      final cursor = _cursor('前<ruby>A<rtc><rt>x</rt><rt>y</rt></rtc></ruby>后');
+      final cursor = _cursor(
+        '前<ruby><rb>A</rb><rb>B</rb><rtc><rt>x</rt><rt>y</rt></rtc></ruby>后',
+      );
       final unit = _drain(cursor).whereType<ForumBodyTextFlowInline>().single;
       final group = unit.content.parts
           .whereType<ForumBodyInlineFlowRuby>()
@@ -77,8 +79,8 @@ void main() {
           .group;
       final level =
           group.annotations.single as ForumBodyRubyAnnotationContainerContent;
-      expect(level.source.runeStart, 2);
-      expect(level.source.runeEnd, 4);
+      expect(level.source.runeStart, 3);
+      expect(level.source.runeEnd, 5);
       expect(
         level.parts.cast<ForumBodyRubyTextAnnotationContent>().map(
           (rt) => _text(rt.parts),
@@ -103,6 +105,53 @@ void main() {
       expect(level.parts, hasLength(2));
     },
   );
+
+  test('only levels with real base columns enter the readable text flow', () {
+    const html =
+        '<p>L<ruby><rt>orphan</rt></ruby>'
+        '<ruby><rb style="color:red">A</rb><rt>extra</rt> <rt>also</rt></ruby>'
+        '<ruby>B<rtc><rt>too</rt><rt>many</rt></rtc>'
+        '<rtc><rt>kept</rt></rtc></ruby>R</p>';
+    final document = _document(html);
+    for (final budget in [1, 7]) {
+      final unit = _drain(
+        _cursor(html),
+        budget: budget,
+      ).whereType<ForumBodyTextFlowInline>().single;
+      final content = unit.content;
+      final plain = content.parts
+          .whereType<ForumBodyInlineFlowText>()
+          .map((part) => part.content)
+          .toList();
+      expect(plain.map((text) => text.projection.text).join(), 'LAR');
+      final base = plain.singleWhere((text) => text.projection.text == 'A');
+      expect(base.runs.single.style.textStyle.color, const Color(0xffff0000));
+      final retained = content.parts
+          .whereType<ForumBodyInlineFlowRuby>()
+          .single
+          .group;
+      final level =
+          retained.annotations.single
+              as ForumBodyRubyAnnotationContainerContent;
+      final annotation =
+          level.parts.single as ForumBodyRubyTextAnnotationContent;
+      expect(_text(annotation.parts), 'kept');
+      expect(
+        content.ignored
+            .where(
+              (item) =>
+                  item.reason == ForumBodyRubyIgnoredReason.unpairedAnnotation,
+            )
+            .map(
+              (item) => document.sourceText.substring(
+                item.source.runeStart,
+                item.source.runeEnd,
+              ),
+            ),
+        ['orphan', 'extra', 'also', 'toomany'],
+      );
+    }
+  });
 
   test(
     'empty and later levels leave their source outside the readable level',
