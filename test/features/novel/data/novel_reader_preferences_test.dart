@@ -25,6 +25,7 @@ void main() {
     expect(defaults.safeAreaEnabled, isTrue);
     expect(defaults.compressBlankLines, isFalse);
     expect(defaults.removeSourceIndent, isFalse);
+    expect(defaults.avoidIsolatedLines, isFalse);
   });
 
   test('constructor uses the same default theme as the default snapshot', () {
@@ -168,6 +169,29 @@ void main() {
       );
     },
   );
+
+  test('line balance preference survives switching to vertical reading', () {
+    const codec = NovelReaderPreferencesSnapshotCodec();
+    final defaults = NovelReaderPreferences.defaults();
+    final enabled = defaults.copyWith(
+      flowMode: NovelReaderFlowMode.vertical,
+      avoidIsolatedLines: true,
+    );
+    final saved = codec.encode(enabled);
+    expect(codec.decode(saved).avoidIsolatedLines, isTrue);
+    expect(codec.decode(saved).flowMode, NovelReaderFlowMode.vertical);
+    expect(codec.decode('{"schemaVersion":1}').avoidIsolatedLines, isFalse);
+    expect(
+      codec
+          .decode('{"schemaVersion":1,"avoidIsolatedLines":"true"}')
+          .avoidIsolatedLines,
+      isFalse,
+    );
+    expect(
+      codec.encode(defaults, previousSource: saved),
+      isNot(contains('avoidIsolatedLines')),
+    );
+  });
 
   test(
     'safe area preference round-trips and defaults old snapshots to enabled',

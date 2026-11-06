@@ -255,6 +255,7 @@ final class ForumBodyTextPageComposer {
     required this.maxPages,
     required this.maxFragments,
     bool flowing = false,
+    bool avoidIsolatedLines = false,
     bool captureNativeUsage = false,
     this.maxNativeHandlesPerPage,
     this.maxNativeEntriesPerPage,
@@ -262,6 +263,7 @@ final class ForumBodyTextPageComposer {
     this.maxDeliveriesPerPage,
     this.maxImagesPerPage,
   }) : _flowing = flowing,
+       _avoidIsolatedLines = avoidIsolatedLines && !flowing,
        _captureNativeUsage = captureNativeUsage {
     if (layoutId.isEmpty ||
         !width.isFinite ||
@@ -279,12 +281,13 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 37;
+  static const revision = 38;
   final ForumBodyIdentity identity;
   final String layoutId;
   final double width;
   final double height;
   final bool _flowing;
+  final bool _avoidIsolatedLines;
   final bool _captureNativeUsage;
 
   /// Explicit metadata budgets, not measured native/GPU memory.
@@ -1094,6 +1097,58 @@ final class ForumBodyTextPageComposer {
           _seal();
           return _result(inspected, pagesBefore, false);
         }
+        if (_avoidIsolatedLines &&
+            (_draft.isNotEmpty || _rules.isNotEmpty) &&
+            _floats.isEmpty &&
+            floatBandBottom == null &&
+            holdFloatLineInset == null &&
+            _collapseHeader == null) {
+          while (true) {
+            final protectedEnd = _balancedEnd(
+              active,
+              firstLine,
+              end,
+              continuation,
+            );
+            if (protectedEnd == null) break;
+            if (inspected >= maxLines) {
+              return _result(inspected, pagesBefore, false);
+            }
+            inspected++;
+            if (layout.lines[protectedEnd - 1].canBreakAfter) {
+              final heightHere = layout
+                  .fragment(firstLine, protectedEnd)
+                  .height;
+              if (top + math.max(heightHere, marker?.bounds.bottom ?? 0) <=
+                  height) {
+                break;
+              }
+              final startsParagraph = active.nextLine == active.firstLine;
+              final freshTop = startsParagraph
+                  ? active.spaceAtPageStart +
+                        math.max(0.0, -(marker?.bounds.top ?? 0))
+                  : 0.0;
+              final heightOnFreshPage = continuation
+                  ? layout.fragment(active.nextLine, protectedEnd).height
+                  : heightHere;
+              if (freshTop +
+                      math.max(
+                        heightOnFreshPage,
+                        startsParagraph ? marker?.bounds.bottom ?? 0 : 0.0,
+                      ) <=
+                  height) {
+                _seal();
+                return _result(inspected, pagesBefore, false);
+              }
+            }
+            if (continuation ||
+                end != active.nextLine + 1 ||
+                protectedEnd - active.nextLine != 3) {
+              break;
+            }
+            active.relaxThreeLineKeep = true;
+          }
+        }
         if (!continuation && _fragmentCount >= maxFragments) {
           _fail(ForumBodyTextPageFailure.fragmentLimit);
         }
@@ -1364,6 +1419,7 @@ final class ForumBodyTextPageComposer {
         active.nextLine = end;
         active.scanLine = end;
         active.groupEnd = null;
+        active.relaxThreeLineKeep = false;
         final paragraphComplete = end == active.endLine;
         if (paragraphComplete) {
           active.input.lease?.release();
@@ -1388,6 +1444,30 @@ final class ForumBodyTextPageComposer {
       close();
       rethrow;
     }
+  }
+
+  /// Check the relevant boundary only. Prefer keeping three remaining rows
+  /// together, then keep two at the start or end when the page can fit them.
+  /// Native groups and page budgets still own the actual placement decisions.
+  int? _balancedEnd(
+    _ActiveParagraph active,
+    int firstLine,
+    int groupEnd,
+    bool continuation,
+  ) {
+    if (continuation) {
+      return active.endLine - groupEnd == 1 && active.nextLine - firstLine >= 2
+          ? active.endLine
+          : null;
+    }
+    if (groupEnd == active.endLine) return null;
+    if (groupEnd > active.nextLine + 1) {
+      return active.endLine - groupEnd == 1 ? active.endLine : null;
+    }
+    if (active.endLine - active.nextLine == 3 && !active.relaxThreeLineKeep) {
+      return active.endLine;
+    }
+    return groupEnd + 1;
   }
 
   ({int linesInspected, int pagesPublished, bool paragraphCompleted}) _result(
@@ -1872,6 +1952,7 @@ final class _ActiveParagraph {
   int nextLine;
   int scanLine;
   int? groupEnd;
+  bool relaxThreeLineKeep = false;
   bool outsideFloatBand = false;
   ForumBodyPendingFloatLine? heldFloatLine;
 }

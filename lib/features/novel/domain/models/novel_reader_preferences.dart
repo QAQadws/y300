@@ -150,6 +150,7 @@ class NovelReaderPreferences {
     this.safeAreaEnabled = true,
     this.compressBlankLines = false,
     this.removeSourceIndent = false,
+    this.avoidIsolatedLines = false,
     this.typography = const NovelReaderTypographyOverrides(),
     this.viewport = const NovelReaderViewportOverrides(),
     this.colors = const NovelReaderColorOverrides(),
@@ -175,6 +176,7 @@ class NovelReaderPreferences {
     required this.safeAreaEnabled,
     required this.compressBlankLines,
     required this.removeSourceIndent,
+    required this.avoidIsolatedLines,
     required this.typography,
     required this.viewport,
     required this.colors,
@@ -198,6 +200,7 @@ class NovelReaderPreferences {
       safeAreaEnabled: true,
       compressBlankLines: false,
       removeSourceIndent: false,
+      avoidIsolatedLines: false,
       typography: NovelReaderTypographyOverrides(),
       viewport: NovelReaderViewportOverrides(),
       colors: NovelReaderColorOverrides(),
@@ -259,6 +262,7 @@ class NovelReaderPreferences {
   final bool safeAreaEnabled;
   final bool compressBlankLines;
   final bool removeSourceIndent;
+  final bool avoidIsolatedLines;
 
   String get themeMode => themePreset.storageValue;
 
@@ -284,6 +288,7 @@ class NovelReaderPreferences {
         other.safeAreaEnabled == safeAreaEnabled &&
         other.compressBlankLines == compressBlankLines &&
         other.removeSourceIndent == removeSourceIndent &&
+        other.avoidIsolatedLines == avoidIsolatedLines &&
         other.typography == typography &&
         other.viewport == viewport &&
         other.colors == colors;
@@ -307,6 +312,7 @@ class NovelReaderPreferences {
     safeAreaEnabled,
     compressBlankLines,
     removeSourceIndent,
+    avoidIsolatedLines,
     typography,
     viewport,
     colors,
@@ -330,6 +336,7 @@ class NovelReaderPreferences {
     bool? safeAreaEnabled,
     bool? compressBlankLines,
     bool? removeSourceIndent,
+    bool? avoidIsolatedLines,
     NovelReaderTypographyOverrides? typography,
     NovelReaderViewportOverrides? viewport,
     NovelReaderColorOverrides? colors,
@@ -354,6 +361,7 @@ class NovelReaderPreferences {
       safeAreaEnabled: safeAreaEnabled ?? this.safeAreaEnabled,
       compressBlankLines: compressBlankLines ?? this.compressBlankLines,
       removeSourceIndent: removeSourceIndent ?? this.removeSourceIndent,
+      avoidIsolatedLines: avoidIsolatedLines ?? this.avoidIsolatedLines,
       typography: typography ?? this.typography,
       viewport: viewport ?? this.viewport,
       colors: colors ?? this.colors,

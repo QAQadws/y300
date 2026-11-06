@@ -46,9 +46,11 @@ final class NovelReaderNativeLayoutScope {
     required int fontCollectionGeneration,
     required String paragraphInputs,
     required bool usesQuoteTheme,
+    required bool avoidIsolatedLines,
   }) : _fontCollectionGeneration = fontCollectionGeneration,
        _paragraphInputs = paragraphInputs,
-       _usesQuoteTheme = usesQuoteTheme;
+       _usesQuoteTheme = usesQuoteTheme,
+       _avoidIsolatedLines = avoidIsolatedLines;
   static const fingerprintRevision = 16;
   final NovelReaderNativePreparedChapter chapter;
   final ForumBodyReaderStyle reader;
@@ -67,6 +69,7 @@ final class NovelReaderNativeLayoutScope {
   final int _fontCollectionGeneration;
   final String _paragraphInputs;
   final bool _usesQuoteTheme;
+  final bool _avoidIsolatedLines;
 
   static Future<NovelReaderNativeLayoutScope> prepare({
     required NovelReaderNativePreparedChapter chapter,
@@ -174,6 +177,7 @@ final class NovelReaderNativeLayoutScope {
       pageHandleLimit,
       pageEntryLimit,
       pageByteLimit,
+      environment.avoidIsolatedLines,
       images?.geometryIdentity,
       if (collapses != null)
         [
@@ -201,6 +205,7 @@ final class NovelReaderNativeLayoutScope {
       fontCollectionGeneration: fontCollectionGeneration,
       paragraphInputs: jsonEncode([...revisions, ...readerValues]),
       usesQuoteTheme: inputs.usesQuoteTheme,
+      avoidIsolatedLines: environment.avoidIsolatedLines,
       paginationKey:
           'native-$fingerprintRevision-${sha256.convert(utf8.encode(jsonEncode(payload)))}',
     );
@@ -219,6 +224,7 @@ final class NovelReaderNativeLayoutScope {
     if (!isCurrent() ||
         width != this.width ||
         height != this.height ||
+        environment.avoidIsolatedLines != _avoidIsolatedLines ||
         fontCollectionGeneration != _fontCollectionGeneration) {
       return null;
     }
@@ -257,6 +263,7 @@ final class NovelReaderNativeLayoutScope {
       fontCollectionGeneration: fontCollectionGeneration,
       paragraphInputs: _paragraphInputs,
       usesQuoteTheme: _usesQuoteTheme,
+      avoidIsolatedLines: _avoidIsolatedLines,
       paginationKey: paginationKey,
     );
   }
@@ -286,6 +293,7 @@ final class NovelReaderNativeLayoutScope {
       dedicatedTables: true,
       captureFloats: true,
       tableExtent: tableExtent,
+      avoidIsolatedLines: _avoidIsolatedLines,
       imageResolver: catalog?.resolve,
       inlineImageResolver: catalog == null
           ? null

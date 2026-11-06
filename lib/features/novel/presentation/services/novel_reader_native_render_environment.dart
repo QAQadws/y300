@@ -14,6 +14,7 @@ final class NovelReaderNativeRenderEnvironment {
     this.reader,
     this.textScaler,
     this.backgroundColor,
+    this.avoidIsolatedLines,
   );
 
   factory NovelReaderNativeRenderEnvironment.capture(
@@ -74,10 +75,13 @@ final class NovelReaderNativeRenderEnvironment {
       // at every effective author/reader font size. Do not flatten to one factor.
       MediaQuery.textScalerOf(context),
       palette.background,
+      preferences.avoidIsolatedLines &&
+          preferences.flowMode != NovelReaderFlowMode.vertical,
     );
   }
 
   final ForumBodyReaderStyle reader;
   final TextScaler textScaler;
   final Color backgroundColor;
+  final bool avoidIsolatedLines;
 }

@@ -45,6 +45,8 @@ final class _Input {
     double height = 20,
     int maxPages = 20,
     int maxFragments = 40,
+    bool avoidIsolatedLines = false,
+    bool flowing = false,
   }) {
     final composer = ForumBodyTextPageComposer(
       identity: document.identity,
@@ -53,6 +55,8 @@ final class _Input {
       height: height,
       maxPages: maxPages,
       maxFragments: maxFragments,
+      avoidIsolatedLines: avoidIsolatedLines,
+      flowing: flowing,
     );
     addTearDown(composer.close);
     return composer;
@@ -89,6 +93,129 @@ void _consume(ForumBodyTextPageComposer composer, {int maxLines = 2}) {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  for (final (prior, rows, height, expected) in [
+    (true, 4, 20.0, [0, 2, 2]),
+    (false, 4, 30.0, [2, 2]),
+    (true, 3, 30.0, [0, 3]),
+    (true, 3, 20.0, [0, 2, 1]),
+    (false, 4, 10.0, [1, 1, 1, 1]),
+  ]) {
+    test(
+      'bounded line balance with prior=$prior, rows=$rows, height=$height',
+      () {
+        final input = _Input('${prior ? '<p>X</p>' : ''}<p>${'A' * rows}</p>');
+        final index = prior ? 1 : 0;
+        for (final budget in [1, 32]) {
+          final composer = input.composer(
+            width: 10,
+            height: height,
+            avoidIsolatedLines: true,
+          );
+          if (prior) {
+            _append(composer, input.lease(0, width: 10), 0);
+            _consume(composer, maxLines: budget);
+          }
+          final lease = input.lease(index, width: 10);
+          expect(lease.layout.lines, hasLength(rows));
+          _append(composer, lease, index);
+          var calls = 0;
+          while (composer.snapshot.isEmpty && !composer.needsInput) {
+            if (++calls > 12) fail('First balanced page did not publish');
+            final step = composer.advance(maxLines: budget);
+            expect(step.linesInspected, lessThanOrEqualTo(budget));
+            expect(
+              step.linesInspected > 0 ||
+                  step.pagesPublished == 1 ||
+                  step.paragraphCompleted,
+              isTrue,
+            );
+          }
+          final prefix = composer.snapshot;
+          final first = prefix.first;
+          _consume(composer, maxLines: budget);
+          composer.finish();
+          expect(prefix, hasLength(1));
+          expect(composer.snapshot.first, same(first));
+          expect(
+            composer.snapshot.map((page) {
+              final fragment = page.fragments
+                  .where((fragment) => fragment.paragraphIndex == index)
+                  .singleOrNull;
+              return fragment == null
+                  ? 0
+                  : fragment.endLine - fragment.startLine;
+            }),
+            expected,
+          );
+          final coverage = composer.snapshot
+              .expand((page) => page.fragments)
+              .where((fragment) => fragment.paragraphIndex == index)
+              .expand(
+                (fragment) => List.generate(
+                  fragment.coverageEndUtf16 - fragment.coverageStartUtf16,
+                  (i) => fragment.coverageStartUtf16 + i,
+                ),
+              );
+          expect(coverage, List.generate(rows, (i) => i));
+          expect(input.cache.activeLeases, 0);
+        }
+      },
+    );
+  }
+
+  test('line balance uses a bounded probe before a long first page', () {
+    final input = _Input('<p>X</p><p>${'A' * 150}</p>');
+    (int, List<int>) firstPage({required bool enabled, bool flowing = false}) {
+      final composer = input.composer(
+        width: 10,
+        height: 40,
+        avoidIsolatedLines: enabled,
+        flowing: flowing,
+      );
+      _append(composer, input.lease(0, width: 10), 0);
+      _consume(composer, maxLines: 1);
+      _append(composer, input.lease(1, width: 10), 1);
+      var inspected = 0;
+      for (var call = 0; call < 8 && composer.snapshot.isEmpty; call++) {
+        final step = composer.advance(maxLines: 1);
+        expect(step.linesInspected, inInclusiveRange(0, 1));
+        inspected += step.linesInspected;
+      }
+      final rows = composer.snapshot.single.fragments
+          .map((f) => f.endLine - f.startLine)
+          .toList();
+      composer.close();
+      expect(input.cache.activeLeases, 0);
+      return (inspected, rows);
+    }
+
+    final (normal, rows) = firstPage(enabled: false);
+    final (protected, balancedRows) = firstPage(enabled: true);
+    final (flowing, flowRows) = firstPage(enabled: true, flowing: true);
+    expect(rows, [1, 3]);
+    expect(balancedRows, rows);
+    expect(protected - normal, 1);
+    expect(flowRows, rows);
+    expect(flowing, normal);
+  });
+
+  test('line balance does not leave a page containing only padding', () {
+    final input = _Input('<p>AB</p>');
+    final composer = input.composer(
+      width: 10,
+      height: 30,
+      avoidIsolatedLines: true,
+    );
+    composer.appendPadding(20);
+    expect(composer.advancePadding().isComplete, isTrue);
+    _append(composer, input.lease(0, width: 10), 0);
+    _consume(composer, maxLines: 1);
+    composer.finish();
+    expect(composer.snapshot, hasLength(2));
+    expect(composer.snapshot.first.fragments.single.startLine, 0);
+    expect(composer.snapshot.last.fragments.single.startLine, 1);
+  });
 
   test(
     'published source hints retain hidden gaps without claiming their visibility',

@@ -217,6 +217,7 @@ final class ForumBodyTextPageSession {
     bool dedicatedTables = false,
     bool captureFloats = false,
     bool captureNativeUsage = false,
+    bool avoidIsolatedLines = false,
     // A flowing host consumes a table's actual occupied height as one slice.
     ForumBodyTableExtent tableExtent = ForumBodyTableExtent.bookPage,
   }) {
@@ -248,6 +249,7 @@ final class ForumBodyTextPageSession {
       maxPages: limits.maxPages,
       maxFragments: limits.maxFragments,
       flowing: tableExtent == ForumBodyTableExtent.natural,
+      avoidIsolatedLines: avoidIsolatedLines,
       captureNativeUsage: captureNativeUsage,
       maxNativeHandlesPerPage: maxNativeHandlesPerPage,
       maxNativeEntriesPerPage: maxNativeEntriesPerPage,

@@ -73,6 +73,7 @@ final class _Fixture {
     int? maxNativeEstimatedBytesPerPage,
     ForumBodyTableExtent extent = ForumBodyTableExtent.bookPage,
     bool captureFloats = false,
+    bool avoidIsolatedLines = false,
   }) {
     final result = ForumBodyTextPageSession(
       document: document,
@@ -92,6 +93,7 @@ final class _Fixture {
       maxNativeEstimatedBytesPerPage: maxNativeEstimatedBytesPerPage,
       tableExtent: extent,
       captureFloats: captureFloats,
+      avoidIsolatedLines: avoidIsolatedLines,
     );
     addTearDown(result.close);
     return result;
@@ -142,6 +144,30 @@ void main() {
     await (FontLoader(
       'packages/forum_content_renderer/ForumBodyInlineSpace',
     )..addFont(rootBundle.load('assets/fonts/inline_space.ttf'))).load();
+  });
+
+  test('line balance resumes after an image that occupies a whole page', () {
+    final fixture = _Fixture('<img src="https://x/tall"><p>${'A' * 40}</p>');
+    final session = fixture.session(
+      height: 30,
+      resolver: (identity, node) => fixture.resolve(identity, node, ratio: .1),
+      avoidIsolatedLines: true,
+    );
+    _finish(session, pages: 1);
+    final prefix = session.snapshot;
+    final image = prefix.single;
+    expect(image.usedHeight, 30);
+    expect(image.fragments.single.kind, ForumBodyTextPageFragmentKind.image);
+    _finish(session);
+    expect(prefix, hasLength(1));
+    expect(session.snapshot.first, same(image));
+    expect(
+      session.snapshot.skip(1).map((page) {
+        final text = page.fragments.single;
+        return text.endLine - text.startLine;
+      }),
+      [2, 2],
+    );
   });
 
   test('text and repeated-URL images retain distinct real source order', () {

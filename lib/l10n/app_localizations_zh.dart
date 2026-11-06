@@ -2440,6 +2440,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get novelRemoveSourceIndentDescription => '清除普通正文开头的空格和作者设置的首行缩进';
 
   @override
+  String get novelAvoidIsolatedLines => '避免孤行';
+
+  @override
+  String get novelAvoidIsolatedLinesDescription => '横向翻页时，尽量避免段落在页首或页尾只留一行';
+
+  @override
   String get novelSafeContent => '安全显示正文';
 
   @override
@@ -8451,6 +8457,12 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get novelRemoveSourceIndentDescription => '清除一般正文開頭的空格與作者設定的首行縮排';
+
+  @override
+  String get novelAvoidIsolatedLines => '避免孤行';
+
+  @override
+  String get novelAvoidIsolatedLinesDescription => '橫向翻頁時，盡量避免段落在頁首或頁尾只留一行';
 
   @override
   String get novelSafeContent => '安全顯示正文';

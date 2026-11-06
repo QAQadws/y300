@@ -4074,6 +4074,18 @@ abstract class AppLocalizations {
   /// **'清除普通正文开头的空格和作者设置的首行缩进'**
   String get novelRemoveSourceIndentDescription;
 
+  /// No description provided for @novelAvoidIsolatedLines.
+  ///
+  /// In zh, this message translates to:
+  /// **'避免孤行'**
+  String get novelAvoidIsolatedLines;
+
+  /// No description provided for @novelAvoidIsolatedLinesDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'横向翻页时，尽量避免段落在页首或页尾只留一行'**
+  String get novelAvoidIsolatedLinesDescription;
+
   /// No description provided for @novelSafeContent.
   ///
   /// In zh, this message translates to:

@@ -330,6 +330,20 @@ class _NovelReaderDisplaySettingsSheetState
                   ),
                   if (widget.nativeTypography) ...[
                     SwitchListTile.adaptive(
+                      key: const Key('novel-reader-avoid-isolated-lines'),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                      ),
+                      title: Text(l10n.novelAvoidIsolatedLines),
+                      subtitle: Text(l10n.novelAvoidIsolatedLinesDescription),
+                      value: _draft.avoidIsolatedLines,
+                      onChanged: _draft.flowMode == NovelReaderFlowMode.vertical
+                          ? null
+                          : (value) => _applyPreferences(
+                              _draft.copyWith(avoidIsolatedLines: value),
+                            ),
+                    ),
+                    SwitchListTile.adaptive(
                       key: const Key('novel-reader-compress-blank-lines'),
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 20,
