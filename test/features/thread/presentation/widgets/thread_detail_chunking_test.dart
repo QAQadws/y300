@@ -697,13 +697,12 @@ void main() {
         ),
       );
       final flow = find.byType(ForumBodyFlowBox);
-      await _pumpUntil(
-        tester,
-        () =>
-            flow.evaluate().length == 1 &&
-            tester.widget<ForumBodyFlowBox>(flow).prefix.isComplete,
-      );
+      // Preparation uses an isolate, then the native layout advances on
+      // Flutter frames. Allow the full frame budget under concurrent tests.
+      await _pumpUntil(tester, () => flow.evaluate().length == 1);
+      await tester.pumpAndSettle(const Duration(milliseconds: 16));
       expect(_renderers(tester, 'long'), isEmpty);
+      expect(tester.widget<ForumBodyFlowBox>(flow).prefix.isComplete, isTrue);
       expect(
         tester.widget<ForumBodyFlowBox>(flow).prefix.length,
         greaterThan(1),
