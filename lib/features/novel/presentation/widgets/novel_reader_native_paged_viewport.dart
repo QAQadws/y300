@@ -1344,9 +1344,10 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
                               : (fragment) => _toggleCollapse(view, fragment),
                           key: ObjectKey(view),
                           view: view,
-                          selectionEnabled:
-                              !widget.frozen &&
-                              controller.visiblePageIndex == page,
+                          // Freezing blocks input, but the confirmed delivery
+                          // remains mounted. Keep its selection registration
+                          // stable until the visible page actually changes.
+                          selectionEnabled: controller.visiblePageIndex == page,
                           // Retain the confirmed origin through cancellation
                           // and this one pending tap destination. Rapid return
                           // reuses its live Element instead of retiring and
