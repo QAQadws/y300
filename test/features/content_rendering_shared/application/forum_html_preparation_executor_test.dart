@@ -5,12 +5,55 @@ import 'dart:ui';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:y300/core/network/site_url_resolver.dart';
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
+import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
+import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/content_rendering_shared/application/host/cache_forum_html_prepared_image_resource.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 void main() {
   group('ForumHtmlPreparationExecutor', () {
+    test(
+      'blog and thread image resources keep distinct worker identities',
+      () async {
+        final executor = ForumHtmlPreparationExecutor(codeUnitThreshold: 0);
+        addTearDown(executor.dispose);
+        const url = 'https://example.test/photo.png';
+        const html = '<img src="$url">';
+        final thread = _request(html);
+        final blog = _request(
+          html,
+          preparer: const DefaultForumHtmlRenderPreparer(
+            contentImageKind: ForumImageKind.blogInline,
+          ),
+        );
+        expect(blog.identity, isNot(thread.identity));
+        final threadLease = executor.tryAcquire(thread)!;
+        final blogLease = executor.tryAcquire(blog)!;
+        addTearDown(threadLease.release);
+        addTearDown(blogLease.release);
+        final threadResult = (await threadLease.future)!;
+        final blogResult = (await blogLease.future)!;
+
+        expect(
+          threadResult.sequence.entries.single.cacheKey,
+          ImageCacheKeys.threadInline(url),
+        );
+        final resource =
+            blogResult.sequence.entries.single.resource
+                as CacheForumHtmlPreparedImageResource;
+        expect(resource.cacheKey, ImageCacheKeys.blogInline(url));
+        expect(resource.request.role, ImageCacheRole.blogInline);
+        expect(resource.request.ownerType, ImageCacheOwnerType.blog);
+        expect(resource.request.ownerId, 'owner-a');
+        expect(
+          _projection(blogResult),
+          _projection(blog.prepareSynchronously()),
+        );
+      },
+    );
+
     test('shared admission survives one facade closing', () async {
       final scheduler = ForumPreparationScheduler();
       addTearDown(scheduler.dispose);

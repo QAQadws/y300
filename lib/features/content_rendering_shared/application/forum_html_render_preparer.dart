@@ -1,9 +1,11 @@
 import 'package:y300/core/network/site_url_resolver.dart';
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/content_rendering_shared/application/host/forum_cache_html_preparation_image_policy.dart';
 import 'package:y300/features/content_rendering_shared/domain/models/forum_html_reader_preferences.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:y300/features/content_rendering_shared/presentation/contracts/forum_html_render_preparer.dart';
+
 import 'forum_html_render_preferences_projection.dart';
 
 const ForumHtmlPreparationImagePolicy defaultForumHtmlPreparationImagePolicy =
@@ -11,9 +13,11 @@ const ForumHtmlPreparationImagePolicy defaultForumHtmlPreparationImagePolicy =
 
 /// Uses the same request resolver for prepared and displayed image resources.
 ForumHtmlPreparationImagePolicy forumHtmlPreparationImagePolicyFor(
-  ForumImageRequestResolver imageRequestResolver,
-) => ForumCacheHtmlPreparationImagePolicy(
+  ForumImageRequestResolver imageRequestResolver, {
+  ForumImageKind contentImageKind = ForumImageKind.threadInline,
+}) => ForumCacheHtmlPreparationImagePolicy(
   imageRequestResolver: imageRequestResolver,
+  contentImageKind: contentImageKind,
 );
 
 /// Unknown preparers may consume every preference, including conversion mode.
@@ -42,6 +46,7 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
     ForumHtmlThemeAdapter themeAdapter = const DefaultForumHtmlThemeAdapter(),
     SiteUrlResolver urlResolver = const SiteUrlResolver(),
     ForumHtmlPreparationImagePolicy? imagePolicy,
+    this.contentImageKind = ForumImageKind.threadInline,
     this.enablePlainTextLinks = false,
     this.enableSafeDisplayPlanning = false,
     this.safeDisplayPlanningCodeUnitBudget,
@@ -62,6 +67,8 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
   final ForumHtmlThemeAdapter _themeAdapter;
   final SiteUrlResolver _urlResolver;
   final ForumHtmlPreparationImagePolicy? _imagePolicy;
+
+  final ForumImageKind contentImageKind;
 
   /// Display-only capability; it is not a persisted reading preference.
   final bool enablePlainTextLinks;
@@ -100,7 +107,10 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
         ForumHtmlPreparationPipeline(
           imagePolicy:
               _imagePolicy ??
-              forumHtmlPreparationImagePolicyFor(_imageRequestResolver),
+              forumHtmlPreparationImagePolicyFor(
+                _imageRequestResolver,
+                contentImageKind: contentImageKind,
+              ),
           // The legacy default deduplicator has its own site resolver, even when
           // callers customize the resolver used for document image preparation.
           imageDeduplicator:

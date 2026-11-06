@@ -4,14 +4,16 @@ import 'package:y300/features/cache/domain/services/forum_image_request_resolver
 import 'package:y300/features/content_rendering_shared/application/host/cache_forum_html_prepared_image_resource.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
-/// Keeps the existing prepared-document cache identity, including novel HTML.
+/// Supplies the App's cache identity for a prepared image occurrence.
 final class ForumCacheHtmlPreparationImagePolicy
     implements ForumHtmlPreparationImagePolicy {
   const ForumCacheHtmlPreparationImagePolicy({
     this.imageRequestResolver = const DefaultForumImageRequestResolver(),
+    this.contentImageKind = ForumImageKind.threadInline,
   });
 
   final ForumImageRequestResolver imageRequestResolver;
+  final ForumImageKind contentImageKind;
 
   @override
   CacheForumHtmlPreparedImageResource? prepareInline({
@@ -25,13 +27,17 @@ final class ForumCacheHtmlPreparationImagePolicy
     String? title,
   }) => CacheForumHtmlPreparedImageResource.prepare(
     ForumImageLoadSpec(
-      kind: ForumImageKind.threadInline,
+      kind: contentImageKind,
       url: url,
       ownerId: _ownerId(
         threadId: threadId,
         imageCacheOwnerId: imageCacheOwnerId,
       ),
-      ownerType: ImageCacheOwnerType.thread,
+      ownerType: switch (contentImageKind) {
+        ForumImageKind.threadInline => ImageCacheOwnerType.thread,
+        ForumImageKind.blogInline => ImageCacheOwnerType.blog,
+        _ => null,
+      },
       imageIndex: imageIndex,
       htmlWidth: htmlWidth,
       htmlHeight: htmlHeight,

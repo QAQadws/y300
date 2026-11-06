@@ -2,6 +2,7 @@ import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 
 import '../domain/models/forum_html_reader_preferences.dart';
 import '../presentation/contracts/forum_html_render_preparer.dart';
@@ -70,6 +71,7 @@ final class ForumHtmlPreparationRequest {
       sourceId: sourceId,
       threadId: threadId,
       imageCacheOwnerId: imageCacheOwnerId,
+      contentImageKind: candidate.contentImageKind,
       enablePlainTextLinks: candidate.enablePlainTextLinks,
       enableSafeDisplayPlanning: candidate.enableSafeDisplayPlanning,
       safeDisplayPlanningCodeUnitBudget:
@@ -87,6 +89,7 @@ final class ForumHtmlBackgroundPreparationInput {
     required this.sourceId,
     required this.threadId,
     required this.imageCacheOwnerId,
+    this.contentImageKind = ForumImageKind.threadInline,
     required this.enablePlainTextLinks,
     this.enableSafeDisplayPlanning = false,
     this.safeDisplayPlanningCodeUnitBudget,
@@ -98,12 +101,14 @@ final class ForumHtmlBackgroundPreparationInput {
   final String sourceId;
   final String? threadId;
   final String? imageCacheOwnerId;
+  final ForumImageKind contentImageKind;
   final bool enablePlainTextLinks;
   final bool enableSafeDisplayPlanning;
   final int? safeDisplayPlanningCodeUnitBudget;
 
   ForumHtmlPreparedRenderDocument prepare() =>
       DefaultForumHtmlRenderPreparer(
+        contentImageKind: contentImageKind,
         enablePlainTextLinks: enablePlainTextLinks,
         enableSafeDisplayPlanning: enableSafeDisplayPlanning,
         safeDisplayPlanningCodeUnitBudget: safeDisplayPlanningCodeUnitBudget,
