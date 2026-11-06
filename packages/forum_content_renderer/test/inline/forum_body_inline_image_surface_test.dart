@@ -69,6 +69,45 @@ Widget _host(Widget child) => MaterialApp(
 );
 
 void main() {
+  testWidgets('a reading surface can suspend nested native image work', (
+    tester,
+  ) async {
+    final fixture = InlineImageFixture(sticker: false);
+    final host = _Host(fixture);
+    final coordinator = ForumHtmlImageViewportCoordinator()..setActive(false);
+    addTearDown(coordinator.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SingleChildScrollView(
+          child: ForumHtmlImageViewportScope(
+            coordinator: coordinator,
+            child: SizedBox(
+              height: 80,
+              child: ForumHtmlImageView(
+                host: host,
+                image: fixture.images.values.first.image,
+                fit: BoxFit.contain,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(host.builds, 0);
+    expect(coordinator.registeredImageCount, 1);
+
+    coordinator.setActive(true);
+    await tester.pumpAndSettle();
+    expect(find.byType(_Pixels), findsOneWidget);
+    coordinator.setActive(false);
+    await tester.pumpAndSettle();
+    expect(find.byType(_Pixels), findsNothing);
+
+    await tester.pumpWidget(const SizedBox());
+    expect(coordinator.registeredImageCount, 0);
+  });
+
   testWidgets('mounted inline anchors reveal the exact repeated image slot', (
     tester,
   ) async {

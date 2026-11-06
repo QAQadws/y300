@@ -572,12 +572,16 @@ class _ThreadPostHtmlFirstBodyState
                 callbacks: callbacks,
               ),
       );
+      final viewport = widget.imageViewportCoordinator;
+      final viewportBody = widget.nativeBody && viewport != null
+          ? ForumHtmlImageViewportScope(coordinator: viewport, child: body)
+          : body;
       return !tracked
-          ? body
+          ? viewportBody
           : ThreadBodyReadingBoundary(
               key: _readingKey,
               coordinator: coordinator!,
-              child: body,
+              child: viewportBody,
             );
     } catch (error, stackTrace) {
       _bodyLayoutPhase = ThreadBodyLayoutPhase.failed;

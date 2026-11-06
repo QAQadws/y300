@@ -10,6 +10,21 @@ import '../../services/forum_html_image_viewport_coordinator.dart';
 import '../forum_html_render_callbacks.dart';
 import 'forum_html_block_image_frame.dart';
 
+/// Shares the reading surface's image work policy with nested native blocks.
+class ForumHtmlImageViewportScope extends InheritedWidget {
+  const ForumHtmlImageViewportScope({
+    super.key,
+    required this.coordinator,
+    required super.child,
+  });
+
+  final ForumHtmlImageViewportCoordinator coordinator;
+
+  @override
+  bool updateShouldNotify(ForumHtmlImageViewportScope oldWidget) =>
+      !identical(oldWidget.coordinator, coordinator);
+}
+
 /// Displays one Host-resolved image without parsing HTML or creating requests.
 /// The same binding and callback generations protect standalone native bodies
 /// and the HTML factory from late dimensions, decoded sizes and frame events.
@@ -58,6 +73,7 @@ class _ForumHtmlImageViewState extends State<ForumHtmlImageView> {
   int _bindingRevision = 0;
   int _callbackRevision = 0;
   int _retryToken = 0;
+  ForumHtmlImageViewportCoordinator? _viewportCoordinator;
   ForumHtmlImageViewportHandle? _viewportHandle;
   ForumHtmlImageViewportMode? _lastMode;
   ForumHtmlImageViewportWork? _prefetchToken;
@@ -89,24 +105,12 @@ class _ForumHtmlImageViewState extends State<ForumHtmlImageView> {
   void initState() {
     super.initState();
     _restoreInlineLayout();
-    _viewportHandle = widget.viewportCoordinator?.register();
     _loadDimensions();
   }
 
   @override
   void didUpdateWidget(covariant ForumHtmlImageView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final coordinatorChanged = !identical(
-      oldWidget.viewportCoordinator,
-      widget.viewportCoordinator,
-    );
-    if (coordinatorChanged) {
-      _viewportHandle?.dispose();
-      _viewportHandle = widget.viewportCoordinator?.register();
-      _lastMode = null;
-      _callbackRevision++;
-      _cancelPrefetch();
-    }
     final bindingChanged =
         oldWidget.image.identity != widget.image.identity ||
         oldWidget.image.htmlSize != widget.image.htmlSize ||
@@ -133,6 +137,23 @@ class _ForumHtmlImageViewState extends State<ForumHtmlImageView> {
 
   @override
   Widget build(BuildContext context) {
+    final coordinator =
+        widget.viewportCoordinator ??
+        (widget.image.isSticker
+            ? null
+            : context
+                  .dependOnInheritedWidgetOfExactType<
+                    ForumHtmlImageViewportScope
+                  >()
+                  ?.coordinator);
+    if (!identical(_viewportCoordinator, coordinator)) {
+      _viewportHandle?.dispose();
+      _viewportCoordinator = coordinator;
+      _viewportHandle = coordinator?.register();
+      _lastMode = null;
+      _callbackRevision++;
+      _cancelPrefetch();
+    }
     final handle = _viewportHandle;
     if (handle == null) return _buildImage();
     return _buildBlockImage(
