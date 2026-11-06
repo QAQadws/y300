@@ -16,6 +16,8 @@ import '../inline/forum_body_text_band_layout.dart';
 import '../style/forum_body_text_scale_snapshot.dart';
 import 'forum_body_native_paragraph_layout.dart';
 import 'forum_body_paragraph_content.dart';
+import 'forum_body_paragraph_geometry.dart'
+    show forumBodyHaveSameParagraphLineInputs;
 import 'forum_body_paragraph_layout.dart';
 import 'forum_body_paragraph_row.dart';
 import 'forum_body_first_line_indent.dart';
@@ -863,7 +865,12 @@ final class ForumBodyParagraphCache {
     _bytes -= entry.bytes;
     _leases -= entry.leases;
     entry.leases = 0;
-    entry.layout.dispose();
+    try {
+      entry.layout.dispose();
+    } finally {
+      entry.textBackgroundInk?.dispose();
+      entry.textBackgroundInk = null;
+    }
   }
 
   void clearUnpinned() {
@@ -1249,6 +1256,66 @@ final class ForumBodyParagraphLease extends ForumBodyTextLease {
   @override
   final ForumBodyParagraphContent content;
 
+  late final TextScaler capturedTextScaler = ForumBodyTextScaleSnapshot(
+    {
+      for (final (size, value) in (_entry.key as _LayoutKey).scales)
+        size: value,
+    },
+    rootSize: content.style.textStyle.fontSize!,
+    missingSize: const ForumBodyParagraphLayoutException(
+      ForumBodyParagraphLayoutFailure.scale,
+    ),
+  );
+
+  /// The cache owns the optional paint companion under the existing entry.
+  /// It is never used for line breaking, hit testing, or source coverage.
+  ForumBodyParagraphLayout prepareTextBackgroundInk() {
+    final original = layout;
+    final cached = _entry.textBackgroundInk;
+    if (cached != null) return cached;
+    final key = _entry.key as _LayoutKey;
+    final bytes = _entry.initialBytes;
+    _owner._makeRoom(bytes, newEntry: false);
+    final ink = ForumBodyParagraphLayout.create(
+      content: content.withoutTextBackground,
+      width: original.width,
+      textScaler: capturedTextScaler,
+      rowIsolationPitch: key.rowIsolationPitch,
+    );
+    var adopted = false;
+    try {
+      _owner._builds++;
+      if (ink.height != original.height ||
+          ink.width != original.width ||
+          ink.paintScale != original.paintScale ||
+          ink.horizontalInset != original.horizontalInset ||
+          ink.lineCount != original.lineCount) {
+        throw const ForumBodyParagraphLayoutException(
+          ForumBodyParagraphLayoutFailure.coverage,
+        );
+      }
+      for (var index = 0; index < ink.lineCount; index++) {
+        final a = original.lines[index];
+        final b = ink.lines[index];
+        if (!forumBodyHaveSameParagraphLineInputs(a, b) ||
+            a.top != b.top ||
+            a.bottom != b.bottom ||
+            a.baseline != b.baseline) {
+          throw const ForumBodyParagraphLayoutException(
+            ForumBodyParagraphLayoutFailure.coverage,
+          );
+        }
+      }
+      _entry.textBackgroundInk = ink;
+      _entry.bytes += bytes;
+      _owner._bytes += bytes;
+      adopted = true;
+      return ink;
+    } finally {
+      if (!adopted) ink.dispose();
+    }
+  }
+
   /// Exact current source/request qualification without acquisition, cache
   /// mutation or shaping. A caller scaler can retire this handle while sampled.
   bool matchesNativeInputs({
@@ -1437,6 +1504,7 @@ final class _LayoutEntry {
   int bytes;
   int leases = 0;
   bool retired = false;
+  ForumBodyParagraphLayout? textBackgroundInk;
   ForumBodyTextBandContent? bandHint;
   WeakReference<ForumBodyTextScaleSnapshot>? bandScalerHint;
   double? bandGutterHint;

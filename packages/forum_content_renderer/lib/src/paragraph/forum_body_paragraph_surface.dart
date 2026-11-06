@@ -3,9 +3,13 @@ import 'package:flutter/widgets.dart' show BuildContext, LeafRenderObjectWidget;
 import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../style/forum_body_style_options.dart';
+import '../style/forum_body_text_background_style.dart';
+import 'forum_body_paragraph_background_view.dart';
 import 'forum_body_paragraph_cache.dart';
 import 'forum_body_paragraph_layout.dart';
 import 'forum_body_text_surface_box.dart';
+
+typedef _BackgroundAppearance = ({Color? color, double radius});
 
 /// Paints an already laid out paragraph or line view. This surface takes
 /// ownership of one lease; each concurrent surface needs its own lease.
@@ -28,6 +32,14 @@ final class ForumBodyParagraphSurface extends LeafRenderObjectWidget {
   /// Host/layout placement changes retire a gesture even when shaping is shared.
   final Object? interactionIdentity;
 
+  _BackgroundAppearance? _backgroundAppearance(BuildContext context) {
+    final style = context
+        .dependOnInheritedWidgetOfExactType<ForumBodyTextBackgroundStyle>();
+    return style == null || (style.color == null && style.borderRadius == 0)
+        ? null
+        : (color: style.color, radius: style.borderRadius);
+  }
+
   @override
   RenderBox createRenderObject(BuildContext context) => _ParagraphSurfaceBox(
     lease,
@@ -35,6 +47,7 @@ final class ForumBodyParagraphSurface extends LeafRenderObjectWidget {
     endLine,
     onSourceTap,
     interactionIdentity,
+    _backgroundAppearance(context),
   );
 
   @override
@@ -48,6 +61,7 @@ final class ForumBodyParagraphSurface extends LeafRenderObjectWidget {
       endLine,
       onSourceTap,
       interactionIdentity,
+      _backgroundAppearance(context),
     );
   }
 }
@@ -59,9 +73,11 @@ final class _ParagraphSurfaceBox extends ForumBodyTextSurfaceBox {
     this._endLine,
     void Function(HtmlProjectedSourcePosition)? onTap,
     Object? interactionIdentity,
+    this._appearance,
   ) : super(onTap, interactionIdentity) {
     try {
       _view = _makeView(_lease, _startLine, _endLine);
+      if (_appearance != null) _prepareBackground();
     } catch (_) {
       dispose();
       rethrow;
@@ -71,6 +87,15 @@ final class _ParagraphSurfaceBox extends ForumBodyTextSurfaceBox {
   int _startLine;
   int? _endLine;
   ForumBodyParagraphFragment? _view;
+  ForumBodyParagraphBackgroundView? _background;
+  _BackgroundAppearance? _appearance;
+
+  void _prepareBackground() {
+    final view = _view;
+    if (view != null && view.coverageStartUtf16 != view.coverageEndUtf16) {
+      _background = ForumBodyParagraphBackgroundView.prepare(_lease, view);
+    }
+  }
 
   static ForumBodyParagraphFragment? _makeView(
     ForumBodyParagraphLease lease,
@@ -86,6 +111,7 @@ final class _ParagraphSurfaceBox extends ForumBodyTextSurfaceBox {
     int? end,
     void Function(HtmlProjectedSourcePosition)? onTap,
     Object? interactionIdentity,
+    _BackgroundAppearance? appearance,
   ) {
     final geometryChanged =
         !identical(_lease, lease) || _startLine != start || _endLine != end;
@@ -101,6 +127,15 @@ final class _ParagraphSurfaceBox extends ForumBodyTextSurfaceBox {
     _startLine = start;
     _endLine = end;
     _view = nextView;
+    final appearanceChanged = appearance != _appearance;
+    _appearance = appearance;
+    if (geometryChanged) _background = null;
+    if ((geometryChanged || appearanceChanged) &&
+        appearance != null &&
+        _background == null) {
+      _prepareBackground();
+    }
+    if (appearanceChanged) markNeedsPaint();
     refreshInteraction(
       onTap: onTap,
       interactionIdentity: interactionIdentity,
@@ -120,6 +155,17 @@ final class _ParagraphSurfaceBox extends ForumBodyTextSurfaceBox {
       _view?.sourceAt(position) ?? _lease.layout.sourceAt(position);
   @override
   void paintContent(Canvas canvas, Offset offset) {
+    final appearance = _appearance;
+    final background = _background;
+    if (appearance != null && background != null) {
+      background.paint(
+        canvas,
+        offset,
+        color: appearance.color,
+        radius: appearance.radius,
+      );
+      return;
+    }
     final view = _view;
     if (view != null) {
       view.paint(canvas, offset);
@@ -148,5 +194,8 @@ final class _ParagraphSurfaceBox extends ForumBodyTextSurfaceBox {
   }
 
   @override
-  void releaseContent() => _lease.release();
+  void releaseContent() {
+    _background = null;
+    _lease.release();
+  }
 }

@@ -161,6 +161,7 @@ final class ForumBodyResolvedStyle {
     this.strong = false,
     this.ownDecoration = TextDecoration.none,
     this.ownBackground,
+    this.textBackgroundPath,
     this.linkTarget,
     this.linkPath,
     this.boxBackground,
@@ -192,6 +193,9 @@ final class ForumBodyResolvedStyle {
   final bool strong;
   final TextDecoration ownDecoration;
   final Color? ownBackground;
+
+  /// The author declaration that owns the effective inline fill.
+  final String? textBackgroundPath;
   final String? linkTarget;
 
   /// Original anchor occurrence, shared by its styled descendants.
@@ -241,6 +245,7 @@ final class ForumBodyResolvedStyle {
           strong: strong,
           ownDecoration: ownDecoration,
           ownBackground: ownBackground,
+          textBackgroundPath: textBackgroundPath,
           linkTarget: linkTarget,
           linkPath: linkPath,
           boxBackground: boxBackground,

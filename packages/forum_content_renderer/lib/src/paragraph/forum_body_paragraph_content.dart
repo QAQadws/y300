@@ -8,6 +8,7 @@ import '../flow/forum_body_styled_flow_cursor.dart';
 import '../inline/forum_body_native_space_span.dart';
 import '../style/forum_body_length.dart';
 import '../style/forum_body_native_text_paint.dart';
+import '../style/forum_body_paint_text_style.dart';
 import '../style/forum_body_style_options.dart';
 import 'forum_body_paragraph_input_admission.dart';
 import 'forum_body_horizontal_text_frame.dart';
@@ -157,6 +158,41 @@ final class ForumBodyParagraphContent {
   /// BR partitions keep source/style but do not start a new formatting context.
   final bool appliesFirstLineIndent;
   final ForumBodyParagraphPaintLayer paintLayer;
+
+  late final bool hasSolidTextBackground =
+      paintLayer == ForumBodyParagraphPaintLayer.all &&
+      !isSourceFree &&
+      runs.any((run) => forumBodySolidTextBackground(run.style) != null);
+
+  /// A paint companion derived once from the same source and shaping inputs.
+  late final ForumBodyParagraphContent withoutTextBackground =
+      ForumBodyParagraphContent._(
+        identity: identity,
+        path: path,
+        fontRevision: fontRevision,
+        styleRevision: styleRevision,
+        style: _withoutTextBackground(style),
+        layoutMode: layoutMode,
+        projection: projection,
+        runs: [
+          for (final run in runs)
+            ForumBodyParagraphRun(run.path, _withoutTextBackground(run.style)),
+        ],
+        issues: issues,
+        isSourceFree: isSourceFree,
+        appliesFirstLineIndent: appliesFirstLineIndent,
+        paintLayer: paintLayer,
+      );
+
+  static ForumBodyResolvedStyle _withoutTextBackground(
+    ForumBodyResolvedStyle style,
+  ) => forumBodySolidTextBackground(style) == null
+      ? style
+      : style.withTextStyle(
+          style.textStyle.copyWith(
+            background: Paint()..color = const Color(0x00000000),
+          ),
+        );
 
   // Frozen style work is shared by cold layouts and warm-cache admission.
   late final horizontalInset =

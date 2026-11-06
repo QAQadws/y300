@@ -12,3 +12,19 @@ TextStyle forumBodyPaintTextStyle(ForumBodyResolvedStyle style) =>
         shadows: const [],
       )
     : style.textStyle;
+
+Color? forumBodySolidTextBackground(ForumBodyResolvedStyle style) {
+  if (style.visibilityHidden) return null;
+  final paint = style.textStyle.background;
+  if (paint != null &&
+      (paint.shader != null ||
+          paint.colorFilter != null ||
+          paint.imageFilter != null ||
+          paint.maskFilter != null ||
+          paint.blendMode != BlendMode.srcOver ||
+          paint.style != PaintingStyle.fill)) {
+    return null;
+  }
+  final color = paint?.color ?? style.textStyle.backgroundColor;
+  return color != null && color.a > 0 ? color : null;
+}

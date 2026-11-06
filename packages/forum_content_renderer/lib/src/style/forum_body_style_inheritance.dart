@@ -82,6 +82,9 @@ final class ForumBodyStyleInheritance {
       ownBackground: restore(ForumBodyStyleProperty.background)
           ? author.ownBackground
           : effective.ownBackground,
+      textBackgroundPath: restore(ForumBodyStyleProperty.background)
+          ? author.textBackgroundPath
+          : effective.textBackgroundPath,
       display: effective.display,
       visibilityHidden: effective.visibilityHidden,
       quoteDecoration: effective.quoteDecoration,

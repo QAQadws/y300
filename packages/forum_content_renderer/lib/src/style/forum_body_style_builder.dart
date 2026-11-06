@@ -316,6 +316,7 @@ final class ForumBodyStyleBuilder {
     Color? boxBackground = tableBackground ?? semanticBackground;
     Color? ownBackground = boxBackground;
     var inlineBackground = style.backgroundColor;
+    var textBackgroundPath = parent.textBackgroundPath;
     final rawBackground = declarations
         .effectiveDeclaration({'background-color', 'background'})
         ?.value
@@ -348,11 +349,13 @@ final class ForumBodyStyleBuilder {
                 color,
                 inlineBackground ?? const Color(0x00000000),
               );
+        if (color != null && color.a > 0) textBackgroundPath = node.path;
       } else {
         boxBackground = color;
       }
     }
     if (_force(ForumBodyStyleProperty.background, role)) {
+      textBackgroundPath = null;
       inlineBackground =
           reader.textStyle.backgroundColor ?? const Color(0x00000000);
       boxBackground = semanticBackground;
@@ -636,6 +639,7 @@ final class ForumBodyStyleBuilder {
       strong: strong,
       ownDecoration: ownDecoration,
       ownBackground: ownBackground,
+      textBackgroundPath: textBackgroundPath,
       linkTarget: linkTarget,
       linkPath: linkPath,
       boxBackground: boxBackground,
