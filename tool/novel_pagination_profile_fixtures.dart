@@ -72,11 +72,26 @@ final novelProfileRubyGapFixtures = <({String name, String html})>[
   (name: 'ruby-gaps-dense', html: _rubyGaps(ranks: 24, columns: 4)),
 ];
 
-/// Source languages are a separate matrix: preserve prior baseline/gap inputs.
+final novelProfileBasicWrapWord =
+    'pneumonoultramicroscopicsilicovolcanoconiosis' * 5;
+final novelProfileBasicWrapUrl =
+    'https://example.invalid/${'readercompatibilitysegment' * 8}?view=original';
+
+/// Source languages and basic wrapping are separate from the performance baselines.
 final novelProfileLanguageFixtures = <({String name, String html})>[
   (name: 'language-runs', html: _languageRuns()),
   (name: 'language-ruby-ltr', html: _languageRuby()),
   (name: 'language-ruby-rtl', html: _languageRuby(rtl: true)),
+  (
+    name: 'language-basic-wrap',
+    html: List.filled(
+      6,
+      '<div lang="en" style="letter-spacing:1px;text-align:justify">'
+      '<p>$novelProfileBasicWrapWord</p>'
+      '<p><a href="$novelProfileBasicWrapUrl">$novelProfileBasicWrapUrl</a></p>'
+      '</div>',
+    ).join(),
+  ),
 ];
 
 /// Real reader matrix for the admitted nested tree path. Keep established
@@ -170,6 +185,7 @@ Set<String>? novelProfileExpectedLanguages(String name) => switch (name) {
   'language-runs' => const {'ja', 'zh-Hans-CN', 'zh-Hant-TW', 'ko', 'und'},
   'language-ruby-ltr' => const {'ja', 'zh-Hant-TW', 'ko', 'und'},
   'language-ruby-rtl' => const {'ar', 'ja', 'zh-Hant-TW', 'ko', 'und'},
+  'language-basic-wrap' => const {'en'},
   _ => null,
 };
 

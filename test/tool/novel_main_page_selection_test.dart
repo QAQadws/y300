@@ -18,6 +18,7 @@ import 'package:y300/shared/widgets/forum_content_selection_copy_page.dart';
 
 import '../../tool/novel_main_page_profile_data.dart';
 import '../../tool/novel_main_page_profile_observation.dart';
+import '../../tool/novel_pagination_profile_fixtures.dart';
 
 final class _Writer implements ClipboardTextWriter {
   final writes = <String>[];
@@ -29,7 +30,15 @@ final class _Writer implements ClipboardTextWriter {
 
 final class _SelectionPreferences implements NovelReaderPreferencesRepository {
   _SelectionPreferences(NovelReaderFlowMode mode)
-    : value = profileReaderPreferences.copyWith(flowMode: mode);
+    : value = profileReaderPreferences.copyWith(
+        flowMode: mode,
+        typography: const NovelReaderTypographyOverrides(
+          letterSpacing: NovelReaderLetterSpacing(logicalPixels: 1),
+          textAlignment: NovelReaderTextAlignment(
+            mode: NovelReaderTextAlignMode.justify,
+          ),
+        ),
+      );
 
   NovelReaderPreferences value;
 
@@ -345,11 +354,23 @@ void main() {
       final writer = _Writer();
       final lines = [
         'Alpha',
+        novelProfileBasicWrapWord,
         for (var index = 0; index < 55; index++) '段落$index${'正文内容' * 20}',
+        novelProfileBasicWrapUrl,
         'Omega',
       ];
       final data = NovelMainPageProfileData();
-      final id = data.add(lines.map((line) => '<p>$line</p>').join());
+      final id = data.add(
+        lines.map((line) {
+          if (line == novelProfileBasicWrapUrl) {
+            return '<p lang="en"><a href="$line">$line</a></p>';
+          }
+          if (line == novelProfileBasicWrapWord) {
+            return '<p lang="en">$line</p>';
+          }
+          return '<p>$line</p>';
+        }).join(),
+      );
       final args = NovelReaderArgs(
         novelId: id.novelId,
         episodeId: id.episodeId,
@@ -462,9 +483,25 @@ void main() {
         final length = lines.join().runes.length;
         final head = ForumBodySourceRange(identity, 0, 1);
         final tail = ForumBodySourceRange(identity, length - 1, length);
+        final wordStart = lines.first.length;
+        final wordRange = ForumBodySourceRange(
+          identity,
+          wordStart,
+          wordStart + novelProfileBasicWrapWord.length,
+        );
+        final urlEnd = length - lines.last.length;
+        final urlRange = ForumBodySourceRange(
+          identity,
+          urlEnd - novelProfileBasicWrapUrl.length,
+          urlEnd,
+        );
         final start = reverse ? tail : head;
         final end = reverse ? head : tail;
         await goToEdge(reverse);
+        expect(
+          glyphs(reverse ? urlRange : wordRange).map((p) => p.dy).toSet(),
+          hasLength(greaterThan(1)),
+        );
         await mark(start, l10n.novelSelectionStart);
         expect(find.text(l10n.novelSelectionChooseEnd), findsOneWidget);
 
@@ -479,6 +516,10 @@ void main() {
 
         await goToEdge(!reverse);
         expect(glyphs(start), isEmpty);
+        expect(
+          glyphs(reverse ? wordRange : urlRange).map((p) => p.dy).toSet(),
+          hasLength(greaterThan(1)),
+        );
         await mark(end, l10n.novelSelectionEnd);
         final selected = ForumBodySourceRange(identity, 0, length);
         expect(

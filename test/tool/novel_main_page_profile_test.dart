@@ -57,6 +57,7 @@ void main() {
         'language-runs',
         'language-ruby-ltr',
         'language-ruby-rtl',
+        'language-basic-wrap',
       ]);
       expect(
         novelMainPageProfileFixtures('ruby-nested'),
@@ -445,7 +446,7 @@ void main() {
           );
         }
         void checkLanguages(ProfileReaderObservation current) {
-          if (semantic) {
+          if (semantic || scenario.fixture?.name == 'language-basic-wrap') {
             expect(
               current.nativeController!
                   .viewForPage(current.page!)!
