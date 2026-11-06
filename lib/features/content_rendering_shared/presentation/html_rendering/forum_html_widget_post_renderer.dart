@@ -3,6 +3,7 @@ import '../../application/forum_html_render_preferences_projection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
+import 'package:y300/core/config/app_config.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_dimension_index.dart';
@@ -56,8 +57,6 @@ class ForumHtmlWidgetPostRenderer extends StatefulWidget {
     this.contentLayout = ForumHtmlContentLayout.document,
     this.hasTrailingContent = false,
   });
-
-  static final Uri forumBaseUri = Uri.parse('https://bbs.yamibo.com/');
 
   final String html;
   final ForumHtmlThemeContext theme;
@@ -208,8 +207,7 @@ class _ForumHtmlWidgetPostRendererState
       blockSpacingMode: widget.blockSpacingMode,
       contentLayout: widget.contentLayout,
       hasTrailingContent: widget.hasTrailingContent,
-      linkBaseUri:
-          widget.linkBaseUri ?? ForumHtmlWidgetPostRenderer.forumBaseUri,
+      linkBaseUri: widget.linkBaseUri ?? AppConfig.siteBaseUri,
     );
   }
 

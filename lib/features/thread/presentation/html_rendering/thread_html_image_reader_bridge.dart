@@ -1,4 +1,5 @@
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+import 'package:y300/core/config/app_config.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_image_layout_hint.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
@@ -157,7 +158,7 @@ class ThreadHtmlImageReaderBridge {
 
   String _normalizeUrlForMatch(String value) {
     final trimmed = value.trim();
-    final resolved = ForumHtmlWidgetPostRenderer.forumBaseUri.resolve(trimmed);
+    final resolved = AppConfig.siteBaseUri.resolve(trimmed);
     return resolved.removeFragment().toString();
   }
 }

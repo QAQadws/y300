@@ -3,6 +3,7 @@ class AppConfig {
 
   // Discuz 站点根地址，用于页面级接口、Referer 和相对 URL 解析。
   static const String siteBaseUrl = 'https://bbs.yamibo.com';
+  static final Uri siteBaseUri = Uri.parse('$siteBaseUrl/');
   static const String apiBaseUrl =
       'https://bbs.yamibo.com/api/mobile/index.php';
   static const String defaultApiVersion = '4';

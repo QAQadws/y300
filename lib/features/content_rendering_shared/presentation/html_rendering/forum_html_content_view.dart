@@ -67,7 +67,6 @@ class ForumHtmlContentView extends ConsumerStatefulWidget {
 }
 
 class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
-  static final _forumBaseUri = Uri.parse('${AppConfig.siteBaseUrl}/');
   late var _preparation = _createPreparation();
   late var _defaultPreparer = DefaultForumHtmlRenderPreparer(
     contentImageKind: widget.contentImageKind,
@@ -206,7 +205,7 @@ class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
                 if (!current()) return false;
                 final uri = Uri.tryParse(url.trim());
                 if (uri == null) return false;
-                final base = widget.linkBaseUri ?? _forumBaseUri;
+                final base = widget.linkBaseUri ?? AppConfig.siteBaseUri;
                 widget.onOpenLink?.call(base.resolveUri(uri).toString());
                 return true;
               },
