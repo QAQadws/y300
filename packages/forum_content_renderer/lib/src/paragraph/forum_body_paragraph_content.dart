@@ -171,28 +171,21 @@ final class ForumBodyParagraphContent {
         path: path,
         fontRevision: fontRevision,
         styleRevision: styleRevision,
-        style: _withoutTextBackground(style),
+        style: forumBodyWithoutSolidTextBackground(style),
         layoutMode: layoutMode,
         projection: projection,
         runs: [
           for (final run in runs)
-            ForumBodyParagraphRun(run.path, _withoutTextBackground(run.style)),
+            ForumBodyParagraphRun(
+              run.path,
+              forumBodyWithoutSolidTextBackground(run.style),
+            ),
         ],
         issues: issues,
         isSourceFree: isSourceFree,
         appliesFirstLineIndent: appliesFirstLineIndent,
         paintLayer: paintLayer,
       );
-
-  static ForumBodyResolvedStyle _withoutTextBackground(
-    ForumBodyResolvedStyle style,
-  ) => forumBodySolidTextBackground(style) == null
-      ? style
-      : style.withTextStyle(
-          style.textStyle.copyWith(
-            background: Paint()..color = const Color(0x00000000),
-          ),
-        );
 
   // Frozen style work is shared by cold layouts and warm-cache admission.
   late final horizontalInset =

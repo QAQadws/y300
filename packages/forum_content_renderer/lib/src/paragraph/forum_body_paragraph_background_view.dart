@@ -3,8 +3,10 @@ import 'dart:math' as math;
 import 'package:flutter/painting.dart';
 
 import '../style/forum_body_paint_text_style.dart';
+import '../style/forum_body_style_options.dart';
 import '../style/forum_body_text_background_geometry.dart';
 import 'forum_body_paragraph_cache.dart';
+import 'forum_body_paragraph_content.dart';
 import 'forum_body_paragraph_layout.dart';
 import 'forum_body_text_layout.dart';
 
@@ -19,6 +21,12 @@ typedef ForumBodyTextBackgroundRegion = ({
   String? path,
   Color color,
   List<Rect> rectangles,
+});
+
+typedef ForumBodyTextBackgroundRun = ({
+  int start,
+  int end,
+  ForumBodyResolvedStyle style,
 });
 
 /// Opt-in paint for a mounted window. Source and hit testing still use the
@@ -36,19 +44,16 @@ final class ForumBodyParagraphBackgroundView {
     ForumBodyParagraphFragment window,
   ) {
     final layout = window.layout;
-    final first = window.startLine == 0 ? 0 : window.startLine - 1;
-    final last = window.endLine == layout.lineCount
-        ? layout.lineCount - 1
-        : window.endLine;
-    final start = layout.lines[first].coverageStartUtf16;
-    final end = layout.lines[last].coverageEndUtf16;
+    if (!lease.content.hasSolidTextBackground) return null;
     final groups = [
-      for (final region in _regions(
-        lease,
-        start,
-        end,
-        layout.paintScale,
-        (span) => _boxes(layout, span),
+      for (final region in forumBodyLineBackgroundRegions(
+        runs: _textRuns(lease.content),
+        scaler: lease.capturedTextScaler,
+        paintScale: layout.paintScale,
+        lines: layout.lines,
+        startLine: window.startLine,
+        endLine: window.endLine,
+        selectionBoxes: layout.selectionBoxes,
       ))
         (
           color: region.color,
@@ -60,38 +65,6 @@ final class ForumBodyParagraphBackgroundView {
     return ink == null
         ? null
         : ForumBodyParagraphBackgroundView._(window, ink, groups);
-  }
-
-  static Iterable<Rect> _boxes(
-    ForumBodyParagraphLayout layout,
-    _BackgroundSpan span,
-  ) sync* {
-    final lines = layout.lines;
-    var low = 0;
-    var high = lines.length;
-    while (low < high) {
-      final middle = (low + high) >> 1;
-      if (lines[middle].coverageEndUtf16 <= span.start) {
-        low = middle + 1;
-      } else {
-        high = middle;
-      }
-    }
-    for (
-      var i = low;
-      i < lines.length && lines[i].coverageStartUtf16 < span.end;
-      i++
-    ) {
-      final line = lines[i];
-      final start = math.max(span.start, line.startUtf16);
-      final end = math.min(span.end, line.unpaintedTrailingSpaceStartUtf16);
-      if (start >= end) continue;
-      for (final box in layout.selectionBoxes(start, end)) {
-        final rect = box.toRect();
-        if (rect.isEmpty) continue;
-        yield _backgroundBox(rect, span, line.baseline, line.top, line.bottom);
-      }
-    }
   }
 
   void paint(
@@ -116,6 +89,64 @@ final class ForumBodyParagraphBackgroundView {
   }
 }
 
+/// Resolve the full natural shape of each author group intersecting this
+/// window. Optional row placement maps native strips into the actual flow.
+Iterable<ForumBodyTextBackgroundRegion> forumBodyLineBackgroundRegions({
+  required Iterable<ForumBodyTextBackgroundRun> runs,
+  required TextScaler scaler,
+  double paintScale = 1,
+  required List<ForumBodyParagraphLine> lines,
+  required int startLine,
+  required int endLine,
+  required List<TextBox> Function(int start, int end) selectionBoxes,
+  Offset Function(int line)? placeRow,
+}) {
+  if (startLine == endLine) return const [];
+  final first = math.max(0, startLine - 1);
+  final last = math.min(lines.length - 1, endLine);
+  return _regions(
+    runs,
+    scaler,
+    lines[first].coverageStartUtf16,
+    lines[last].coverageEndUtf16,
+    paintScale,
+    (span) sync* {
+      var low = 0;
+      var high = lines.length;
+      while (low < high) {
+        final middle = (low + high) >> 1;
+        if (lines[middle].coverageEndUtf16 <= span.start) {
+          low = middle + 1;
+        } else {
+          high = middle;
+        }
+      }
+      for (
+        var i = low;
+        i < lines.length && lines[i].coverageStartUtf16 < span.end;
+        i++
+      ) {
+        final line = lines[i];
+        final start = math.max(span.start, line.startUtf16);
+        final end = math.min(span.end, line.unpaintedTrailingSpaceStartUtf16);
+        if (start >= end) continue;
+        final shift = placeRow?.call(i) ?? Offset.zero;
+        for (final box in selectionBoxes(start, end)) {
+          final rect = box.toRect();
+          if (rect.isEmpty) continue;
+          yield _backgroundBox(
+            rect,
+            span,
+            line.baseline,
+            line.top,
+            line.bottom,
+          ).shift(shift);
+        }
+      }
+    },
+  );
+}
+
 ForumBodyTextLayout? forumBodyTryPrepareBackgroundInk(
   ForumBodyTextLease lease,
 ) {
@@ -134,14 +165,19 @@ Iterable<ForumBodyTextBackgroundRegion> forumBodySingleLineBackgroundRegions(
   ForumBodyTextLease lease,
 ) {
   final layout = lease.layout;
-  final text = lease.content.projection.text;
+  final content = lease.content;
+  final text = content.projection.text;
+  final runs = _textRuns(content);
+  final scaler = lease.capturedTextScaler;
   if (layout is ForumBodyParagraphLayout) {
-    return _regions(
-      lease,
-      0,
-      text.length,
-      layout.paintScale,
-      (span) => ForumBodyParagraphBackgroundView._boxes(layout, span),
+    return forumBodyLineBackgroundRegions(
+      runs: runs,
+      scaler: scaler,
+      paintScale: layout.paintScale,
+      lines: layout.lines,
+      startLine: 0,
+      endLine: layout.lineCount,
+      selectionBoxes: layout.selectionBoxes,
     );
   }
   var paintedEnd = text.length;
@@ -149,7 +185,7 @@ Iterable<ForumBodyTextBackgroundRegion> forumBodySingleLineBackgroundRegions(
     paintedEnd--;
   }
   if (paintedEnd == 0) paintedEnd = text.length;
-  return _regions(lease, 0, paintedEnd, 1, (span) sync* {
+  return _regions(runs, scaler, 0, paintedEnd, 1, (span) sync* {
     final end = math.min(span.end, paintedEnd);
     if (span.start >= end) return;
     for (final box in layout.selectionBoxes(span.start, end)) {
@@ -167,24 +203,34 @@ Iterable<ForumBodyTextBackgroundRegion> forumBodySingleLineBackgroundRegions(
   });
 }
 
+Iterable<ForumBodyTextBackgroundRun> _textRuns(
+  ForumBodyParagraphContent content,
+) sync* {
+  for (final part in content.projection.parts) {
+    yield (
+      start: part.utf16Start,
+      end: part.utf16Start + part.text.length,
+      style: content.runs[part.runIndex].style,
+    );
+  }
+}
+
 Iterable<ForumBodyTextBackgroundRegion> _regions(
-  ForumBodyTextLease lease,
+  Iterable<ForumBodyTextBackgroundRun> runs,
+  TextScaler scaler,
   int start,
   int end,
   double paintScale,
   Iterable<Rect> Function(_BackgroundSpan) boxes,
 ) sync* {
-  final content = lease.content;
-  if (!content.hasSolidTextBackground) return;
-  final scaler = lease.capturedTextScaler;
   final ranges = <(String?, Color), List<_BackgroundSpan>>{};
-  for (final part in content.projection.parts) {
-    final style = content.runs[part.runIndex].style;
+  for (final run in runs) {
+    final style = run.style;
     final color = forumBodySolidTextBackground(style);
     if (color == null) continue;
     final spans = ranges[(style.textBackgroundPath, color)] ??= [];
-    final from = part.utf16Start;
-    final to = from + part.text.length;
+    final from = run.start;
+    final to = run.end;
     final text = style.textStyle;
     final factor = text.height;
     final height = factor != null && factor != kTextHeightNone

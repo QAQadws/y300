@@ -288,6 +288,96 @@ void main() {
     expect(f.cache.preparedPictureCount, 0);
   });
 
+  for (final (allocated, cold) in [
+    (false, false),
+    (true, false),
+    (true, true),
+  ]) {
+    testWidgets(
+      'mixed text keeps its mounted source (allocated: $allocated, cold: $cold)',
+      (tester) async {
+        final opening = allocated
+            ? '<p style="white-space:pre-wrap;line-height:.25">'
+            : '<p>';
+        final f = _Fixture(
+          '$opening<span style="background:#ff0000;color:transparent">'
+          'AB<b style="color:#0022ff;text-decoration:underline">C</b>D'
+          '</span>${allocated ? '\n' : ' '}<ruby><rb>EF</rb><rt>xy</rt></ruby>'
+          '${allocated ? '\nGG\nHH' : ''}</p>',
+          height: 70,
+        );
+        f.drain();
+        final snapshot = f.session.snapshot;
+        final fragments = f.prepare(0);
+        final inline = fragments
+            .whereType<ForumBodyPreparedInlineFragment>()
+            .single;
+        final view = inline.view;
+        final start = view.coverageStartUtf16;
+        final end = view.coverageEndUtf16;
+        final boxes = view.selectionBoxes(start, end);
+        expect(boxes, isNotEmpty);
+        expect(
+          inline.nativeLeases.whereType<ForumBodyTextPictureLease>(),
+          allocated ? isNotEmpty : isEmpty,
+        );
+        final surface = ForumBodyTextPageSurface.prepared(
+          snapshot: snapshot,
+          pageIndex: 0,
+          layoutId: snapshot.layoutId,
+          fragments: fragments,
+        );
+        final key = GlobalKey();
+        final body = RepaintBoundary(key: key, child: surface);
+        Future<Uint8List> show({Color? color, double radius = 0}) async {
+          await tester.pumpWidget(
+            Directionality(
+              textDirection: TextDirection.ltr,
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: ForumBodyTextBackgroundStyle(
+                  color: color,
+                  borderRadius: radius,
+                  child: body,
+                ),
+              ),
+            ),
+          );
+          return _pagePixels(tester, key);
+        }
+
+        final authored = await show();
+        final red = _rgbCount(authored, 0xff0000);
+        final ink = _rgbCount(authored, 0x0022ff);
+        expect(red, greaterThan(0));
+        expect(ink, greaterThan(0));
+        if (cold) f.cache.clearUnpinned();
+        final handles = f.cache.activeLeases;
+        final element = tester.element(find.byWidget(surface));
+        final square = await show(color: const Color(0xff00ff00));
+        expect(_rgbCount(square, 0xff0000), 0);
+        expect(_rgbCount(square, 0x00ff00), red);
+        expect(_rgbCount(square, 0x0022ff), ink);
+        final layouts = f.cache.layoutBuildCount;
+        final pictures = f.cache.pictureBuildCount;
+        final rounded = await show(color: const Color(0xff00ff00), radius: 4);
+        expect(_rgbCount(rounded, 0x00ff00), inExclusiveRange(0, red));
+        expect(_rgbCount(rounded, 0x0022ff), ink);
+        expect(await show(), orderedEquals(authored));
+        expect(tester.element(find.byWidget(surface)), same(element));
+        expect(view.selectionBoxes(start, end), boxes);
+        expect(f.cache.layoutBuildCount, layouts);
+        expect(f.cache.pictureBuildCount, pictures);
+        expect(f.cache.activeLeases, handles + (allocated ? 1 : 0));
+        await tester.pumpWidget(const SizedBox.shrink());
+        expect(f.cache.activeLeases, 0);
+        f.cache.clearUnpinned();
+        expect(f.cache.estimatedRetainedBytes, 0);
+        expect(f.cache.preparedPictureCount, 0);
+      },
+    );
+  }
+
   testWidgets('paragraph rounds natural ends across columns and pages', (
     tester,
   ) async {

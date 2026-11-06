@@ -295,6 +295,7 @@ final class ForumBodyInlineFontFrameViewPreparation {
               endLine,
               _isolated!,
               _picture,
+              cache,
               _ensureVisibleOwner!,
             );
             _result = ForumBodyInlineParagraphView._allocated(

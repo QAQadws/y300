@@ -9,6 +9,7 @@ final class _InlineFontFrameBinding {
     this.endLine,
     this.isolated,
     this.picture,
+    this.cache,
     this.ensureOwner,
   ) : window = plan.fragment(startLine, endLine);
   final ForumBodyInlineFontFramePlan plan;
@@ -22,6 +23,7 @@ final class _InlineFontFrameBinding {
   window;
   final ForumBodyInlineParagraphLease isolated;
   final ForumBodyTextPictureLease? picture;
+  final ForumBodyParagraphCache cache;
   final void Function() ensureOwner;
   bool get isActive =>
       isolated.isActive && (picture?.hasSameActiveOwner(isolated) ?? true);

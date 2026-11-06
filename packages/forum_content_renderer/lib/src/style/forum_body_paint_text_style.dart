@@ -28,3 +28,13 @@ Color? forumBodySolidTextBackground(ForumBodyResolvedStyle style) {
   final color = paint?.color ?? style.textStyle.backgroundColor;
   return color != null && color.a > 0 ? color : null;
 }
+
+ForumBodyResolvedStyle forumBodyWithoutSolidTextBackground(
+  ForumBodyResolvedStyle style,
+) => forumBodySolidTextBackground(style) == null
+    ? style
+    : style.withTextStyle(
+        style.textStyle.copyWith(
+          background: Paint()..color = const Color(0x00000000),
+        ),
+      );

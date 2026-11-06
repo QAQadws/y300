@@ -76,7 +76,7 @@ final class ForumBodyInlineEmphasisGlyphPreparation {
           _result = ForumBodyInlineEmphasisGlyphInput._(
             original,
             _changed
-                ? ForumBodyInlineSpanContent._emphasisGlyphs(
+                ? ForumBodyInlineSpanContent._withPaintStyles(
                     original,
                     _style!,
                     _runs!,

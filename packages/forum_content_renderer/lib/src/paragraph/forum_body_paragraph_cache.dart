@@ -1390,6 +1390,78 @@ final class ForumBodyInlineParagraphLease
   /// Always the current child styles/interactions, not a cached engine's input.
   final ForumBodyInlineSpanContent content;
 
+  late final TextScaler capturedTextScaler = ForumBodyTextScaleSnapshot(
+    {
+      for (final (size, value) in (_entry.key as _InlineLayoutKey).scales)
+        size: value,
+    },
+    rootSize: content.style.textStyle.fontSize!,
+    missingSize: const ForumBodyParagraphLayoutException(
+      ForumBodyParagraphLayoutFailure.scale,
+    ),
+  );
+
+  /// A natural window can borrow optional ink without changing its native
+  /// slot placements. Allocated rows already have independent paint phases.
+  ForumBodyInlineParagraphLayout prepareNaturalTextBackgroundInk() {
+    final original = layout;
+    if (original.rowIsolationPitch != null) {
+      throw StateError('Natural ink requires a natural inline layout');
+    }
+    final cached = _entry.textBackgroundInk as ForumBodyInlineParagraphLayout?;
+    if (cached != null) return cached;
+    final bytes = _entry.initialBytes;
+    _owner._makeRoom(bytes, newEntry: false);
+    if (!_owner.ownsLease(this)) throw StateError('Inline lease is retired');
+    if (_entry.textBackgroundInk
+        case final ForumBodyInlineParagraphLayout admitted) {
+      return admitted;
+    }
+    final key = _entry.key as _InlineLayoutKey;
+    final ink = ForumBodyInlineParagraphLayout.create(
+      content: content.withoutTextBackground,
+      width: original.width,
+      dimensions: original.dimensions,
+      textScaler: capturedTextScaler,
+      layoutMode: key.layoutMode,
+    );
+    var adopted = false;
+    try {
+      _owner._builds++;
+      const failure = ForumBodyParagraphLayoutException(
+        ForumBodyParagraphLayoutFailure.coverage,
+      );
+      if (ink.width != original.width ||
+          ink.height != original.height ||
+          ink.lineCount != original.lineCount ||
+          !listEquals(ink.atomBoxes, original.atomBoxes)) {
+        throw failure;
+      }
+      for (var index = 0; index < ink.lineCount; index++) {
+        final a = original.lines[index];
+        final b = ink.lines[index];
+        if (!forumBodyHaveSameParagraphLineInputs(a, b) ||
+            a.top != b.top ||
+            a.bottom != b.bottom ||
+            a.baseline != b.baseline) {
+          throw failure;
+        }
+      }
+      for (var index = 0; index < ink.atomBoxes.length; index++) {
+        if (ink.isAtomTrimmed(index) != original.isAtomTrimmed(index)) {
+          throw failure;
+        }
+      }
+      _entry.textBackgroundInk = ink;
+      _entry.bytes += bytes;
+      _owner._bytes += bytes;
+      adopted = true;
+      return ink;
+    } finally {
+      if (!adopted) ink.dispose();
+    }
+  }
+
   /// Exact current source/request qualification, using the same immutable
   /// slot snapshot and native key as acquire/probe. Never acquires or shapes.
   bool matchesNativeInputs({

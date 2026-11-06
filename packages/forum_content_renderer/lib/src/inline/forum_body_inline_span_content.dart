@@ -9,6 +9,7 @@ import '../paragraph/forum_body_first_line_indent.dart';
 import '../paragraph/forum_body_horizontal_text_frame.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../style/forum_body_native_text_paint.dart';
+import '../style/forum_body_paint_text_style.dart';
 import '../style/forum_body_style_options.dart';
 import 'forum_body_native_space_span.dart';
 import 'forum_body_inline_image_input.dart';
@@ -52,9 +53,8 @@ final class ForumBodyInlineSpanContent {
        contexts = List.unmodifiable(contexts),
        runs = List.unmodifiable(runs);
 
-  // Only the retired glyph writer may transfer its table. Contexts and source
-  // mappings belong to the original parent, including every real child window.
-  ForumBodyInlineSpanContent._emphasisGlyphs(
+  // The paint table changes independently of every real child/source window.
+  ForumBodyInlineSpanContent._withPaintStyles(
     ForumBodyInlineSpanContent original,
     this.style,
     List<ForumBodyParagraphRun> runs,
@@ -453,6 +453,38 @@ final class ForumBodyInlineSpanContent {
   /// rescaled as ordinary parent text.
   late final List<ForumBodyParagraphRun> parentRuns = _parentInput.runs;
   late final _parentInput = _buildTextSpan();
+
+  late final bool hasSolidParentTextBackground =
+      paintLayer == ForumBodyParagraphPaintLayer.all &&
+      parentRuns.any((run) => forumBodySolidTextBackground(run.style) != null);
+
+  late final ForumBodyInlineSpanContent withoutTextBackground =
+      ForumBodyInlineSpanContent._withPaintStyles(
+        this,
+        forumBodyWithoutSolidTextBackground(style),
+        [
+          for (final run in runs)
+            ForumBodyParagraphRun(
+              run.path,
+              forumBodyWithoutSolidTextBackground(run.style),
+            ),
+        ],
+      );
+
+  Iterable<({int start, int end, ForumBodyResolvedStyle style})>
+  get parentTextRanges sync* {
+    final cursor = _InlineParentCursor(projection);
+    while (!cursor.isComplete) {
+      final part = cursor.advance();
+      if (part?.runIndex case final runIndex?) {
+        yield (
+          start: part!.startUtf16,
+          end: part.endUtf16,
+          style: runs[runIndex].style,
+        );
+      }
+    }
+  }
 
   void validateDimensions(List<PlaceholderDimensions> dimensions) {
     if (dimensions.length != projection.atoms.length) {

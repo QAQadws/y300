@@ -12,7 +12,10 @@ import 'forum_body_inline_paragraph_layout.dart';
 import 'forum_body_inline_span_content.dart';
 import 'forum_body_inline_image_input.dart';
 import '../paragraph/forum_body_paragraph_layout.dart'
-    show ForumBodyParagraphLine;
+    show
+        ForumBodyParagraphLayoutException,
+        ForumBodyParagraphLayoutFailure,
+        ForumBodyParagraphLine;
 import 'forum_body_ruby_group_layout.dart';
 import 'forum_body_ruby_segment_layout.dart';
 import 'forum_body_ruby_soft_space_layout.dart';
@@ -22,6 +25,7 @@ import 'forum_body_ruby_tree_layout.dart';
 import 'forum_body_emphasis_line_layout.dart';
 import 'forum_body_inline_paint_command.dart';
 import 'forum_body_inline_paint_row.dart';
+import 'forum_body_inline_emphasis_paint_preparation.dart';
 import 'forum_body_text_baseline_layout.dart';
 import 'forum_body_inline_font_frame_plan.dart';
 import '../pagination/forum_body_inline_page_preparation.dart';
@@ -32,6 +36,7 @@ part 'forum_body_inline_view_assembly.dart';
 part 'forum_body_inline_ruby_binding_work.dart';
 part 'forum_body_inline_background_regions.dart';
 part 'forum_body_inline_text_highlights.dart';
+part 'forum_body_inline_parent_highlights.dart';
 part 'forum_body_inline_paint_commands.dart';
 part 'forum_body_inline_font_frame_view.dart';
 part 'forum_body_inline_font_frame_view_preparation.dart';
@@ -434,14 +439,17 @@ final class ForumBodyInlineParagraphView {
       // Child pictures already contain their native edge coverage. A second
       // antialiased rectangular viewport compounds alpha at fractional edges.
       canvas.clipRect(offset & Size(width, height), doAntiAlias: false);
-      if (_fontFrames case final frames?) {
-        frames.picture?.paint(canvas, offset);
-      } else {
-        _fragment!.paintParent(canvas, offset);
+      final highlights = backgroundColor != null || backgroundRadius > 0
+          ? _textHighlights
+          : null;
+      if (highlights?.parent == null) {
+        if (_fontFrames case final frames?) {
+          frames.picture?.paint(canvas, offset);
+        } else {
+          _fragment!.paintParent(canvas, offset);
+        }
       }
-      final highlights = _textHighlights;
-      if (highlights != null &&
-          (backgroundColor != null || backgroundRadius > 0)) {
+      if (highlights != null) {
         highlights.paint(
           canvas,
           offset,
@@ -752,6 +760,7 @@ final class ForumBodyInlineParagraphView {
     _children = const {};
     _backgrounds = const [];
     _backgroundOutlines = null;
+    _textHighlights?.close();
     _textHighlights = null;
     _backgroundRows = const [];
     _fragment = null;

@@ -3,12 +3,13 @@ part of 'forum_body_inline_paragraph_view.dart';
 /// Actual leaf commands retain the already-proved placement. A band's ink
 /// companion belongs to the original lease's cache entry, not to this replay.
 final class _InlineTextHighlights {
-  const _InlineTextHighlights(this.steps, this.outlines);
+  const _InlineTextHighlights(this.steps, this.outlines, this.parent);
 
   final List<({ForumBodyInlinePaintCommand step, ForumBodyTextLayout? ink})>
   steps;
   final List<({Color color, ForumBodyTextBackgroundGeometry geometry})>
   outlines;
+  final _InlineParentHighlights? parent;
 
   static _InlineTextHighlights? prepare(ForumBodyInlineParagraphView view) {
     final steps =
@@ -48,14 +49,25 @@ final class _InlineTextHighlights {
         steps.add((step: step, ink: ink));
       }
     }
+    final parent = _InlineParentHighlights.prepare(view);
+    if (parent != null) {
+      for (final region in parent.regions) {
+        (groups[(region.path, region.color)] ??= []).addAll(region.rectangles);
+      }
+    }
     if (groups.isEmpty) return null;
-    return _InlineTextHighlights(steps, [
-      for (final group in groups.entries)
-        (
-          color: group.key.$2,
-          geometry: ForumBodyTextBackgroundGeometry(group.value),
-        ),
-    ]);
+    try {
+      return _InlineTextHighlights(steps, [
+        for (final group in groups.entries)
+          (
+            color: group.key.$2,
+            geometry: ForumBodyTextBackgroundGeometry(group.value),
+          ),
+      ], parent);
+    } catch (_) {
+      parent?.picture?.release();
+      rethrow;
+    }
   }
 
   void paint(
@@ -72,6 +84,7 @@ final class _InlineTextHighlights {
         paint.color = color ?? outline.color;
         outline.geometry.paint(canvas, paint, radius);
       }
+      parent?.paint(canvas, Offset.zero);
       for (final step in steps) {
         step.step.replay(canvas, textInk: step.ink);
       }
@@ -79,4 +92,6 @@ final class _InlineTextHighlights {
       canvas.restore();
     }
   }
+
+  void close() => parent?.picture?.release();
 }
