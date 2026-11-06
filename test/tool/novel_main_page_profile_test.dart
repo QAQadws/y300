@@ -31,6 +31,14 @@ void main() {
         novelMainPageProfileFixtures('baseline'),
         same(novelProfileFixtures),
       );
+      final appearance = novelMainPageProfileFixtures('appearance');
+      expect(appearance.map((f) => f.name), [
+        'appearance-plain',
+        'appearance-mixed',
+      ]);
+      expect(appearance.first.html, novelProfileSafeHtml);
+      expect(appearance.last.html, contains('background:'));
+      expect(appearance.last.html, contains('<rt '));
       expect(
         novelMainPageProfileFixtures('ruby-gaps'),
         same(novelProfileRubyGapFixtures),

@@ -13,6 +13,24 @@ final novelProfileFixtures = <({String name, String html})>[
   (name: 'complex', html: novelProfileComplexHtml),
 ];
 
+final novelProfileAppearanceFixtures = <({String name, String html})>[
+  (name: 'appearance-plain', html: novelProfileSafeHtml),
+  (
+    name: 'appearance-mixed',
+    html: List.generate(
+      40,
+      (i) =>
+          '<p><span style="background:rgba(255,180,50,.4)">第${i + 1}段合成正文，'
+          '<b>同段粗体</b>与普通字。</span>'
+          '<ruby style="background:rgba(255,120,50,.3)">'
+          '<rb style="background:#bdf0e8">注音</rb>'
+          '<rt style="background:#ffea98">ちゅうおん</rt></ruby>'
+          '<span style="background:#e0dcff">继续阅读另一段底色，'
+          '以及<ruby><rb>漢字</rb><rt>かんじ</rt></ruby>后的文字。</span></p>',
+    ).join(),
+  ),
+];
+
 final novelProfileLongTextFixtures = <({String name, String html})>[
   (name: 'long-text-10k', html: _longText(100)),
   (name: 'long-text-100k', html: _longText(1000)),
@@ -127,6 +145,7 @@ List<({String name, String html})> novelMainPageProfileFixtures(
   String corpus,
 ) => switch (corpus) {
   'baseline' => novelProfileFixtures,
+  'appearance' => novelProfileAppearanceFixtures,
   'long-text' => novelProfileLongTextFixtures,
   'semantic' => novelProfileSemanticFixtures,
   'ruby-gaps' => novelProfileRubyGapFixtures,

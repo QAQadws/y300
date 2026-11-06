@@ -7,6 +7,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart'
+    show ForumBodyTextBackgroundStyle;
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
 import 'package:y300/features/novel/presentation/novel_reader_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -28,6 +30,8 @@ const _modeCycle = bool.fromEnvironment('PROFILE_MODE_CYCLE');
 const _transitionCycle = _chapterCycle || _modeCycle;
 const _inlineSoftSpace = bool.fromEnvironment('PROFILE_INLINE_SOFT_SPACE');
 const _warmReturn = bool.fromEnvironment('PROFILE_WARM_RETURN');
+const _roundedAppearance = bool.fromEnvironment('PROFILE_ROUNDED_APPEARANCE');
+const _appearanceRadius = 6.0;
 const _corpus = String.fromEnvironment(
   'PROFILE_CORPUS',
   defaultValue: 'baseline',
@@ -70,6 +74,11 @@ void main() {
   if (_fixtures.isEmpty) throw StateError('Empty profile corpus');
   if (!['native', 'legacy', 'both'].contains(_backend)) {
     throw ArgumentError('Unknown profile backend');
+  }
+  if (_roundedAppearance && (_corpus != 'appearance' || _backend != 'native')) {
+    throw ArgumentError(
+      'Rounded appearance requires the native appearance corpus',
+    );
   }
   if (_memoryMode &&
       (_baseline || _inlineSoftSpace || _warmReturn || _backend == 'both')) {
@@ -278,6 +287,8 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       'inlineSoftSpaceRequested': _inlineSoftSpace,
       'warmReturnRequested': _warmReturn,
       'corpus': _corpus,
+      if (_corpus == 'appearance')
+        'textBackgroundRadius': _roundedAppearance ? _appearanceRadius : 0,
     });
     var inlineSoftSpaceCases = 0;
     var firstLineIndentCases = 0;
@@ -584,12 +595,19 @@ class _MainPageProfileState extends State<_MainPageProfile> {
     final key = GlobalKey();
     final navigator = Navigator.of(context);
     final route = MaterialPageRoute<void>(
-      builder: (_) => NovelReaderPage(
-        key: key,
-        novelId: source.novelId,
-        initialEpisodeId: source.episodeId,
-        nativePagination: native,
-      ),
+      builder: (_) {
+        final reader = NovelReaderPage(
+          key: key,
+          novelId: source.novelId,
+          initialEpisodeId: source.episodeId,
+          nativePagination: native,
+        );
+        if (!_roundedAppearance) return reader;
+        return ForumBodyTextBackgroundStyle(
+          borderRadius: _appearanceRadius,
+          child: reader,
+        );
+      },
     );
     ProfileReaderObservation? latest;
     bool windowOpen = false;
@@ -861,6 +879,14 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       final owner = latest?.nativeOwner;
       final legacyReleased = latest?.legacyCachesReleased;
       latest = null;
+      if (_corpus == 'appearance' && owner != null) {
+        _emit({
+          'event': 'appearance_cache',
+          'run': id,
+          'estimatedRetainedBytes': owner.estimatedRetainedBytes,
+          'activeCacheHandles': owner.activeCacheHandles,
+        });
+      }
       begin('exit');
       final exitClock = Stopwatch()..start();
       navigator.pop();

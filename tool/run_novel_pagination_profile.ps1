@@ -11,8 +11,9 @@ param(
     [switch]$WarmReturn,
     [ValidateSet('native', 'legacy', 'both')]
     [string]$Backend = 'both',
-    [ValidateSet('baseline', 'long-text', 'semantic', 'ruby-gaps', 'language', 'ruby-nested', 'ruby-mixed-nested', 'ruby-nested-columns')]
+    [ValidateSet('baseline', 'appearance', 'long-text', 'semantic', 'ruby-gaps', 'language', 'ruby-nested', 'ruby-mixed-nested', 'ruby-nested-columns')]
     [string]$Corpus = 'baseline',
+    [switch]$RoundedAppearance,
     [switch]$PrepareOnly
 )
 
@@ -36,6 +37,9 @@ if ($WarmReturn -and -not $MainPage) {
 }
 if ($Corpus -ne 'baseline' -and -not $MainPage) {
     throw "-Corpus $Corpus requires -MainPage."
+}
+if ($RoundedAppearance -and ($Corpus -ne 'appearance' -or $Backend -ne 'native')) {
+    throw '-RoundedAppearance requires -Corpus appearance and -Backend native.'
 }
 if ($Memory) {
     if (-not $MainPage -or $Backend -eq 'both' -or $Baseline -or $InlineSoftSpace -or $WarmReturn) {
@@ -72,7 +76,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Ignore .local/renderer_profile locally before generating the profile target.' }
     $revision = (& git rev-parse --short HEAD).Trim()
     Assert-NativeSuccess 'Read revision'
-    $branch = (& git branch --show-current).Trim()
+    $branch = & git branch --show-current
+    Assert-NativeSuccess 'Read branch'
     if ([string]::IsNullOrEmpty($branch)) { $branch = "detached-$revision" }
     if (& git status --porcelain --untracked-files=no) { $revision += '-dirty' }
     $mainGradle = Read-Utf8 (Join-Path $repoRoot 'android/app/build.gradle.kts')
@@ -164,6 +169,7 @@ flutter:
         if ($ModeCycle) { $runArguments += '--dart-define=PROFILE_MODE_CYCLE=true' }
         if ($MainPage) { $runArguments += "--dart-define=PROFILE_BACKEND=$Backend" }
         if ($MainPage) { $runArguments += "--dart-define=PROFILE_CORPUS=$Corpus" }
+        if ($RoundedAppearance) { $runArguments += '--dart-define=PROFILE_ROUNDED_APPEARANCE=true' }
         if ($InlineSoftSpace) { $runArguments += '--dart-define=PROFILE_INLINE_SOFT_SPACE=true' }
         if ($WarmReturn) { $runArguments += '--dart-define=PROFILE_WARM_RETURN=true' }
         $script:profileSuiteResult = $null
