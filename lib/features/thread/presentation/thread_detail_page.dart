@@ -62,7 +62,7 @@ class ThreadDetailPage extends ConsumerStatefulWidget {
     this.landing = ThreadPostLanding.top,
     this.initialForumName,
     this.bodyReadingObserver,
-    this.nativeBody = const bool.fromEnvironment('Y300_NATIVE_THREAD_BODY'),
+    this.nativeBody = true,
   }) : assert(
          landing == ThreadPostLanding.top ||
              (targetPid != null && targetPid != ''),
@@ -77,6 +77,8 @@ class ThreadDetailPage extends ConsumerStatefulWidget {
   final ThreadPostLanding landing;
   final String? initialForumName;
   final ThreadBodyReadingObserver? bodyReadingObserver;
+
+  /// Selects the renderer for the entire route, including comparison runs.
   final bool nativeBody;
 
   @override

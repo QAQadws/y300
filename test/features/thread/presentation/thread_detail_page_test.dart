@@ -9,9 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' as riverpod_misc;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:y300/app/navigation/forum_link_routes.dart';
-import 'package:html/parser.dart' as html_parser;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
 import 'package:y300/app/theme/app_theme.dart';
@@ -2332,7 +2330,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(callCount, 1);
-      expect(_richTextContaining('第 1 次加载'), findsOneWidget);
+      expect(_bodyTextContaining('第 1 次加载'), findsOneWidget);
       expect(
         tester
             .widget<ScrollView>(find.byKey(const Key('thread-detail-list')))
@@ -2350,7 +2348,7 @@ void main() {
       // 解析快照有 5 分钟新鲜期，不清缓存的话这次刷新会命中快照、看不到新回复。
       expect(invalidationService.invalidatedThreadIds, <String>['100']);
       expect(callCount, 2);
-      expect(_richTextContaining('第 2 次加载'), findsOneWidget);
+      expect(_bodyTextContaining('第 2 次加载'), findsOneWidget);
     });
 
     testWidgets('pull to refresh keeps the current page and filters', (
@@ -2582,7 +2580,10 @@ void main() {
         postCardDecoration.boxShadow,
         ForumNativeSurfaceShadows.card(detailPalette.stateLayer),
       );
-      expect(_richTextContaining('第一条回复'), findsOneWidget);
+      await _pumpThreadBodyUntil(
+        tester,
+        () => _bodyTextContaining('第一条回复').evaluate().isNotEmpty,
+      );
       expect(find.byKey(const Key('thread-poll-card')), findsOneWidget);
       expect(find.text('选项A'), findsOneWidget);
       final pollSubmitBeforeSelection = tester.widget<FilledButton>(
@@ -2767,8 +2768,11 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 260));
 
-      expect(_richTextContaining('第一条回复'), findsNothing);
-      expect(_richTextContaining('第二条回复'), findsOneWidget);
+      expect(_bodyTextContaining('第一条回复'), findsNothing);
+      await _pumpThreadBodyUntil(
+        tester,
+        () => _bodyTextContaining('第二条回复').evaluate().isNotEmpty,
+      );
       expect(
         tester.getTopLeft(find.byKey(const Key('thread-post-card-p2'))).dy,
         lessThan(120),
@@ -2788,7 +2792,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 120));
 
       expect(repository.queryHistory.last['ordertype'], '1');
-      expect(_richTextContaining('第一条回复'), findsOneWidget);
+      await _pumpThreadBodyUntil(
+        tester,
+        () => _bodyTextContaining('第一条回复').evaluate().isNotEmpty,
+      );
       expect(callCount, 3);
     });
 
@@ -3182,7 +3189,7 @@ void main() {
       );
     });
 
-    testWidgets('uses HTML-first body renderer by default', (tester) async {
+    testWidgets('uses the native body renderer by default', (tester) async {
       final repository = _FakeThreadRepository((tid, page, query) async {
         return ApiSuccess(
           _threadDetailData(
@@ -3192,7 +3199,7 @@ void main() {
                 pid: 'p1',
                 author: 'alice',
                 authorId: '1',
-                message: '<p>默认旧正文</p>',
+                message: '<p>默认原生正文</p>',
                 number: 1,
                 isFirst: true,
                 dateline: 'today',
@@ -3203,17 +3210,18 @@ void main() {
       });
 
       await tester.pumpWidget(_buildTestApp(repository));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 120));
+      await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('thread-post-body-p1')), findsOneWidget);
       expect(find.byType(ThreadPostHtmlBody), findsOneWidget);
       expect(find.byType(ThreadPostHtmlFirstBody), findsOneWidget);
-      expect(_richTextContaining('默认旧正文'), findsOneWidget);
+      expect(find.byType(ForumBodyFlowBox), findsOneWidget);
+      expect(find.byType(ForumHtmlWidgetPostRenderer), findsNothing);
+      expect(_nativeParagraphContaining('默认原生正文'), findsOneWidget);
     });
 
     testWidgets(
-      'HTML-first diagnostic renderer keeps native poll footer separate',
+      'native body keeps the poll footer separate',
       (tester) async {
         final repository = _FakeThreadRepository((tid, page, query) async {
           return ApiSuccess(
@@ -3257,12 +3265,15 @@ void main() {
         expect(find.byType(ThreadPostHtmlFirstBody), findsOneWidget);
         expect(find.byKey(const Key('thread-poll-card')), findsOneWidget);
         expect(find.text('投票选项'), findsOneWidget);
-        expect(_richTextContaining('HTML-first 正文'), findsOneWidget);
+        await _pumpThreadBodyUntil(
+          tester,
+          () => _nativeParagraphContaining('HTML-first 正文').evaluate().isNotEmpty,
+        );
       },
     );
 
     testWidgets(
-      'HTML-first theme changes reprepare colors without reloading the thread',
+      'native body theme changes repaint colors without reloading the thread',
       (tester) async {
         var requestCount = 0;
         final repository = _FakeThreadRepository((tid, page, query) async {
@@ -3288,18 +3299,14 @@ void main() {
         await tester.pumpWidget(
           _buildTestApp(repository, theme: AppTheme.dark()),
         );
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 120));
+        await tester.pumpAndSettle();
 
-        final darkHtml = tester
-            .widget<HtmlWidget>(
-              find.byKey(const Key('forum-html-renderer-theme-p1')),
-            )
-            .html;
-        final darkBody = const CsslibAuthorColorParser().parseOwn(
-          html_parser.parseFragment(darkHtml).querySelector('#theme-body')!,
-        );
-        expect(darkBody.foreground?.toARGB32(), isNot(0xFF000000));
+        Color? bodyColor() => tester
+            .widget<ForumBodyParagraphSurface>(_nativeParagraphContaining('正文'))
+            .lease.content.runs.single.style.textStyle.color;
+        final dark = bodyColor();
+        expect(dark, isNotNull);
+        expect(dark?.toARGB32(), isNot(0xFF000000));
         expect(requestCount, 1);
 
         await tester.pumpWidget(
@@ -3307,16 +3314,8 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        final lightHtml = tester
-            .widget<HtmlWidget>(
-              find.byKey(const Key('forum-html-renderer-theme-p1')),
-            )
-            .html;
-        final lightBody = const CsslibAuthorColorParser().parseOwn(
-          html_parser.parseFragment(lightHtml).querySelector('#theme-body')!,
-        );
-        expect(lightBody.foreground?.toARGB32(), 0xFF000000);
-        expect(lightHtml, isNot(darkHtml));
+        expect(bodyColor()?.toARGB32(), 0xFF000000);
+        expect(bodyColor(), isNot(dark));
         expect(requestCount, 1);
       },
     );
@@ -3377,7 +3376,7 @@ void main() {
     });
 
     testWidgets(
-      'HTML-first image taps open reader by readable sequence index',
+      'native image taps open the reader at the same readable index',
       (tester) async {
         final repository = _FakeThreadRepository((tid, page, query) async {
           return ApiSuccess(
@@ -3410,13 +3409,25 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 120));
 
-        final secondImage = find.byKey(
-          const Key('thread-post-html-first-readable-image-p1-1'),
+        final secondImage = _nativeBodyImage('p1', 1);
+        await _pumpThreadBodyUntil(
+          tester,
+          () => _nativeBodyImage('p1', 0).evaluate().isNotEmpty,
+        );
+        await tester.scrollUntilVisible(
+          secondImage,
+          160,
+          scrollable: find.byType(Scrollable).first,
         );
         await _tapVisibleTop(tester, secondImage);
         await _pumpThreadUiTransition(tester);
 
         expect(find.byType(ThreadImageReaderPage), findsOneWidget);
+        expect(
+          tester.widget<ThreadImageReaderPage>(find.byType(ThreadImageReaderPage))
+              .request.initialIndex,
+          1,
+        );
         expect(
           find.byKey(const Key('thread-image-reader-page-view')),
           findsOneWidget,
@@ -3712,10 +3723,11 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
 
-      expect(
-        find.byKey(const Key('thread-post-html-first-readable-image-p1-0')),
-        findsNothing,
-      );
+      final sticker = find.byType(ForumHtmlImageView);
+      await _pumpThreadBodyUntil(tester, () => sticker.evaluate().isNotEmpty);
+      await tester.tap(sticker);
+      await _pumpThreadUiTransition(tester);
+      expect(_nativeBodyImage('p1', 0), findsNothing);
       expect(find.byType(ThreadImageReaderPage), findsNothing);
     });
 
@@ -4253,14 +4265,9 @@ void main() {
       await tester.pumpWidget(_buildTestApp(repository));
       await _pumpThreadBodyUntil(
         tester,
-        () => find
-            .byKey(const Key('thread-post-html-first-readable-image-p1-0'))
-            .evaluate()
-            .isNotEmpty,
+        () => _nativeBodyImage('p1', 0).evaluate().isNotEmpty,
       );
-      await tester.tap(
-        find.byKey(const Key('thread-post-html-first-readable-image-p1-0')),
-      );
+      await tester.tap(_nativeBodyImage('p1', 0));
       await _pumpThreadUiTransition(tester);
 
       expect(find.byType(ThreadImageReaderPage), findsOneWidget);
@@ -4381,7 +4388,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 260));
 
       expect(requestedPages, <int>[1, 3]);
-      expect(_richTextContaining('第3页正文'), findsOneWidget);
+      await _pumpThreadBodyUntil(
+        tester,
+        () => _bodyTextContaining('第3页正文').evaluate().isNotEmpty,
+      );
       expect(
         tester.getTopLeft(find.byKey(const Key('thread-post-card-p3'))).dy,
         lessThan(120),
@@ -4402,7 +4412,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 260));
 
       expect(requestedPages, <int>[1, 3, 8]);
-      expect(_richTextContaining('第8页正文'), findsOneWidget);
+      await _pumpThreadBodyUntil(
+        tester,
+        () => _bodyTextContaining('第8页正文').evaluate().isNotEmpty,
+      );
       expect(
         tester.getTopLeft(find.byKey(const Key('thread-post-card-p8'))).dy,
         lessThan(120),
@@ -4421,7 +4434,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 260));
 
       expect(requestedPages, <int>[1, 3, 8, 7]);
-      expect(_richTextContaining('第7页正文'), findsOneWidget);
+      await _pumpThreadBodyUntil(
+        tester,
+        () => _bodyTextContaining('第7页正文').evaluate().isNotEmpty,
+      );
       expect(
         tester.getTopLeft(find.byKey(const Key('thread-post-card-p7'))).dy,
         lessThan(120),
@@ -4745,9 +4761,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
 
-      await tester.tapAt(
-        tester.getTopLeft(_richTextContaining('目录')) + const Offset(4, 8),
-      );
+      await _tapNativeBodyText(tester, '目录');
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
 
@@ -4790,14 +4804,12 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
 
-      await tester.tapAt(
-        tester.getTopLeft(_richTextContaining('00')) + const Offset(4, 8),
-      );
+      await _tapNativeBodyText(tester, '00');
       await tester.pump();
       await tester.pumpAndSettle();
 
       expect(find.text('跳转后的帖子'), findsWidgets);
-      expect(_richTextContaining('新帖子正文'), findsOneWidget);
+      expect(_bodyTextContaining('新帖子正文'), findsOneWidget);
     });
 
     testWidgets('opens viewthread pid link at target page natively', (
@@ -4850,9 +4862,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
 
-      await tester.tapAt(
-        tester.getTopLeft(_richTextContaining('跳到楼层')) + const Offset(4, 8),
-      );
+      await _tapNativeBodyText(tester, '跳到楼层');
       await tester.pumpAndSettle();
 
       expect(_appBarTitleText('目标帖子'), findsNothing);
@@ -4860,7 +4870,7 @@ void main() {
         find.byKey(const Key('thread-post-card-41560047')),
         findsOneWidget,
       );
-      expect(_richTextContaining('目标楼层正文'), findsOneWidget);
+      expect(_bodyTextContaining('目标楼层正文'), findsOneWidget);
       final listTop = tester.getTopLeft(
         find.byKey(const Key('thread-detail-list')),
       );
@@ -4965,7 +4975,7 @@ void main() {
           targetTop.dy,
           closeTo(listTop.dy + ForumContentSpacing.listTop, 28),
         );
-        expect(_richTextContaining('第一话 姐姐的日记'), findsOneWidget);
+        expect(_bodyTextContaining('第一话 姐姐的日记'), findsOneWidget);
         expect(historyRecorder.drafts, hasLength(1));
         expect(historyRecorder.drafts.single.target.id, '556943');
         // 锚定分支走的是另一个滚动视图，下拉刷新的物理必须一起挂上。
@@ -5371,9 +5381,7 @@ void main() {
       expect(historyRecorder.drafts, hasLength(1));
       expect(historyRecorder.drafts.single.target.id, '100');
 
-      await tester.tapAt(
-        tester.getTopLeft(_richTextContaining('findpost')) + const Offset(4, 8),
-      );
+      await _tapNativeBodyText(tester, 'findpost');
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
@@ -5384,7 +5392,10 @@ void main() {
         find.byKey(const Key('thread-post-card-41554030')),
         findsOneWidget,
       );
-      expect(_richTextContaining('定位后的楼层'), findsOneWidget);
+      await _pumpThreadBodyUntil(
+        tester,
+        () => _bodyTextContaining('定位后的楼层').evaluate().isNotEmpty,
+      );
       expect(historyRecorder.drafts, hasLength(2));
       expect(historyRecorder.drafts.last.target.id, '572057');
     });
@@ -5468,7 +5479,7 @@ void main() {
       );
     }
 
-    testWidgets('renders long text post as one HTML-first body', (
+    testWidgets('renders long text as one virtualized native body', (
       tester,
     ) async {
       tester.view.physicalSize = const Size(390, 260);
@@ -5506,8 +5517,7 @@ void main() {
       });
 
       await tester.pumpWidget(_buildTestApp(repository));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 120));
+      await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('thread-post-card-long-1')), findsOneWidget);
       expect(find.byKey(const Key('thread-post-body-long-1')), findsOneWidget);
@@ -5527,20 +5537,14 @@ void main() {
         ),
         findsNothing,
       );
-      final bodyRichTexts = tester.widgetList<RichText>(
-        find.descendant(
-          of: find.byKey(const Key('thread-post-body-long-1')),
-          matching: find.byType(RichText),
-        ),
-      );
-      expect(bodyRichTexts, isNotEmpty);
-      expect(
-        bodyRichTexts.every((text) => text.selectionRegistrar == null),
-        isTrue,
-      );
+      final body = tester.widget<ForumBodyFlowBox>(find.byType(ForumBodyFlowBox));
+      expect(body.prefix.isComplete, isTrue);
+      expect(body.prefix.length, greaterThan(1));
+      expect(body.session.activeIssuedFragments, lessThan(body.prefix.length));
+      expect(find.byType(SelectionArea), findsOneWidget);
     });
 
-    testWidgets('uses one HTML-first body entry for image dense posts', (
+    testWidgets('uses one native body entry for image dense posts', (
       tester,
     ) async {
       tester.view.physicalSize = const Size(390, 260);
@@ -5582,22 +5586,17 @@ void main() {
       });
 
       await tester.pumpWidget(_buildTestApp(repository));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 120));
+      await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('thread-post-card-image-1')), findsOneWidget);
       expect(find.byKey(const Key('thread-post-body-image-1')), findsOneWidget);
       expect(find.byKey(const Key('thread-post-body-image-1-0')), findsNothing);
       expect(find.byKey(const Key('thread-post-body-image-1-6')), findsNothing);
-      expect(
-        find.byKey(
-          const Key('thread-post-html-first-readable-image-image-1-0'),
-        ),
-        findsOneWidget,
-      );
+      expect(_nativeBodyImage('image-1', 0), findsOneWidget);
+      expect(_nativeBodyImage('image-1', 6), findsNothing);
     });
 
-    testWidgets('long pressing post body opens copy actions and copy page', (
+    testWidgets('floor menu opens copy actions and the native selection page', (
       tester,
     ) async {
       tester.view.physicalSize = const Size(390, 260);
@@ -5666,8 +5665,7 @@ void main() {
       });
 
       await tester.pumpWidget(_buildTestApp(repository));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 120));
+      await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('thread-post-body-copy-1')), findsOneWidget);
       expect(find.byKey(const Key('thread-post-body-copy-1-0')), findsNothing);
@@ -5676,7 +5674,7 @@ void main() {
           of: find.byKey(const Key('thread-post-body-copy-1')),
           matching: find.byType(SelectionArea),
         ),
-        findsNothing,
+        findsOneWidget,
       );
       expect(
         find.ancestor(
@@ -5698,10 +5696,8 @@ void main() {
       );
       expect(find.byKey(const Key('thread-post-card-copy-1')), findsOneWidget);
 
-      await _longPressVisibleTop(
-        tester,
-        find.byKey(const Key('thread-post-body-copy-1')),
-      );
+      final menu = find.byKey(const Key('thread-post-more-copy-1'));
+      await tester.tap(menu);
       await _pumpThreadUiTransition(tester);
 
       expect(find.byKey(const Key('thread-post-action-sheet')), findsOneWidget);
@@ -5722,10 +5718,7 @@ void main() {
       expect(copiedTexts.single, isNot(contains('page.jpg')));
       expect(find.text('1# 正文已复制'), findsOneWidget);
 
-      await _longPressVisibleTop(
-        tester,
-        find.byKey(const Key('thread-post-body-copy-1')),
-      );
+      await tester.tap(menu);
       await _pumpThreadUiTransition(tester);
       await _tapPostActionSheetItem(
         tester,
@@ -5802,10 +5795,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await _longPressVisibleTop(
-        tester,
-        find.byKey(const Key('thread-post-body-101')),
-      );
+      await tester.tap(find.byKey(const Key('thread-post-more-101')));
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('thread-post-edit-action')), findsOneWidget);
@@ -5935,11 +5925,12 @@ void main() {
         '106',
         '107',
       ]) {
-        await _longPressVisibleTop(
-          tester,
-          find.byKey(Key('thread-post-body-$pid')),
-        );
+        final menu = find.byKey(Key('thread-post-more-$pid'));
+        await tester.ensureVisible(menu);
+        await tester.pump();
+        await tester.tap(menu);
         await tester.pumpAndSettle();
+        expect(find.byKey(const Key('thread-post-action-sheet')), findsOneWidget);
         expect(
           find.byKey(const Key('thread-post-edit-action')),
           findsNothing,
@@ -6031,10 +6022,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
 
-      await _longPressVisibleTop(
-        tester,
-        find.byKey(const Key('thread-post-body-41585107')),
-      );
+      await tester.tap(find.byKey(const Key('thread-post-more-41585107')));
       await tester.pumpAndSettle();
 
       final l10n = await AppLocalizations.delegate.load(const Locale('zh'));
@@ -6091,14 +6079,12 @@ void main() {
       await tester.pump(const Duration(milliseconds: 120));
       await tester.pump();
 
-      final image = tester.widget<CachedLibraryImage>(
-        find.descendant(
-          of: find.byKey(
-            const Key('thread-post-html-first-readable-image-p1-0'),
-          ),
-          matching: find.byType(CachedLibraryImage),
-        ),
+      final imageFinder = find.descendant(
+        of: _nativeBodyImage('p1', 0),
+        matching: find.byType(CachedLibraryImage),
       );
+      await _pumpThreadBodyUntil(tester, () => imageFinder.evaluate().isNotEmpty);
+      final image = tester.widget<CachedLibraryImage>(imageFinder);
       final request = image.request;
       expect(request, isNotNull);
       expect(
@@ -6157,7 +6143,7 @@ void main() {
 
       await _openPostAction(
         tester,
-        bodyKey: const Key('thread-post-body-p1'),
+        menuKey: const Key('thread-post-more-p1'),
         actionKey: const Key('thread-post-rate-action'),
       );
       await tester.pumpAndSettle();
@@ -6227,7 +6213,7 @@ void main() {
 
       await _openPostAction(
         tester,
-        bodyKey: const Key('thread-post-body-p1'),
+        menuKey: const Key('thread-post-more-p1'),
         actionKey: const Key('thread-post-comment-action'),
       );
       await tester.pumpAndSettle();
@@ -6290,10 +6276,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await _longPressVisibleTop(
-        tester,
-        find.byKey(const Key('thread-post-body-p2')),
-      );
+      await tester.tap(find.byKey(const Key('thread-post-more-p2')));
       await tester.pumpAndSettle();
 
       final actionSheet = find.byKey(const Key('thread-post-action-sheet'));
@@ -6335,10 +6318,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
 
-      await _longPressVisibleTop(
-        tester,
-        find.byKey(const Key('thread-post-body-p1')),
-      );
+      await tester.tap(find.byKey(const Key('thread-post-more-p1')));
       await tester.pumpAndSettle();
 
       expect(
@@ -6697,7 +6677,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        expect(_richTextContaining('正文樣本'), findsOneWidget);
+        expect(_bodyTextContaining('正文樣本'), findsOneWidget);
         expect(find.textContaining('alice樣'), findsOneWidget);
         expect(
           preferencesRepository.current.conversionMode,
@@ -6713,8 +6693,8 @@ void main() {
           find.byKey(const Key('forum-html-reader-conversion-mode-control')),
           findsNothing,
         );
-        expect(_richTextContaining('正文樣本'), findsOneWidget);
-        expect(_richTextContaining('正文样本'), findsNothing);
+        expect(_bodyTextContaining('正文樣本'), findsOneWidget);
+        expect(_bodyTextContaining('正文样本'), findsNothing);
         expect(find.textContaining('alice樣'), findsOneWidget);
         expect(find.textContaining('alice样'), findsNothing);
       },
@@ -6772,7 +6752,7 @@ void main() {
 
         expect(_appBarTitleText('軟體區'), findsOneWidget);
         expect(find.text('軟體主題'), findsOneWidget);
-        expect(_richTextContaining('軟體內容'), findsOneWidget);
+        expect(_bodyTextContaining('軟體內容'), findsOneWidget);
         expect(find.textContaining('发型用户名'), findsWidgets);
         expect(find.textContaining('髮型用戶名'), findsNothing);
         expect(repository.queryHistory, hasLength(1));
@@ -7905,11 +7885,36 @@ double _contrastRatio(Color foreground, Color background) {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-Finder _richTextContaining(String text) {
-  return find.byWidgetPredicate((widget) {
-    return widget is RichText && widget.text.toPlainText().contains(text);
-  });
+Finder _bodyTextContaining(String text) => find.byWidgetPredicate((widget) {
+  final content = switch (widget) {
+    RichText(:final text) => text.toPlainText(),
+    ForumBodyParagraphSurface(:final lease) => lease.content.projection.text,
+    ForumBodyInlineParagraphSurface(:final view) =>
+      view.content.projection.display.text,
+    _ => '',
+  };
+  return content.contains(text);
+});
+
+Finder _nativeParagraphContaining(String text) => find.byWidgetPredicate(
+  (widget) => widget is ForumBodyParagraphSurface &&
+      widget.lease.content.projection.text.contains(text),
+);
+
+Future<void> _tapNativeBodyText(WidgetTester tester, String text) async {
+  final finder = _nativeParagraphContaining(text);
+  await _pumpThreadBodyUntil(tester, () => finder.evaluate().isNotEmpty);
+  final paragraph = tester.widget<ForumBodyParagraphSurface>(finder);
+  final offset = paragraph.lease.content.projection.text.indexOf(text);
+  final glyph = paragraph.lease.layout.selectionBoxes(offset, offset + 1).first;
+  await tester.tapAt(tester.getTopLeft(finder) + glyph.toRect().center);
 }
+
+Finder _nativeBodyImage(String pid, int index, {bool skipOffstage = true}) =>
+    find.byKey(
+      ValueKey(('native-readable-image', pid, index)),
+      skipOffstage: skipOffstage,
+    );
 
 ({Rect image, double paragraph, double otherImageHeight}) _nativePostGeometry(
   WidgetTester tester,
@@ -7962,10 +7967,7 @@ ThreadRepository _imageReturnRepository(String message) =>
     );
 
 Finder _imageReturnBodyImage(int index, {bool skipOffstage = true}) =>
-    find.byKey(
-      Key('thread-post-html-first-readable-image-p1-$index'),
-      skipOffstage: skipOffstage,
-    );
+    _nativeBodyImage('p1', index, skipOffstage: skipOffstage);
 
 ScrollableState _imageReturnScrollable(WidgetTester tester) =>
     tester.state<ScrollableState>(
@@ -7995,7 +7997,10 @@ Future<ThreadImageReaderPage> _openImageReturnReader(
     ),
   );
   await tester.pump();
-  await tester.pump(const Duration(milliseconds: 120));
+  await _pumpThreadBodyUntil(
+    tester,
+    () => _imageReturnBodyImage(initialIndex).evaluate().isNotEmpty,
+  );
   await _tapVisibleTop(tester, _imageReturnBodyImage(initialIndex));
   await _pumpThreadUiTransition(tester);
   final reader = tester.widget<ThreadImageReaderPage>(
@@ -8116,10 +8121,10 @@ Future<void> _longPressVisibleTop(WidgetTester tester, Finder finder) async {
 
 Future<void> _openPostAction(
   WidgetTester tester, {
-  required Key bodyKey,
+  required Key menuKey,
   required Key actionKey,
 }) async {
-  await _longPressVisibleTop(tester, find.byKey(bodyKey));
+  await tester.tap(find.byKey(menuKey));
   await tester.pumpAndSettle();
   expect(find.byKey(const Key('thread-post-action-sheet')), findsOneWidget);
   await _tapPostActionSheetItem(tester, actionKey);
