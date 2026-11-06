@@ -1,17 +1,9 @@
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
+import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import '../contracts/forum_html_display_image.dart';
-import '../contracts/forum_html_image_host.dart';
-import '../helpers/forum_html_image_presentation.dart';
-import 'forum_html_prepared_render_document.dart';
-import 'forum_html_render_callbacks.dart';
-import 'widgets/forum_html_image_view.dart';
-import '../services/forum_html_image_viewport_coordinator.dart';
-import '../services/forum_html_image_anchor_controller.dart';
-import '../services/forum_html_body_presentation.dart';
 
 typedef ForumHtmlImageFactoryBinding = ({
   ForumHtmlImageHost? host,

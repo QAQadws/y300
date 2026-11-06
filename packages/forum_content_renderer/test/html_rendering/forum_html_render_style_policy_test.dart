@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:forum_content_renderer/forum_content_renderer.dart';
+import 'package:forum_html_comparison/forum_html_comparison.dart';
 import 'package:forum_content_renderer/src/html_rendering/forum_html_fragment_normalizer.dart';
 import 'render_test_support.dart';
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
+import 'package:forum_html_comparison/forum_html_comparison.dart';
 
 void main() => runApp(const ForumContentRendererExample());
 

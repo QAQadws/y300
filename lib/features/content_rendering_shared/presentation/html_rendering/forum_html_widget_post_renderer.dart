@@ -10,6 +10,7 @@ import 'package:y300/features/cache/domain/services/forum_image_dimension_index.
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
+import 'package:forum_html_comparison/forum_html_comparison.dart';
 import 'package:y300/features/content_rendering_shared/application/forum_html_image_host_provider.dart';
 import 'package:y300/features/content_rendering_shared/application/host/cache_forum_html_image_host.dart';
 import 'package:y300/features/content_rendering_shared/domain/models/forum_html_reader_preferences.dart';
@@ -21,6 +22,8 @@ import '../../application/forum_html_preparation_executor.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 import 'forum_html_preparation_placeholder.dart';
+
+export 'package:forum_html_comparison/forum_html_comparison.dart';
 
 class ForumHtmlWidgetPostRenderer extends StatefulWidget {
   const ForumHtmlWidgetPostRenderer({

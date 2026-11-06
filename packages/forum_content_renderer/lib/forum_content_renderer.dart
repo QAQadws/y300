@@ -202,6 +202,8 @@ export 'src/style/forum_html_base_text_style.dart';
 
 export 'src/helpers/discuz_font_size_policy.dart' show DiscuzFontSizePolicy;
 export 'src/helpers/forum_collapse_chrome.dart' show ForumCollapseChrome;
+export 'src/helpers/forum_html_image_presentation.dart'
+    show forumHtmlClipImage, forumHtmlValidImageSize;
 export 'src/helpers/rich_text_color_contrast.dart'
     show RichTextColorContrast, FlutterRichTextColorContrast;
 export 'src/helpers/rich_text_tone_resolver.dart'
@@ -225,10 +227,8 @@ export 'src/html_rendering/forum_html_image_deduplicator.dart'
 export 'src/html_rendering/forum_html_prepared_render_document.dart';
 export 'src/html_rendering/forum_html_render_callbacks.dart';
 export 'src/html_rendering/forum_html_render_theme_factory.dart';
-export 'src/html_rendering/forum_html_render_style_policy.dart';
 export 'src/html_rendering/forum_html_render_text_style_resolver.dart';
 export 'src/html_rendering/forum_html_preparation_pipeline.dart';
-export 'src/html_rendering/forum_html_renderer.dart';
 export 'src/html_rendering/forum_html_safe_display_planner.dart';
 export 'src/html_rendering/theme/css_author_color_parser.dart';
 export 'src/html_rendering/theme/css_inline_style_declarations.dart';
@@ -246,4 +246,4 @@ export 'src/services/forum_html_image_viewport_coordinator.dart';
 export 'src/html_rendering/widgets/forum_html_image_view.dart';
 export 'src/services/forum_html_image_predecode_policy.dart';
 export 'src/services/forum_html_image_anchor_controller.dart'
-    show ForumHtmlImageAnchorController;
+    show ForumHtmlImageAnchor, ForumHtmlImageAnchorController;

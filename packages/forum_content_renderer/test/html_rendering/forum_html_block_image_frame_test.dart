@@ -2,6 +2,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
+import 'package:forum_html_comparison/forum_html_comparison.dart';
 
 import 'render_test_support.dart';
 

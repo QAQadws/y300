@@ -2,21 +2,12 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
+import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
-import '../models/forum_html_content_layout.dart';
-import '../models/forum_html_render_options.dart';
-import '../contracts/forum_html_collapse_labels.dart';
-import '../contracts/forum_html_image_host.dart';
-import '../services/forum_html_body_presentation.dart';
-import '../services/forum_html_image_viewport_coordinator.dart';
-import '../services/forum_html_image_anchor_controller.dart';
+
 import 'forum_html_image_widget_factory.dart';
-import 'forum_html_prepared_render_document.dart';
-import 'forum_html_render_callbacks.dart';
 import 'forum_html_render_style_policy.dart';
-import 'theme/forum_html_theme_context.dart';
-import 'widgets/forum_collapse_block.dart';
 
 enum ForumHtmlRenderMode { column, listView, sliverList }
 

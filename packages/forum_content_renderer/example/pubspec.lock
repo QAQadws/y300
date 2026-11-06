@@ -114,6 +114,13 @@ packages:
       relative: true
     source: path
     version: "0.1.0"
+  forum_html_comparison:
+    dependency: "direct main"
+    description:
+      path: "../../forum_html_comparison"
+      relative: true
+    source: path
+    version: "0.1.0"
   html:
     dependency: transitive
     description:

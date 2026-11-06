@@ -1,0 +1,21 @@
+name: forum_html_comparison
+description: Legacy HTML rendering adapter for explicit comparisons.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.12.0
+  flutter: ^3.44.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_widget_from_html_core: 0.17.4
+  forum_content_renderer:
+    path: ../forum_content_renderer
+  html: ^0.15.6
+  yamibo_forum_client:
+    path: ../yamibo_forum_client
+
+dev_dependencies:
+  flutter_lints: ^6.0.0

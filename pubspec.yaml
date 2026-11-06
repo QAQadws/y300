@@ -43,6 +43,8 @@ dependencies:
     path: packages/html_pagination_core
   forum_content_renderer:
     path: packages/forum_content_renderer
+  forum_html_comparison:
+    path: packages/forum_html_comparison
   flutter_localizations:
     sdk: flutter
   intl: ^0.20.3

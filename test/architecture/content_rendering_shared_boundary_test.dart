@@ -8,8 +8,12 @@ import 'dart_dependency_directives.dart';
 const _packageRoot = 'packages/forum_content_renderer/';
 const _packageLib = '${_packageRoot}lib/';
 const _packageEntry = '${_packageLib}forum_content_renderer.dart';
+const _comparisonLib = 'packages/forum_html_comparison/lib/';
+const _comparisonEntry = '${_comparisonLib}forum_html_comparison.dart';
 const _sharedRoot = 'lib/features/content_rendering_shared/';
 const _publicEntry = '${_sharedRoot}content_rendering.dart';
+const _comparisonAdapter =
+    '${_sharedRoot}presentation/html_rendering/forum_html_widget_post_renderer.dart';
 const _threadHtmlRoot = 'lib/features/thread/presentation/html_rendering/';
 const _retiredRenderingEntries = {
   '${_sharedRoot}presentation/html_rendering/forum_html_render_preparer.dart',
@@ -57,7 +61,6 @@ const _cacheNeutralDisplayFiles = {
   '${_packageLib}src/contracts/forum_html_image_host.dart',
   '${_packageLib}src/contracts/forum_html_image_predecode_host.dart',
   '${_packageLib}src/contracts/forum_html_display_image.dart',
-  '${_packageLib}src/html_rendering/forum_html_image_widget_factory.dart',
   '${_packageLib}src/html_rendering/forum_html_render_callbacks.dart',
   '${_packageLib}src/services/forum_html_image_viewport_coordinator.dart',
   '${_packageLib}src/services/forum_html_image_predecode_policy.dart',
@@ -166,6 +169,36 @@ import '../../../test/test_support/localized_test_app.dart';
     );
   });
 
+  test('legacy engine is isolated to the comparison package', () {
+    const legacyEngine =
+        'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
+    const comparison =
+        'package:forum_html_comparison/forum_html_comparison.dart';
+    expect(
+      _violationTargets('${_packageLib}src/new_renderer.dart', '''
+import '$legacyEngine';
+import '$comparison';
+'''),
+      {legacyEngine, _comparisonEntry},
+    );
+    expect(
+      _violationTargets('${_comparisonLib}src/new_renderer.dart', '''
+import '$legacyEngine';
+import 'package:forum_content_renderer/forum_content_renderer.dart';
+import 'package:forum_content_renderer/src/private.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
+'''),
+      {'${_packageLib}src/private.dart', _publicEntry},
+    );
+    expect(
+      _violationTargets('lib/features/novel/presentation/new_reader.dart', '''
+import '$legacyEngine';
+import '$comparison';
+'''),
+      {legacyEngine, _comparisonEntry},
+    );
+  });
+
   test('shared rendering keeps Host ownership and one public entry', () {
     final violations = <String>[];
     for (final root in [
@@ -174,6 +207,7 @@ import '../../../test/test_support/localized_test_app.dart';
       '${_packageRoot}lib',
       '${_packageRoot}test',
       '${_packageRoot}example',
+      _comparisonLib,
     ]) {
       for (final file in Directory(
         root,
@@ -352,7 +386,6 @@ import 'package:y300/features/content_rendering_shared/data/new_repository.dart'
         expect(
           _violationTargets(source, '''
 import 'package:flutter/widgets.dart';
-import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:html/dom.dart';
 import 'package:forum_content_renderer/src/models/forum_html_content_layout.dart';
 '''),
@@ -373,6 +406,10 @@ String _target(String source, String uri) =>
     ? normalizeDartSourcePath(
         '$_packageLib${uri.substring('package:forum_content_renderer/'.length)}',
       )
+    : uri.startsWith('package:forum_html_comparison/')
+    ? normalizeDartSourcePath(
+        '$_comparisonLib${uri.substring('package:forum_html_comparison/'.length)}',
+      )
     : uri.startsWith('package:forum_content_renderer_example/')
     ? normalizeDartSourcePath(
         '${_packageRoot}example/lib/${uri.substring('package:forum_content_renderer_example/'.length)}',
@@ -381,6 +418,16 @@ String _target(String source, String uri) =>
 
 bool _isForbidden(String source, String target) {
   if (_retiredRenderingEntries.contains(target)) return true;
+  if (source.startsWith(_comparisonLib)) {
+    return !(target.startsWith('${_comparisonLib}src/') ||
+        target == _packageEntry ||
+        target == 'dart:convert' ||
+        target.startsWith('package:flutter/') ||
+        target.startsWith('package:flutter_widget_from_html_core/') ||
+        target.startsWith('package:html/') ||
+        target ==
+            'package:yamibo_forum_client/yamibo_forum_client_contracts.dart');
+  }
   if (source.startsWith(_packageRoot)) {
     final library = source.startsWith(_packageLib);
     if (_preparationPolicyFiles.contains(source) &&
@@ -414,8 +461,10 @@ bool _isForbidden(String source, String target) {
               }.contains(target)
             : target.startsWith('dart:')) ||
         target.startsWith('package:flutter/') ||
-        (!library && target.startsWith('package:flutter_test/')) ||
-        target.startsWith('package:flutter_widget_from_html_core/') ||
+        (!library &&
+            (target.startsWith('package:flutter_test/') ||
+                target.startsWith('package:flutter_widget_from_html_core/') ||
+                target == _comparisonEntry)) ||
         target.startsWith('package:html/') ||
         target.startsWith('package:csslib/') ||
         target == 'package:crypto/crypto.dart' ||
@@ -425,6 +474,15 @@ bool _isForbidden(String source, String target) {
             'package:yamibo_forum_client/yamibo_forum_client_contracts.dart');
   }
   if (target.startsWith(_packageRoot) && target != _packageEntry) return true;
+  if (target.startsWith(_comparisonLib) &&
+      (target != _comparisonEntry ||
+          (source.startsWith('lib/') && source != _comparisonAdapter))) {
+    return true;
+  }
+  if (source.startsWith('lib/') &&
+      target.startsWith('package:flutter_widget_from_html_core/')) {
+    return true;
+  }
   // App adapter tests may inspect their own Host internals, but never pkg src.
   if (source.startsWith('test/')) return false;
   if (!source.startsWith(_sharedRoot)) {

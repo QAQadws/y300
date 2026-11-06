@@ -626,6 +626,13 @@ packages:
       relative: true
     source: path
     version: "0.1.0"
+  forum_html_comparison:
+    dependency: "direct main"
+    description:
+      path: "packages/forum_html_comparison"
+      relative: true
+    source: path
+    version: "0.1.0"
   forum_markup_core:
     dependency: "direct main"
     description:

@@ -12,6 +12,8 @@ dependencies:
     sdk: flutter
   forum_content_renderer:
     path: ..
+  forum_html_comparison:
+    path: ../../forum_html_comparison
 
 dev_dependencies:
   flutter_test:
