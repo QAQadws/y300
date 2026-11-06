@@ -57,7 +57,7 @@ final class NovelReaderNativeLayoutScope {
   static const fingerprintRevision = 16;
   final NovelReaderNativePreparedChapter chapter;
   final ForumBodyReaderStyle reader;
-  final TextScaler textScaler;
+  final ForumBodyTextScaleSnapshot textScaler;
 
   /// Canvas paint only; native text and inline backgrounds stay in the key.
   final Color backgroundColor;
@@ -202,7 +202,13 @@ final class NovelReaderNativeLayoutScope {
     return NovelReaderNativeLayoutScope._(
       chapter: chapter,
       reader: reader,
-      textScaler: _CapturedTextScaler(scales, reader.textStyle.fontSize!),
+      textScaler: ForumBodyTextScaleSnapshot(
+        scales,
+        rootSize: reader.textStyle.fontSize!,
+        missingSize: const NovelReaderNativeLayoutInputException(
+          NovelReaderNativeLayoutInputFailure.scaling,
+        ),
+      ),
       backgroundColor: background,
       width: width,
       height: height,
@@ -255,7 +261,7 @@ final class NovelReaderNativeLayoutScope {
             _paragraphInputs) {
       return null;
     }
-    for (final entry in (textScaler as _CapturedTextScaler).sizes.entries) {
+    for (final entry in textScaler.sizes.entries) {
       if (!isCurrent()) return null;
       final scaled = environment.textScaler.scale(entry.key);
       if (!isCurrent() || scaled != entry.value) return null;
@@ -462,21 +468,6 @@ int _pageHandleLimit(int issued) {
   } finally {
     cursor.close();
   }
-}
-
-final class _CapturedTextScaler extends TextScaler {
-  _CapturedTextScaler(Map<double, double> sizes, this.rootSize)
-    : sizes = Map.unmodifiable(sizes);
-  final Map<double, double> sizes;
-  final double rootSize;
-  @override
-  double scale(double fontSize) =>
-      sizes[fontSize] ??
-      (throw const NovelReaderNativeLayoutInputException(
-        NovelReaderNativeLayoutInputFailure.scaling,
-      ));
-  @override
-  double get textScaleFactor => scale(rootSize) / rootSize;
 }
 
 ForumHtmlThemeContext? _freezeTheme(ForumHtmlThemeContext? theme) =>

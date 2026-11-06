@@ -50,6 +50,93 @@ ForumBodyTextBandContent heavyBand() {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('a band reuses only matching captured scales and gutter', () {
+    final owner = cache();
+    addTearDown(owner.close);
+    final input = band([
+      '<span style="font-size:10px">aa</span>',
+      '<span>b</span>',
+    ]);
+    const missingSize = FormatException('Font size was not captured');
+    final sizes = <double, double>{10: 12, 20: 24};
+    final snapshot = ForumBodyTextScaleSnapshot(
+      sizes,
+      rootSize: 20,
+      missingSize: missingSize,
+    );
+    final first = owner.acquireBandChild(
+      content: input,
+      childIndex: 0,
+      textScaler: snapshot,
+    );
+    final firstWidth = first.layout.width;
+    sizes[10] = 20;
+    expect(snapshot.scale(10), 12);
+    expect(() => snapshot.sizes.clear(), throwsUnsupportedError);
+    final retained = owner.tryAcquireBandChildCached(
+      content: input,
+      childIndex: 0,
+      textScaler: snapshot,
+    )!;
+    expect(retained.layout.width, firstWidth);
+    final probe = owner.createBudgetProbe();
+    addTearDown(probe.close);
+    for (final index in [0, 1]) {
+      probe.includeBandChild(
+        content: input,
+        childIndex: index,
+        textScaler: snapshot,
+      );
+    }
+    expect(probe.snapshotNativeIdentities(), hasLength(1));
+    expect(owner.layoutBuildCount, 1);
+    expect(
+      owner.tryAcquireBandChildCached(
+        content: input,
+        childIndex: 0,
+        textScaler: snapshot,
+        gutter: 100,
+      ),
+      isNull,
+    );
+    final changed = owner.acquireBandChild(
+      content: input,
+      childIndex: 0,
+      textScaler: ForumBodyTextScaleSnapshot(
+        sizes,
+        rootSize: 20,
+        missingSize: missingSize,
+      ),
+    );
+    expect(changed.layout.width, greaterThan(firstWidth));
+    expect(owner.layoutBuildCount, 2);
+    expect(
+      () => owner.tryAcquireBandChildCached(
+        content: input,
+        childIndex: 0,
+        textScaler: ForumBodyTextScaleSnapshot(
+          {20: 24},
+          rootSize: 20,
+          missingSize: missingSize,
+        ),
+      ),
+      throwsA(same(missingSize)),
+    );
+    first.release();
+    retained.release();
+    changed.release();
+    owner.clearUnpinned();
+    expect(owner.entryCount, 0);
+    expect(
+      owner.tryAcquireBandChildCached(
+        content: input,
+        childIndex: 0,
+        textScaler: snapshot,
+      ),
+      isNull,
+    );
+  });
+
   test(
     'the same band rechecks nonlinear values even for one equal mutable scaler',
     () {

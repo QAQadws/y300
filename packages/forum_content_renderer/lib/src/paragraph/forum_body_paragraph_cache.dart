@@ -13,6 +13,7 @@ import '../inline/forum_body_inline_paint_row.dart';
 import '../inline/forum_body_emphasis_mark.dart';
 import '../inline/forum_body_text_band_content.dart';
 import '../inline/forum_body_text_band_layout.dart';
+import '../style/forum_body_text_scale_snapshot.dart';
 import 'forum_body_native_paragraph_layout.dart';
 import 'forum_body_paragraph_content.dart';
 import 'forum_body_paragraph_layout.dart';
@@ -458,13 +459,17 @@ final class ForumBodyParagraphCache {
   }) {
     if (_closed) throw StateError('Paragraph cache is closed');
     RangeError.checkValidIndex(childIndex, content.contexts, 'childIndex');
-    final resolved = ForumBodyTextBandLayout.validateInputs(
-      content: content,
-      textScaler: textScaler,
-      gutter: gutter,
-    );
-    if (_closed) throw StateError('Paragraph cache is closed');
-    final key = _bandKey(content, resolved.scales, resolved.gutter);
+    var key = _validatedBandKey(content, textScaler, gutter);
+    if (key == null) {
+      final resolved = ForumBodyTextBandLayout.validateInputs(
+        content: content,
+        textScaler: textScaler,
+        gutter: gutter,
+      );
+      if (_closed) throw StateError('Paragraph cache is closed');
+      key = _bandKey(content, resolved.scales, resolved.gutter);
+    }
+    final separation = key.gutter;
     final entry = _acquireEntry(
       key: key,
       allowBuild: allowBuild,
@@ -472,11 +477,11 @@ final class ForumBodyParagraphCache {
       build: () => ForumBodyTextBandLayout.create(
         content: content,
         textScaler: textScaler,
-        gutter: resolved.gutter,
+        gutter: separation,
       ),
     );
     if (entry == null) return null;
-    _rememberBand(entry, content);
+    _rememberBand(entry, content, textScaler, gutter);
     try {
       return ForumBodyTextBandChildLease._(
         this,
@@ -489,6 +494,23 @@ final class ForumBodyParagraphCache {
       _release(entry);
       rethrow;
     }
+  }
+
+  ForumBodyTextBandCacheKey? _validatedBandKey(
+    ForumBodyTextBandContent content,
+    TextScaler textScaler,
+    double? gutter,
+  ) {
+    final entry = _bandHints[content];
+    if (entry == null ||
+        entry.retired ||
+        !identical(entry.bandScalerHint?.target, textScaler) ||
+        entry.bandGutterHint != gutter) {
+      return null;
+    }
+    // Only a validated acquisition of this immutable scaler can install this
+    // hint. Custom scalers must still replay every size on every acquisition.
+    return entry.key as ForumBodyTextBandCacheKey;
   }
 
   ForumBodyTextBandCacheKey _bandKey(
@@ -508,7 +530,12 @@ final class ForumBodyParagraphCache {
     return ForumBodyTextBandCacheKey(content, scales, gutter);
   }
 
-  void _rememberBand(_LayoutEntry entry, ForumBodyTextBandContent content) {
+  void _rememberBand(
+    _LayoutEntry entry,
+    ForumBodyTextBandContent content,
+    TextScaler textScaler,
+    double? gutter,
+  ) {
     final previous = entry.bandHint;
     if (previous != null &&
         !identical(previous, content) &&
@@ -516,6 +543,13 @@ final class ForumBodyParagraphCache {
       _bandHints.remove(previous);
     }
     entry.bandHint = content;
+    if (!identical(entry.bandScalerHint?.target, textScaler)) {
+      // A cache hit from a new scope must not retain its entire scale table.
+      entry.bandScalerHint = textScaler is ForumBodyTextScaleSnapshot
+          ? WeakReference(textScaler)
+          : null;
+    }
+    entry.bandGutterHint = gutter;
     _bandHints[content] = entry;
   }
 
@@ -825,6 +859,7 @@ final class ForumBodyParagraphCache {
       _bandHints.remove(hint);
     }
     entry.bandHint = null;
+    entry.bandScalerHint = null;
     _bytes -= entry.bytes;
     _leases -= entry.leases;
     entry.leases = 0;
@@ -1062,17 +1097,21 @@ final class ForumBodyParagraphBudgetProbe {
       throw StateError('Paragraph budget probe is retired');
     }
     RangeError.checkValidIndex(childIndex, content.contexts, 'childIndex');
-    final resolved = ForumBodyTextBandLayout.validateInputs(
-      content: content,
-      textScaler: textScaler,
-      gutter: gutter,
-    );
-    if (!identical(_cache, cache) || cache.isClosed) {
-      throw StateError('Paragraph budget probe is retired');
+    var key = cache._validatedBandKey(content, textScaler, gutter);
+    if (key == null) {
+      final resolved = ForumBodyTextBandLayout.validateInputs(
+        content: content,
+        textScaler: textScaler,
+        gutter: gutter,
+      );
+      if (!identical(_cache, cache) || cache.isClosed) {
+        throw StateError('Paragraph budget probe is retired');
+      }
+      key = cache._bandKey(content, resolved.scales, resolved.gutter);
     }
     _include(
       cache,
-      cache._bandKey(content, resolved.scales, resolved.gutter),
+      key,
       forumBodyTextBandMinimumBytes(content) +
           (content.contexts.length * 2 - 1) * 96,
     );
@@ -1399,6 +1438,8 @@ final class _LayoutEntry {
   int leases = 0;
   bool retired = false;
   ForumBodyTextBandContent? bandHint;
+  WeakReference<ForumBodyTextScaleSnapshot>? bandScalerHint;
+  double? bandGutterHint;
 }
 
 /// Complete process-local native input, including baked paint. Actual scaled
