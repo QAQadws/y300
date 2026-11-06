@@ -11,6 +11,7 @@ import 'package:y300/features/cache/domain/models/image_cache_keys.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
+import 'package:y300/features/content_rendering_shared/application/host/cache_forum_html_display_image.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/presentation/blog/blog_editor_preview.dart';
 import 'package:y300/features/profile/presentation/blog/blog_editor_state.dart';
@@ -22,6 +23,7 @@ import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 import '../../../test_support/localized_test_app.dart';
+import '../../../test_support/native_body_finders.dart';
 import '../test_support/blog_detail_fixture.dart';
 import '../test_support/blog_visual_fixture.dart';
 
@@ -76,13 +78,14 @@ void main() {
           expect(host.details.queries, hasLength(1));
         }
         final sourceId = _sourceId(source);
-        final target = find.byKey(
-          Key('thread-post-html-first-readable-image-$sourceId-1'),
-        );
-        await tester.ensureVisible(target);
-        await tester.pump();
+        final target = source == 'preview'
+            ? find.byKey(
+                Key('thread-post-html-first-readable-image-$sourceId-1'),
+              )
+            : _nativeImage(sourceId, 1);
+        await _revealImage(tester, target);
         final before = tester.getTopLeft(target);
-        final gesture = tester.widget<GestureDetector>(target);
+        final gesture = _imageGesture(tester, target);
         await _tapImage(tester, target);
         expect(find.byType(BlogImageReaderPage), findsOneWidget);
         // A stale double tap on the covered source cannot stack a second reader.
@@ -154,11 +157,9 @@ void main() {
     (tester) async {
       final host = _Host();
       await host.pump(tester, 'article');
-      final target = find.byKey(
-        const Key('thread-post-html-first-readable-image-profile-blog-11-0'),
-      );
-      await tester.ensureVisible(target);
-      final staleTap = tester.widget<GestureDetector>(target).onTap!;
+      final target = _nativeImage('profile-blog-11', 0);
+      await _revealImage(tester, target);
+      final staleTap = _imageGesture(tester, target).onTap!;
       await _tapImage(tester, target);
       await _frames(tester);
       expect(find.byType(ImageReaderEngine), findsOneWidget);
@@ -185,10 +186,8 @@ void main() {
       final gate = Completer<ForumImagePrecacheResult>();
       host.preload.pending = gate;
       await host.pump(tester, 'article');
-      final target = find.byKey(
-        const Key('thread-post-html-first-readable-image-profile-blog-11-0'),
-      );
-      await tester.ensureVisible(target);
+      final target = _nativeImage('profile-blog-11', 0);
+      await _revealImage(tester, target);
       await _tapImage(tester, target);
       await _frames(tester);
       expect(host.preload.specs, isNotEmpty);
@@ -210,6 +209,34 @@ String _sourceId(String source) => switch (source) {
   'comment' || 'comment-selection' => 'profile-blog-comment-31',
   _ => 'blog-editor-preview-preview',
 };
+
+Finder _nativeImage(String sourceId, int index) => find.descendant(
+  of: findNativeBody(sourceId),
+  matching: find.byWidgetPredicate((widget) {
+    final image = widget is ForumHtmlImageView ? widget.image : null;
+    return image is CacheForumHtmlDisplayImage &&
+        image.request.imageIndex == index;
+  }),
+);
+
+GestureDetector _imageGesture(WidgetTester tester, Finder target) =>
+    tester.widget<GestureDetector>(
+      tester.widget(target) is GestureDetector
+          ? target
+          : find
+                .ancestor(of: target, matching: find.byType(GestureDetector))
+                .first,
+    );
+
+Future<void> _revealImage(WidgetTester tester, Finder target) async {
+  await tester.pumpAndSettle();
+  await tester.scrollUntilVisible(
+    target,
+    200,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.pump();
+}
 
 Future<void> _frames(WidgetTester tester) async {
   await tester.pump();
@@ -276,6 +303,7 @@ final class _Host {
       ),
     );
     await _frames(tester);
+    await tester.pumpAndSettle();
   }
 }
 

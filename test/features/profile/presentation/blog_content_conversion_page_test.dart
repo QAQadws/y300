@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -15,7 +16,9 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
+
 import '../../../test_support/localized_test_app.dart';
+import '../../../test_support/native_body_finders.dart';
 import '../test_support/blog_detail_fixture.dart';
 import '../test_support/blog_operation_fixture.dart';
 import '../test_support/blog_text_converter_fixture.dart';
@@ -113,7 +116,7 @@ void main() {
       expect(
         find.descendant(
           of: find.byType(ForumHtmlContentView),
-          matching: find.text('评论', findRichText: true),
+          matching: findNativeBodyText('评论'),
         ),
         findsOneWidget,
       );

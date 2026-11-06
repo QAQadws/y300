@@ -20,6 +20,7 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 import 'package:y300/l10n/app_localizations.dart';
 
 import '../../../test_support/localized_test_app.dart';
+import '../../../test_support/native_body_finders.dart';
 import '../test_support/blog_detail_fixture.dart';
 import '../test_support/blog_text_converter_fixture.dart';
 
@@ -63,16 +64,16 @@ void main() {
       );
       await _pumpUntil(
         tester,
-        () => find.text('內文', findRichText: true).evaluate().isNotEmpty,
+        () => findNativeBodyText('內文').evaluate().isNotEmpty,
       );
-      expect(find.text('評論', findRichText: true), findsOneWidget);
+      expect(findNativeBodyText('評論'), findsOneWidget);
       expect(_styleForText(tester, 'Article 11').fontFamily, 'NativeUi');
       final authorStyle = _styleForText(tester, 'Author emphasis');
       expect(authorStyle.fontFamily, FontIdentity.runtimeFamily(_first.id));
       expect(authorStyle.fontWeight, FontWeight.w700);
       expect(authorStyle.fontStyle, FontStyle.italic);
 
-      final source = _renderer(tester, _articleSource).preparedDocument;
+      final source = _renderer(tester, _articleSource).prepared;
       final conversions = List<String>.of(host.converter.inputs);
       await host.controller.setFontFamily(_second.id);
       await _ready(
@@ -89,7 +90,7 @@ void main() {
         _styleForText(tester, 'Author emphasis').fontFamily,
         FontIdentity.runtimeFamily(_second.id),
       );
-      expect(_renderer(tester, _articleSource).preparedDocument, same(source));
+      expect(_renderer(tester, _articleSource).prepared, same(source));
       expect(host.converter.inputs, conversions);
       expect(host.preferences.value.conversionMode, TextConversionMode.none);
 
@@ -131,7 +132,7 @@ void main() {
         () => host.runtime.requested.contains(_first.id),
       );
       expect(find.text('Article 11'), findsWidgets);
-      expect(find.byType(ForumHtmlWidgetPostRenderer), findsNothing);
+      expect(find.byType(ForumNativeBodyFlow), findsNothing);
       fontReady.complete();
       await _ready(
         tester,
@@ -172,7 +173,7 @@ void main() {
         );
         final body = find.descendant(
           of: page,
-          matching: find.byKey(Key('forum-html-renderer-$source')),
+          matching: findNativeBody(source),
         );
         final bodyElement = tester.element(body);
         final selection = find.descendant(
@@ -180,11 +181,7 @@ void main() {
           matching: find.byType(SelectionArea),
         );
         final selectionElement = tester.element(selection);
-        final document = _renderer(
-          tester,
-          source,
-          within: page,
-        ).preparedDocument;
+        final document = _renderer(tester, source, within: page).prepared;
         final fontReady = Completer<void>();
         host.runtime.gates[_second.id] = fontReady;
         final selected = host.controller.setFontFamily(_second.id);
@@ -193,7 +190,7 @@ void main() {
           () => host.runtime.requested.contains(_second.id),
         );
         expect(
-          _renderer(tester, source, within: page).textStyle!.fontFamily,
+          _renderer(tester, source, within: page).textStyle.fontFamily,
           FontIdentity.runtimeFamily(_first.id),
         );
         fontReady.complete();
@@ -207,7 +204,7 @@ void main() {
         await tester.runAsync(() => host.service.deleteFont(_second.id));
         await _ready(tester, source, null, within: page);
         expect(
-          _renderer(tester, source, within: page).preparedDocument,
+          _renderer(tester, source, within: page).prepared,
           same(document),
         );
         expect(tester.element(body), same(bodyElement));
@@ -226,15 +223,12 @@ void main() {
   }
 }
 
-ForumHtmlWidgetPostRenderer _renderer(
+ForumNativeBodyFlow _renderer(
   WidgetTester tester,
   String source, {
   Finder? within,
 }) {
-  final body = find.byWidgetPredicate(
-    (widget) =>
-        widget is ForumHtmlWidgetPostRenderer && widget.sourceId == source,
-  );
+  final body = findNativeBody(source);
   return tester.widget(
     within == null ? body : find.descendant(of: within, matching: body),
   );
@@ -247,10 +241,7 @@ Future<void> _ready(
   Finder? within,
 }) async {
   await _pumpUntil(tester, () {
-    final body = find.byWidgetPredicate(
-      (widget) =>
-          widget is ForumHtmlWidgetPostRenderer && widget.sourceId == source,
-    );
+    final body = findNativeBody(source);
     final matches = within == null
         ? body
         : find.descendant(of: within, matching: body);
@@ -258,10 +249,7 @@ Future<void> _ready(
     final expectedFamily =
         family ??
         Theme.of(tester.element(matches)).textTheme.bodyMedium?.fontFamily;
-    return tester
-            .widget<ForumHtmlWidgetPostRenderer>(matches)
-            .textStyle
-            ?.fontFamily ==
+    return tester.widget<ForumNativeBodyFlow>(matches).textStyle.fontFamily ==
         expectedFamily;
   });
   await tester.pumpAndSettle();
@@ -306,6 +294,12 @@ TextStyle _styleForText(WidgetTester tester, String text) {
 
   for (final richText in tester.widgetList<RichText>(find.byType(RichText))) {
     final found = matching(richText.text, const TextStyle());
+    if (found != null) return found;
+  }
+  for (final paragraph in tester.widgetList<ForumBodyParagraphSurface>(
+    find.byType(ForumBodyParagraphSurface),
+  )) {
+    final found = matching(paragraph.lease.content.textSpan, const TextStyle());
     if (found != null) return found;
   }
   fail('No rendered style for $text');

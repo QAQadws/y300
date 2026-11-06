@@ -20,6 +20,7 @@ import 'package:y300/l10n/app_localizations.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart';
 
 import '../../../test_support/localized_test_app.dart';
+import '../../../test_support/native_body_finders.dart';
 import '../test_support/blog_comment_fixture.dart';
 import '../test_support/blog_detail_fixture.dart';
 import '../test_support/blog_text_converter_fixture.dart';
@@ -77,9 +78,7 @@ void main() {
             find.descendant(of: card, matching: find.text('Article 11')),
           );
         } else if (entry == 'body') {
-          await tester.longPress(
-            find.text('article fixture', findRichText: true),
-          );
+          await tester.longPress(findNativeBodyText('article fixture'));
         } else {
           await tester.longPressAt(
             tester.getTopLeft(card) + const Offset(20, 3),
@@ -232,16 +231,16 @@ void main() {
         expect(html.onOpenLink, isNotNull);
         expect(html.onOpenImage, isNotNull);
         expect(
-          find.ancestor(
+          find.descendant(
             of: find.byKey(const Key('blog-selection-copy-body')),
             matching: find.byType(SelectionArea),
           ),
           findsOneWidget,
         );
-        final texts = tester.widgetList<RichText>(
-          find.descendant(of: page, matching: find.byType(RichText)),
+        final flow = tester.widget<ForumNativeBodyFlow>(
+          find.descendant(of: page, matching: findNativeBody(sourceId)),
         );
-        expect(texts.any((text) => text.selectionRegistrar != null), isTrue);
+        expect(flow.selectEntireBody, isTrue);
         host.changeActor('303');
         await tester.pumpAndSettle();
         expect(

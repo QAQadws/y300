@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
@@ -28,6 +27,7 @@ import 'package:y300/l10n/app_localizations.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart';
 
 import '../../../test_support/localized_test_app.dart';
+import '../../../test_support/native_body_finders.dart';
 import '../test_support/blog_detail_fixture.dart';
 import '../test_support/blog_directory_fixture.dart';
 import '../test_support/profile_repository_fixture.dart';
@@ -513,7 +513,9 @@ void main() {
       } else {
         await tester.pumpWidget(const SizedBox.shrink());
       }
-      host.clipboard.pending!.completeError(StateError('clipboard unavailable'));
+      host.clipboard.pending!.completeError(
+        StateError('clipboard unavailable'),
+      );
       await tester.pumpAndSettle();
       expect(find.byType(SnackBar), findsNothing);
       expect(tester.takeException(), isNull);
@@ -562,8 +564,7 @@ void main() {
     tester,
   ) async {
     final host = _Host();
-    host.details.commentHtml =
-        '<p><a href="home.php?mod=space&amp;uid=202&amp;do=profile">linked author</a></p>';
+    host.details.commentHtml = '<p><a href="home.php?mod=space&amp;uid=202&amp;do=profile">linked author</a></p>';
     await host.pump(
       tester,
       const ProfileBlogDetailPage(
@@ -689,10 +690,9 @@ void main() {
         find.byKey(const Key('profile-blog-comments-heading')),
         findsNothing,
       );
-      expect(
-        find.text('article fixture', findRichText: true).hitTestable(),
-        findsOneWidget,
-      );
+      final article = findNativeBodyText('article fixture');
+      final viewport = find.byKey(const Key('profile-blog-detail'));
+      expect(tester.getRect(viewport).overlaps(tester.getRect(article)), isTrue);
       expect(_detailScroll(tester).position.pixels, 0);
       await tester.tap(find.text(l10n.profileBlogAllComments));
       await tester.pumpAndSettle();
@@ -700,10 +700,7 @@ void main() {
       expect(host.details.queries.last.page, 1);
       expect(find.text(l10n.profileBlogComments), findsNothing);
       expect(find.text(l10n.profileBlogCommentsEmpty), findsNothing);
-      expect(
-        find.text('article fixture', findRichText: true).hitTestable(),
-        findsOneWidget,
-      );
+      expect(tester.getRect(viewport).overlaps(tester.getRect(article)), isTrue);
       expect(tester.takeException(), isNull);
     },
   );
@@ -714,8 +711,7 @@ void main() {
       final host = _Host();
       final cache = _PendingImageCache();
       host.imageCache = cache;
-      host.details.bodyHtml =
-          '<p>article above comments</p><img src="https://bbs.yamibo.com/data/attachment/home/fixture.png">';
+      host.details.bodyHtml = '<p>article above comments</p><img src="https://bbs.yamibo.com/data/attachment/home/fixture.png">';
       await host.pump(
         tester,
         const ProfileBlogDetailPage(
@@ -728,14 +724,22 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
       final heading = find.byKey(const Key('profile-blog-comments-heading'));
       expect(heading, findsOneWidget);
-      expect(find.text('comment fixture', findRichText: true), findsOneWidget);
+      final comment = findNativeBodyText('comment fixture');
+      for (var frame = 0; frame < 12 && comment.evaluate().isEmpty; frame++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(comment, findsOneWidget);
       expect(tester.getTopLeft(heading).dy, inInclusiveRange(56, 90));
       // Reveal the bottom of the article as well; offscreen images may remain
       // deferred while the targeted comment is immediately readable.
       _detailScroll(tester).position.jumpTo(-160);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
-      expect(find.byType(CachedLibraryImage), findsOneWidget);
+      final imageFinder = find.byType(CachedLibraryImage);
+      for (var frame = 0; frame < 24 && imageFinder.evaluate().isEmpty; frame++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(imageFinder, findsOneWidget);
       expect(cache.keys, isNotEmpty);
       expect(cache.downloads, 0);
       final before = tester.getTopLeft(heading);
@@ -752,9 +756,8 @@ void main() {
         );
         try {
           final bytes = await frame.toByteData(format: ui.ImageByteFormat.png);
-          return await File(
-            '${directory.path}/fixture.png',
-          ).writeAsBytes(bytes!.buffer.asUint8List());
+          return await File('${directory.path}/fixture.png')
+              .writeAsBytes(bytes!.buffer.asUint8List());
         } finally {
           frame.dispose();
         }
@@ -762,7 +765,6 @@ void main() {
       addTearDown(() async {
         await file!.parent.delete(recursive: true);
       });
-      final imageFinder = find.byType(CachedLibraryImage);
       final imageWidget = tester.widget<CachedLibraryImage>(imageFinder);
       final provider = resolveDownscaledFileImageProvider(
         localPath: file!.path,
@@ -802,6 +804,8 @@ void main() {
       expect(host.details.queries, hasLength(1));
       expect(cache.downloads, 0);
       expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      host.container.dispose();
     },
   );
 }
@@ -814,19 +818,8 @@ ScrollableState _detailScroll(WidgetTester tester) => tester.state(
       )
       .first,
 );
-Future<void> _tapHtmlLink(WidgetTester tester, String text) async {
-  // A paragraph can be wider than its link. Tap the actual glyph selection,
-  // not the center of the full-width RichText render box.
-  final paragraph = tester.renderObject<RenderParagraph>(
-    find.text(text, findRichText: true),
-  );
-  final box = paragraph
-      .getBoxesForSelection(
-        TextSelection(baseOffset: 0, extentOffset: text.length),
-      )
-      .first;
-  await tester.tapAt(paragraph.localToGlobal(box.toRect().center));
-}
+Future<void> _tapHtmlLink(WidgetTester tester, String text) =>
+    tapNativeBodyText(tester, text);
 
 Future<void> _tapLink(WidgetTester tester) async {
   await tester.tap(find.byKey(const Key('open-content-link')));
@@ -901,9 +894,8 @@ class _Host {
         child: LocalizedTestApp(
           navigatorKey: navigator,
           builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: TextScaler.linear(textScale)),
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: TextScaler.linear(textScale)),
             child: child!,
           ),
           home: home,

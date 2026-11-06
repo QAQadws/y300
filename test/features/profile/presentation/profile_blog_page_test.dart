@@ -20,6 +20,7 @@ import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 import '../../../test_support/localized_test_app.dart';
+import '../../../test_support/native_body_finders.dart';
 import '../test_support/blog_comment_fixture.dart';
 import '../test_support/blog_draft_fixture.dart';
 import '../test_support/blog_operation_fixture.dart';
@@ -754,9 +755,9 @@ void main() {
     expect(find.text(l10n.profileBlogViews(39)), findsNothing);
     expect(find.text(l10n.profileBlogCommentCount(1)), findsNothing);
     expect(find.text('hsyhlj'), findsOneWidget);
-    expect(_richTextContaining('一直对着电脑屏幕'), findsOneWidget);
+    expect(findNativeBodyText('一直对着电脑屏幕'), findsOneWidget);
     expect(find.text(l10n.profileBlogComments), findsOneWidget);
-    expect(_richTextContaining('探险的感觉'), findsOneWidget);
+    expect(findNativeBodyText('探险的感觉'), findsOneWidget);
   });
 
   testWidgets(
@@ -807,7 +808,7 @@ void main() {
         ),
         findsNothing,
       );
-      expect(_richTextContaining('一直对着电脑屏幕'), findsOneWidget);
+      expect(findNativeBodyText('一直对着电脑屏幕'), findsOneWidget);
       await tester.tap(find.byKey(const Key('blog-detail-reply')));
       await tester.pumpAndSettle();
       expect(find.byType(BlogCommentPage), findsOneWidget);
@@ -1629,10 +1630,4 @@ class _FakeBlogDetailRepository implements UserBlogDetailRepository {
       metadata: const DataReadMetadata.network(),
     );
   }
-}
-
-Finder _richTextContaining(String text) {
-  return find.byWidgetPredicate((widget) {
-    return widget is RichText && widget.text.toPlainText().contains(text);
-  });
 }

@@ -35,6 +35,7 @@ import 'package:y300/l10n/app_localizations.dart';
 
 import '../../../support/forum_auth_test_support.dart';
 import '../../../test_support/localized_test_app.dart';
+import '../../../test_support/native_body_finders.dart';
 import '../../messages/support/message_test_repository.dart';
 import '../test_support/friend_read_fixture.dart';
 
@@ -350,7 +351,7 @@ void main() {
     expect(find.text(l10n.profileMyThreadsTab), findsOneWidget);
     expect(find.text(l10n.profileSendMessage), findsOneWidget);
     expect(find.byKey(const Key('user-profile-signature')), findsOneWidget);
-    expect(_richTextContaining('Make a deal'), findsOneWidget);
+    expect(findNativeBodyText('Make a deal'), findsOneWidget);
     expect(find.byKey(const Key('user-profile-details')), findsOneWidget);
     expect(find.text('用户组'), findsOneWidget);
     expect(find.text('普通会员'), findsOneWidget);
@@ -1801,12 +1802,6 @@ class _FakeAuthRepository implements AuthRepository {
 
   @override
   Future<void> logout() async {}
-}
-
-Finder _richTextContaining(String text) {
-  return find.byWidgetPredicate((widget) {
-    return widget is RichText && widget.text.toPlainText().contains(text);
-  });
 }
 
 Future<void> _reveal(WidgetTester tester, Finder finder) async {

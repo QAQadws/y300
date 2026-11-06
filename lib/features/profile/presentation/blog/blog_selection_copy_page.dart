@@ -74,7 +74,11 @@ class _BlogSelectionCopyPageState extends ConsumerState<BlogSelectionCopyPage> {
       key: const Key('blog-selection-copy-page'),
       title: l10n.threadSelectionCopyTitle,
       bodyKey: const Key('blog-selection-copy-body'),
+      childOwnsSelection: true,
       child: ForumHtmlContentView(
+        nativeBody: true,
+        selectEntireBody: true,
+        isCurrent: () => _canInteract,
         html: widget.displayHtml,
         sourceId: widget.sourceId,
         useSharedReaderFont: true,

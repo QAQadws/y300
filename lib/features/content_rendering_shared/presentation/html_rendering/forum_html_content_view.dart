@@ -2,16 +2,21 @@ import 'package:y300/features/content_rendering_shared/presentation/contracts/fo
 import 'package:y300/features/content_rendering_shared/application/forum_html_reader_preferences_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/clipboard/clipboard_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:y300/features/content_rendering_shared/domain/models/forum_html_reader_preferences.dart';
 import 'package:y300/features/content_rendering_shared/application/forum_html_render_preparer.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
+import '../../application/forum_html_image_host_provider.dart';
 import '../../application/forum_html_preparation_controller.dart';
 import '../../application/forum_html_preparation_executor.dart';
 import '../../application/forum_html_reader_font_binding.dart';
 import 'forum_html_preparation_placeholder.dart';
 import 'forum_html_reader_text_style.dart';
+import 'forum_html_style_policy.dart';
+import 'forum_native_body_flow.dart';
 
 import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_widget_post_renderer.dart';
 
@@ -29,11 +34,14 @@ class ForumHtmlContentView extends ConsumerStatefulWidget {
     this.theme,
     this.surfaceColor,
     this.foregroundColor,
-    this.renderPreparer = const DefaultForumHtmlRenderPreparer(),
+    this.renderPreparer,
     this.preparationExecutor,
     this.linkBaseUri,
     this.useSharedReaderFont = false,
-  });
+    this.nativeBody = false,
+    this.selectEntireBody = false,
+    this.isCurrent,
+  }) : assert(!selectEntireBody || nativeBody);
 
   final String html;
   final String sourceId;
@@ -47,10 +55,13 @@ class ForumHtmlContentView extends ConsumerStatefulWidget {
   final ForumHtmlThemeContext? theme;
   final Color? surfaceColor;
   final Color? foregroundColor;
-  final ForumHtmlRenderPreparer renderPreparer;
+  final ForumHtmlRenderPreparer? renderPreparer;
   final ForumHtmlPreparationExecutor? preparationExecutor;
   final Uri? linkBaseUri;
   final bool useSharedReaderFont;
+  final bool nativeBody;
+  final bool selectEntireBody;
+  final bool Function()? isCurrent;
 
   @override
   ConsumerState<ForumHtmlContentView> createState() =>
@@ -59,6 +70,13 @@ class ForumHtmlContentView extends ConsumerStatefulWidget {
 
 class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
   late var _preparation = _createPreparation();
+  late var _nativePreparer = DefaultForumHtmlRenderPreparer(
+    contentImageKind: widget.contentImageKind,
+  );
+  Object? _nativeSource;
+  var _expansion = <String, bool>{};
+  Object? _imageHostIdentity;
+  ForumHtmlImageHost? _imageHost;
 
   ForumHtmlPreparationController _createPreparation() =>
       ForumHtmlPreparationController(executor: widget.preparationExecutor)
@@ -75,6 +93,11 @@ class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
       _preparation.dispose();
       _preparation = _createPreparation();
     }
+    if (oldWidget.contentImageKind != widget.contentImageKind) {
+      _nativePreparer = DefaultForumHtmlRenderPreparer(
+        contentImageKind: widget.contentImageKind,
+      );
+    }
     if (_preparation.hasError) _preparation.reset();
   }
 
@@ -89,6 +112,7 @@ class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
     final trimmedHtml = widget.html.trim();
     if (trimmedHtml.isEmpty) {
       _preparation.reset();
+      _nativeSource = null;
       return const SizedBox.shrink();
     }
     final ownerId = _ownerId();
@@ -113,20 +137,95 @@ class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
     final sourceId = widget.sourceId.trim().isEmpty
         ? ownerId
         : widget.sourceId.trim();
-    final document = _preparation.resolve(
-      ForumHtmlPreparationRequest(
-        html: trimmedHtml,
-        preferences: preferences,
-        theme: renderTheme,
-        sourceId: sourceId,
-        threadId: ownerId,
-        imageCacheOwnerId: ownerId,
-        preparer: widget.renderPreparer,
-      ),
+    final request = ForumHtmlPreparationRequest(
+      html: trimmedHtml,
+      preferences: preferences,
+      theme: renderTheme,
+      sourceId: sourceId,
+      threadId: ownerId,
+      imageCacheOwnerId: ownerId,
+      preparer:
+          widget.renderPreparer ??
+          (widget.nativeBody
+              ? _nativePreparer
+              : const DefaultForumHtmlRenderPreparer()),
     );
+    ForumHtmlPreparedRenderDocument? document;
+    try {
+      document = _preparation.resolve(request);
+    } catch (_) {
+      if (!widget.nativeBody) rethrow;
+      final l10n = AppLocalizations.of(context);
+      return Column(
+        children: [
+          Text(l10n.threadHtmlRenderFailed),
+          TextButton(
+            onPressed: () => setState(_preparation.reset),
+            child: Text(l10n.commonRetry),
+          ),
+        ],
+      );
+    }
     if (document == null) return const ForumHtmlPreparationPlaceholder();
     final sequence = document.sequence;
     final onOpenImage = widget.onOpenImage;
+    if (widget.nativeBody) {
+      final source = (trimmedHtml, sourceId, ownerId, request.preparer);
+      if (_nativeSource != source) {
+        _nativeSource = source;
+        _expansion = {};
+      }
+      final requestIdentity = request.identity;
+      bool current() =>
+          mounted &&
+          _preparation.identity == requestIdentity &&
+          (widget.isCurrent?.call() ?? true);
+      return ForumNativeBodyFlow(
+        key: ObjectKey(_expansion),
+        prepared: document,
+        preferences: preferences,
+        theme: renderTheme,
+        textStyle: fontBinding == null
+            ? ForumHtmlStylePolicy(
+                preferences,
+                theme: renderTheme,
+              ).baseTextStyle(context)
+            : resolveForumHtmlReaderTextStyle(
+                context,
+                preferences: preferences,
+                theme: renderTheme,
+                font: fontBinding.resolvedFont,
+              ),
+        fontRevision: fontBinding?.cacheKey ?? '',
+        imageHost: _resolveImageHost(document, ownerId),
+        expansion: _expansion,
+        callbacks: ForumHtmlRenderCallbacks(
+          onTapImage: onOpenImage == null
+              ? null
+              : (image) {
+                  if (current()) widget.onOpenImage?.call(sequence, image);
+                },
+          onTapUrl: widget.onOpenLink == null
+              ? null
+              : (url) {
+                  if (!current()) return false;
+                  final uri = Uri.tryParse(url.trim());
+                  if (uri == null) return false;
+                  final base =
+                      widget.linkBaseUri ??
+                      ForumHtmlWidgetPostRenderer.forumBaseUri;
+                  widget.onOpenLink?.call(base.resolveUri(uri).toString());
+                  return true;
+                },
+        ),
+        clipboardTextWriter: ref.read(clipboardTextWriterProvider),
+        selectionEnabled: widget.selectEntireBody,
+        selectEntireBody: widget.selectEntireBody,
+        isSelectionCurrent: current,
+        errorBuilder: (context) =>
+            Text(AppLocalizations.of(context).threadHtmlRenderFailed),
+      );
+    }
     return ForumHtmlWidgetPostRenderer(
       html: trimmedHtml,
       theme: renderTheme,
@@ -159,6 +258,34 @@ class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
         },
       ),
     );
+  }
+
+  ForumHtmlImageHost? _resolveImageHost(
+    ForumHtmlPreparedRenderDocument document,
+    String ownerId,
+  ) {
+    if (document.sequence.entries.isEmpty &&
+        document.skippedStickerCount == 0) {
+      _imageHostIdentity = null;
+      return _imageHost = null;
+    }
+    final host = ref.watch(forumHtmlImageHostProvider);
+    final identity = (
+      host,
+      ownerId,
+      widget.imageReferer,
+      widget.contentImageKind,
+    );
+    if (_imageHostIdentity != identity) {
+      _imageHostIdentity = identity;
+      _imageHost = host.forContent(
+        threadId: ownerId,
+        imageCacheOwnerId: ownerId,
+        imageReferer: widget.imageReferer,
+        contentImageKind: widget.contentImageKind,
+      );
+    }
+    return _imageHost;
   }
 
   String _ownerId() {

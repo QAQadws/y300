@@ -17,6 +17,7 @@ import 'package:y300/l10n/app_localizations.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 import '../../../test_support/localized_test_app.dart';
+import '../../../test_support/native_body_finders.dart';
 import '../test_support/blog_navigation_fixture.dart';
 
 void main() {
@@ -309,7 +310,7 @@ void main() {
     await refreshing;
     await tester.pumpAndSettle();
     expect(find.byType(ProfileBlogDetailPage), findsOneWidget);
-    expect(find.text('retained body', findRichText: true), findsOneWidget);
+    expect(findNativeBodyText('retained body'), findsOneWidget);
     expect(find.byType(SnackBar), findsNothing);
     expect(tester.takeException(), isNull);
   });

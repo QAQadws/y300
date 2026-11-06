@@ -15,6 +15,7 @@ import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 import '../../../test_support/localized_test_app.dart';
+import '../../../test_support/native_body_finders.dart';
 import '../test_support/blog_navigation_fixture.dart';
 
 void main() {
@@ -28,7 +29,7 @@ void main() {
       expect(host.history.drafts, isEmpty);
       host.details.succeed(0);
       await tester.pumpAndSettle();
-      expect(find.text('article body', findRichText: true), findsOneWidget);
+      expect(findNativeBodyText('article body'), findsOneWidget);
       expect(host.history.drafts, hasLength(1));
       final controller = tester
           .widget<BlogHistoryVisitObserver>(
@@ -193,7 +194,7 @@ void main() {
       await host.pump(tester);
       host.details.succeed(0);
       await tester.pumpAndSettle();
-      expect(find.text('article body', findRichText: true), findsOneWidget);
+      expect(findNativeBodyText('article body'), findsOneWidget);
       expect(host.history.drafts, hasLength(1));
       final controller = tester
           .widget<BlogHistoryVisitObserver>(

@@ -42,6 +42,7 @@ import 'package:y300/shared/widgets/native_primary_tab_bar.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 import '../../../test_support/localized_test_app.dart';
+import '../../../test_support/native_body_finders.dart';
 import '../test_support/blog_comment_fixture.dart';
 import '../test_support/blog_operation_fixture.dart';
 import '../test_support/blog_visual_fixture.dart';
@@ -617,6 +618,9 @@ void main() {
     final picture = find.byWidgetPredicate(
       (widget) => widget is CachedLibraryImage && widget.request != null,
     );
+    for (var frame = 0; frame < 20 && picture.evaluate().isEmpty; frame++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
     await tester.ensureVisible(picture);
     await tester.pump(const Duration(milliseconds: 500));
     final file = await tester.runAsync(() async {
@@ -688,12 +692,7 @@ void _checkHtmlTheme(
   ThemeData theme, {
   required String sourceId,
 }) {
-  final renderer = tester.widget<ForumHtmlWidgetPostRenderer>(
-    find.byWidgetPredicate(
-      (widget) =>
-          widget is ForumHtmlWidgetPostRenderer && widget.sourceId == sourceId,
-    ),
-  );
+  final renderer = tester.widget<ForumNativeBodyFlow>(findNativeBody(sourceId));
   final postTheme = const ForumHtmlRenderThemeFactory().fromThreadPalette(
     palette: ThreadDetailNativePalette.resolve(theme),
     brightness: theme.brightness,

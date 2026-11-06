@@ -1251,6 +1251,10 @@ class _BlogDetailCard extends ConsumerWidget {
               style: Theme.of(context).textTheme.bodyMedium
                   ?.copyWith(color: palette.body, height: 1.5),
               child: ForumHtmlContentView(
+                key: ObjectKey(accountOwner),
+                nativeBody: true,
+                isCurrent: () =>
+                    identical(ref.read(blogMutationBusProvider), accountOwner),
                 html: display.html(data.bodyHtml),
                 sourceId: 'profile-blog-${data.blogId}',
                 useSharedReaderFont: true,
@@ -1368,6 +1372,10 @@ class _CommentCard extends ConsumerWidget {
               style: Theme.of(context).textTheme.bodyMedium
                   ?.copyWith(color: palette.body, height: 1.5),
               child: ForumHtmlContentView(
+                key: ObjectKey(accountOwner),
+                nativeBody: true,
+                isCurrent: () =>
+                    identical(ref.read(blogMutationBusProvider), accountOwner),
                 html: display.html(comment.bodyHtml),
                 sourceId: 'profile-blog-comment-${comment.commentId}',
                 useSharedReaderFont: true,

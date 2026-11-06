@@ -25,6 +25,7 @@ import 'package:y300/l10n/app_localizations.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 import '../../../test_support/localized_test_app.dart';
+import '../../../test_support/native_body_finders.dart';
 
 const _output = String.fromEnvironment('PROFILE_VISUAL_OUTPUT');
 const _font = String.fromEnvironment('PROFILE_VISUAL_FONT');
@@ -936,20 +937,14 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      final signatureLink = find.text('故事链接', findRichText: true);
+      final signatureLink = findNativeBodyText('故事链接');
       await tester.dragUntilVisible(
         signatureLink,
         find.byKey(const Key('user-profile-page-list')),
         const Offset(0, -250),
       );
       await tester.pumpAndSettle();
-      final paragraph = tester.renderObject<RenderParagraph>(signatureLink);
-      final linkBox = paragraph
-          .getBoxesForSelection(
-            const TextSelection(baseOffset: 0, extentOffset: 4),
-          )
-          .first;
-      await tester.tapAt(paragraph.localToGlobal(linkBox.toRect().center));
+      await tapNativeBodyText(tester, '故事链接');
       await tester.dragUntilVisible(
         find.text('https://example.test/works'),
         find.byKey(const Key('user-profile-page-list')),
@@ -1198,9 +1193,8 @@ Future<void> _save(WidgetTester tester, String name) async {
     try {
       final bytes = await frame.toByteData(format: ui.ImageByteFormat.png);
       final directory = await Directory(_output).create(recursive: true);
-      await File(
-        '${directory.path}/$name.png',
-      ).writeAsBytes(bytes!.buffer.asUint8List());
+      await File('${directory.path}/$name.png')
+          .writeAsBytes(bytes!.buffer.asUint8List());
     } finally {
       frame.dispose();
     }

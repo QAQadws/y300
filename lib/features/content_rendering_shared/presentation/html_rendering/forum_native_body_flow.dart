@@ -33,9 +33,10 @@ final class ForumNativeBodyFlow extends StatefulWidget {
     required this.callbacks,
     required this.clipboardTextWriter,
     this.onOpenSelectedLink,
+    this.selectionEnabled = true,
     this.selectEntireBody = false,
     this.isSelectionCurrent,
-    required this.onGeometry,
+    this.onGeometry,
     this.onLayoutPhase,
     required this.errorBuilder,
     this.imageAnchorController,
@@ -51,9 +52,10 @@ final class ForumNativeBodyFlow extends StatefulWidget {
   final ForumHtmlRenderCallbacks callbacks;
   final ClipboardTextWriter clipboardTextWriter;
   final ForumSelectionLinkOpener? onOpenSelectedLink;
+  final bool selectionEnabled;
   final bool selectEntireBody;
   final bool Function()? isSelectionCurrent;
-  final void Function(bool ready, bool complete) onGeometry;
+  final void Function(bool ready, bool complete)? onGeometry;
   final ValueChanged<ForumHtmlBodyLayoutPhase>? onLayoutPhase;
   final WidgetBuilder errorBuilder;
   final ForumHtmlImageAnchorController? imageAnchorController;
@@ -171,7 +173,7 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
         final run = _pending = _FlowRun(inputs, changes);
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!_current(run)) return;
-          widget.onGeometry(false, false);
+          widget.onGeometry?.call(false, false);
           unawaited(_start(run, document, width, scaler, direction, style));
         });
       }
@@ -194,20 +196,9 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (run != null)
-            ForumContentSelectionRegion(
-              nativeFlow: true,
-              clipboardTextWriter: widget.clipboardTextWriter,
-              onOpenForumLink: widget.onOpenSelectedLink,
-              selectionIdentity: _pending,
-              isCurrent: () =>
-                  _current(run) &&
-                  _error == null &&
-                  (widget.isSelectionCurrent?.call() ?? true),
-              wholeBodySelection: widget.selectEntireBody
-                  ? (session: run.session!, complete: run.prefix!.isComplete)
-                  : null,
-              onSelectionStarted: widget.callbacks.onInteraction,
-              child: ForumBodyFlowBox(
+            _withSelection(
+              run,
+              ForumBodyFlowBox(
                 key: run.boundsKey,
                 session: run.session!,
                 prefix: run.prefix!,
@@ -229,7 +220,7 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
                 onReadyChanged: (ready) {
                   if (!_current(run)) return;
                   run.ready = ready;
-                  widget.onGeometry(
+                  widget.onGeometry?.call(
                     ready && _error == null,
                     run.prefix!.isComplete && _error == null,
                   );
@@ -256,6 +247,25 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
       );
     },
   );
+
+  Widget _withSelection(_FlowRun run, Widget body) {
+    if (!widget.selectionEnabled) return body;
+    return ForumContentSelectionRegion(
+      nativeFlow: true,
+      clipboardTextWriter: widget.clipboardTextWriter,
+      onOpenForumLink: widget.onOpenSelectedLink,
+      selectionIdentity: _pending,
+      isCurrent: () =>
+          _current(run) &&
+          _error == null &&
+          (widget.isSelectionCurrent?.call() ?? true),
+      wholeBodySelection: widget.selectEntireBody
+          ? (session: run.session!, complete: run.prefix!.isComplete)
+          : null,
+      onSelectionStarted: widget.callbacks.onInteraction,
+      child: body,
+    );
+  }
 
   Future<void> _start(
     _FlowRun run,
@@ -365,7 +375,7 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
           _shown?.close();
           _shown = null;
         });
-        widget.onGeometry(false, true);
+        widget.onGeometry?.call(false, true);
       }
       return;
     }
@@ -387,7 +397,7 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_current(run) && identical(run.prefix, snapshot) && _error == null) {
-        widget.onGeometry(run.ready, snapshot.isComplete);
+        widget.onGeometry?.call(run.ready, snapshot.isComplete);
       }
     });
   }
@@ -406,7 +416,8 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
       layoutId: snapshot.layoutId,
       fragments: fragments,
       compactHeight: true,
-      selectionEnabled: _current(run) && _error == null,
+      selectionEnabled:
+          widget.selectionEnabled && _current(run) && _error == null,
       imageHost: run.host,
       imageAnchorController: widget.imageAnchorController,
       collapseLabels: ForumHtmlCollapseLabels(
@@ -518,7 +529,7 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
   void _fail(Object error, StackTrace stack) {
     debugPrint('[ForumBody][flow] ${error.runtimeType}');
     setState(() => _error = error);
-    widget.onGeometry(false, false);
+    widget.onGeometry?.call(false, false);
   }
 
   void _retry() {
