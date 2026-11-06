@@ -226,12 +226,32 @@ final class ForumBodyPageColumns {
   double widthFor(double screenWidth) =>
       (screenWidth - (count - 1) * gap) / count;
 
+  /// Logical column for a screen x coordinate. The gutter is split between
+  /// its neighbors so selection handles can cross it in either direction.
+  int indexAt(double screenWidth, double x) {
+    final physicalIndex = ((x + gap / 2) ~/ (widthFor(screenWidth) + gap))
+        .clamp(0, count - 1);
+    return readingOrder == TextDirection.ltr
+        ? physicalIndex
+        : count - 1 - physicalIndex;
+  }
+
   double _leftFor(double columnWidth, int index) {
     final physicalIndex = readingOrder == TextDirection.ltr
         ? index
         : count - 1 - index;
     return physicalIndex * (columnWidth + gap);
   }
+
+  @override
+  bool operator ==(Object other) =>
+      other is ForumBodyPageColumns &&
+      other.count == count &&
+      other.gap == gap &&
+      other.readingOrder == readingOrder;
+
+  @override
+  int get hashCode => Object.hash(count, gap, readingOrder);
 }
 
 /// Fixed read-only prefix over append-only storage. Completion and length are

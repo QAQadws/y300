@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/semantics.dart' show OrdinalSortKey;
 import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../document/forum_body_document.dart';
@@ -167,6 +168,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
       layoutId,
       snapshot.width,
       compactHeight ? page.usedHeight : snapshot.height,
+      snapshot.columns,
       selectionEnabled,
       List.unmodifiable(fragments),
       onSourceTap,
@@ -193,6 +195,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     this._layoutId,
     this._width,
     this._height,
+    this._columns,
     this._selectionEnabled,
     this._bindings,
     this._onSourceTap,
@@ -215,6 +218,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
   final String _layoutId;
   final double _width;
   final double _height;
+  final ForumBodyPageColumns _columns;
   final bool _selectionEnabled;
   final List<ForumBodyPreparedTextFragment> _bindings;
   final void Function(ForumBodyTextPageFragment, HtmlProjectedSourcePosition)?
@@ -374,6 +378,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
     ForumBodyTextPageFragment fragment,
     ForumBodyPreparedTextFragment binding,
     bool canSelect,
+    int index,
   ) {
     final key = ObjectKey(_bindingKey(binding));
     final identity = (
@@ -452,6 +457,9 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
               sourceIdentity: _sourceIdentity,
               identity: identity,
               registrar: registrar,
+              columnOrder: _columns.count == 1
+                  ? null
+                  : (geometry: _columns, fragmentIndex: index),
               child: surface,
             ),
           );
@@ -463,55 +471,60 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
         top: fragment.top,
         width: fragment.width,
         height: fragment.height,
-        child: body,
+        child: _orderedSemantics(index, body),
       );
     }
     final bounds = header.bounds;
     return Positioned.fromRect(
       key: key,
       rect: bounds,
-      child: Directionality(
-        textDirection: header.direction,
-        child: Material(
-          type: MaterialType.transparency,
-          child: DecoratedBox(
-            decoration: forumCollapseOutline(
-              Theme.of(context).colorScheme.outlineVariant,
-            ),
-            child: ForumCollapseHeaderControl(
-              toggleKey: ValueKey(
-                'forum-native-collapse-toggle-${header.id}-${fragment.paragraphIndex}',
+      child: _orderedSemantics(
+        index,
+        Directionality(
+          textDirection: header.direction,
+          child: Material(
+            type: MaterialType.transparency,
+            child: DecoratedBox(
+              decoration: forumCollapseOutline(
+                Theme.of(context).colorScheme.outlineVariant,
               ),
-              expanded: header.expanded,
-              label: header.expanded
-                  ? _collapseLabels?.expandedSemanticsLabel
-                  : _collapseLabels?.collapsedSemanticsLabel,
-              onTap: _onCollapseToggle == null
-                  ? null
-                  : () {
-                      if (binding.isActive) _onCollapseToggle(fragment);
-                    },
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  PositionedDirectional(
-                    start: ForumCollapseHeaderMetrics.inset,
-                    top: 0,
-                    bottom: 0,
-                    child: IgnorePointer(
-                      child: Center(
-                        child: ForumCollapseChevron(expanded: header.expanded),
+              child: ForumCollapseHeaderControl(
+                toggleKey: ValueKey(
+                  'forum-native-collapse-toggle-${header.id}-${fragment.paragraphIndex}',
+                ),
+                expanded: header.expanded,
+                label: header.expanded
+                    ? _collapseLabels?.expandedSemanticsLabel
+                    : _collapseLabels?.collapsedSemanticsLabel,
+                onTap: _onCollapseToggle == null
+                    ? null
+                    : () {
+                        if (binding.isActive) _onCollapseToggle(fragment);
+                      },
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    PositionedDirectional(
+                      start: ForumCollapseHeaderMetrics.inset,
+                      top: 0,
+                      bottom: 0,
+                      child: IgnorePointer(
+                        child: Center(
+                          child: ForumCollapseChevron(
+                            expanded: header.expanded,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                  Positioned(
-                    left: fragment.left - bounds.left,
-                    top: fragment.top - bounds.top,
-                    width: fragment.width,
-                    height: fragment.height,
-                    child: body,
-                  ),
-                ],
+                    Positioned(
+                      left: fragment.left - bounds.left,
+                      top: fragment.top - bounds.top,
+                      width: fragment.width,
+                      height: fragment.height,
+                      child: body,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -519,6 +532,15 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
       ),
     );
   }
+
+  Widget _orderedSemantics(int index, Widget child) => _columns.count == 1
+      ? child
+      : Semantics(
+          container: true,
+          explicitChildNodes: true,
+          sortKey: OrdinalSortKey(index.toDouble()),
+          child: child,
+        );
 
   @override
   Widget build(BuildContext context) => ForumBodyPageSelectionScope(
@@ -611,7 +633,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
       final marks = highlight == null || highlight.ranges.isEmpty
           ? const <Rect>[]
           : locateSourceRanges(highlight.ranges);
-      return SizedBox(
+      final page = SizedBox(
         width: _width,
         height: _height,
         child: Stack(
@@ -640,7 +662,13 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
                 ),
               ),
             for (final (index, fragment) in _page.fragments.indexed)
-              _placedFragment(context, fragment, _bindings[index], canSelect),
+              _placedFragment(
+                context,
+                fragment,
+                _bindings[index],
+                canSelect,
+                index,
+              ),
             if (marks.isNotEmpty)
               Positioned.fill(
                 child: IgnorePointer(
@@ -652,6 +680,9 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
           ],
         ),
       );
+      return _columns.count == 1
+          ? page
+          : Semantics(container: true, explicitChildNodes: true, child: page);
     },
   );
 }

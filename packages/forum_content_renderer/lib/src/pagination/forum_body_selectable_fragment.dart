@@ -224,6 +224,18 @@ final class _PageSelectionScopeState
 
 final class _PageSelectionDelegate extends StaticSelectionContainerDelegate {
   @override
+  Comparator<Selectable> get compareOrder => (a, b) {
+    if (a is _RenderSelectableFragment && b is _RenderSelectableFragment) {
+      final first = a._input.columnOrder;
+      final second = b._input.columnOrder;
+      if (first != null && second != null) {
+        return first.fragmentIndex.compareTo(second.fragmentIndex);
+      }
+    }
+    return super.compareOrder(a, b);
+  };
+
+  @override
   SelectedContent? getSelectedContent() =>
       _joinSelected(selectables.whereType<_RenderSelectableFragment>());
 }
@@ -278,6 +290,7 @@ final class ForumBodySelectableFragment extends SingleChildRenderObjectWidget {
     required this.identity,
     required this.registrar,
     required super.child,
+    this.columnOrder,
     super.key,
   });
 
@@ -287,6 +300,7 @@ final class ForumBodySelectableFragment extends SingleChildRenderObjectWidget {
   final ForumBodyIdentity sourceIdentity;
   final Object identity;
   final SelectionRegistrar? registrar;
+  final ({ForumBodyPageColumns geometry, int fragmentIndex})? columnOrder;
 
   @override
   RenderObject createRenderObject(BuildContext context) =>
@@ -550,6 +564,20 @@ final class _RenderSelectableFragment extends RenderProxyBox
     final local = globalToLocal(event.globalPosition);
     if (!local.isFinite) return SelectionResult.none;
     final text = _text!;
+    if (_input.columnOrder case final order?) {
+      final fragment = _input.fragment;
+      final width = _input.pageSize.width;
+      final column = order.geometry.indexAt(
+        width,
+        fragment.left + fragment.width / 2,
+      );
+      final target = order.geometry.indexAt(width, fragment.left + local.dx);
+      // The target's column takes precedence over its vertical position.
+      // A drag from the bottom of a column can continue at the next one's top.
+      if (target != column) {
+        return _setEdge(target < column ? text.start : text.end, isEnd: isEnd);
+      }
+    }
     final other = isEnd ? _base : _extent;
     var position = _caret(local, forward: isEnd);
     if (event.granularity == TextGranularity.word &&

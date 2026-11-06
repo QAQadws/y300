@@ -2,6 +2,7 @@ import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart'
     show MaterialApp, Scaffold, SelectionArea;
+import 'package:flutter/semantics.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
@@ -14,6 +15,7 @@ final class _Fixture {
     bool dedicatedTables = false,
     bool captureFloats = false,
     ForumBodyTableExtent tableExtent = ForumBodyTableExtent.bookPage,
+    ForumBodyPageColumns columns = const ForumBodyPageColumns(),
   }) {
     document = const ForumBodyParser().parse(
       html: html,
@@ -40,6 +42,7 @@ final class _Fixture {
       layoutId: 'selection',
       width: 200,
       height: height,
+      columns: columns,
       collapses: ForumBodyCollapseLayout(document),
       dedicatedTables: dedicatedTables,
       captureFloats: captureFloats,
@@ -280,6 +283,95 @@ void main() {
     expect(fixture.cache.activeLeases, 0);
     expect(tester.takeException(), isNull);
   });
+
+  for (final direction in TextDirection.values) {
+    testWidgets(
+      'column selection and announcements follow ${direction.name} flow',
+      (tester) async {
+        final semantics = tester.ensureSemantics();
+        try {
+          const labels = ['First', 'Second', 'Third', 'Fourth'];
+          final fixture = _Fixture(
+            labels.map((text) => '<p style="margin:0">$text</p>').join(),
+            height: 20,
+            columns: ForumBodyPageColumns(
+              count: 2,
+              gap: 20,
+              readingOrder: direction,
+            ),
+          );
+          final snapshot = fixture.session.snapshot;
+          final parts = snapshot.single.fragments;
+          expect(parts.map((part) => part.top), [0, 10, 0, 10]);
+          String? selected;
+          await tester.pumpWidget(
+            MaterialApp(
+              home: Scaffold(
+                body: SelectionArea(
+                  onSelectionChanged: (content) =>
+                      selected = content?.plainText,
+                  child: Align(
+                    alignment: Alignment.topLeft,
+                    child: ForumBodyTextPageSurface.prepared(
+                      snapshot: snapshot,
+                      pageIndex: 0,
+                      layoutId: snapshot.layoutId,
+                      fragments: fixture.prepare(0),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final first = tester.getSemantics(
+            find.bySemanticsLabel(labels.first),
+          );
+          var root = first;
+          while (root.parent != null) {
+            root = root.parent!;
+          }
+          Iterable<String> traversal(SemanticsNode node) sync* {
+            yield node.label;
+            for (final child in node.debugListChildrenInOrder(
+              DebugSemanticsDumpOrder.traversalOrder,
+            )) {
+              yield* traversal(child);
+            }
+          }
+
+          expect(traversal(root).where(labels.contains), labels);
+          final region = tester.state<SelectableRegionState>(
+            find.byType(SelectableRegion),
+          );
+          region.selectAll(SelectionChangedCause.toolbar);
+          await tester.pump();
+          expect(selected, labels.join('\n'));
+          final origin = tester.getTopLeft(
+            find.byType(ForumBodyTextPageSurface),
+          );
+          final start = origin + Offset(parts[1].left + 1, parts[1].top + 5);
+          final end = origin + Offset(parts[2].left + 49, parts[2].top + 5);
+          for (final reverse in [false, true]) {
+            region.clearSelection();
+            await tester.pump();
+            final drag = await tester.startGesture(
+              reverse ? end : start,
+              kind: PointerDeviceKind.mouse,
+            );
+            await drag.moveTo(reverse ? start : end);
+            await drag.up();
+            await tester.pump();
+            expect(selected, 'Second\nThird');
+          }
+          await tester.pumpWidget(const SizedBox.shrink());
+          expect(fixture.cache.activeLeases, 0);
+        } finally {
+          semantics.dispose();
+        }
+      },
+    );
+  }
 
   testWidgets('flow copy joins source paragraphs across scrolling slices', (
     tester,

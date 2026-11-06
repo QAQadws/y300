@@ -74,6 +74,8 @@ final class _Fixture {
     ForumBodyTableExtent extent = ForumBodyTableExtent.bookPage,
     bool captureFloats = false,
     bool avoidIsolatedLines = false,
+    double width = 100,
+    ForumBodyPageColumns columns = const ForumBodyPageColumns(),
   }) {
     final result = ForumBodyTextPageSession(
       document: document,
@@ -85,8 +87,9 @@ final class _Fixture {
       cache: cache,
       limits: limits,
       layoutId: id,
-      width: 100,
+      width: width,
       height: height,
+      columns: columns,
       imageResolver: missingResolver ? null : resolver ?? resolve,
       maxNativeHandlesPerPage: maxNativeHandlesPerPage,
       maxNativeEntriesPerPage: maxNativeEntriesPerPage,
@@ -139,6 +142,32 @@ Matcher _failure(ForumBodyTextPageSessionFailure failure) => throwsA(
 );
 
 void main() {
+  testWidgets('a large block image is fitted to the next reading column', (
+    tester,
+  ) async {
+    final fixture = _Fixture(
+      '<p style="margin:0">abcdefghijklmn</p>'
+      '<img src="https://x/wide" width="240" height="120">',
+    );
+    final session = fixture.session(
+      width: 200,
+      height: 60,
+      columns: const ForumBodyPageColumns(count: 2, gap: 20),
+    );
+    _finish(session);
+    final page = session.snapshot.single;
+    final image = page.fragments.singleWhere((part) => part.imageFrame != null);
+    expect(
+      (image.left, image.top, image.width, image.height),
+      (110, 0, 90, 45),
+    );
+    final deliveries = _prepare(session, 0);
+    expect(deliveries.last, isA<ForumBodyPreparedImageFragment>());
+    for (final part in deliveries) {
+      part.close();
+    }
+    expect(session.activeIssuedImages, 0);
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() async {
     await (FontLoader(
