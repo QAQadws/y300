@@ -71,7 +71,9 @@ resolveNovelReaderNativeTypography(
             quote: scale(roleSizes.quote),
             code: scale(roleSizes.code),
           ),
-    rubyFontScale: forceAllSizes ? 1 : scale(roleSizes.ruby),
+    rubyFontScale: forceAllSizes || !preferences.showRubyAnnotations
+        ? 1
+        : scale(roleSizes.ruby),
     letterSpacing: letters?.logicalPixels,
     paragraphBefore: effectiveSpacing.before,
     paragraphAfter: effectiveSpacing.after,

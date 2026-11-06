@@ -2270,6 +2270,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get novelRoleFontSizeRuby => '注音字号';
 
   @override
+  String get novelShowRubyAnnotations => '显示注音';
+
+  @override
   String get novelRoleFontSizesHint => '按比例调整各类文字原有的字号。100% 保留原有大小。';
 
   @override
@@ -8322,6 +8325,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get novelRoleFontSizeRuby => '注音字級';
+
+  @override
+  String get novelShowRubyAnnotations => '顯示注音';
 
   @override
   String get novelRoleFontSizesHint => '按比例調整各類文字原有的字級。100% 保留原有大小。';

@@ -8,11 +8,13 @@ class NovelReaderRoleFontSizesPanel extends StatelessWidget {
     super.key,
     required this.value,
     required this.enabled,
+    required this.showRubyAnnotations,
     required this.onChanged,
   });
 
   final NovelReaderRoleFontSizes value;
   final bool enabled;
+  final bool showRubyAnnotations;
   final ValueChanged<NovelReaderRoleFontSizes> onChanged;
 
   @override
@@ -61,7 +63,7 @@ class NovelReaderRoleFontSizesPanel extends StatelessWidget {
                 label: l10n.novelRoleFontSizePercent(amount),
                 semanticFormatterCallback: (number) =>
                     l10n.novelRoleFontSizePercent(number.round()),
-                onChanged: enabled
+                onChanged: enabled && (role != 'ruby' || showRubyAnnotations)
                     ? (number) {
                         final next = number.round();
                         onChanged(

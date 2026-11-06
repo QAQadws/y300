@@ -88,6 +88,7 @@ final class ForumBodyReaderStyle {
     this.removeSourceIndent = false,
     this.roleFontScales = defaultRoleFontScales,
     this.rubyFontScale = 1,
+    this.showRubyAnnotations = true,
     this.theme,
     ForumBodyStylePolicy? policy,
   }) : policy = policy ?? ForumBodyStylePolicy() {
@@ -131,6 +132,7 @@ final class ForumBodyReaderStyle {
 
   /// Relative to the annotation's resolved size within its enclosing role.
   final double rubyFontScale;
+  final bool showRubyAnnotations;
   final ForumBodyStylePolicy policy;
 
   /// The same immutable semantic palette used by the HTML renderer.

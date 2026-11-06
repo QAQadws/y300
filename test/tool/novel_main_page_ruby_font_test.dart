@@ -206,6 +206,7 @@ void main() {
       ) as ProviderScope;
       // Font overrides share the I/O scope, so dependent reader providers cannot
       // be instantiated by an ancestor outside the synthetic repository boundary.
+      final semantics = tester.ensureSemantics();
       try {
         await tester.pumpWidget(
           ProviderScope(
@@ -444,6 +445,66 @@ void main() {
           isNotNull,
         );
 
+        await tester.pumpAndSettle();
+        final annotationSemantics = find.bySemanticsLabel(RegExp('345'));
+        expect(annotationSemantics, findsWidgets);
+        final scaledWidth = _glyphBounds(sized, '345').width;
+        for (final shown in [false, true]) {
+          final previousKey = observation.paginationKey;
+          observation.overlay!.controller!.showMenu();
+          await tester.pumpAndSettle();
+          await tester.tap(find.byTooltip(l10n.novelDisplay));
+          await tester.pumpAndSettle();
+          final toggle = find.byKey(
+            const Key('novel-reader-show-ruby-annotations'),
+          );
+          await tester.ensureVisible(toggle);
+          expect(tester.widget<SwitchListTile>(toggle).value, !shown);
+          await tester.tap(toggle);
+          await tester.pump();
+          expect(tester.widget<SwitchListTile>(toggle).value, shown);
+          expect(tester.widget<Slider>(rubySlider).onChanged != null, shown);
+          navigator.currentState!.pop();
+          await waitUntil(() {
+            final current = observeProfileReader(reader.currentContext!, args);
+            return current.ready &&
+                current.complete &&
+                current.paginationKey != previousKey &&
+                state().persistedPreferences.showRubyAnnotations == shown;
+          });
+          await tester.pumpAndSettle();
+          observation = observeProfileReader(reader.currentContext!, args);
+          final current = observation.nativeController!.viewForPage(
+            observation.page!,
+          )!;
+          expect(current.coverage.locate(anchor), isNotNull);
+          expect(_position(state().progressSnapshot), _position(before));
+          expect(
+            state().persistedPreferences.typography.roleFontSizes.ruby,
+            150,
+          );
+          if (shown) {
+            expect(annotationSemantics, findsWidgets);
+            expect(
+              _glyphBounds(
+                _completeInline(reader.currentContext!, observation),
+                '345',
+              ).width,
+              closeTo(scaledWidth, .01),
+            );
+          } else {
+            expect(annotationSemantics, findsNothing);
+            final hidden = _visibleInline(reader.currentContext!, observation);
+            expect(hidden, isNotEmpty);
+            for (final view in hidden) {
+              expect(
+                view.content.projection.display.text,
+                isNot(contains('345')),
+              );
+            }
+          }
+        }
+
         // Exercise reflow through the real Reader after the font has loaded.
         // These requests must reach the native ruby children as well as the
         // parent, while previewing keeps the confirmed semantic position.
@@ -601,6 +662,7 @@ void main() {
         data.release(args.episodeId);
         expect(data.retainedChapters, 0);
       } finally {
+        semantics.dispose();
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump();
       }

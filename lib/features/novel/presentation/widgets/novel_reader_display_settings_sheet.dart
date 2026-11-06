@@ -143,8 +143,20 @@ class _NovelReaderDisplaySettingsSheetState
                 _SettingsSection(
                   title: l10n.novelRoleFontSizes,
                   children: [
+                    SwitchListTile.adaptive(
+                      key: const Key('novel-reader-show-ruby-annotations'),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                      ),
+                      title: Text(l10n.novelShowRubyAnnotations),
+                      value: _draft.showRubyAnnotations,
+                      onChanged: (value) => _applyPreferences(
+                        _draft.copyWith(showRubyAnnotations: value),
+                      ),
+                    ),
                     NovelReaderRoleFontSizesPanel(
                       value: _draft.typography.roleFontSizes,
+                      showRubyAnnotations: _draft.showRubyAnnotations,
                       enabled:
                           _draft.typography.fontSizeScope !=
                           NovelReaderStyleScope.forceAll,

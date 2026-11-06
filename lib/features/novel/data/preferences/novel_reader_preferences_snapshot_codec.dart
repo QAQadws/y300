@@ -56,6 +56,11 @@ final class NovelReaderPreferencesSnapshotCodec {
     } else {
       result.remove('keepHeadingWithNext');
     }
+    if (normalized.showRubyAnnotations) {
+      result.remove('showRubyAnnotations');
+    } else {
+      result['showRubyAnnotations'] = false;
+    }
     final typography = _typography.encode(
       normalized.typography,
       previous: previous?['typography'],
@@ -159,6 +164,10 @@ final class NovelReaderPreferencesSnapshotCodec {
           decoded['keepHeadingWithNext'],
           fallback: defaults.keepHeadingWithNext,
         ),
+        showRubyAnnotations: _validBool(
+          decoded['showRubyAnnotations'],
+          fallback: defaults.showRubyAnnotations,
+        ),
       );
     } on FormatException {
       return defaults;
@@ -192,6 +201,7 @@ final class NovelReaderPreferencesSnapshotCodec {
       removeSourceIndent: preferences.removeSourceIndent,
       avoidIsolatedLines: preferences.avoidIsolatedLines,
       keepHeadingWithNext: preferences.keepHeadingWithNext,
+      showRubyAnnotations: preferences.showRubyAnnotations,
     );
   }
 

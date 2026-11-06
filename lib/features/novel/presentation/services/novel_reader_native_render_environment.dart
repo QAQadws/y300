@@ -71,6 +71,7 @@ final class NovelReaderNativeRenderEnvironment {
         removeSourceIndent: preferences.removeSourceIndent,
         roleFontScales: nativeTypography.roleFontScales,
         rubyFontScale: nativeTypography.rubyFontScale,
+        showRubyAnnotations: preferences.showRubyAnnotations,
         policy: nativeTypography.policy,
         theme: const NovelForumHtmlRenderThemeFactory().fromPalette(palette),
       ),

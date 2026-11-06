@@ -152,6 +152,7 @@ class NovelReaderPreferences {
     this.removeSourceIndent = false,
     this.avoidIsolatedLines = false,
     this.keepHeadingWithNext = false,
+    this.showRubyAnnotations = true,
     this.typography = const NovelReaderTypographyOverrides(),
     this.viewport = const NovelReaderViewportOverrides(),
     this.colors = const NovelReaderColorOverrides(),
@@ -179,6 +180,7 @@ class NovelReaderPreferences {
     required this.removeSourceIndent,
     required this.avoidIsolatedLines,
     required this.keepHeadingWithNext,
+    required this.showRubyAnnotations,
     required this.typography,
     required this.viewport,
     required this.colors,
@@ -204,6 +206,7 @@ class NovelReaderPreferences {
       removeSourceIndent: false,
       avoidIsolatedLines: false,
       keepHeadingWithNext: false,
+      showRubyAnnotations: true,
       typography: NovelReaderTypographyOverrides(),
       viewport: NovelReaderViewportOverrides(),
       colors: NovelReaderColorOverrides(),
@@ -267,6 +270,7 @@ class NovelReaderPreferences {
   final bool removeSourceIndent;
   final bool avoidIsolatedLines;
   final bool keepHeadingWithNext;
+  final bool showRubyAnnotations;
 
   String get themeMode => themePreset.storageValue;
 
@@ -294,6 +298,7 @@ class NovelReaderPreferences {
         other.removeSourceIndent == removeSourceIndent &&
         other.avoidIsolatedLines == avoidIsolatedLines &&
         other.keepHeadingWithNext == keepHeadingWithNext &&
+        other.showRubyAnnotations == showRubyAnnotations &&
         other.typography == typography &&
         other.viewport == viewport &&
         other.colors == colors;
@@ -317,7 +322,7 @@ class NovelReaderPreferences {
     safeAreaEnabled,
     compressBlankLines,
     removeSourceIndent,
-    Object.hash(avoidIsolatedLines, keepHeadingWithNext),
+    Object.hash(avoidIsolatedLines, keepHeadingWithNext, showRubyAnnotations),
     typography,
     viewport,
     colors,
@@ -343,6 +348,7 @@ class NovelReaderPreferences {
     bool? removeSourceIndent,
     bool? avoidIsolatedLines,
     bool? keepHeadingWithNext,
+    bool? showRubyAnnotations,
     NovelReaderTypographyOverrides? typography,
     NovelReaderViewportOverrides? viewport,
     NovelReaderColorOverrides? colors,
@@ -369,6 +375,7 @@ class NovelReaderPreferences {
       removeSourceIndent: removeSourceIndent ?? this.removeSourceIndent,
       avoidIsolatedLines: avoidIsolatedLines ?? this.avoidIsolatedLines,
       keepHeadingWithNext: keepHeadingWithNext ?? this.keepHeadingWithNext,
+      showRubyAnnotations: showRubyAnnotations ?? this.showRubyAnnotations,
       typography: typography ?? this.typography,
       viewport: viewport ?? this.viewport,
       colors: colors ?? this.colors,

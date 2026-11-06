@@ -85,6 +85,7 @@ class DefaultNovelReaderPreferenceImpactAnalyzer
         previous.removeSourceIndent != next.removeSourceIndent ||
         previous.avoidIsolatedLines != next.avoidIsolatedLines ||
         previous.keepHeadingWithNext != next.keepHeadingWithNext ||
+        previous.showRubyAnnotations != next.showRubyAnnotations ||
         previous.safeAreaEnabled != next.safeAreaEnabled) {
       impacts.add(NovelReaderPreferenceImpact.relayout);
     }

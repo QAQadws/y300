@@ -12,7 +12,7 @@ import 'forum_body_style_options.dart';
 import 'forum_body_text_emphasis_resolver.dart';
 import 'forum_body_list_style_resolver.dart';
 
-const forumBodyStyleRevision = 28;
+const forumBodyStyleRevision = 29;
 ForumBodyLength forumBodyReaderIndent(
   ForumBodyReaderStyle reader,
   double size,
@@ -104,6 +104,9 @@ final class ForumBodyStyleBuilder {
     double fontScale = 1,
   }) {
     final role = _role(node.kind, parent.role);
+    final isRubyAnnotation =
+        node.kind == ForumBodyElementKind.rubyText ||
+        node.kind == ForumBodyElementKind.rubyAnnotationContainer;
     final quoteClass =
         node.attributes['class']?.split(RegExp(r'\s+')).contains('quote') ??
         false;
@@ -208,9 +211,7 @@ final class ForumBodyStyleBuilder {
       };
     }
 
-    var height =
-        node.kind == ForumBodyElementKind.rubyText ||
-            node.kind == ForumBodyElementKind.rubyAnnotationContainer
+    var height = isRubyAnnotation
         ? const ForumBodyLineHeight.factor(1)
         : node.tag == 'sup' || node.tag == 'sub'
         ? const ForumBodyLineHeight.natural()
@@ -624,6 +625,7 @@ final class ForumBodyStyleBuilder {
       lineHeight: height,
       hidden:
           parent.hidden ||
+          (applyPolicy && isRubyAnnotation && !reader.showRubyAnnotations) ||
           node.kind == ForumBodyElementKind.hidden ||
           (node.attributes['class']
                   ?.split(RegExp(r'\s+'))

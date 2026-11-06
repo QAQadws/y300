@@ -108,6 +108,59 @@ void main() {
     )..addFont(rootBundle.load('assets/fonts/inline_space.ttf'))).load();
   });
 
+  test(
+    'hidden ruby drops annotation geometry while retaining base copy and source',
+    () {
+      const html =
+          '<p><ruby><rb>AB</rb><rp>(</rp><rt>reading</rt>'
+          '<rp>)</rp></ruby>YZ</p>';
+      final visible = _Fixture(html, width: 160, height: 100);
+      final hidden = _Fixture(
+        html,
+        width: 160,
+        height: 100,
+        reader: ForumBodyReaderStyle(
+          textStyle: _reader.textStyle,
+          fontRevision: _reader.fontRevision,
+          linkColor: _reader.linkColor,
+          paragraphAfter: 0,
+          showRubyAnnotations: false,
+        ),
+      );
+      for (final fixture in [visible, hidden]) {
+        fixture.finish();
+      }
+      expect(hidden.document.identity, visible.document.identity);
+      expect(hidden.document.sourceText, visible.document.sourceText);
+      final before = visible.prepare(0).single;
+      final after = hidden.prepare(0).single;
+      try {
+        expect(before.projection.text, 'ABreadingYZ');
+        expect(after.projection.text, 'ABYZ');
+        expect(
+          hidden.session.snapshot.single.usedHeight,
+          lessThan(visible.session.snapshot.single.usedHeight),
+        );
+        final point = after.glyphBoxes(0, 2).first.toRect().center;
+        final selection = forumBodyTextSelectionAt(
+          binding: after,
+          fragment: hidden.session.snapshot.single.fragments.single,
+          pageSize: const Size(160, 100),
+          point: point,
+        );
+        expect(selection?.isAnnotation, isFalse);
+        expect(selection?.text, 'AB');
+        expect(
+          after.projection.sourceAtUtf16(2).sourceRune,
+          before.projection.sourceAtUtf16(9).sourceRune,
+        );
+      } finally {
+        before.close();
+        after.close();
+      }
+    },
+  );
+
   for (final html in [
     'AB H<sup>2</sup>O',
     'AB A<sub>n</sub>z',

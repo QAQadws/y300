@@ -3750,6 +3750,12 @@ abstract class AppLocalizations {
   /// **'注音字号'**
   String get novelRoleFontSizeRuby;
 
+  /// No description provided for @novelShowRubyAnnotations.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示注音'**
+  String get novelShowRubyAnnotations;
+
   /// No description provided for @novelRoleFontSizesHint.
   ///
   /// In zh, this message translates to:

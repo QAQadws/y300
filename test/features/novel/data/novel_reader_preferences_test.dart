@@ -27,6 +27,30 @@ void main() {
     expect(defaults.removeSourceIndent, isFalse);
     expect(defaults.avoidIsolatedLines, isFalse);
     expect(defaults.keepHeadingWithNext, isFalse);
+    expect(defaults.showRubyAnnotations, isTrue);
+  });
+
+  test('annotation visibility is sparse and retains the chosen size', () {
+    const codec = NovelReaderPreferencesSnapshotCodec();
+    final defaults = NovelReaderPreferences.defaults();
+    final hidden = defaults.copyWith(
+      showRubyAnnotations: false,
+      typography: const NovelReaderTypographyOverrides(
+        roleFontSizes: NovelReaderRoleFontSizes(ruby: 140),
+      ),
+    );
+    final saved = codec.encode(hidden);
+    expect(codec.decode(saved), hidden);
+    expect(
+      codec
+          .decode('{"schemaVersion":1,"showRubyAnnotations":"false"}')
+          .showRubyAnnotations,
+      isTrue,
+    );
+    final shown = hidden.copyWith(showRubyAnnotations: true);
+    final updated = codec.encode(shown, previousSource: saved);
+    expect(updated, isNot(contains('showRubyAnnotations')));
+    expect(codec.decode(updated), shown);
   });
 
   test('constructor uses the same default theme as the default snapshot', () {
