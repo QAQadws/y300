@@ -65,6 +65,7 @@ final class NovelReaderNativeRenderEnvironment {
         paragraphBefore: nativeTypography.paragraphBefore,
         paragraphAfter: nativeTypography.paragraphAfter,
         firstLineIndent: nativeTypography.indent,
+        compressBlankLines: preferences.compressBlankLines,
         policy: nativeTypography.policy,
         theme: const NovelForumHtmlRenderThemeFactory().fromPalette(palette),
       ),

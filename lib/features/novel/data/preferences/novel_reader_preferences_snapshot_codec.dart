@@ -36,6 +36,11 @@ final class NovelReaderPreferencesSnapshotCodec {
       'conversionMode': normalized.conversionMode.storageValue,
       'safeAreaEnabled': normalized.safeAreaEnabled,
     };
+    if (normalized.compressBlankLines) {
+      result['compressBlankLines'] = true;
+    } else {
+      result.remove('compressBlankLines');
+    }
     final typography = _typography.encode(
       normalized.typography,
       previous: previous?['typography'],
@@ -123,6 +128,10 @@ final class NovelReaderPreferencesSnapshotCodec {
           decoded['safeAreaEnabled'],
           fallback: defaults.safeAreaEnabled,
         ),
+        compressBlankLines: _validBool(
+          decoded['compressBlankLines'],
+          fallback: defaults.compressBlankLines,
+        ),
       );
     } on FormatException {
       return defaults;
@@ -152,6 +161,7 @@ final class NovelReaderPreferencesSnapshotCodec {
       themePreset: preferences.themePreset,
       conversionMode: preferences.conversionMode,
       safeAreaEnabled: preferences.safeAreaEnabled,
+      compressBlankLines: preferences.compressBlankLines,
     );
   }
 

@@ -23,6 +23,7 @@ void main() {
     expect(defaults.showProgressIndicator, isTrue);
     expect(defaults.conversionMode, NovelReaderConversionMode.none);
     expect(defaults.safeAreaEnabled, isTrue);
+    expect(defaults.compressBlankLines, isFalse);
   });
 
   test('constructor uses the same default theme as the default snapshot', () {
@@ -118,6 +119,25 @@ void main() {
     expect(
       NovelReaderConversionModeCodec.fromStorage('future-conversion'),
       NovelReaderConversionMode.none,
+    );
+  });
+
+  test('blank line cleanup is opt-in and round-trips both values', () {
+    const codec = NovelReaderPreferencesSnapshotCodec();
+    final defaults = NovelReaderPreferences.defaults();
+    final enabled = defaults.copyWith(compressBlankLines: true);
+    expect(enabled, isNot(defaults));
+    final saved = codec.encode(enabled);
+    expect(codec.decode(saved).compressBlankLines, isTrue);
+    final reset = codec.encode(defaults, previousSource: saved);
+    expect(reset, isNot(contains('compressBlankLines')));
+    expect(codec.decode(reset).compressBlankLines, isFalse);
+    expect(codec.decode('{"schemaVersion":1}').compressBlankLines, isFalse);
+    expect(
+      codec
+          .decode('{"schemaVersion":1,"compressBlankLines":"true"}')
+          .compressBlankLines,
+      isFalse,
     );
   });
 

@@ -915,6 +915,8 @@
   "novelReading": "閱讀",
   "novelReadingMode": "閱讀模式",
   "novelConversionMode": "簡繁",
+  "novelCompressBlankLines": "壓縮連續空行",
+  "novelCompressBlankLinesDescription": "減少一般正文中重複的空行與空白段落",
   "novelSafeContent": "安全顯示正文",
   "novelChapterInteractionsDockSetting": "顯示章末互動懸浮按鈕",
   "novelChapterInteractionsSettingSaveFailed": "按鈕設定儲存失敗，已還原先前設定",

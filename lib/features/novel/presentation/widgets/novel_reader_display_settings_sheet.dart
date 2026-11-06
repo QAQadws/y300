@@ -328,6 +328,19 @@ class _NovelReaderDisplaySettingsSheetState
                       _draft.copyWith(conversionMode: value),
                     ),
                   ),
+                  if (widget.nativeTypography)
+                    SwitchListTile.adaptive(
+                      key: const Key('novel-reader-compress-blank-lines'),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                      ),
+                      title: Text(l10n.novelCompressBlankLines),
+                      subtitle: Text(l10n.novelCompressBlankLinesDescription),
+                      value: _draft.compressBlankLines,
+                      onChanged: (value) => _applyPreferences(
+                        _draft.copyWith(compressBlankLines: value),
+                      ),
+                    ),
                   SwitchListTile.adaptive(
                     key: const Key('novel-reader-safe-area-switch'),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 20),

@@ -68,6 +68,32 @@ final class ForumBodyStyledFlowCursor {
   bool get isComplete => _complete;
   bool get isClosed => _closed;
 
+  /// The opt-in prose cleanup does not enter protected or independently
+  /// formatted contexts, even if an inner element resolves to the body role.
+  bool get isOrdinaryProse =>
+      contentRoot == null && _open.every(_isProseElement);
+
+  static final _verseClass = RegExp(r'(^|\s)(poem|poetry|verse)(\s|$)');
+
+  static bool _isProseElement(ForumBodyStyledFlowEvent event) {
+    final element = event.node as ForumBodyElement;
+    final style = event.style;
+    return const {
+          ForumBodyElementKind.paragraph,
+          ForumBodyElementKind.container,
+          ForumBodyElementKind.inline,
+          ForumBodyElementKind.hardBreak,
+        }.contains(element.kind) &&
+        style.role == ForumBodyTextRole.body &&
+        style.whiteSpace == ForumBodyWhiteSpace.normal &&
+        !style.hidden &&
+        !style.visibilityHidden &&
+        style.floatSide == ForumBodyFloatSide.none &&
+        style.clear == ForumBodyClear.none &&
+        style.linkTarget == null &&
+        !_verseClass.hasMatch(element.attributes['class']?.toLowerCase() ?? '');
+  }
+
   /// Provenance is a token, never a reference back to this cursor or a UI owner.
   bool owns(ForumBodyStyledFlowEvent event) => identical(event._owner, _owner);
   bool isOpenElement(ForumBodyStyledFlowEvent event) =>

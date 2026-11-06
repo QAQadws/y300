@@ -8,6 +8,7 @@ import '../inline/forum_body_ruby_content_cursor.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_paragraph_layout.dart';
 import '../style/forum_body_style_options.dart';
+import 'forum_body_blank_line_filter.dart';
 import 'forum_body_styled_flow_cursor.dart';
 import 'forum_body_inline_flow_content.dart';
 import 'forum_body_text_flow_sequence.dart';
@@ -92,13 +93,16 @@ final class ForumBodyTextFlowCursor {
            ? document
            : null,
        _tableCollapses = collapses,
+       _blankLines = reader.compressBlankLines && contentRoot == null
+           ? ForumBodyBlankLineFilter()
+           : null,
        _flow = ForumBodyStyledFlowCursor(
          document: document,
          reader: reader,
          collapses: collapses,
          contentRoot: contentRoot,
        );
-  static const revision = 14;
+  static const revision = 15;
   final bool dedicatedTables;
 
   /// Requires a consumer for exclusion controls, including clearance BRs.
@@ -110,6 +114,7 @@ final class ForumBodyTextFlowCursor {
   final ForumBodyParagraphContentBuilder paragraphBuilder;
   final ForumBodyRubyContentLimits rubyLimits;
   final ForumBodyStyledFlowCursor _flow;
+  ForumBodyBlankLineFilter? _blankLines;
   ForumBodyDocument? _tableDocument;
   ForumBodyCollapseLayout? _tableCollapses;
   final _blocks = <ForumBodyStyledFlowEvent>[];
@@ -296,6 +301,7 @@ final class ForumBodyTextFlowCursor {
         final issues = _flow.takePendingIssues();
         _issues.addAll(issues);
         if (_skipFollowingEditStatus(event)) continue;
+        if (_blankLines?.omit(_flow, event) == true) continue;
         if (event.phase == ForumBodyFlowPhase.close &&
             _dedicatedTableShells.remove(event.node.path)) {
           continue;
@@ -655,6 +661,7 @@ final class ForumBodyTextFlowCursor {
     _before?.close();
     _after?.close();
     _flow.close();
+    _blankLines = null;
     _before = null;
     _after = null;
     _break = null;

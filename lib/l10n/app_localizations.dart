@@ -4050,6 +4050,18 @@ abstract class AppLocalizations {
   /// **'简繁'**
   String get novelConversionMode;
 
+  /// No description provided for @novelCompressBlankLines.
+  ///
+  /// In zh, this message translates to:
+  /// **'压缩连续空行'**
+  String get novelCompressBlankLines;
+
+  /// No description provided for @novelCompressBlankLinesDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'减少普通正文中重复的空行和空白段落'**
+  String get novelCompressBlankLinesDescription;
+
   /// No description provided for @novelSafeContent.
   ///
   /// In zh, this message translates to:

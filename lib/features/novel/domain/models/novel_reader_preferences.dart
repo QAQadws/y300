@@ -148,6 +148,7 @@ class NovelReaderPreferences {
     this.showProgressIndicator = true,
     this.conversionMode = NovelReaderConversionMode.none,
     this.safeAreaEnabled = true,
+    this.compressBlankLines = false,
     this.typography = const NovelReaderTypographyOverrides(),
     this.viewport = const NovelReaderViewportOverrides(),
     this.colors = const NovelReaderColorOverrides(),
@@ -171,6 +172,7 @@ class NovelReaderPreferences {
     required this.showProgressIndicator,
     required this.conversionMode,
     required this.safeAreaEnabled,
+    required this.compressBlankLines,
     required this.typography,
     required this.viewport,
     required this.colors,
@@ -192,6 +194,7 @@ class NovelReaderPreferences {
       showProgressIndicator: true,
       conversionMode: NovelReaderConversionMode.none,
       safeAreaEnabled: true,
+      compressBlankLines: false,
       typography: NovelReaderTypographyOverrides(),
       viewport: NovelReaderViewportOverrides(),
       colors: NovelReaderColorOverrides(),
@@ -251,6 +254,7 @@ class NovelReaderPreferences {
   final bool showProgressIndicator;
   final NovelReaderConversionMode conversionMode;
   final bool safeAreaEnabled;
+  final bool compressBlankLines;
 
   String get themeMode => themePreset.storageValue;
 
@@ -274,6 +278,7 @@ class NovelReaderPreferences {
         other.showProgressIndicator == showProgressIndicator &&
         other.conversionMode == conversionMode &&
         other.safeAreaEnabled == safeAreaEnabled &&
+        other.compressBlankLines == compressBlankLines &&
         other.typography == typography &&
         other.viewport == viewport &&
         other.colors == colors;
@@ -295,6 +300,7 @@ class NovelReaderPreferences {
     showProgressIndicator,
     conversionMode,
     safeAreaEnabled,
+    compressBlankLines,
     typography,
     viewport,
     colors,
@@ -316,6 +322,7 @@ class NovelReaderPreferences {
     bool? showProgressIndicator,
     NovelReaderConversionMode? conversionMode,
     bool? safeAreaEnabled,
+    bool? compressBlankLines,
     NovelReaderTypographyOverrides? typography,
     NovelReaderViewportOverrides? viewport,
     NovelReaderColorOverrides? colors,
@@ -338,6 +345,7 @@ class NovelReaderPreferences {
           showProgressIndicator ?? this.showProgressIndicator,
       conversionMode: conversionMode ?? this.conversionMode,
       safeAreaEnabled: safeAreaEnabled ?? this.safeAreaEnabled,
+      compressBlankLines: compressBlankLines ?? this.compressBlankLines,
       typography: typography ?? this.typography,
       viewport: viewport ?? this.viewport,
       colors: colors ?? this.colors,

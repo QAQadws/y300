@@ -1002,6 +1002,8 @@
   "novelReading": "阅读",
   "novelReadingMode": "阅读模式",
   "novelConversionMode": "简繁",
+  "novelCompressBlankLines": "压缩连续空行",
+  "novelCompressBlankLinesDescription": "减少普通正文中重复的空行和空白段落",
   "novelSafeContent": "安全显示正文",
   "novelChapterInteractionsDockSetting": "显示章末互动悬浮按钮",
   "novelChapterInteractionsSettingSaveFailed": "按钮设置保存失败，已恢复之前的设置",

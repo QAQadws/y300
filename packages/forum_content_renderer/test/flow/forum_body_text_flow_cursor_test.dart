@@ -16,9 +16,17 @@ ForumBodyTextFlowCursor _cursor(
   ForumBodyDocument document, {
   ForumBodyParagraphContentBuilder builder =
       const ForumBodyParagraphContentBuilder(),
+  bool compressBlankLines = false,
 }) => ForumBodyTextFlowCursor(
   document: document,
-  reader: _reader,
+  reader: compressBlankLines
+      ? ForumBodyReaderStyle(
+          textStyle: _reader.textStyle,
+          fontRevision: _reader.fontRevision,
+          linkColor: _reader.linkColor,
+          compressBlankLines: true,
+        )
+      : _reader,
   paragraphBuilder: builder,
 );
 
@@ -41,6 +49,85 @@ List<ForumBodyTextFlowUnit> _drain(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'blank line cleanup preserves canonical sources and remains bounded',
+    () {
+      final document = _document(
+        '<p>甲<br> \n<br>${'<br>\n' * 550}乙</p>'
+        '<p>&nbsp;</p>\n${'<p>　</p>\n' * 550}<p>丙</p>',
+      );
+      final original = _cursor(document);
+      final cleanup = _cursor(document, compressBlankLines: true);
+      addTearDown(original.close);
+      addTearDown(cleanup.close);
+      final originalParagraphs = _drain(
+        original,
+        budget: 4,
+      ).whereType<ForumBodyTextFlowParagraph>().toList();
+      final units = _drain(cleanup, budget: 1);
+      final paragraphs = units.whereType<ForumBodyTextFlowParagraph>().toList();
+      expect(originalParagraphs, hasLength(1105));
+      expect(paragraphs.map((unit) => unit.content.projection.text), [
+        '甲\n',
+        '\n',
+        '乙',
+        '\u00a0',
+        '丙',
+      ]);
+      expect(paragraphs.map((unit) => unit.identity).toSet(), {
+        document.identity,
+      });
+      expect(units.last, isA<ForumBodyTextFlowBoundary>());
+      final tail = paragraphs.last.content.projection;
+      expect(
+        tail.sourceAtUtf16(0).sourceRune,
+        document.sourceMap.runeLength - 1,
+      );
+      expect(tail.sourceAtUtf16(0).isExact, isTrue);
+      final omitted = document.descendants
+          .whereType<ForumBodyElement>()
+          .where((node) => node.kind == ForumBodyElementKind.hardBreak)
+          .elementAt(2)
+          .source;
+      expect(
+        paragraphs.expand(
+          (unit) => unit.content.projection.displayRangesInSource(
+            sourceStart: omitted.runeStart,
+            sourceEnd: omitted.runeEnd,
+            startUtf16: 0,
+            endUtf16: unit.content.projection.text.length,
+          ),
+        ),
+        isEmpty,
+      );
+      expect(document.sourceText, contains('乙\u00a0\n　'));
+    },
+  );
+
+  test('blank line cleanup preserves protected and authored formatting', () {
+    final document = _document(
+      '<div class="verse">诗<br><br><br>句<p>&nbsp;</p><p>　</p></div>'
+      '<pre>代<br><br><br>码</pre>'
+      '<table><tr><td>表<br><br><br>格</td></tr></table>'
+      '<div class="locked">权<br><br><br>限</div>'
+      '<div class="showcollapse_box"><div class="showcollapse_title">标题</div>'
+      '<div class="showcollapse_content">折<br><br><br>叠</div></div>'
+      '<p>样<br><br><br style="color:red">式</p>'
+      '<p id="blank-anchor">&nbsp;</p><p>　</p>',
+    );
+    Iterable<String> displayed(bool cleanup) {
+      final cursor = _cursor(document, compressBlankLines: cleanup);
+      addTearDown(cursor.close);
+      return _drain(cursor, budget: 1)
+          .whereType<ForumBodyTextFlowParagraph>()
+          .map((unit) => unit.content.projection.text);
+    }
+
+    final expected = displayed(false);
+    expect(expected, containsAll(['诗\n', '句', '权\n', '限', '折\n', '叠']));
+    expect(displayed(true), expected);
+  });
 
   test('Discuz span, clearance and table keep their inline source order', () {
     final document = _document(

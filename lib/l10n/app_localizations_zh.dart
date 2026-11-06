@@ -2428,6 +2428,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get novelConversionMode => '简繁';
 
   @override
+  String get novelCompressBlankLines => '压缩连续空行';
+
+  @override
+  String get novelCompressBlankLinesDescription => '减少普通正文中重复的空行和空白段落';
+
+  @override
   String get novelSafeContent => '安全显示正文';
 
   @override
@@ -8427,6 +8433,12 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get novelConversionMode => '簡繁';
+
+  @override
+  String get novelCompressBlankLines => '壓縮連續空行';
+
+  @override
+  String get novelCompressBlankLinesDescription => '減少一般正文中重複的空行與空白段落';
 
   @override
   String get novelSafeContent => '安全顯示正文';

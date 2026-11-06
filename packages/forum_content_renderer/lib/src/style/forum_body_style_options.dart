@@ -76,6 +76,7 @@ final class ForumBodyReaderStyle {
     this.paragraphBefore = 0,
     this.paragraphAfter = 10,
     this.firstLineIndent = ForumBodyLength.zero,
+    this.compressBlankLines = false,
     this.theme,
     ForumBodyStylePolicy? policy,
   }) : policy = policy ?? ForumBodyStylePolicy() {
@@ -106,6 +107,7 @@ final class ForumBodyReaderStyle {
   final double paragraphBefore;
   final double paragraphAfter;
   final ForumBodyLength firstLineIndent;
+  final bool compressBlankLines;
   final ForumBodyStylePolicy policy;
 
   /// The same immutable semantic palette used by the HTML renderer.
