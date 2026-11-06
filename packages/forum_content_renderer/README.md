@@ -70,7 +70,7 @@ Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `
 
 `ForumBodyParagraphContentBuilder` 的 `build`、`openCurrent` 和 `openSequence` 接收 `layoutMode`，默认 `ForumBodyParagraphLayoutMode.wrap`。`fitSingleLine` 要求已经投影为完整逻辑单行的文字；硬换行会明确失败，不裁剪或省略尾部，也不承担 HTML 格式识别、空白改写或来源投影。格式处理者仍须独立核对内容结构和来源。
 
-拟合先按实际字体、行高及每个字号的 `TextScaler` 完成同一个 TextPainter 布局，超过可用宽度才等比缩小；短行不放大。行高、baseline、行矩形、完整及分片绘制、选区框和命中坐标共用这次变换，不能另用较小字号重新排版来猜高度。缓存键包含模式及实际缩放输入；普通换行与单行模式即使暂时尺寸相同也不共享布局条目。原生 backend revision 为 7，布局指纹和页绑定须使用公开 revision。
+单行先按实际字体、行高及各字号的 `TextScaler` 完成原生布局，超过可用宽度才等比缩小。拟合后按真实字形框补足必要的垂直空间。行框、基线、绘制、选区和命中共用同一缩放与平移，分页以完整单行盒分配高度。缓存键包含模式及实际缩放输入，布局指纹和页绑定读取公开的 backend revision。
 
 `intrinsicSingleLine` 提供 ruby 等行内布局所需的真实固有单行宽度，保留全部字形、行高、非线性系统缩放、预格式化空格及来源投影，不按请求宽度缩小或补足空白。请求宽度仍须通过准入，但不影响该模式的原生几何，缓存可跨有效请求宽度复用；与 wrap/fit 缓存保持隔离。硬换行及超过 16384 逻辑像素的固有宽度明确失败。它是排字端口，不识别 ruby、分组注音或自行启用格式支持。
 

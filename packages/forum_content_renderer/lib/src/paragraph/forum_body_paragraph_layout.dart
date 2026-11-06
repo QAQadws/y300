@@ -34,7 +34,7 @@ final class ForumBodyParagraphLayout
     this.width,
     this.height,
     this._paintScale,
-    this.horizontalInset,
+    this._paintOrigin,
     this._engineProjection,
     this.firstLineIndent,
     this.rowIsolationPitch,
@@ -167,12 +167,43 @@ final class ForumBodyParagraphLayout
         inline: engine,
       );
       final horizontalInset = inset * paintScale;
-      final lines = horizontalInset == 0
+      var lines = horizontalInset == 0
           ? nativeLines
           : [
               for (final line in nativeLines)
                 line.shift(Offset(horizontalInset, 0)),
             ];
+      var height = painter.height * paintScale;
+      var paintTop = 0.0;
+      if (fitted && lines.isNotEmpty) {
+        // A fitted notice is one physical row. Its fallback font boxes can
+        // extend beyond the nominal line height even after width fitting.
+        final line = lines.single;
+        var top = 0.0;
+        var bottom = height;
+        for (final box in painter.getBoxesForSelection(
+          TextSelection(
+            baseOffset: line.engineStartUtf16,
+            extentOffset: line.engineUnpaintedTrailingSpaceStartUtf16,
+          ),
+        )) {
+          final boxTop = box.top * paintScale;
+          final boxBottom = box.bottom * paintScale;
+          if (boxTop < top) top = boxTop;
+          if (boxBottom > bottom) bottom = boxBottom;
+        }
+        if (top < 0 || bottom > height) {
+          paintTop = -top;
+          height = bottom + paintTop;
+          lines = [
+            line.withVerticalFrame(
+              top: 0,
+              bottom: height,
+              baseline: line.baseline + paintTop,
+            ),
+          ];
+        }
+      }
       if (engine != null &&
           lines.isNotEmpty &&
           lines.first.coverageEndUtf16 == 0) {
@@ -184,9 +215,9 @@ final class ForumBodyParagraphLayout
         content,
         painter,
         layoutWidth,
-        painter.height * paintScale,
+        height,
         paintScale,
-        horizontalInset,
+        Offset(horizontalInset, paintTop),
         engine,
         indentGeometry,
         rowIsolationPitch,
@@ -230,7 +261,7 @@ final class ForumBodyParagraphLayout
     return scales;
   }
 
-  static const backendRevision = 12;
+  static const backendRevision = 13;
 
   /// Native-only requested baseline separation, in logical pixels after actual
   /// font scaling. It is neither the author's line height nor page allocation.
@@ -244,7 +275,8 @@ final class ForumBodyParagraphLayout
   final double nativeFontClearance;
 
   /// Physical edge reserve shared by paint, hit testing, lines and boxes.
-  final double horizontalInset;
+  double get horizontalInset => _paintOrigin.dx;
+  final Offset _paintOrigin;
   final ForumBodyFirstLineIndentGeometry firstLineIndent;
   final ForumBodyIdentity identity;
   final String? path;
@@ -278,7 +310,10 @@ final class ForumBodyParagraphLayout
       for (final frame in _painter.maximumLineFrames(
         _engineProjection?.engineText.length ?? projection.text.length,
       ))
-        (top: frame.top * _paintScale, bottom: frame.bottom * _paintScale),
+        (
+          top: frame.top * _paintScale + _paintOrigin.dy,
+          bottom: frame.bottom * _paintScale + _paintOrigin.dy,
+        ),
     ]);
   }
 
@@ -295,8 +330,10 @@ final class ForumBodyParagraphLayout
   /// differ from the logical first LineMetrics baseline exposed by this layout.
   double get nativeAlphabeticBaseline {
     _ensureOpen();
-    return _painter.computeDistanceToActualBaseline(TextBaseline.alphabetic) *
-        _paintScale;
+    final baseline = _painter.computeDistanceToActualBaseline(
+      TextBaseline.alphabetic,
+    );
+    return baseline * _paintScale + _paintOrigin.dy;
   }
 
   @override
@@ -304,10 +341,7 @@ final class ForumBodyParagraphLayout
     _ensureOpen();
     // An empty native paragraph has a real font baseline but no text rows.
     // Preserve that strut without introducing a synthetic row or glyph.
-    return lines.isEmpty
-        ? _painter.computeDistanceToActualBaseline(TextBaseline.alphabetic) *
-              _paintScale
-        : lines.first.baseline;
+    return lines.isEmpty ? nativeAlphabeticBaseline : lines.first.baseline;
   }
 
   @override
@@ -331,7 +365,7 @@ final class ForumBodyParagraphLayout
     ui.Picture? picture;
     try {
       recorder = ui.PictureRecorder();
-      _painter.paint(Canvas(recorder), Offset(horizontalInset, 0));
+      _painter.paint(Canvas(recorder), _paintOrigin);
       picture = recorder.endRecording();
       recorder = null;
       _ensureOpen();
@@ -368,12 +402,15 @@ final class ForumBodyParagraphLayout
       throw StateError('Isolated paragraph paint is not prepared');
     }
     if (_paintScale == 1) {
-      _painter.paint(canvas, offset + Offset(horizontalInset, 0));
+      _painter.paint(canvas, offset + _paintOrigin);
       return;
     }
     canvas.save();
     try {
-      canvas.translate(offset.dx + horizontalInset, offset.dy);
+      canvas.translate(
+        offset.dx + _paintOrigin.dx,
+        offset.dy + _paintOrigin.dy,
+      );
       canvas.scale(_paintScale, _paintScale);
       _painter.paint(canvas, Offset.zero);
     } finally {
@@ -385,7 +422,7 @@ final class ForumBodyParagraphLayout
   HtmlProjectedSourcePosition sourceAt(Offset offset) {
     _ensureOpen();
     final position = _painter.getPositionForOffset(
-      (offset - Offset(horizontalInset, 0)) / _paintScale,
+      (offset - _paintOrigin) / _paintScale,
     );
     final affinity = position.affinity == TextAffinity.upstream
         ? HtmlProjectionAffinity.upstream
@@ -423,14 +460,14 @@ final class ForumBodyParagraphLayout
     );
     return List.unmodifiable([
       for (final box in boxes)
-        if (_paintScale == 1 && horizontalInset == 0)
+        if (_paintScale == 1 && _paintOrigin == Offset.zero)
           box
         else
           TextBox.fromLTRBD(
             box.left * _paintScale + horizontalInset,
-            box.top * _paintScale,
+            box.top * _paintScale + _paintOrigin.dy,
             box.right * _paintScale + horizontalInset,
-            box.bottom * _paintScale,
+            box.bottom * _paintScale + _paintOrigin.dy,
             box.direction,
           ),
     ]);
@@ -462,9 +499,9 @@ final class ForumBodyParagraphLayout
       lineIndex: line,
       fontBounds: Rect.fromLTRB(
         rect.left * _paintScale + horizontalInset,
-        rect.top * _paintScale,
+        rect.top * _paintScale + _paintOrigin.dy,
         rect.right * _paintScale + horizontalInset,
-        rect.bottom * _paintScale,
+        rect.bottom * _paintScale + _paintOrigin.dy,
       ),
       engineClusterRange: range,
       direction: glyph.writingDirection,

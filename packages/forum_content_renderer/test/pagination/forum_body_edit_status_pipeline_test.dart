@@ -13,6 +13,15 @@ final _reader = ForumBodyReaderStyle(
   linkColor: const Color(0xff0000ff),
 );
 
+const _limits = ForumBodyTextPageSessionLimits(
+  maxPages: 20,
+  maxFragments: 40,
+  maxParagraphs: 20,
+  maxTextCodeUnits: 2000,
+  maxRuns: 40,
+  maxIssuedLeases: 8,
+);
+
 ForumBodyDocument _document(String html) => const ForumBodyParser().parse(
   html: html,
   sourceId: 'edit-status',
@@ -199,14 +208,7 @@ void main() {
         layoutId: 'edit-page',
         width: 100,
         height: 40,
-        limits: const ForumBodyTextPageSessionLimits(
-          maxPages: 20,
-          maxFragments: 40,
-          maxParagraphs: 20,
-          maxTextCodeUnits: 2000,
-          maxRuns: 40,
-          maxIssuedLeases: 8,
-        ),
+        limits: _limits,
       );
       addTearDown(session.close);
       var calls = 0;
@@ -270,4 +272,67 @@ void main() {
       }
     },
   );
+
+  test('a fitted notice allocates the full vertical glyph frame', () {
+    final document = _document(
+      '<i class="pstatus" style="line-height:.5">ABCDEFGHIJKLMNOPQRST</i>'
+      '<br><br><p>Body</p>',
+    );
+    final cache = ForumBodyParagraphCache(
+      maxEntries: 8,
+      maxEstimatedBytes: 1 << 20,
+    );
+    addTearDown(cache.close);
+    final session = ForumBodyTextPageSession(
+      document: document,
+      reader: _reader,
+      cache: cache,
+      layoutId: 'fitted-notice-frame',
+      width: 100,
+      height: 60,
+      limits: _limits,
+    );
+    addTearDown(session.close);
+    while (!session.isComplete) {
+      expect(session.advance(maxEvents: 8, maxLines: 4).madeProgress, isTrue);
+    }
+    final notice = session.snapshot.first.fragments.first;
+    cache.clearUnpinned();
+    final preparation = session.openPagePreparation(0);
+    addTearDown(preparation.close);
+    while (!preparation.isReady) {
+      final step = preparation.advance(maxFragments: 1, maxParts: 1);
+      expect(step.waitingForLayoutBudget, isFalse);
+    }
+    final bindings = preparation.takeFragments();
+    try {
+      final binding = bindings.first as ForumBodyPreparedParagraphFragment;
+      final layout = binding.lease.layout;
+      final fragment = binding.view!;
+      expect(layout.paintScale, lessThan(1));
+      expect(fragment.height, notice.height);
+      expect(layout.lines.single.coverageEndUtf16, 20);
+      for (var i = 0; i < 20; i++) {
+        final box = binding.glyphBoxes(i, i + 1).single;
+        expect(box.top, greaterThanOrEqualTo(0));
+        expect(box.bottom, lessThanOrEqualTo(notice.height));
+        expect(
+          fragment
+              .sourceAt(
+                Offset(
+                  box.left + box.toRect().width / 4,
+                  box.toRect().center.dy,
+                ),
+              )
+              .displayUtf16,
+          i,
+        );
+      }
+    } finally {
+      for (final binding in bindings) {
+        binding.close();
+      }
+    }
+    expect(cache.activeLeases, 0);
+  });
 }
