@@ -72,6 +72,7 @@ final class ForumBodyParser {
       tableElements: builder.tableElements,
       parsedNodeCount: count,
       uniqueStyleCount: builder.styles.length,
+      elementCounts: builder.elementCounts,
     );
   }
 
@@ -126,6 +127,7 @@ final class _BodyBuilder {
   final imageElements = <ForumBodyElement>[];
   final collapseElements = <ForumBodyElement>[];
   final tableElements = <ForumBodyElement>[];
+  final elementCounts = <ForumBodyElementKind, int>{};
   final styles = <String, ForumBodyAuthorStyle>{};
   final codec = CssInlineStyleDeclarationCodec.scoped();
 
@@ -190,6 +192,7 @@ final class _BodyBuilder {
       }
     }
     final kind = _kind(node, preceding);
+    elementCounts[kind] = (elementCounts[kind] ?? 0) + 1;
     if (kind == ForumBodyElementKind.unknown) {
       issues.add(ForumBodyIssue(ForumBodyIssueCode.unknownElement, path));
     }

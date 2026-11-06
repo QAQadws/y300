@@ -30,6 +30,7 @@ import '../services/novel_reader_native_owner.dart';
 import '../services/novel_reader_native_image_resources.dart';
 import '../services/novel_reader_native_preparation_service.dart';
 import '../services/novel_reader_native_render_environment.dart';
+import '../services/novel_reader_native_diagnostics.dart';
 import '../services/novel_reader_native_work_scheduler.dart';
 import '../services/novel_reader_pagination_cancellation.dart';
 import '../services/novel_reader_pagination_demand.dart';
@@ -839,6 +840,8 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
     NovelReaderPaginationCancellationToken token,
     bool force,
   ) async {
+    const diagnostics = NovelReaderNativeDiagnostics();
+    const mode = NovelReaderNativeDiagnosticMode.paged;
     NovelReaderNativeCacheHandle? handle;
     ForumBodyTextPageSession? session;
     bool current() =>
@@ -1075,8 +1078,22 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
       _current = request;
       _rememberPrefix(request);
       _pending = null;
+      var reportedCompletion = false;
+      var reportedFailure = false;
       _changes = controller.changes.listen((_) {
         if (!_disposed && identical(_current, request)) {
+          if (_live(request)) {
+            final error = controller.error;
+            if (error != null && !reportedFailure) {
+              reportedFailure = true;
+              diagnostics.failed(mode, error);
+            } else if (error == null &&
+                !reportedCompletion &&
+                controller.snapshot?.isComplete == true) {
+              reportedCompletion = true;
+              diagnostics.completed(mode, request.session);
+            }
+          }
           _reconcileNavigation();
           _rememberPrefix(request);
           setState(() {});
@@ -1097,6 +1114,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
       _scheduleNavigation();
     } catch (error) {
       if (current()) {
+        diagnostics.failed(mode, error);
         _stop(_current);
         setState(() {
           _busy = false;

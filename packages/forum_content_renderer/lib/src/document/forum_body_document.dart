@@ -186,11 +186,13 @@ final class ForumBodyDocument {
     required Iterable<ForumBodyIssue> issues,
     required this.parsedNodeCount,
     required this.uniqueStyleCount,
+    Map<ForumBodyElementKind, int> elementCounts = const {},
     Iterable<ForumBodyElement> imageElements = const [],
     Iterable<ForumBodyElement> collapseElements = const [],
     Iterable<ForumBodyElement> tableElements = const [],
   }) : nodes = List.unmodifiable(nodes),
        issues = List.unmodifiable(issues),
+       elementCounts = Map.unmodifiable(elementCounts),
        imageElements = List.unmodifiable(imageElements),
        collapseElements = List.unmodifiable(collapseElements),
        tableElements = List.unmodifiable(tableElements);
@@ -199,6 +201,7 @@ final class ForumBodyDocument {
   final List<ForumBodyNode> nodes;
   final HtmlSourceTextMap sourceMap;
   final List<ForumBodyIssue> issues;
+  final Map<ForumBodyElementKind, int> elementCounts;
 
   /// Actual image occurrences in source order, indexed during parsing.
   final List<ForumBodyElement> imageElements;

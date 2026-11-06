@@ -1,11 +1,15 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_native_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_exception.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_anchor_binder.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_native_diagnostics.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_preparation_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_preparation_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
@@ -86,6 +90,70 @@ class _Gated implements NovelReaderNativePreparationService {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'local native counters coalesce and omit source and error details',
+    () async {
+      final cache = NovelReaderNativePreparationCache();
+      addTearDown(cache.dispose);
+      final messages = <String>[];
+      final original = debugPrint;
+      debugPrint = (message, {wrapWidth}) => messages.add(message!);
+      try {
+        final source = _Source(
+          '<p><ruby>private-text<rt>private-reading</rt></ruby></p>',
+        );
+        final service = _Service();
+        Future<NovelReaderNativeChapterPreparation> resolve() =>
+            _resolve(cache, service, source, sourceId: 'private-source');
+        await Future.wait([resolve(), resolve()]);
+        await resolve();
+        expect(messages, hasLength(1));
+
+        const diagnostics = NovelReaderNativeDiagnostics();
+        const mode = NovelReaderNativeDiagnosticMode.paged;
+        diagnostics.failed(
+          mode,
+          const ForumBodyTableException(
+            ForumBodyTableFailure.overlap,
+            'private-path',
+          ),
+        );
+        diagnostics.failed(mode, StateError('private-exception'));
+        diagnostics.failed(
+          mode,
+          const NovelReaderPaginationException(
+            code: 'paginationCancelled',
+            message: 'private-cancellation',
+          ),
+        );
+        expect(messages, hasLength(3));
+        expect(messages.join(), isNot(contains('private-')));
+        final rows = messages
+            .map(
+              (message) =>
+                  jsonDecode(message.substring('[NovelReaderNative] '.length))
+                      as Map,
+            )
+            .toList();
+        expect(rows.first['event'], 'prepared');
+        expect(rows.first['formats'], {
+          'paragraph': 1,
+          'ruby': 1,
+          'rubyText': 1,
+        });
+        expect(rows[1], {
+          'event': 'failed',
+          'mode': 'paged',
+          'category': 'table.overlap',
+          'count': 1,
+        });
+        expect(rows.last['category'], 'unexpected');
+      } finally {
+        debugPrint = original;
+      }
+    },
+  );
 
   test('same source coalesces and reuses pure data independently of layout/typography', () async {
     final cache = NovelReaderNativePreparationCache();

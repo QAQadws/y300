@@ -26,6 +26,7 @@ import '../services/novel_reader_native_layout_scope.dart';
 import '../services/novel_reader_native_owner.dart';
 import '../services/novel_reader_native_preparation_service.dart';
 import '../services/novel_reader_native_render_environment.dart';
+import '../services/novel_reader_native_diagnostics.dart';
 import '../services/novel_reader_native_source_run.dart';
 import '../services/novel_reader_native_table_anchor_probe.dart';
 import '../services/novel_reader_native_table_window_proof.dart';
@@ -458,6 +459,12 @@ final class NovelReaderNativeFlowHostState
         },
       );
       await source.run();
+      if (_current(run)) {
+        const NovelReaderNativeDiagnostics().completed(
+          NovelReaderNativeDiagnosticMode.scrolling,
+          session,
+        );
+      }
     } on Object catch (error) {
       if (_current(run)) _fail(run, error);
     }
@@ -1050,6 +1057,10 @@ final class NovelReaderNativeFlowHostState
 
   void _fail(_FlowRun run, Object error) {
     if (!_current(run) || _error != null) return;
+    const NovelReaderNativeDiagnostics().failed(
+      NovelReaderNativeDiagnosticMode.scrolling,
+      error,
+    );
     _finishNavigation(NovelReaderNavigationOutcome.unavailable);
     setState(() => _error = error);
     run.stop();

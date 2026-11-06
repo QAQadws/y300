@@ -8,6 +8,7 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 
 import '../models/novel_reader_native_prepared_chapter.dart';
 import '../models/novel_reader_pagination_exception.dart';
+import 'novel_reader_native_diagnostics.dart';
 import 'novel_reader_native_preparation_service.dart';
 import 'novel_reader_pagination_cancellation.dart';
 
@@ -110,6 +111,9 @@ final class NovelReaderNativePreparationCache {
       work.token.throwIfCancelled();
       if (!_closed && identical(_inFlight[key], work)) {
         _put(key, value);
+        if (value is NovelReaderNativePreparedChapter) {
+          const NovelReaderNativeDiagnostics().prepared(value.document);
+        }
       }
       if (!work.result.isCompleted) work.result.complete(value);
     } catch (error, stack) {
@@ -222,6 +226,7 @@ int _estimate(_Key key, NovelReaderNativeChapterPreparation value) {
     // cover immutable IR/maps and per-rune coordinate/projection arrays.
     bytes +=
         256 * value.document.parsedNodeCount +
+        32 * value.document.elementCounts.length +
         32 * map.runeLength +
         64 * map.rangesByPath.length +
         256 * value.anchors.segments.length;

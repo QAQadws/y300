@@ -495,6 +495,7 @@ final class ForumBodyTextPageSession {
       ? const Stream<void>.empty()
       : (_retirementEvents ??= StreamController<void>.broadcast()).stream;
   int get droppedStyleIssueCount => _droppedIssues;
+  int get pendingStyleIssueCount => _issues.length;
 
   /// Borrow a published table while this session is alive. The session owns
   /// the table's cell bodies even when the published prefix survives a failure.
