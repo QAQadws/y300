@@ -266,14 +266,16 @@ class _MainPageProfileState extends State<_MainPageProfile> {
     // the final batch has arrived, without assigning it to the current phase.
     await Future<void>.delayed(const Duration(milliseconds: 1200));
     await _nextFrame();
-    final timingRecords = _frames.windows
-        .map((window) => window.toJson(frameBudgetUs: budget))
-        .toList();
-    final missingFrames = timingRecords
-        .where((record) => record['frameCount'] == 0)
-        .length;
-    for (final record in timingRecords) {
+    var missingFrames = 0;
+    var frameReportCount = 0;
+    for (final record in _frames.summaries(frameBudgetUs: budget)) {
+      missingFrames += record['windowsWithoutFrames']! as int;
+      frameReportCount++;
       _emit({'event': 'phase_frames', ...record});
+    }
+    for (final record in _frames.slowFrames()) {
+      frameReportCount++;
+      _emit({'event': 'phase_frame_over_50ms', ...record});
     }
     final matrix = <Map<String, Object?>>[];
     for (final backend in ['legacy', 'native']) {
@@ -337,6 +339,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       'runtimeErrorTypes': _runtimeErrors.toSet().take(10).toList(),
       'timingOverflow': _frames.overflowed,
       'windowsWithoutFrames': missingFrames,
+      'frameReportCount': frameReportCount,
       'retainedSyntheticChapters': widget.data.retainedChapters,
       'hasRequiredSampleCounts': _baseline && _config.hasRequiredSampleCounts,
       'baselineSamplingCompleted':
@@ -387,8 +390,12 @@ class _MainPageProfileState extends State<_MainPageProfile> {
     ProfileReaderObservation? latest;
     bool windowOpen = false;
     final clock = Stopwatch()..start();
-    void begin(String phase) {
-      _frames.begin('$id/$phase', _frameTime);
+    void begin(String phase, {String? reportGroup}) {
+      _frames.begin(
+        '$id/$phase',
+        _frameTime,
+        reportGroup: reportGroup == null ? null : '$id/$reportGroup',
+      );
       windowOpen = true;
     }
 
@@ -473,7 +480,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
         }
         final targetPrepared =
             latest.nativeController?.viewForPage(next.page) != null;
-        begin('turn-$i');
+        begin('turn-$i', reportGroup: 'turns');
         final turnClock = Stopwatch()..start();
         command();
         latest = await _wait(

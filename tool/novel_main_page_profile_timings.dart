@@ -2,24 +2,25 @@ import 'dart:math' as math;
 
 /// Uses engine vsync time, never the time a batched timing callback arrived.
 final class ProfileFrameWindows {
-  final _windows = <ProfileFrameWindow>[];
-  ProfileFrameWindow? _active;
+  final _windows = <_ProfileFrameWindow>[];
+  _ProfileFrameWindow? _active;
   int _samples = 0;
   bool overflowed = false;
   static const maxSamples = 100000;
 
-  List<ProfileFrameWindow> get windows => List.unmodifiable(_windows);
-
-  ProfileFrameWindow begin(String label, int startExclusiveUs) {
+  void begin(String label, int startExclusiveUs, {String? reportGroup}) {
     if (_active != null ||
         (_windows.isNotEmpty &&
             startExclusiveUs < _windows.last.endInclusiveUs!)) {
       throw StateError('Overlapping profile frame windows');
     }
-    final window = ProfileFrameWindow._(label, startExclusiveUs);
+    final window = _ProfileFrameWindow(
+      label,
+      startExclusiveUs,
+      reportGroup ?? label,
+    );
     _windows.add(window);
     _active = window;
-    return window;
   }
 
   void end(int endInclusiveUs) {
@@ -30,7 +31,7 @@ final class ProfileFrameWindows {
     window.endInclusiveUs = endInclusiveUs;
     _active = null;
     // Timings may arrive before the post-frame continuation closes this window.
-    window._frames.removeWhere((frame) => frame.vsyncUs > endInclusiveUs);
+    window.frames.removeWhere((frame) => frame.vsyncUs > endInclusiveUs);
   }
 
   void add({
@@ -56,40 +57,71 @@ final class ProfileFrameWindows {
       overflowed = true;
       return;
     }
-    window._frames.add((
+    window.frames.add((
       vsyncUs: vsyncUs,
       buildUs: buildUs,
       rasterUs: rasterUs,
       totalUs: totalUs,
     ));
   }
+
+  Iterable<Map<String, Object>> summaries({
+    required double frameBudgetUs,
+  }) sync* {
+    final groups = <String, List<_ProfileFrameWindow>>{};
+    for (final window in _windows) {
+      (groups[window.reportGroup] ??= []).add(window);
+    }
+    for (final entry in groups.entries) {
+      final windows = entry.value;
+      // Merge raw samples only after attribution. The gaps between turn
+      // commands remain outside the group, and empty commands stay visible.
+      final frames = windows.expand((window) => window.frames).toList();
+      yield {
+        'phase': entry.key,
+        'windowCount': windows.length,
+        'windowsWithoutFrames': windows.where((w) => w.frames.isEmpty).length,
+        'frameCount': frames.length,
+        'buildUs': profileDistribution(frames.map((frame) => frame.buildUs)),
+        'rasterUs': profileDistribution(frames.map((frame) => frame.rasterUs)),
+        'totalUs': profileDistribution(frames.map((frame) => frame.totalUs)),
+        'buildOverBudget': frames
+            .where((frame) => frame.buildUs > frameBudgetUs)
+            .length,
+        'rasterOverBudget': frames
+            .where((frame) => frame.rasterUs > frameBudgetUs)
+            .length,
+        'totalOverBudget': frames
+            .where((frame) => frame.totalUs > frameBudgetUs)
+            .length,
+      };
+    }
+  }
+
+  Iterable<Map<String, Object>> slowFrames() sync* {
+    for (final window in _windows) {
+      for (final frame in window.frames) {
+        if (frame.totalUs <= 50000) continue;
+        yield {
+          'phase': window.label,
+          'vsyncUs': frame.vsyncUs,
+          'buildUs': frame.buildUs,
+          'rasterUs': frame.rasterUs,
+          'totalUs': frame.totalUs,
+        };
+      }
+    }
+  }
 }
 
-final class ProfileFrameWindow {
-  ProfileFrameWindow._(this.label, this.startExclusiveUs);
+final class _ProfileFrameWindow {
+  _ProfileFrameWindow(this.label, this.startExclusiveUs, this.reportGroup);
+
   final String label;
   final int startExclusiveUs;
+  final String reportGroup;
   int? endInclusiveUs;
-  final _frames = <({int vsyncUs, int buildUs, int rasterUs, int totalUs})>[];
-
-  Map<String, Object?> toJson({required double frameBudgetUs}) => {
-    'phase': label,
-    'startExclusiveVsyncUs': startExclusiveUs,
-    'endInclusiveVsyncUs': endInclusiveUs,
-    'frameCount': _frames.length,
-    'buildUs': profileDistribution(_frames.map((frame) => frame.buildUs)),
-    'rasterUs': profileDistribution(_frames.map((frame) => frame.rasterUs)),
-    'totalUs': profileDistribution(_frames.map((frame) => frame.totalUs)),
-    'buildOverBudget': _frames
-        .where((frame) => frame.buildUs > frameBudgetUs)
-        .length,
-    'rasterOverBudget': _frames
-        .where((frame) => frame.rasterUs > frameBudgetUs)
-        .length,
-    'totalOverBudget': _frames
-        .where((frame) => frame.totalUs > frameBudgetUs)
-        .length,
-  };
+  final frames = <({int vsyncUs, int buildUs, int rasterUs, int totalUs})>[];
 }
 
 Map<String, Object?> profileDistribution(Iterable<int> input) {

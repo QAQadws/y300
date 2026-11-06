@@ -147,6 +147,7 @@ flutter:
         if ($MainPage) { $runArguments += "--dart-define=PROFILE_CORPUS=$Corpus" }
         if ($InlineSoftSpace) { $runArguments += '--dart-define=PROFILE_INLINE_SOFT_SPACE=true' }
         $script:profileSuiteResult = $null
+        $script:profileFrameReports = 0
         & flutter @runArguments 2>&1 | ForEach-Object {
             $line = $_.ToString()
             $line | Out-File -LiteralPath $logPath -Append -Encoding utf8
@@ -156,12 +157,18 @@ flutter:
                 try {
                     $record = $line.Substring($index + 14) | ConvertFrom-Json
                     if ($record.event -eq 'suite_done') { $script:profileSuiteResult = $record }
+                    if ($record.event -in @('phase_frames', 'phase_frame_over_50ms')) {
+                        $script:profileFrameReports++
+                    }
                 } catch { }
             }
         }
         Assert-NativeSuccess 'Run profile target'
         if ($null -eq $script:profileSuiteResult -or -not $script:profileSuiteResult.suitePassed) {
             throw "Profile suite did not pass. See $logPath"
+        }
+        if ($MainPage -and $script:profileSuiteResult.frameReportCount -ne $script:profileFrameReports) {
+            throw "Incomplete profile frame output. Expected $($script:profileSuiteResult.frameReportCount), received $script:profileFrameReports. See $logPath"
         }
         Write-Host "Profile results: $logPath"
     } finally { Pop-Location }
