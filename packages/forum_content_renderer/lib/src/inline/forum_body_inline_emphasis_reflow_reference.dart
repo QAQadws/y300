@@ -5,14 +5,14 @@ import 'package:flutter/painting.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_geometry.dart';
 import '../paragraph/forum_body_paragraph_row_reference.dart';
-import 'forum_body_inline_emphasis_children_plan.dart';
+import 'forum_body_inline_emphasis_row_placement.dart';
 
-/// Verified current old/final natural parents after actual child replanning.
+/// Verified current original and final natural parents.
 /// Only numeric geometry and exact immutable inputs survive. These deltas are
 /// physical coordinates, never new source offsets or painted coverage.
 final class ForumBodyInlineEmphasisReflowReference {
   ForumBodyInlineEmphasisReflowReference._(
-    this.children,
+    this.placement,
     ForumBodyInlineParagraphLease original,
     ForumBodyInlineParagraphLease finalParent,
     List<double> deltas,
@@ -27,7 +27,7 @@ final class ForumBodyInlineEmphasisReflowReference {
       originalHeight = original.layout.height,
       finalHeight = finalParent.layout.height;
   static const revision = 1;
-  final ForumBodyInlineEmphasisChildrenPlan children;
+  final ForumBodyInlineEmphasisRowPlacement placement;
   final Object originalInputIdentity, finalInputIdentity;
   final List<ForumBodyParagraphLine> originalLines, finalLines;
   final List<TextBox> originalAtomBoxes, finalAtomBoxes;
@@ -42,14 +42,14 @@ final class ForumBodyInlineEmphasisReflowReference {
 /// No acquire, shaping, native query, paint or caller handle release occurs.
 final class ForumBodyInlineEmphasisReflowReferencePreparation {
   ForumBodyInlineEmphasisReflowReferencePreparation({
-    required ForumBodyInlineEmphasisChildrenPlan children,
+    required ForumBodyInlineEmphasisRowPlacement placement,
     required ForumBodyInlineParagraphLease original,
     required ForumBodyInlineParagraphLease finalParent,
     required void Function() ensureOwner,
     this.maxLines = 4096,
     this.maxAtoms = 512,
     this.maxHeight = 1048576,
-  }) : _children = children,
+  }) : _placement = placement,
        _original = original,
        _finalParent = finalParent,
        _ensureOwner = ensureOwner {
@@ -61,9 +61,10 @@ final class ForumBodyInlineEmphasisReflowReferencePreparation {
     }
     try {
       _guard();
-      final geometry = children.placement.input.fonts.geometry;
+      final page = placement.input.page;
+      final geometry = placement.input.fonts.geometry;
       if (!identical(original.content, geometry.input.glyphInput.glyphs) ||
-          !identical(children.page.content, geometry.input.content) ||
+          !identical(page.content, geometry.input.content) ||
           !identical(original.layout.lines, geometry.lines) ||
           original.nativeInputIdentity != geometry.nativeInputIdentity ||
           original.layout.rowIsolationPitch != null ||
@@ -82,7 +83,7 @@ final class ForumBodyInlineEmphasisReflowReferencePreparation {
       if (a.lineCount != b.lineCount ||
           a.width != b.width ||
           a.atomBoxes.length != b.atomBoxes.length ||
-          a.atomBoxes.length != children.page.dimensions.length ||
+          a.atomBoxes.length != page.dimensions.length ||
           a.firstLineIndent.requestedAdvance !=
               b.firstLineIndent.requestedAdvance ||
           a.firstLineIndent.appliedAdvance !=
@@ -105,7 +106,7 @@ final class ForumBodyInlineEmphasisReflowReferencePreparation {
   }
   final int maxLines, maxAtoms;
   final double maxHeight;
-  ForumBodyInlineEmphasisChildrenPlan? _children;
+  ForumBodyInlineEmphasisRowPlacement? _placement;
   ForumBodyInlineParagraphLease? _original, _finalParent;
   void Function()? _ensureOwner;
   List<double>? _deltas = [];
@@ -150,28 +151,18 @@ final class ForumBodyInlineEmphasisReflowReferencePreparation {
           if (point >= b.lines[_atomRow].engineCoverageEndUtf16) {
             _atomRow++;
           } else {
-            final children = _children!,
-                page = children.page,
-                oldPage = children.placement.input.page;
-            final target = page.dimensions[_atom],
-                actual = b.dimensions[_atom],
-                oldTarget = oldPage.dimensions[_atom],
-                oldActual = a.dimensions[_atom];
-            if (!_sameDimension(target, actual) ||
-                !_sameDimension(oldTarget, oldActual)) {
+            final placement = _placement!, page = placement.input.page;
+            final target = page.dimensions[_atom];
+            if (!_sameDimension(target, b.dimensions[_atom]) ||
+                !_sameDimension(target, a.dimensions[_atom])) {
               _fail(ForumBodyParagraphRowReferenceFailure.source);
             }
             final first = a.atomBoxes[_atom], last = b.atomBoxes[_atom];
             if (point < b.lines[_atomRow].engineCoverageStartUtf16 ||
                 _atomRow !=
-                    children
-                        .placement
-                        .input
-                        .fonts
-                        .geometry
-                        .atomLineIndices[_atom] ||
+                    placement.input.fonts.geometry.atomLineIndices[_atom] ||
                 a.isAtomTrimmed(_atom) !=
-                    oldPage.trimmedAtomIndices.contains(_atom) ||
+                    page.trimmedAtomIndices.contains(_atom) ||
                 b.isAtomTrimmed(_atom) !=
                     page.trimmedAtomIndices.contains(_atom) ||
                 first.left != last.left ||
@@ -183,7 +174,7 @@ final class ForumBodyInlineEmphasisReflowReferencePreparation {
           }
         } else {
           _result = ForumBodyInlineEmphasisReflowReference._(
-            _children!,
+            _placement!,
             _original!,
             _finalParent!,
             _deltas!,
@@ -231,7 +222,7 @@ final class ForumBodyInlineEmphasisReflowReferencePreparation {
 
   void close() {
     _closed = true;
-    _children = null;
+    _placement = null;
     _original = null;
     _finalParent = null;
     _ensureOwner = null;

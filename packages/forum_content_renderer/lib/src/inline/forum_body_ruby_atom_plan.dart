@@ -9,7 +9,6 @@ import 'forum_body_ruby_soft_space_contract.dart';
 import 'forum_body_ruby_tree_input.dart';
 import 'forum_body_ruby_tree_metrics_preparation.dart';
 import 'forum_body_inline_plan_preparation.dart';
-import 'forum_body_emphasis_line_layout.dart';
 import 'forum_body_text_baseline_layout.dart';
 import 'forum_body_inline_image_input.dart';
 
@@ -60,10 +59,6 @@ sealed class ForumBodyRubyAtomPlan {
     required ForumBodyRubyTreeInput request,
     required ForumBodyRubyTreeMetrics metrics,
   }) = ForumBodyRubyTreePlan;
-  factory ForumBodyRubyAtomPlan.emphasisTree({
-    required ForumBodyRubyGlyphTreeInput request,
-    required ForumBodyRubyTreeEmphasisPlan format,
-  }) = ForumBodyRubyTreeEmphasisAtomPlan;
   List<ForumBodyTextRequest> get nativeRequests;
   double get maxWidth;
   int get nativeHandleCount => nativeRequests.length;
@@ -157,55 +152,6 @@ final class ForumBodyTextBaselineAtomPlan extends ForumBodyRubyAtomPlan {
 /// A complete tree format, distinct from its private glyph-only numeric plan.
 /// Original windows qualify source; glyph requests retain their explicit
 /// derivation, and fonts plus the actual marker scene share one budget prefix.
-final class ForumBodyRubyTreeEmphasisAtomPlan extends ForumBodyRubyAtomPlan {
-  ForumBodyRubyTreeEmphasisAtomPlan({
-    required this.request,
-    required this.format,
-  }) : super._() {
-    if (!identical(
-      request,
-      format.placement.input.input.geometry.metrics.input,
-    )) {
-      throw ArgumentError('Ruby emphasis atom input differs from its format');
-    }
-  }
-  final ForumBodyRubyGlyphTreeInput request;
-  final ForumBodyRubyTreeEmphasisPlan format;
-  @override
-  List<ForumBodyTextRequest> get nativeRequests => request.glyphRequests;
-  @override
-  int get nativeHandleCount => format.retainedHandleCount;
-  @override
-  Iterable<ForumBodyParagraphContent> get sourceContexts =>
-      request.sources.map((source) => source.content);
-  @override
-  Iterable<ForumBodyParagraphContent> get glyphContexts =>
-      request.sources.map((source) => source.glyphs);
-  @override
-  int get extraTextCodeUnits => request.sourceTree.extraTextCodeUnits;
-  @override
-  // Glyph projections share original text storage but retain derived run tables.
-  int get extraRuns => request.extraRuns;
-  @override
-  Iterable<ForumBodyNativeRequestSlot> get nativeFootprint sync* {
-    for (final slot in nativeBudgetFootprint) {
-      if (slot.request case final ForumBodyNativeRequest request) {
-        yield (
-          request: request,
-          width: slot.width,
-          minimumLineCount: slot.minimumLineCount,
-        );
-      }
-    }
-  }
-
-  @override
-  Iterable<ForumBodyNativeBudgetSlot> get nativeBudgetFootprint =>
-      format.nativeBudgetFootprint;
-  @override
-  double get maxWidth => request.maxWidth;
-}
-
 final class ForumBodyRubyTreePlan extends ForumBodyRubyAtomPlan {
   ForumBodyRubyTreePlan({required this.request, required this.metrics})
     : super._() {

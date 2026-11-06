@@ -17,7 +17,6 @@ enum _LinePhase {
   frame,
   commands,
   sealMetrics,
-  bindingPaint,
   basePaint,
   scene,
   releaseMarks,
@@ -144,7 +143,6 @@ final class ForumBodyEmphasisLinePreparation {
     required TextScaler textScaler,
     required bool measureOnly,
     bool bindOnly = false,
-    bool prepareBindingPaint = false,
     ForumBodyTextRequest? baseRequest,
     ForumBodyEmphasisLineMetrics? metrics,
     ForumBodyEmphasisRowInput? rowInput,
@@ -157,7 +155,6 @@ final class ForumBodyEmphasisLinePreparation {
        _callerScaler = textScaler,
        _measureOnly = measureOnly,
        _bindOnly = bindOnly,
-       _prepareBindingPaint = prepareBindingPaint,
        _expected = metrics,
        _additionalOwned = additionalOwnedLeases,
        _request =
@@ -223,7 +220,6 @@ final class ForumBodyEmphasisLinePreparation {
   final double width;
   final bool _measureOnly;
   final bool _bindOnly;
-  final bool _prepareBindingPaint;
   ForumBodyEmphasisLineMetrics? _expected;
   Iterator<MapEntry<double, double>>? _scaleChecks;
   Iterable<ForumBodyNativeParagraphLease> Function()? _additionalOwned;
@@ -769,22 +765,10 @@ final class ForumBodyEmphasisLinePreparation {
               _positioned = null;
               _index = 0;
               _phase = _bindOnly
-                  ? (_prepareBindingPaint
-                        ? _LinePhase.bindingPaint
-                        : _LinePhase.ready)
+                  ? _LinePhase.ready
                   : _measureOnly
                   ? _LinePhase.releaseMarks
                   : _LinePhase.basePaint;
-            case _LinePhase.bindingPaint:
-              if (!_base!.layout.isPaintPrepared) {
-                if (cachedOnly) {
-                  _cacheMiss = true;
-                  used++;
-                  return step();
-                }
-                if (cache.prepareTextPaint(_base!)) pictures++;
-              }
-              _phase = _LinePhase.ready;
             case _LinePhase.basePaint:
               if (!_base!.layout.isPaintPrepared) {
                 if (cachedOnly) {
@@ -970,31 +954,6 @@ final class ForumBodyEmphasisLinePreparation {
       final result = _EmphasisNativeBinding(base, row, _markLeases);
       _markLeases = [];
       _base = null;
-      _phase = _LinePhase.transferred;
-      _dropInputs();
-      return result;
-    } catch (_) {
-      close();
-      rethrow;
-    } finally {
-      _operating = false;
-    }
-  }
-
-  _RubyEmphasisGlyphBinding _takeGlyphBinding() {
-    if (_operating) throw StateError('Emphasis line preparation is reentrant');
-    _operating = true;
-    try {
-      _guard();
-      if (!isReady ||
-          !_bindOnly ||
-          _rowInput != null ||
-          !_prepareBindingPaint) {
-        throw StateError('Ruby emphasis binding is incomplete');
-      }
-      final result = _RubyEmphasisGlyphBinding(_base!, _markLeases);
-      _base = null;
-      _markLeases = [];
       _phase = _LinePhase.transferred;
       _dropInputs();
       return result;

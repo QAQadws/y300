@@ -73,8 +73,6 @@ Iterable<ForumBodyInlinePaintCommand?> _rubyPaintCommands(
       binding.space.inspectMembers();
     case _RubyTreeBinding():
       yield* binding.tree.paintCommands(offset);
-    case _RubyEmphasisTreeBinding():
-      yield* binding.tree.paintCommands(offset);
   }
 }
 

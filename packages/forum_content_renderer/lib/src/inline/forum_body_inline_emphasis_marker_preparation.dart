@@ -179,7 +179,7 @@ final class ForumBodyInlineEmphasisMarkerPreparation {
           cache.pictureBuildCount == pictures) {
         final a = _allocation!,
             m = a.input.natural,
-            placement = m.reflow.children.placement,
+            placement = m.reflow.placement,
             fm = placement.input.fonts;
         final rejectedAt = cache.budgetRevision;
         try {
@@ -375,9 +375,7 @@ final class ForumBodyInlineEmphasisMarkerPreparation {
   }
 
   Iterable<ForumBodyPositionedTextPictureInput> _commands() sync* {
-    final a = _allocation!,
-        m = a.input.natural,
-        p = m.reflow.children.placement;
+    final a = _allocation!, m = a.input.natural, p = m.reflow.placement;
     for (final index in _selected) {
       final mark = p.marks[index],
           row = a.rows[mark.lineIndex],

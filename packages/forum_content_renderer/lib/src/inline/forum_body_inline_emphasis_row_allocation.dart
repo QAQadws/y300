@@ -130,7 +130,7 @@ final class ForumBodyInlineEmphasisRowAllocationPreparation {
           !identical(input.geometry.lines, ref.isolatedLines)) {
         _source();
       }
-      final page = input.natural.page, placement = reflow.children.placement;
+      final page = input.natural.page, placement = reflow.placement;
       if (ref.lineCount > maxLines ||
           page.rubyAtoms.length > maxAtoms ||
           placement.marks.length > maxMarks) {
@@ -180,7 +180,7 @@ final class ForumBodyInlineEmphasisRowAllocationPreparation {
         _guard();
         final input = _input!,
             reflow = input.natural.reflow,
-            placement = reflow.children.placement,
+            placement = reflow.placement,
             page = input.natural.page;
         switch (_phase) {
           case _AllocationPhase.naturalFrames:

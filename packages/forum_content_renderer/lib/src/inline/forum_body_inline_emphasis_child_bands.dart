@@ -12,7 +12,6 @@ import 'forum_body_ruby_atom_plan.dart';
 import 'forum_body_ruby_band_stack.dart';
 import 'forum_body_ruby_group_metrics.dart';
 import 'forum_body_ruby_root_box.dart';
-import 'forum_body_ruby_tree_input.dart';
 import 'forum_body_ruby_tree_metrics_preparation.dart';
 
 /// Font and annotation clearance in the actual mixed parent's coordinates.
@@ -27,10 +26,6 @@ final class ForumBodyInlineEmphasisChildBand {
     required this.baseBottom,
     required this.overEdge,
     required this.underEdge,
-    required this.overBaseline,
-    required this.underBaseline,
-    required this.overAnnotationMarkerBounds,
-    required this.underAnnotationMarkerBounds,
   });
   final int atomIndex, lineIndex;
   final ForumBodyRubyAtomPlan source;
@@ -42,10 +37,6 @@ final class ForumBodyInlineEmphasisChildBand {
 
   /// Font-only annotation reservations, including existing virtual empty RTs.
   final double? overEdge, underEdge;
-
-  /// Current base-row mark baselines, kept separate from annotation marks.
-  final double? overBaseline, underBaseline;
-  final Rect? overAnnotationMarkerBounds, underAnnotationMarkerBounds;
 }
 
 /// Source-bound numeric inputs only. Child fonts/scene readiness and the final
@@ -64,10 +55,9 @@ final class ForumBodyInlineEmphasisChildBands {
   final List<ForumBodyInlineEmphasisChildBand?> children;
 }
 
-enum _ChildBandPhase { atoms, ranks, contexts, finish, publish, ready, retired }
+enum _ChildBandPhase { atoms, ranks, finish, publish, ready, retired }
 
-/// Reuses final aligned child geometry. Each part visits one atom, annotation
-/// rank or existing decoration context; no shaping, cache lookup or recording.
+/// Reads final aligned child geometry one atom or annotation rank at a time.
 final class ForumBodyInlineEmphasisChildBandsPreparation {
   ForumBodyInlineEmphasisChildBandsPreparation({
     required ForumBodyInlineEmphasisFontMetrics fonts,
@@ -102,15 +92,12 @@ final class ForumBodyInlineEmphasisChildBandsPreparation {
   ForumBodyInlineEmphasisChildBands? _result;
   var _phase = _ChildBandPhase.atoms;
   bool _operating = false;
-  int _index = 0, _rank = 0, _context = 0;
+  int _index = 0, _rank = 0;
   double _top = 0, _bottom = 0, _over = 0, _under = 0;
-  double? _overEdge, _underEdge, _overBaseline, _underBaseline;
-  Rect? _overAnnotationMarks, _underAnnotationMarks;
+  double? _overEdge, _underEdge;
   Offset _origin = Offset.zero;
   ForumBodyRubyGroupMetrics? _group;
   ForumBodyRubyLevelMetrics? _level;
-  ForumBodyRubyTreeDecorationBands? _decoration;
-  ForumBodyRubyPhysicalRow? _rootRow;
   bool get isReady => _phase == _ChildBandPhase.ready;
 
   int advance({int maxParts = 32}) {
@@ -132,35 +119,14 @@ final class ForumBodyInlineEmphasisChildBandsPreparation {
             if (_rank < count) {
               _annotation(_rank++);
             } else {
-              _phase = _ChildBandPhase.contexts;
-            }
-          case _ChildBandPhase.contexts:
-            final decoration = _decoration;
-            if (decoration != null && _context < decoration.contexts.length) {
-              final context = decoration.contexts[_context++];
-              if (context.physicalRow == _rootRow) {
-                _includeEdges(
-                  context.baseAncestorOverEdge == null
-                      ? null
-                      : _origin.dy + context.baseAncestorOverEdge!,
-                  context.baseAncestorUnderEdge == null
-                      ? null
-                      : _origin.dy + context.baseAncestorUnderEdge!,
-                );
-              }
-            } else {
               _phase = _ChildBandPhase.finish;
             }
+
           case _ChildBandPhase.finish:
             _check(_top);
             _check(_bottom);
             if (_top > _bottom) _fail(ForumBodyEmphasisGeometryFailure.boxes);
-            for (final value in [
-              _overEdge,
-              _underEdge,
-              _overBaseline,
-              _underBaseline,
-            ]) {
+            for (final value in [_overEdge, _underEdge]) {
               if (value != null) _check(value);
             }
             _children.add(
@@ -173,10 +139,6 @@ final class ForumBodyInlineEmphasisChildBandsPreparation {
                 baseBottom: _bottom,
                 overEdge: _overEdge,
                 underEdge: _underEdge,
-                overBaseline: _overBaseline,
-                underBaseline: _underBaseline,
-                overAnnotationMarkerBounds: _overAnnotationMarks,
-                underAnnotationMarkerBounds: _underAnnotationMarks,
               ),
             );
             _index++;
@@ -221,7 +183,6 @@ final class ForumBodyInlineEmphasisChildBandsPreparation {
     final slot = layout.atomBoxes[_index].toRect();
     final source = page.rubyAtoms[_index];
     ForumBodyRubyAtomFrame? frame;
-    ForumBodyRubyTreeEmphasisPlan? emphasis;
     ForumBodyRubyTreeContainerMetrics? tree;
     double baseline;
     Size size;
@@ -256,11 +217,6 @@ final class ForumBodyInlineEmphasisChildBandsPreparation {
         tree = metrics.root;
         baseline = tree.box.alphabeticBaseline;
         size = tree.frame.size;
-      case ForumBodyRubyTreeEmphasisAtomPlan(:final format):
-        emphasis = format;
-        tree = format.placement.input.input.geometry.metrics.root;
-        baseline = format.frame.baseline;
-        size = format.frame.size;
     }
     frame = page.rootFonts[_index]?.enclose(
       childSize: size,
@@ -268,31 +224,6 @@ final class ForumBodyInlineEmphasisChildBandsPreparation {
     );
     _origin = slot.topLeft + (frame?.childOffset ?? Offset.zero);
     var baseOrigin = _origin;
-    if (emphasis != null) {
-      _origin += emphasis.frame.childOffset;
-      baseOrigin = _origin;
-      _decoration = emphasis.placement.input;
-      final context = _decoration!.contexts.first;
-      _rootRow = context.physicalRow;
-      final row = emphasis.placement.rowForId(_rootRow!);
-      _overBaseline = row.overBaseline == null
-          ? null
-          : _origin.dy + row.overBaseline!;
-      _underBaseline = row.underBaseline == null
-          ? null
-          : _origin.dy + row.underBaseline!;
-      _overAnnotationMarks = row.overAnnotationMarkerBounds?.shift(_origin);
-      _underAnnotationMarks = row.underAnnotationMarkerBounds?.shift(_origin);
-      // Direct root reservations also apply when the base has no source leaf.
-      _includeEdges(
-        _decoration!.nodes.last.localOverEdge == null
-            ? null
-            : _origin.dy + _decoration!.nodes.last.localOverEdge!,
-        _decoration!.nodes.last.localUnderEdge == null
-            ? null
-            : _origin.dy + _decoration!.nodes.last.localUnderEdge!,
-      );
-    }
     if (tree != null) {
       baseOrigin += tree.frame.childOffset;
       _group = tree.group;
@@ -380,11 +311,8 @@ final class ForumBodyInlineEmphasisChildBandsPreparation {
   void _clearCurrent() {
     _group = null;
     _level = null;
-    _decoration = null;
-    _rootRow = null;
-    _overEdge = _underEdge = _overBaseline = _underBaseline = null;
-    _overAnnotationMarks = _underAnnotationMarks = null;
-    _rank = _context = 0;
+    _overEdge = _underEdge = null;
+    _rank = 0;
   }
 
   static void _check(double value) {

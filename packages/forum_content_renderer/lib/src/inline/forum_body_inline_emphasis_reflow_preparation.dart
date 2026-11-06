@@ -4,13 +4,11 @@ import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_geometry.dart';
 import 'forum_body_emphasis_line_layout.dart';
 import 'forum_body_emphasis_text_geometry.dart';
-import 'forum_body_inline_emphasis_children_plan.dart';
 import 'forum_body_inline_emphasis_reflow_reference.dart';
 import 'forum_body_inline_emphasis_row_placement.dart';
 import 'forum_body_inline_paragraph_request.dart';
 
 enum _ReflowPhase {
-  children,
   beginPrefix,
   prefix,
   probe,
@@ -27,9 +25,8 @@ enum _ReflowPhase {
   closed,
 }
 
-/// The final-parent measurement transaction. Borrows the initial parent and
-/// caller prefix, owns only its new parent, and reuses completed child replans
-/// through warm misses or external-pin waits. No paint is prepared here.
+/// Verifies the natural parent for the final row allocation. The original
+/// parent and caller prefix remain borrowed throughout the transaction.
 final class ForumBodyInlineEmphasisReflowPreparation {
   ForumBodyInlineEmphasisReflowPreparation({
     required ForumBodyInlineEmphasisRowPlacement placement,
@@ -73,10 +70,16 @@ final class ForumBodyInlineEmphasisReflowPreparation {
           ForumBodyEmphasisLineFailure.source,
         );
       }
-      _childWork = ForumBodyInlineEmphasisChildrenPlanPreparation(
-        placement: placement,
-        ensureOwner: _guard,
-        maxAtoms: maxAtoms,
+      final page = placement.input.page;
+      if (page.rubyAtoms.length > maxAtoms) {
+        throw const ForumBodyEmphasisGeometryException(
+          ForumBodyEmphasisGeometryFailure.limit,
+        );
+      }
+      _request = ForumBodyInlineParagraphRequest(
+        content: original.content,
+        dimensions: page.dimensions,
+        layoutMode: page.layoutMode,
       );
       _guard();
     } catch (_) {
@@ -91,8 +94,6 @@ final class ForumBodyInlineEmphasisReflowPreparation {
   ForumBodyParagraphCache? _cache;
   void Function()? _ensureOwner;
   Iterable<ForumBodyNativeParagraphLease> Function()? _additionalOwned;
-  ForumBodyInlineEmphasisChildrenPlanPreparation? _childWork;
-  ForumBodyInlineEmphasisChildrenPlan? _children;
   ForumBodyInlineParagraphRequest? _request;
   ForumBodyInlineEmphasisReflowReferencePreparation? _referenceWork;
   ForumBodyInlineEmphasisReflowReference? _reference;
@@ -104,7 +105,7 @@ final class ForumBodyInlineEmphasisReflowPreparation {
   ForumBodyParagraphBudgetException? _rejection;
   int _rejectedAt = -1, _blockedAt = -1;
   int _verifiedRow = 0, _verifiedTarget = 0, _verifiedAtom = 0;
-  var _phase = _ReflowPhase.children;
+  var _phase = _ReflowPhase.beginPrefix;
   bool _operating = false, _cacheMiss = false;
   bool get isReady => _phase == _ReflowPhase.ready;
   bool get cacheMiss => _cacheMiss;
@@ -133,21 +134,6 @@ final class ForumBodyInlineEmphasisReflowPreparation {
         final rejectedAt = cache.budgetRevision;
         try {
           switch (_phase) {
-            case _ReflowPhase.children:
-              final work = _childWork!;
-              used += work.advance(maxParts: maxParts - used);
-              _guard();
-              if (work.isReady) {
-                final children = _children = work.takePlan();
-                _childWork = null;
-                _request = ForumBodyInlineParagraphRequest(
-                  content: _original!.content,
-                  dimensions: children.page.dimensions,
-                  layoutMode: children.page.layoutMode,
-                );
-                _phase = _ReflowPhase.beginPrefix;
-              }
-              continue;
             case _ReflowPhase.beginPrefix:
               _probe = cache.createBudgetProbe();
               _probe!.includeLease(_original!);
@@ -214,7 +200,7 @@ final class ForumBodyInlineEmphasisReflowPreparation {
               _owned = [];
               _referenceWork =
                   ForumBodyInlineEmphasisReflowReferencePreparation(
-                    children: _children!,
+                    placement: _placement!,
                     original: _original!,
                     finalParent: acquired,
                     ensureOwner: _guard,
@@ -449,8 +435,6 @@ final class ForumBodyInlineEmphasisReflowPreparation {
   }
 
   void _drop() {
-    _childWork?.close();
-    _childWork = null;
     _referenceWork?.close();
     _referenceWork = null;
     _geometryWork?.close();
@@ -465,7 +449,6 @@ final class ForumBodyInlineEmphasisReflowPreparation {
     _cache = null;
     _ensureOwner = null;
     _additionalOwned = null;
-    _children = null;
     _request = null;
     _reference = null;
     _geometry = null;

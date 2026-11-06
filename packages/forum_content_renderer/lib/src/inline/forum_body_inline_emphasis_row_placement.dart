@@ -7,8 +7,6 @@ import '../style/forum_body_style_options.dart';
 import 'forum_body_emphasis_line_layout.dart';
 import 'forum_body_emphasis_text_geometry.dart';
 import 'forum_body_inline_emphasis_child_bands.dart';
-import 'forum_body_ruby_atom_plan.dart';
-import 'forum_body_ruby_tree_input.dart';
 
 final class ForumBodyInlineEmphasisRow {
   const ForumBodyInlineEmphasisRow._(
@@ -52,25 +50,20 @@ final class ForumBodyInlineEmphasisRowPlacement {
     this.input,
     List<ForumBodyInlineEmphasisRow> rows,
     List<ForumBodyInlinePlacedEmphasisMark> marks,
-    List<ForumBodyRubyRootEmphasisShift?> shifts,
   ) : rows = UnmodifiableListView(rows),
-      marks = UnmodifiableListView(marks),
-      childShifts = UnmodifiableListView(shifts);
+      marks = UnmodifiableListView(marks);
   static const revision = 1;
   final ForumBodyInlineEmphasisChildBands input;
   final List<ForumBodyInlineEmphasisRow> rows;
   final List<ForumBodyInlinePlacedEmphasisMark> marks;
-  final List<ForumBodyRubyRootEmphasisShift?> childShifts;
 }
 
 enum _MixedPlacementPhase {
   rows,
   children,
-  childMarks,
   parentMarks,
   solve,
   place,
-  shifts,
   publish,
   ready,
   retired,
@@ -93,12 +86,8 @@ final class ForumBodyInlineEmphasisRowPlacementPreparation {
   List<_MixedMarkerRow> _work = [];
   List<ForumBodyInlineEmphasisRow> _rows = [];
   List<ForumBodyInlinePlacedEmphasisMark> _marks = [];
-  List<ForumBodyRubyRootEmphasisShift?> _shifts = [];
   ForumBodyInlineEmphasisRowPlacement? _result;
-  ForumBodyInlineEmphasisChildBand? _child;
-  ForumBodyRubyTreeEmphasisPlan? _childPlan;
-  ForumBodyRubyPhysicalRow? _childRow;
-  int _index = 0, _mark = 0, _inspected = 0;
+  int _index = 0, _inspected = 0;
   var _phase = _MixedPlacementPhase.rows;
   bool _operating = false;
   bool get isReady => _phase == _MixedPlacementPhase.ready;
@@ -130,46 +119,7 @@ final class ForumBodyInlineEmphasisRowPlacementPreparation {
                 final row = _work[child.lineIndex];
                 row.includeBase(child.baseTop, child.baseBottom);
                 row.includeEdges(child.overEdge, child.underEdge);
-                row.includeEdges(
-                  child.overAnnotationMarkerBounds?.top,
-                  child.underAnnotationMarkerBounds?.bottom,
-                );
-                row.includeExisting(child.overBaseline, child.underBaseline);
-                if (child.source case ForumBodyRubyTreeEmphasisAtomPlan(
-                  :final format,
-                )) {
-                  _child = child;
-                  _childPlan = format;
-                  _childRow = format.placement.input.contexts.first.physicalRow;
-                  _mark = 0;
-                  _phase = _MixedPlacementPhase.childMarks;
-                }
               }
-            }
-          case _MixedPlacementPhase.childMarks:
-            if (_mark < _childPlan!.placement.marks.length) {
-              _count();
-              final placed = _childPlan!.placement.marks[_mark++];
-              if (placed.row == _childRow) {
-                final mark = placed.mark, line = placed.source.line;
-                final side = line
-                    .input
-                    .content
-                    .runs[line.input.units[mark.unitIndex].runIndex]
-                    .style
-                    .textEmphasis
-                    .side;
-                _work[_child!.lineIndex].includeMark(
-                  mark.scaledAlphabeticBaseline - mark.scaledFontBounds.top,
-                  mark.scaledFontBounds.bottom - mark.scaledAlphabeticBaseline,
-                  side,
-                );
-              }
-            } else {
-              _child = null;
-              _childPlan = null;
-              _childRow = null;
-              _phase = _MixedPlacementPhase.children;
             }
           case _MixedPlacementPhase.parentMarks:
             if (_index < geometry.targets.length) {
@@ -236,46 +186,17 @@ final class ForumBodyInlineEmphasisRowPlacementPreparation {
               _index++;
             } else {
               _index = 0;
-              _phase = _MixedPlacementPhase.shifts;
-            }
-          case _MixedPlacementPhase.shifts:
-            if (_index < input.children.length) {
-              final child = input.children[_index++];
-              ForumBodyRubyRootEmphasisShift? shift;
-              if (child != null &&
-                  child.source is ForumBodyRubyTreeEmphasisAtomPlan) {
-                final row = _rows[child.lineIndex];
-                final over = child.overBaseline == null
-                        ? 0.0
-                        : row.overBaseline! - child.overBaseline!,
-                    under = child.underBaseline == null
-                        ? 0.0
-                        : row.underBaseline! - child.underBaseline!;
-                if (over != 0 || under != 0) {
-                  shift = ForumBodyRubyRootEmphasisShift(
-                    original:
-                        (child.source as ForumBodyRubyTreeEmphasisAtomPlan)
-                            .format
-                            .placement,
-                    over: over,
-                    under: under,
-                  );
-                }
-              }
-              _shifts.add(shift);
-            } else {
               _phase = _MixedPlacementPhase.publish;
             }
+
           case _MixedPlacementPhase.publish:
             _result = ForumBodyInlineEmphasisRowPlacement._(
               input,
               _rows,
               _marks,
-              _shifts,
             );
             _rows = [];
             _marks = [];
-            _shifts = [];
             _phase = _MixedPlacementPhase.ready;
           case _MixedPlacementPhase.ready:
           case _MixedPlacementPhase.retired:
@@ -337,16 +258,12 @@ final class ForumBodyInlineEmphasisRowPlacementPreparation {
     _work = [];
     _rows = [];
     _marks = [];
-    _shifts = [];
     _result = null;
-    _child = null;
-    _childPlan = null;
-    _childRow = null;
   }
 }
 
 final class _MixedMarkerRow {
-  double? top, bottom, overEdge, underEdge, existingOver, existingUnder;
+  double? top, bottom, overEdge, underEdge;
   double overDescent = 0, underAscent = 0;
   bool hasOver = false, hasUnder = false;
   static double? min(double? a, double? b) => a == null
@@ -373,11 +290,6 @@ final class _MixedMarkerRow {
     underEdge = max(underEdge, under);
   }
 
-  void includeExisting(double? over, double? under) {
-    existingOver = min(existingOver, over);
-    existingUnder = max(existingUnder, under);
-  }
-
   void includeMark(double ascent, double descent, ForumBodyEmphasisSide side) {
     if (!ascent.isFinite || !descent.isFinite || ascent < 0 || descent < 0) {
       ForumBodyInlineEmphasisRowPlacementPreparation._invalid();
@@ -395,12 +307,8 @@ final class _MixedMarkerRow {
     if ((hasOver || hasUnder) && (top == null || bottom == null)) {
       ForumBodyInlineEmphasisRowPlacementPreparation._invalid();
     }
-    final over = hasOver
-            ? min(min(top, overEdge)! - overDescent, existingOver)
-            : null,
-        under = hasUnder
-            ? max(max(bottom, underEdge)! + underAscent, existingUnder)
-            : null;
+    final over = hasOver ? min(top, overEdge)! - overDescent : null,
+        under = hasUnder ? max(bottom, underEdge)! + underAscent : null;
     if (over != null && !over.isFinite || under != null && !under.isFinite) {
       ForumBodyInlineEmphasisRowPlacementPreparation._invalid();
     }

@@ -64,9 +64,6 @@ sealed class ForumBodyRubyAtomRequest {
   ) = ForumBodyRubySoftSpaceAtomRequest;
   const factory ForumBodyRubyAtomRequest.tree(ForumBodyRubyTreeInput value) =
       ForumBodyRubyTreeAtomRequest;
-  const factory ForumBodyRubyAtomRequest.emphasisTree(
-    ForumBodyRubyGlyphTreeInput value,
-  ) = ForumBodyRubyTreeEmphasisAtomRequest;
   List<ForumBodyTextRequest> get nativeRequests;
   ForumBodyRubyContainerBackground? get background;
   ForumBodyRubyRootBoxInput? get rootBox;
@@ -92,26 +89,6 @@ final class ForumBodyTextBaselineAtomRequest extends ForumBodyRubyAtomRequest {
   ForumBodyRubyAtomRequest mapRequests(
     ForumBodyTextRequest Function(ForumBodyTextRequest) map,
   ) => ForumBodyTextBaselineAtomRequest(map(text), shift, maxWidth);
-}
-
-final class ForumBodyRubyTreeEmphasisAtomRequest
-    extends ForumBodyRubyAtomRequest {
-  const ForumBodyRubyTreeEmphasisAtomRequest(this.value);
-  final ForumBodyRubyGlyphTreeInput value;
-  @override
-  List<ForumBodyTextRequest> get nativeRequests => value.glyphRequests;
-  @override
-  ForumBodyRubyContainerBackground? get background => null;
-  @override
-  ForumBodyRubyRootBoxInput get rootBox => value.sourceTree.rootGroup.font;
-  @override
-  int get extraTextCodeUnits => value.extraTextCodeUnits;
-  @override
-  int get extraRuns => value.extraRuns;
-  @override
-  ForumBodyRubyAtomRequest mapRequests(
-    ForumBodyTextRequest Function(ForumBodyTextRequest) map,
-  ) => ForumBodyRubyTreeEmphasisAtomRequest(value.mapGlyphRequests(map));
 }
 
 final class ForumBodyRubyTreeAtomRequest extends ForumBodyRubyAtomRequest {

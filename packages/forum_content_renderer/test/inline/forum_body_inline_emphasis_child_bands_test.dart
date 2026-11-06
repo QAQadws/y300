@@ -189,10 +189,6 @@ List<Object?> _values(ForumBodyInlineEmphasisChildBands value) => [
             b.baseBottom,
             b.overEdge,
             b.underEdge,
-            b.overBaseline,
-            b.underBaseline,
-            b.overAnnotationMarkerBounds,
-            b.underAnnotationMarkerBounds,
           ],
 ];
 

@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/painting.dart';
 import '../inline/forum_body_ruby_group_preparation.dart';
-import '../inline/forum_body_ruby_atom_plan.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import 'forum_body_prepared_text_fragment.dart';
 import 'forum_body_inline_page_preparation.dart';
@@ -123,11 +122,7 @@ final class ForumBodyTextPagePreparation {
             input is ForumBodyListItemPageContent ||
             input is ForumBodyImagePageContent ||
             input is ForumBodyEmphasisPageContent ||
-            (input is ForumBodyInlinePageContent &&
-                (input.fontFrames != null ||
-                    input.rubyAtoms.any(
-                      (atom) => atom is ForumBodyRubyTreeEmphasisAtomPlan,
-                    ))),
+            (input is ForumBodyInlinePageContent && input.fontFrames != null),
       );
   ForumBodyParagraphCache? _cache;
   final ForumBodyTextPageSnapshot snapshot;

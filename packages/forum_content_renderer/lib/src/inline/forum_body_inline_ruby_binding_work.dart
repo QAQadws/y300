@@ -12,7 +12,6 @@ final class _RubyBindingWork {
     ForumBodyRubySegmentLayout? segment,
     ForumBodyRubySoftSpaceLayout? space,
     ForumBodyRubyTreeLayout? tree,
-    ForumBodyRubyTreeEmphasisLayout? emphasisTree,
     required void Function(ForumBodyNativeParagraphLease) own,
   }) : _cursor = content.openAtomicContexts(index),
        _group = group,
@@ -22,9 +21,7 @@ final class _RubyBindingWork {
        _segment = segment,
        _space = space,
        _tree = tree,
-       _emphasisTree = emphasisTree,
-       _treeLeases =
-           (tree?.nativeLeases ?? emphasisTree?.nativeLeases)?.iterator,
+       _treeLeases = tree?.nativeLeases.iterator,
        _members = segment?.inspectMembers(),
        _own = own;
   ForumBodyInlineAtomicContextCursor? _cursor;
@@ -39,7 +36,6 @@ final class _RubyBindingWork {
   ForumBodyRubySegmentLayout? _segment;
   ForumBodyRubySoftSpaceLayout? _space;
   ForumBodyRubyTreeLayout? _tree;
-  ForumBodyRubyTreeEmphasisLayout? _emphasisTree;
   Iterator<ForumBodyNativeParagraphLease>? _treeLeases;
   bool _treeLeasesDone = false;
   Map<int, ForumBodyInlineContext> _treeWindows = {};
@@ -94,8 +90,7 @@ final class _RubyBindingWork {
         final window = _cursor!.resolve(text.content);
         _cursor!.finish();
         _result = _BaselineTextBinding(text, window);
-      } else if (_tree != null || _emphasisTree != null) {
-        _emphasisTree?.ensureActive();
+      } else if (_tree case final tree?) {
         if (!_treeLeasesDone) {
           if (_treeLeases!.moveNext()) {
             _own!(_treeLeases!.current);
@@ -103,22 +98,12 @@ final class _RubyBindingWork {
             _treeLeasesDone = true;
           }
         }
-        final tree = _tree, emphasis = _emphasisTree;
-        final length = tree?.members.length ?? emphasis!.sources.length;
-        if (_treeMember < length) {
-          if (tree != null) {
-            final member = tree.members[_treeMember++];
-            _treeWindows[member.nodeIndex] = _cursor!.resolve(member.content);
-          } else {
-            final source = emphasis!.sources[_treeMember++].source;
-            _treeWindows[source.id] = _cursor!.resolve(source.content);
-          }
+        if (_treeMember < tree.members.length) {
+          final member = tree.members[_treeMember++];
+          _treeWindows[member.nodeIndex] = _cursor!.resolve(member.content);
         } else if (_treeLeasesDone) {
           _cursor!.finish();
-          final windows = UnmodifiableMapView(_treeWindows);
-          _result = tree != null
-              ? _RubyTreeBinding(tree, windows)
-              : _RubyEmphasisTreeBinding(emphasis!, windows);
+          _result = _RubyTreeBinding(tree, UnmodifiableMapView(_treeWindows));
         }
       } else if (_space != null) {
         if (_spaceWindows.length < _space!.contents.length) {
@@ -214,7 +199,6 @@ final class _RubyBindingWork {
     _segment = null;
     _space = null;
     _tree = null;
-    _emphasisTree = null;
     _treeLeases = null;
     _treeWindows = {};
     _members = null;

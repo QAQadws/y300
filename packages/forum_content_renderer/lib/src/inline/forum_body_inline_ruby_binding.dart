@@ -166,56 +166,6 @@ final class _RubyTreeBinding extends _RubyBinding {
 
 /// The complete scene already qualifies actual glyphs and markers. This second
 /// binding associates each original current source with its real parent window.
-final class _RubyEmphasisTreeBinding extends _RubyBinding {
-  const _RubyEmphasisTreeBinding(this.tree, this.windows);
-  final ForumBodyRubyTreeEmphasisLayout tree;
-  final Map<int, ForumBodyInlineContext> windows;
-  @override
-  Size get size => tree.size;
-  @override
-  double get baseline => tree.baseline;
-  @override
-  bool get isActive => tree.isActive;
-  @override
-  bool get checksExternalOwner => true;
-  @override
-  void ensureActive() => tree.ensureActive();
-  @override
-  Iterable<ForumBodyNativeParagraphLease> get nativeLeases => tree.nativeLeases;
-  @override
-  void paint(Canvas canvas, Offset offset) => tree.paint(canvas, offset);
-  @override
-  _RubySourceHit sourceAt(Offset point) {
-    final hit = tree.sourceAt(point);
-    return (window: windows[hit.nodeIndex]!, position: hit.position);
-  }
-
-  @override
-  List<TextBox> selectionBoxes(int start, int end) =>
-      _boxes(start, end, paintedOnly: false);
-  @override
-  List<TextBox> glyphBoxes(int start, int end) =>
-      _boxes(start, end, paintedOnly: true);
-  List<TextBox> _boxes(int start, int end, {required bool paintedOnly}) => [
-    for (final bound in tree.sources)
-      ..._selectRubyWindow(
-        windows[bound.source.id],
-        start,
-        end,
-        (from, to) => tree.selectionBoxes(
-          sourceId: bound.source.id,
-          startUtf16: from,
-          endUtf16: to,
-          paintedOnly: paintedOnly,
-        ),
-      ),
-  ];
-  @override
-  void close() => tree.close();
-}
-
-/// Root leading translates the complete child once; annotation stacking and
-/// current source windows remain the child's own immutable geometry.
 final class _RubyRootFrameBinding extends _RubyBinding {
   const _RubyRootFrameBinding(this.child, this.frame, this.rowAllocation);
   final _RubyBinding child;

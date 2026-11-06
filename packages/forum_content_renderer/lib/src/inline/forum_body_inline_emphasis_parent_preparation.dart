@@ -36,7 +36,7 @@ final class ForumBodyInlineEmphasisParentMetrics {
   final double requestWidth;
   Map<double, double> get effectiveScales =>
       (textScaler as _CapturedInlineScaler).values;
-  ForumBodyInlinePageContent get page => reflow.children.page;
+  ForumBodyInlinePageContent get page => reflow.placement.input.page;
   ForumBodyInlineEmphasisTextInput get text => geometry.input;
   ForumBodyInlineParagraphRequest get parentRequest =>
       ForumBodyInlineParagraphRequest(

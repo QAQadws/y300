@@ -23,9 +23,6 @@ import '../paragraph/forum_body_paragraph_content.dart';
 import '../flow/forum_body_inline_flow_content.dart';
 import 'forum_body_inline_source_preparation.dart';
 import 'forum_body_ruby_tree_metrics_preparation.dart';
-import 'forum_body_ruby_tree_input.dart';
-import 'forum_body_emphasis_line_layout.dart';
-import 'forum_body_ruby_tree_emphasis_format_preparation.dart';
 
 part 'forum_body_intrinsic_inline_metrics.dart';
 
@@ -119,11 +116,6 @@ final class ForumBodyInlinePlanPreparation {
   ForumBodyRubySegmentMetricsPreparation? _segment;
   ForumBodyRubySoftSpacePreparation? _space;
   ForumBodyRubyTreeMetricsPreparation? _tree;
-  ForumBodyRubyGlyphTreeMetricsPreparation? _glyph;
-  ForumBodyRubyGlyphTreeMetrics? _glyphCurrent, _alignedGlyph;
-  ForumBodyRubyTreeEmphasisFormatPreparation? _format, _reformat;
-  final _glyphSnapshots = <int, ForumBodyRubyGlyphTreeMetrics>{};
-  final _emphasisFormats = <int, ForumBodyRubyTreeEmphasisPlan>{};
   final _atomPlans = <ForumBodyRubyAtomPlan>[];
   final _dimensions = <PlaceholderDimensions>[];
   final _treeSnapshots = <int, ForumBodyRubyTreeMetrics>{};
@@ -146,9 +138,6 @@ final class ForumBodyInlinePlanPreparation {
     if (_segment != null) ..._segment!.nativeLeases,
     if (_space != null) ..._space!.nativeLeases,
     if (_tree != null) ..._tree!.nativeLeases,
-    if (_glyph != null) ..._glyph!.nativeLeases,
-    if (_format != null) ..._format!.nativeLeases,
-    if (_reformat != null) ..._reformat!.nativeLeases,
   ];
 
   ({int partsPrepared, bool isReady, bool waitingForLayoutBudget}) advance({
@@ -191,7 +180,6 @@ final class ForumBodyInlinePlanPreparation {
         final request = _input!.atoms[_metrics.length];
         final root = request.rootBox;
         if (request is! ForumBodyRubyTreeAtomRequest &&
-            request is! ForumBodyRubyTreeEmphasisAtomRequest &&
             root != null &&
             !_rootFonts.containsKey(root)) {
           final step = _prepareFont(root.fontStrut, (height, baseline) {
@@ -253,8 +241,6 @@ final class ForumBodyInlinePlanPreparation {
           // finalization cannot throw a native band isolation exception.
           final count = _pair?.preparedPartCount;
           final failed =
-              _glyph?.failedRequest ??
-              _format?.failedRequest ??
               _tree?.failedRequest ??
               _space?.failedRequest ??
               _segment?.failedRequest ??
@@ -278,14 +264,6 @@ final class ForumBodyInlinePlanPreparation {
             // float rounding cannot repeatedly miss the isolation boundary.
             retry ? (hint + 1).clamp(1.0, 16384.0) : null,
           );
-          if (_input!.hasEmphasisTrees) {
-            // Shared glyph bands may include already measured earlier atoms.
-            // Their complete format keys/positions cannot survive remapping.
-            _metrics.clear();
-            _treeSnapshots.clear();
-            _glyphSnapshots.clear();
-            _emphasisFormats.clear();
-          }
           // A failed native band never triggers another shape in this unit.
           parts++;
           break;
@@ -397,50 +375,6 @@ final class ForumBodyInlinePlanPreparation {
           waitingForLayoutBudget: step.waitingForLayoutBudget,
           formatUnitsPrepared: step.partsPrepared,
         );
-      case ForumBodyRubyTreeEmphasisAtomRequest(:final value):
-        if (_glyphCurrent == null) {
-          final job = _glyph ??= ForumBodyRubyGlyphTreeMetricsPreparation(
-            input: value,
-            cache: _cache!,
-            ensureOwner: _guard,
-            textScaler: _textScaler!,
-            additionalOwnedLeases: _ownedPrefix,
-          );
-          final step = job.advance(maxParts: maxParts, cachedOnly: cachedOnly);
-          _cacheMiss = job.cacheMiss;
-          if (job.isReady) {
-            final metrics = job.takeMetrics();
-            _guard();
-            _glyphCurrent = metrics;
-            _glyph = null;
-            job.close();
-            _rootFonts[value.sourceTree.rootGroup.font] =
-                ForumBodyRubyRootFontBox(
-                  input: value.sourceTree.rootGroup.font,
-                  height: metrics.root.font.height,
-                  alphabeticBaseline: metrics.root.font.alphabeticBaseline,
-                );
-          }
-          return step;
-        }
-        final job = _format ??= ForumBodyRubyTreeEmphasisFormatPreparation(
-          glyphMetrics: _glyphCurrent!,
-          cache: _cache!,
-          ensureOwner: _guard,
-          expectedTextScaler: _textScaler!,
-          additionalOwnedLeases: _ownedPrefix,
-        );
-        final step = job.advance(maxParts: maxParts, cachedOnly: cachedOnly);
-        _cacheMiss = job.cacheMiss;
-        if (job.isReady) {
-          final plan = job.takePlan();
-          _guard();
-          _glyphSnapshots[_metrics.length] = _glyphCurrent!;
-          _emphasisFormats[_metrics.length] = plan;
-          _metrics.add(_glyphCurrent!.rootAtom);
-          _closeMetric();
-        }
-        return step;
       case ForumBodyRubyTreeAtomRequest(:final value):
         final tree = _tree ??= ForumBodyRubyTreeMetricsPreparation(
           input: value,
@@ -614,11 +548,6 @@ final class ForumBodyInlinePlanPreparation {
   }
 
   void _closeMetric() {
-    _glyph?.close();
-    _glyph = null;
-    _glyphCurrent = null;
-    _format?.close();
-    _format = null;
     _tree?.close();
     _tree = null;
     _pair?.close();
@@ -643,10 +572,6 @@ final class ForumBodyInlinePlanPreparation {
       atomOffsets: _input!.atomEngineOffsets,
       rootFonts: [
         for (final request in _input!.atoms) _rootFonts[request.rootBox],
-      ],
-      discoveryDimensions: [
-        for (var index = 0; index < _input!.atoms.length; index++)
-          _emphasisFormats[index]?.frame.dimensions,
       ],
     );
     var parts = 0;
@@ -678,21 +603,11 @@ final class ForumBodyInlinePlanPreparation {
       return (partsPrepared: parts + 1, waitingForLayoutBudget: false);
     }
     if (_atomPlans.length < _input!.atoms.length) {
-      final step = _advancePlans(
-        alignment,
-        maxParts: maxParts - parts,
-        cachedOnly: cachedOnly,
-      );
-      parts += step.partsPrepared;
+      parts += _advancePlans(alignment, maxParts: maxParts - parts);
       if (_atomPlans.length < _input!.atoms.length ||
-          step.waitingForLayoutBudget ||
           _cacheMiss ||
-          parts == maxParts ||
-          step.nativeBuilt) {
-        return (
-          partsPrepared: parts,
-          waitingForLayoutBudget: step.waitingForLayoutBudget,
-        );
+          parts == maxParts) {
+        return (partsPrepared: parts, waitingForLayoutBudget: false);
       }
     }
     if (!alignment.requiresFinalParent) {
@@ -821,157 +736,82 @@ final class ForumBodyInlinePlanPreparation {
     _state = _State.ready;
   }
 
-  ({int partsPrepared, bool waitingForLayoutBudget, bool nativeBuilt})
-  _advancePlans(
+  int _advancePlans(
     ForumBodyRubyRowAlignment alignment, {
     required int maxParts,
-    required bool cachedOnly,
   }) {
-    var parts = 0, waiting = false;
-    final cache = _cache!, before = cache.layoutBuildCount;
+    var parts = 0;
     while (_atomPlans.length < _input!.atoms.length && parts < maxParts) {
       final index = _atomPlans.length, request = _input!.atoms[index];
-      if (request is ForumBodyRubyTreeEmphasisAtomRequest) {
-        if (_alignedGlyph == null) {
-          final previous = _glyphSnapshots[index]!;
-          final current = previous.withAlignedRoot(alignment.results[index]);
-          if (identical(previous, current)) {
-            _appendEmphasis(request, _emphasisFormats[index]!);
-          } else {
-            _alignedGlyph = current;
-            _reformat = ForumBodyRubyTreeEmphasisFormatPreparation(
-              glyphMetrics: current,
-              cache: cache,
-              ensureOwner: _guard,
-              expectedTextScaler: _textScaler!,
-              additionalOwnedLeases: _ownedPrefix,
-            );
-          }
-          parts++;
-        } else {
-          final job = _reformat!,
-              step = job.advance(
-                maxParts: maxParts - parts,
-                cachedOnly: cachedOnly,
-              );
-          parts += step.formatUnitsPrepared;
-          _cacheMiss = job.cacheMiss;
-          waiting = step.waitingForLayoutBudget;
-          _guard();
-          if (job.isReady) {
-            final plan = job.takePlan();
-            _guard();
-            _appendEmphasis(request, plan);
-            _reformat = null;
-            _alignedGlyph = null;
-            job.close();
-          }
-          if (step.formatUnitsPrepared == 0 ||
-              waiting ||
-              _cacheMiss ||
-              cache.layoutBuildCount != before) {
-            break;
-          }
-        }
-      } else {
-        _atomPlans.add(switch ((request, alignment.results[index])) {
-          (
-            ForumBodyInlineImageAtomRequest(:final input),
-            ForumBodyInlineImageAtomMetrics(),
-          ) =>
-            ForumBodyInlineImageAtomPlan(input: input, maxWidth: width),
-          (
-            ForumBodyIntrinsicInlineAtomRequest(),
-            ForumBodyIntrinsicInlineAtomMetrics(),
-          ) =>
-            ForumBodyIntrinsicInlineAtomPlan(
-              metrics: _inlineBoxes[index]!,
-              maxWidth: width,
-            ),
-          (
-            ForumBodyTextBaselineAtomRequest(:final text, :final maxWidth),
-            ForumBodyTextBaselineAtomMetrics(:final value),
-          ) =>
-            ForumBodyRubyAtomPlan.textBaseline(
-              request: text,
-              metrics: value,
-              maxWidth: maxWidth,
-            ),
-          (
-            ForumBodyRubyTreeAtomRequest(:final value),
-            ForumBodyRubyComponentMetrics(value: final metrics),
-          ) =>
-            ForumBodyRubyAtomPlan.tree(
-              request: value,
-              metrics: _treeSnapshots[index]!
-                  .rebindInput(value)
-                  .withRootSegment(metrics),
-            ),
-          (
-            ForumBodyRubyTreeAtomRequest(:final value),
-            ForumBodyRubyColumnMetrics(value: final metrics),
-          ) =>
-            ForumBodyRubyAtomPlan.tree(
-              request: value,
-              metrics: _treeSnapshots[index]!
-                  .rebindInput(value)
-                  .withRootGroup(metrics),
-            ),
-          (
-            ForumBodyRubyColumnAtomRequest(:final value),
-            ForumBodyRubyColumnMetrics(value: final metrics),
-          ) =>
-            ForumBodyRubyAtomPlan.column(
-              request: value,
-              level: alignment.targets[index],
-              metrics: metrics,
-            ),
-          (
-            ForumBodyRubySegmentAtomRequest(:final value),
-            ForumBodyRubyComponentMetrics(value: final metrics),
-          ) =>
-            ForumBodyRubyAtomPlan.segment(request: value, metrics: metrics),
-          (
-            ForumBodyRubySoftSpaceAtomRequest(:final value),
-            ForumBodyRubySpaceMetrics(value: final metrics),
-          ) =>
-            ForumBodyRubyAtomPlan.softSpace(request: value, metrics: metrics),
-          _ => throw StateError('Inline numeric/request atom kinds differ'),
-        });
-        _dimensions.add(alignment.dimensions[index]);
-        parts++;
-      }
+      _atomPlans.add(switch ((request, alignment.results[index])) {
+        (
+          ForumBodyInlineImageAtomRequest(:final input),
+          ForumBodyInlineImageAtomMetrics(),
+        ) =>
+          ForumBodyInlineImageAtomPlan(input: input, maxWidth: width),
+        (
+          ForumBodyIntrinsicInlineAtomRequest(),
+          ForumBodyIntrinsicInlineAtomMetrics(),
+        ) =>
+          ForumBodyIntrinsicInlineAtomPlan(
+            metrics: _inlineBoxes[index]!,
+            maxWidth: width,
+          ),
+        (
+          ForumBodyTextBaselineAtomRequest(:final text, :final maxWidth),
+          ForumBodyTextBaselineAtomMetrics(:final value),
+        ) =>
+          ForumBodyRubyAtomPlan.textBaseline(
+            request: text,
+            metrics: value,
+            maxWidth: maxWidth,
+          ),
+        (
+          ForumBodyRubyTreeAtomRequest(:final value),
+          ForumBodyRubyComponentMetrics(value: final metrics),
+        ) =>
+          ForumBodyRubyAtomPlan.tree(
+            request: value,
+            metrics: _treeSnapshots[index]!
+                .rebindInput(value)
+                .withRootSegment(metrics),
+          ),
+        (
+          ForumBodyRubyTreeAtomRequest(:final value),
+          ForumBodyRubyColumnMetrics(value: final metrics),
+        ) =>
+          ForumBodyRubyAtomPlan.tree(
+            request: value,
+            metrics: _treeSnapshots[index]!
+                .rebindInput(value)
+                .withRootGroup(metrics),
+          ),
+        (
+          ForumBodyRubyColumnAtomRequest(:final value),
+          ForumBodyRubyColumnMetrics(value: final metrics),
+        ) =>
+          ForumBodyRubyAtomPlan.column(
+            request: value,
+            level: alignment.targets[index],
+            metrics: metrics,
+          ),
+        (
+          ForumBodyRubySegmentAtomRequest(:final value),
+          ForumBodyRubyComponentMetrics(value: final metrics),
+        ) =>
+          ForumBodyRubyAtomPlan.segment(request: value, metrics: metrics),
+        (
+          ForumBodyRubySoftSpaceAtomRequest(:final value),
+          ForumBodyRubySpaceMetrics(value: final metrics),
+        ) =>
+          ForumBodyRubyAtomPlan.softSpace(request: value, metrics: metrics),
+        _ => throw StateError('Inline numeric/request atom kinds differ'),
+      });
+      _dimensions.add(alignment.dimensions[index]);
+      parts++;
       _guard();
     }
-    return (
-      partsPrepared: parts,
-      waitingForLayoutBudget: waiting,
-      nativeBuilt: cache.layoutBuildCount != before,
-    );
-  }
-
-  void _appendEmphasis(
-    ForumBodyRubyTreeEmphasisAtomRequest request,
-    ForumBodyRubyTreeEmphasisPlan plan,
-  ) {
-    final index = _atomPlans.length, initial = _emphasisFormats[index]!;
-    if ((plan.frame.size.width - initial.frame.size.width).abs() >
-        ForumBodyRubyGroupMetrics.geometryTolerance) {
-      throw const ForumBodyEmphasisLineException(
-        ForumBodyEmphasisLineFailure.geometry,
-      );
-    }
-    _atomPlans.add(
-      ForumBodyRubyAtomPlan.emphasisTree(request: request.value, format: plan),
-    );
-    _dimensions.add(
-      _rootFonts[request.rootBox]!
-          .enclose(
-            childSize: plan.frame.size,
-            childBaseline: plan.frame.baseline,
-          )
-          .dimensions,
-    );
+    return parts;
   }
 
   ({ForumBodyInlinePageContent content, ForumBodyInlineParagraphLease lease})
@@ -1098,13 +938,8 @@ final class ForumBodyInlinePlanPreparation {
     _validateInput = null;
     _treeSnapshots.clear();
     _inlineBoxes.clear();
-    _glyphSnapshots.clear();
-    _emphasisFormats.clear();
     _atomPlans.clear();
     _dimensions.clear();
-    _reformat?.close();
-    _reformat = null;
-    _alignedGlyph = null;
     _closeMetric();
     _parent?.release();
     _parent = null;

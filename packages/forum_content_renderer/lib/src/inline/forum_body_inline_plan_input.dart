@@ -20,7 +20,6 @@ import 'forum_body_ruby_whitespace.dart';
 import 'forum_body_inline_text_window.dart';
 import 'forum_body_text_band_content.dart';
 import 'forum_body_ruby_tree_input.dart';
-import 'forum_body_emphasis_mark.dart';
 import 'forum_body_inline_image_input.dart';
 
 part 'forum_body_intrinsic_text_input.dart';
@@ -46,14 +45,12 @@ final class ForumBodyInlinePlanInput {
              .atoms
              .map((atom) => atom.engineUtf16),
        );
-  static const revision = 31;
+  static const revision = 32;
 
   factory ForumBodyInlinePlanInput(
     ForumBodyInlineFlowContent input,
     double width, {
     Map<ForumBodyRubyGroupContent, ForumBodyRubyTreeInput> trees = const {},
-    Map<ForumBodyRubyGroupContent, ForumBodyRubyGlyphTreeInput> emphasisTrees =
-        const {},
     bool groupMixedWords = true,
     ForumBodyInlinePlanInput? prefix,
     bool keepTrailingSpace = false,
@@ -453,12 +450,10 @@ final class ForumBodyInlinePlanInput {
               group.rootPath,
             );
           }
-          final glyphs = emphasisTrees[group];
-          final tree = trees[group] ?? glyphs?.sourceTree;
+          final tree = trees[group];
           if (tree != null) {
             if (!identical(tree.rootGroup.group, group) ||
-                tree.maxWidth != width ||
-                (glyphs != null && !identical(glyphs.sourceTree, tree))) {
+                tree.maxWidth != width) {
               throw ForumBodyParagraphInputException(
                 ForumBodyParagraphInputFailure.identity,
                 group.rootPath,
@@ -472,11 +467,7 @@ final class ForumBodyInlinePlanInput {
             }
             if (start == offset) _unsupported(group.rootPath);
             atoms.add((startUtf16: start, endUtf16: offset));
-            requestsByAtom.add(
-              glyphs == null
-                  ? ForumBodyRubyAtomRequest.tree(tree)
-                  : ForumBodyRubyAtomRequest.emphasisTree(glyphs),
-            );
+            requestsByAtom.add(ForumBodyRubyAtomRequest.tree(tree));
             levelIds.add(levelId);
             previousCollapsibleSpace = false;
             atLineStart = false;
@@ -878,7 +869,6 @@ final class ForumBodyInlinePlanInput {
         input,
         width,
         trees: trees,
-        emphasisTrees: emphasisTrees,
         groupMixedWords: false,
         prefix: prefix,
         keepTrailingSpace: keepTrailingSpace,
@@ -924,22 +914,14 @@ final class ForumBodyInlinePlanInput {
       maxContexts: maxParentContexts,
     );
     final glyphContexts = Set<ForumBodyParagraphContent>.identity();
-    final derived =
-        Map<ForumBodyParagraphContent, ForumBodyParagraphContent>.identity();
     for (final atom in requestsByAtom) {
       glyphContexts.addAll(atom.nativeRequests.map((r) => r.content));
-      if (atom is ForumBodyRubyTreeEmphasisAtomRequest) {
-        for (final source in atom.value.sources) {
-          if (source.needsNative) derived[source.content] = source.glyphs;
-        }
-      }
     }
     final requests = _requests([
       // Batch children in the same explicit ORIGINAL source order as the parent
       // projection, not their reordered display columns. Never sort or rebase.
       for (final index in sourceOrder)
-        if (glyphContexts.contains(derived[contexts[index]] ?? contexts[index]))
-          derived[contexts[index]] ?? contexts[index],
+        if (glyphContexts.contains(contexts[index])) contexts[index],
       for (final atom in requestsByAtom)
         for (final request in atom.nativeRequests)
           if (request.content.isSourceFree) request.content,
@@ -980,9 +962,6 @@ final class ForumBodyInlinePlanInput {
 
   final int retainedTextCodeUnits;
   final int retainedRuns;
-  late final hasEmphasisTrees = atoms.any(
-    (atom) => atom is ForumBodyRubyTreeEmphasisAtomRequest,
-  );
   Iterable<double> get nativeFontSizes sync* {
     yield content.style.textStyle.fontSize!;
     for (final run in content.runs) {
@@ -1017,7 +996,6 @@ final class ForumBodyInlinePlanInput {
       }
       final tree = switch (atom) {
         ForumBodyRubyTreeAtomRequest(:final value) => value,
-        ForumBodyRubyTreeEmphasisAtomRequest(:final value) => value.sourceTree,
         _ => null,
       };
       if (tree != null) {
@@ -1030,23 +1008,6 @@ final class ForumBodyInlinePlanInput {
           }
           if (node is ForumBodyRubyTreeInline) {
             yield* node.input.nativeFontSizes;
-          }
-        }
-      }
-      if (atom is ForumBodyRubyTreeEmphasisAtomRequest) {
-        for (final source in atom.value.sources) {
-          // Empty RTs have no glyph request but still contribute actual natural
-          // font samples to a containing inline parent's frozen scaler.
-          yield source.content.style.textStyle.fontSize!;
-          for (final run in source.content.runs) {
-            yield run.style.textStyle.fontSize!;
-          }
-          final emphasis = source.emphasis;
-          if (emphasis == null) continue;
-          for (final unit in emphasis.units) {
-            yield ForumBodyEmphasisMarkInput.resolveFontSize(
-              source.content.runs[unit.runIndex].style.textStyle,
-            );
           }
         }
       }

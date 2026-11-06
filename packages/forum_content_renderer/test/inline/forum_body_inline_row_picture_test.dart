@@ -375,7 +375,7 @@ void main() {
           addTearDown(markers.close);
           final a = s.allocation,
               m = a.input.natural,
-              placement = m.reflow.children.placement,
+              placement = m.reflow.placement,
               byKey = {
                 for (final font in markers.fonts)
                   font.nativeInputIdentity: font,

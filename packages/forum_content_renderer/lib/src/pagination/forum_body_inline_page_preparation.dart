@@ -18,7 +18,8 @@ import '../inline/forum_body_ruby_segment_layout.dart';
 import '../inline/forum_body_ruby_segment_preparation.dart';
 import '../inline/forum_body_ruby_soft_space_layout.dart';
 import '../inline/forum_body_ruby_tree_layout.dart';
-import '../inline/forum_body_emphasis_line_layout.dart';
+import '../inline/forum_body_emphasis_line_layout.dart'
+    show ForumBodyEmphasisLineStep;
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_layout.dart';
 import '../paragraph/forum_body_native_budget_input.dart';
@@ -157,13 +158,11 @@ final class ForumBodyInlinePagePreparation {
   final _segments = <int, ForumBodyRubySegmentLayout>{};
   final _spaces = <int, ForumBodyRubySoftSpaceLayout>{};
   final _trees = <int, ForumBodyRubyTreeLayout>{};
-  final _emphasisTrees = <int, ForumBodyRubyTreeEmphasisLayout>{};
   int _nextGroup = 0;
   ForumBodyRubyGroupPreparation? _pair;
   ForumBodyRubySegmentPreparation? _component;
   ForumBodyRubySoftSpacePreparation? _space;
   ForumBodyRubyTreePreparation? _tree;
-  ForumBodyRubyTreeEmphasisScenePreparation? _emphasisTree;
   ForumBodyInlineViewAssembly? _binding;
   bool _validatingParent = false;
   var _parentAtom = 0;
@@ -186,12 +185,10 @@ final class ForumBodyInlinePagePreparation {
     for (final segment in _segments.values) ...segment.nativeLeases,
     for (final space in _spaces.values) ...space.nativeLeases,
     for (final tree in _trees.values) ...tree.nativeLeases,
-    for (final tree in _emphasisTrees.values) ...tree.nativeLeases,
     if (_pair != null) ..._pair!.nativeLeases,
     if (_component != null) ..._component!.nativeLeases,
     if (_space != null) ..._space!.nativeLeases,
     if (_tree != null) ..._tree!.nativeLeases,
-    if (_emphasisTree != null) ..._emphasisTree!.nativeLeases,
     if (_binding != null) ..._binding!.nativeLeases,
   ];
 
@@ -312,9 +309,6 @@ final class ForumBodyInlinePagePreparation {
           _nextGroup++;
           return (cacheMiss: false, view: null);
         }
-        if (atom is ForumBodyRubyTreeEmphasisAtomPlan) {
-          return _advanceEmphasisTree(index, atom, cachedOnly, maxParts);
-        }
         if (atom is ForumBodyRubyTreePlan) {
           return _advanceTree(index, atom, cachedOnly, maxParts);
         }
@@ -363,7 +357,6 @@ final class ForumBodyInlinePagePreparation {
         rubySegments: _segments,
         rubySpaces: _spaces,
         rubyTrees: _trees,
-        rubyEmphasisTrees: _emphasisTrees,
         containerBackgrounds: input.containerBackgrounds,
         rootFonts: input.rootFonts,
         ensureOwner: _guard,
@@ -375,39 +368,10 @@ final class ForumBodyInlinePagePreparation {
       _segments.clear();
       _spaces.clear();
       _trees.clear();
-      _emphasisTrees.clear();
       return _advanceBinding(maxParts);
     } finally {
       _advancing = false;
     }
-  }
-
-  ({bool cacheMiss, ForumBodyInlineParagraphView? view}) _advanceEmphasisTree(
-    int index,
-    ForumBodyRubyTreeEmphasisAtomPlan atom,
-    bool cachedOnly,
-    int maxParts,
-  ) {
-    final job = _emphasisTree ??= ForumBodyRubyTreeEmphasisScenePreparation(
-      input: atom.request,
-      plan: atom.format,
-      cache: _cache!,
-      ensureOwner: _guard,
-      ensureVisibleOwner: _ensureVisibleOwner!,
-      width: atom.maxWidth,
-      expectedTextScaler: _textScaler!,
-      additionalOwnedLeases: _ownedPageLeases,
-    );
-    final step = job.advance(maxParts: maxParts, cachedOnly: cachedOnly);
-    _workCount += step.partsPrepared;
-    _guard();
-    _waiting = step.waitingForLayoutBudget;
-    if (!job.isReady) return (cacheMiss: job.cacheMiss, view: null);
-    _emphasisTrees[index] = job.takeLayout();
-    _emphasisTree = null;
-    job.close();
-    _nextGroup++;
-    return (cacheMiss: false, view: null);
   }
 
   ({bool cacheMiss, ForumBodyInlineParagraphView? view}) _advanceTree(
@@ -667,16 +631,10 @@ final class ForumBodyInlinePagePreparation {
     _space = null;
     _tree?.close();
     _tree = null;
-    _emphasisTree?.close();
-    _emphasisTree = null;
     for (final tree in _trees.values) {
       tree.close();
     }
     _trees.clear();
-    for (final tree in _emphasisTrees.values) {
-      tree.close();
-    }
-    _emphasisTrees.clear();
     for (final group in _groups.values) {
       group.close();
     }

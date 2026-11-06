@@ -1,18 +1,9 @@
 import 'dart:collection';
-import 'dart:math' as math;
-
-import 'package:flutter/painting.dart';
-import 'package:html_pagination_core/html_pagination_core.dart'
-    show HtmlProjectedSourcePosition;
 
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_text_request.dart';
-import '../paragraph/forum_body_native_request.dart';
-import '../paragraph/forum_body_paragraph_cache.dart';
-import '../paragraph/forum_body_text_request_preparation.dart';
 import '../style/forum_body_style_options.dart';
 import 'forum_body_inline_text_window.dart';
-import 'forum_body_inline_paint_command.dart';
 import 'forum_body_ruby_annotation_input.dart';
 import 'forum_body_ruby_annotation_pairing.dart';
 import 'forum_body_ruby_child_input.dart';
@@ -23,27 +14,8 @@ import 'forum_body_ruby_root_box.dart';
 import 'forum_body_inline_plan_input.dart';
 import 'forum_body_inline_source_preparation.dart';
 import 'forum_body_ruby_whitespace.dart';
-import 'forum_body_emphasis_text_input.dart';
-import 'forum_body_ruby_group_metrics.dart';
-import 'forum_body_ruby_group_preparation.dart';
-import 'forum_body_ruby_tree_metrics_preparation.dart';
-import 'forum_body_ruby_tree_child_geometry.dart';
-import 'forum_body_ruby_tree_layout.dart';
-import 'forum_body_emphasis_line_layout.dart';
-import 'forum_body_emphasis_mark.dart';
-import 'forum_body_text_band_layout.dart';
-import 'forum_body_ruby_band_stack.dart';
 
 part 'forum_body_ruby_tree_segment_input.dart';
-part 'forum_body_ruby_glyph_tree_input.dart';
-part 'forum_body_ruby_glyph_tree_metrics.dart';
-part 'forum_body_ruby_glyph_tree_geometry.dart';
-part 'forum_body_ruby_glyph_tree_bands.dart';
-part 'forum_body_ruby_glyph_tree_binding.dart';
-part 'forum_body_ruby_empty_annotation_fonts.dart';
-part 'forum_body_ruby_tree_emphasis_metrics.dart';
-part 'forum_body_ruby_tree_decoration_bands.dart';
-part 'forum_body_ruby_tree_emphasis_placement.dart';
 
 /// Internal postorder graph of real nested columns and segments. Source leaves
 /// stay in original base/annotation order; their IDs are not DOM offsets.
@@ -177,12 +149,6 @@ final class ForumBodyRubyTreeGroup extends ForumBodyRubyTreeRoot {
     this.base,
     List<({int? child, ForumBodyRubySide side})> annotations,
   ) : annotations = UnmodifiableListView(annotations);
-  ForumBodyRubyTreeGroup._withFont(
-    ForumBodyRubyRootBoxInput font,
-    ForumBodyRubyTreeGroup source,
-  ) : base = source.base,
-      annotations = source.annotations,
-      super(font, source.background, source.group);
   final int base;
   final List<({int? child, ForumBodyRubySide side})> annotations;
 }
@@ -233,19 +199,6 @@ final class ForumBodyRubyTreeSegment extends ForumBodyRubyTreeRoot {
        sides = List.unmodifiable(sides),
        spanRanks = UnmodifiableMapView(spanRanks),
        annotationGapRanks = UnmodifiableMapView(annotationGapRanks);
-  ForumBodyRubyTreeSegment._withFont(
-    ForumBodyRubyRootBoxInput font,
-    ForumBodyRubyTreeSegment source,
-  ) : bases = source.bases,
-      spans = source.spans,
-      gaps = source.gaps,
-      annotationGaps = source.annotationGaps,
-      fences = source.fences,
-      children = source.children,
-      sides = source.sides,
-      spanRanks = source.spanRanks,
-      annotationGapRanks = source.annotationGapRanks,
-      super(font, source.background, source.group);
   final List<int> bases;
   final List<ForumBodyRubyTreeSegmentSpan> spans;
   final List<ForumBodyRubyTreeSegmentGap> gaps;

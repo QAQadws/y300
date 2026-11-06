@@ -2,8 +2,6 @@ import '../flow/forum_body_inline_flow_content.dart';
 import 'forum_body_inline_plan_input.dart';
 import 'forum_body_ruby_content.dart';
 import 'forum_body_ruby_tree_input.dart';
-import '../paragraph/forum_body_paragraph_content.dart';
-import '../style/forum_body_style_options.dart';
 
 part 'forum_body_ruby_source_inspection.dart';
 
@@ -28,12 +26,7 @@ final class ForumBodyInlineSourcePreparation {
   Map<ForumBodyRubyGroupContent, ForumBodyRubyTreeInput> _trees =
       Map.identity();
   ForumBodyRubyTreeInputPreparation? _tree;
-  ForumBodyRubyGlyphTreeInputPreparation? _glyph;
-  final Map<ForumBodyRubyGroupContent, ForumBodyRubyGlyphTreeInput>
-  _emphasisTrees = Map.identity();
   _RubySourceInspection? _inspection;
-  Iterator<bool>? _flags;
-  bool _knownEmphasis = false;
   ForumBodyRubyGroupContent? _group;
   ForumBodyInlinePlanInput? _result;
   int _index = 0;
@@ -49,38 +42,15 @@ final class ForumBodyInlineSourcePreparation {
       _guard();
       var units = 0;
       while (!isReady && units < maxParts) {
-        final tree = _tree, glyph = _glyph, inspection = _inspection;
-        if (glyph != null) {
-          units += glyph.advance(maxParts: maxParts - units);
-          _guard();
-          if (glyph.isReady) {
-            final value = glyph.takeInput();
-            _guard();
-            _emphasisTrees[_group!] = value;
-            glyph.close();
-            _glyph = null;
-            _group = null;
-          }
-        } else if (_flags != null) {
-          if (!_flags!.moveNext()) {
-            _flags = null;
-            _group = null;
-          } else if (_flags!.current) {
-            _projectGlyphs();
-          }
-          units++;
-        } else if (tree != null) {
+        final tree = _tree, inspection = _inspection;
+        if (tree != null) {
           units += tree.advance(maxParts: maxParts - units);
           _guard();
           if (tree.isReady) {
             _trees[_group!] = tree.takeInput();
             tree.close();
             _tree = null;
-            if (_knownEmphasis) {
-              _projectGlyphs();
-            } else {
-              _flags = _rubyTreeEmphasisFlags(_trees[_group!]!).iterator;
-            }
+            _group = null;
           }
         } else if (inspection != null) {
           units += inspection.isComplete
@@ -88,7 +58,6 @@ final class ForumBodyInlineSourcePreparation {
               : inspection.advance(maxParts: maxParts - units);
           _guard();
           if (inspection.isComplete) {
-            _knownEmphasis = inspection.emphasisKnown;
             if (inspection.needsTree) {
               _tree = ForumBodyRubyTreeInputPreparation(
                 group: _group!,
@@ -111,7 +80,6 @@ final class ForumBodyInlineSourcePreparation {
             _input!,
             width,
             trees: _trees,
-            emphasisTrees: _emphasisTrees,
             prefix: _prefix,
             keepTrailingSpace: keepTrailingSpace,
           );
@@ -128,14 +96,6 @@ final class ForumBodyInlineSourcePreparation {
     } finally {
       _operating = false;
     }
-  }
-
-  void _projectGlyphs() {
-    _flags = null;
-    _glyph = ForumBodyRubyGlyphTreeInputPreparation.fromTree(
-      sourceTree: _trees[_group!]!,
-      ensureOwner: _guard,
-    );
   }
 
   ForumBodyInlinePlanInput takeInput() {
@@ -166,11 +126,7 @@ final class ForumBodyInlineSourcePreparation {
     _closed = true;
     _tree?.close();
     _tree = null;
-    _glyph?.close();
-    _glyph = null;
-    _flags = null;
     _inspection = null;
-    _emphasisTrees.clear();
     _input = null;
     _prefix = null;
     _group = null;
