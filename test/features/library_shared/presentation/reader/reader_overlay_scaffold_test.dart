@@ -1,4 +1,8 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 
 import '../../../../test_support/localized_test_app.dart';
 
@@ -276,6 +280,73 @@ void main() {
     expect(bottom.ignoring, isTrue);
   });
 
+  testWidgets('hidden overlays retire their semantics and keyboard focus', (
+    tester,
+  ) async {
+    final controller = ReaderOverlayController();
+    final bodyFocus = FocusNode();
+    addTearDown(controller.dispose);
+    addTearDown(bodyFocus.dispose);
+    var activated = 0;
+    final action = ReaderToolbarAction(
+      id: 'fixture',
+      icon: Icons.search,
+      label: 'Fixture action',
+      onPressed: () => activated++,
+    );
+    List<SemanticsData> actionSemantics() {
+      final matches = <SemanticsData>[];
+      void visit(SemanticsNode node) {
+        final data = node.getSemanticsData();
+        if (data.tooltip == action.label) matches.add(data);
+        node.visitChildren((child) {
+          visit(child);
+          return true;
+        });
+      }
+
+      final view = tester.binding.renderViews.single;
+      visit(view.owner!.semanticsOwner!.rootSemanticsNode!);
+      return matches;
+    }
+
+    await tester.pumpWidget(
+      _buildScaffold(
+        controller: controller,
+        topActions: [action],
+        bottomActions: [action],
+        child: Focus(focusNode: bodyFocus, child: const SizedBox.expand()),
+      ),
+    );
+    expect(actionSemantics(), isEmpty);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(bodyFocus.hasPrimaryFocus, isTrue);
+
+    controller.showMenu();
+    await tester.pumpAndSettle();
+    expect(actionSemantics(), hasLength(2));
+    bool actionFocused() => actionSemantics().any(
+      (data) => data.flagsCollection.isFocused == ui.Tristate.isTrue,
+    );
+    for (var i = 0; i < 8 && !actionFocused(); i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+    }
+    expect(actionFocused(), isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    expect(activated, 1);
+
+    controller.hideMenu();
+    await tester.pump();
+    expect(actionSemantics(), isEmpty);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(bodyFocus.hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    expect(activated, 1);
+  });
+
   testWidgets('ReaderOverlayScaffold center tap toggles menu visibility', (
     tester,
   ) async {
@@ -445,6 +516,7 @@ Widget _buildScaffold({
   Duration animationDuration = Duration.zero,
   Key? overlayKey,
   TextScaler? textScaler,
+  Widget child = const ColoredBox(color: Colors.white),
 }) {
   return LocalizedTestApp(
     theme: theme,
@@ -476,7 +548,7 @@ Widget _buildScaffold({
           ),
           actions: bottomActions,
         ),
-        child: const ColoredBox(color: Colors.white),
+        child: child,
       ),
     ),
   );

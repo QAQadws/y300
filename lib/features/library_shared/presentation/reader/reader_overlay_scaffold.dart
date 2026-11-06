@@ -236,9 +236,15 @@ class _ReaderOverlayScaffoldState extends State<ReaderOverlayScaffold>
           child: IgnorePointer(
             key: const Key('shared-reader-top-overlay-hit-test-gate'),
             ignoring: !_isMenuVisible,
-            child: SlideTransition(
-              position: _topSlideAnimation,
-              child: ReaderTopOverlayBar(config: widget.topBar),
+            child: ExcludeFocus(
+              excluding: !_isMenuVisible,
+              child: ExcludeSemantics(
+                excluding: !_isMenuVisible,
+                child: SlideTransition(
+                  position: _topSlideAnimation,
+                  child: ReaderTopOverlayBar(config: widget.topBar),
+                ),
+              ),
             ),
           ),
         ),
@@ -250,9 +256,15 @@ class _ReaderOverlayScaffoldState extends State<ReaderOverlayScaffold>
           child: IgnorePointer(
             key: const Key('shared-reader-bottom-overlay-hit-test-gate'),
             ignoring: !_isMenuVisible,
-            child: SlideTransition(
-              position: _bottomSlideAnimation,
-              child: ReaderBottomOverlayPanel(config: widget.bottomBar),
+            child: ExcludeFocus(
+              excluding: !_isMenuVisible,
+              child: ExcludeSemantics(
+                excluding: !_isMenuVisible,
+                child: SlideTransition(
+                  position: _bottomSlideAnimation,
+                  child: ReaderBottomOverlayPanel(config: widget.bottomBar),
+                ),
+              ),
             ),
           ),
         ),
