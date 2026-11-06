@@ -1,6 +1,7 @@
 import '../document/forum_body_collapse_layout.dart';
 import '../document/forum_body_document.dart';
 import '../style/forum_body_style_cursor.dart';
+import '../style/forum_body_style_builder.dart';
 import '../style/forum_body_style_options.dart';
 import '../style/forum_body_style_resolver.dart';
 
@@ -18,7 +19,9 @@ final class ForumBodyStyledFlowEvent {
     required this.depth,
     required Object owner,
     required this.index,
-  }) : _owner = owner;
+    ForumBodyResolvedStyle? paragraphStyle,
+  }) : _owner = owner,
+       _paragraphStyle = paragraphStyle;
 
   final ForumBodyFlowPhase phase;
   final ForumBodyNode node;
@@ -26,6 +29,10 @@ final class ForumBodyStyledFlowEvent {
   final int depth;
   final int index;
   final Object _owner;
+  final ForumBodyResolvedStyle? _paragraphStyle;
+
+  /// Display-only override. Descendants still inherit the authored style.
+  ForumBodyResolvedStyle get paragraphStyle => _paragraphStyle ?? style;
 }
 
 /// Forward-only structural consumption over the sole style cursor. At most one
@@ -38,7 +45,8 @@ final class ForumBodyStyledFlowCursor {
     required ForumBodyReaderStyle reader,
     ForumBodyCollapseLayout? collapses,
     ForumBodyElement? contentRoot,
-  }) : _styles = const ForumBodyStyleResolver().open(
+  }) : _reader = reader,
+       _styles = const ForumBodyStyleResolver().open(
          document,
          reader,
          collapses: collapses,
@@ -46,6 +54,7 @@ final class ForumBodyStyledFlowCursor {
        );
 
   final ForumBodyStyleCursor _styles;
+  final ForumBodyReaderStyle _reader;
   final _owner = Object();
   int _eventIndex = 0;
   final _open = <ForumBodyStyledFlowEvent>[];
@@ -67,17 +76,23 @@ final class ForumBodyStyledFlowCursor {
   int get resolvedNodeCount => _styles.resolvedNodeCount;
   bool get isComplete => _complete;
   bool get isClosed => _closed;
+  bool get removeSourceIndent =>
+      _reader.removeSourceIndent && contentRoot == null;
 
   /// The opt-in prose cleanup does not enter protected or independently
   /// formatted contexts, even if an inner element resolves to the body role.
   bool get isOrdinaryProse =>
-      contentRoot == null && _open.every(_isProseElement);
+      contentRoot == null &&
+      _open.every(
+        (event) => _isProseElement(event.node as ForumBodyElement, event.style),
+      );
 
   static final _verseClass = RegExp(r'(^|\s)(poem|poetry|verse)(\s|$)');
 
-  static bool _isProseElement(ForumBodyStyledFlowEvent event) {
-    final element = event.node as ForumBodyElement;
-    final style = event.style;
+  static bool _isProseElement(
+    ForumBodyElement element,
+    ForumBodyResolvedStyle style,
+  ) {
     return const {
           ForumBodyElementKind.paragraph,
           ForumBodyElementKind.container,
@@ -144,6 +159,7 @@ final class ForumBodyStyledFlowCursor {
         depth: opened.depth,
         owner: _owner,
         index: _eventIndex++,
+        paragraphStyle: opened._paragraphStyle,
       );
       return true;
     }
@@ -151,15 +167,27 @@ final class ForumBodyStyledFlowCursor {
       _complete = true;
       return false;
     }
+    final style = _nextStyle!;
     final event = ForumBodyStyledFlowEvent._(
       phase: next is ForumBodyText
           ? ForumBodyFlowPhase.text
           : ForumBodyFlowPhase.open,
       node: next,
-      style: _nextStyle!,
+      style: style,
       depth: _open.length,
       owner: _owner,
       index: _eventIndex++,
+      paragraphStyle:
+          removeSourceIndent &&
+              next is ForumBodyElement &&
+              style.display == ForumBodyDisplay.block &&
+              !style.indentFromReader &&
+              _isProseElement(next, style) &&
+              isOrdinaryProse
+          ? style.withReaderIndent(
+              forumBodyReaderIndent(_reader, style.textStyle.fontSize!),
+            )
+          : null,
     );
     _nextNode = null;
     _nextStyle = null;

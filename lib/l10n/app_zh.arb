@@ -1004,6 +1004,8 @@
   "novelConversionMode": "简繁",
   "novelCompressBlankLines": "压缩连续空行",
   "novelCompressBlankLinesDescription": "减少普通正文中重复的空行和空白段落",
+  "novelRemoveSourceIndent": "清理原有缩进",
+  "novelRemoveSourceIndentDescription": "清除普通正文开头的空格和作者设置的首行缩进",
   "novelSafeContent": "安全显示正文",
   "novelChapterInteractionsDockSetting": "显示章末互动悬浮按钮",
   "novelChapterInteractionsSettingSaveFailed": "按钮设置保存失败，已恢复之前的设置",

@@ -328,7 +328,7 @@ class _NovelReaderDisplaySettingsSheetState
                       _draft.copyWith(conversionMode: value),
                     ),
                   ),
-                  if (widget.nativeTypography)
+                  if (widget.nativeTypography) ...[
                     SwitchListTile.adaptive(
                       key: const Key('novel-reader-compress-blank-lines'),
                       contentPadding: const EdgeInsets.symmetric(
@@ -341,6 +341,19 @@ class _NovelReaderDisplaySettingsSheetState
                         _draft.copyWith(compressBlankLines: value),
                       ),
                     ),
+                    SwitchListTile.adaptive(
+                      key: const Key('novel-reader-remove-source-indent'),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                      ),
+                      title: Text(l10n.novelRemoveSourceIndent),
+                      subtitle: Text(l10n.novelRemoveSourceIndentDescription),
+                      value: _draft.removeSourceIndent,
+                      onChanged: (value) => _applyPreferences(
+                        _draft.copyWith(removeSourceIndent: value),
+                      ),
+                    ),
+                  ],
                   SwitchListTile.adaptive(
                     key: const Key('novel-reader-safe-area-switch'),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 20),

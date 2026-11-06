@@ -4062,6 +4062,18 @@ abstract class AppLocalizations {
   /// **'减少普通正文中重复的空行和空白段落'**
   String get novelCompressBlankLinesDescription;
 
+  /// No description provided for @novelRemoveSourceIndent.
+  ///
+  /// In zh, this message translates to:
+  /// **'清理原有缩进'**
+  String get novelRemoveSourceIndent;
+
+  /// No description provided for @novelRemoveSourceIndentDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除普通正文开头的空格和作者设置的首行缩进'**
+  String get novelRemoveSourceIndentDescription;
+
   /// No description provided for @novelSafeContent.
   ///
   /// In zh, this message translates to:

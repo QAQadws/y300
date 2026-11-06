@@ -13,6 +13,7 @@ import 'package:y300/features/novel/data/preferences/shared_preferences_novel_re
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_preferences.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_native_page_coverage.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_native_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/novel_reader_page.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_preparation_service.dart';
@@ -25,11 +26,20 @@ import '../../tool/novel_main_page_profile_data.dart';
 import '../../tool/novel_main_page_profile_observation.dart';
 
 void main() {
+  setUpAll(() async {
+    await (FontLoader('packages/forum_content_renderer/ForumBodyInlineSpace')
+          ..addFont(
+            rootBundle.load(
+              'packages/forum_content_renderer/assets/fonts/inline_space.ttf',
+            ),
+          ))
+        .load();
+  });
   for (final mode in [
     NovelReaderFlowMode.pagedLtr,
     NovelReaderFlowMode.vertical,
   ]) {
-    testWidgets('blank line switch reuses converted sources in ${mode.name}', (
+    testWidgets('source cleanup preserves conversion in ${mode.name}', (
       tester,
     ) async {
       SharedPreferences.setMockInitialValues({});
@@ -54,11 +64,17 @@ void main() {
         profileReaderPreferences.copyWith(
           flowMode: mode,
           conversionMode: NovelReaderConversionMode.toTraditional,
+          typography: const NovelReaderTypographyOverrides(
+            firstLineIndent: NovelReaderFirstLineIndent(
+              em: 1,
+              scope: NovelReaderStyleScope.asDefault,
+            ),
+          ),
         ),
       );
       final data = NovelMainPageProfileData();
       final chapter = data.add(
-        '<p>台词<br><br><br><br>句尾</p>'
+        '<p style="text-indent:70px">　台词<br><br><br><br>　句尾</p>'
         '<p>&nbsp;</p><p>　</p><p>下一段</p>',
       );
       final args = NovelReaderArgs(
@@ -108,16 +124,30 @@ void main() {
       );
       ProfileReaderObservation observe() =>
           observeProfileReader(readerKey.currentContext!, args);
+      NovelReaderNativePageCoverage bookCoverage() {
+        final visible = observe();
+        return visible.nativeController!.viewForPage(visible.page!)!.coverage;
+      }
+
       bool layoutReady() => mode == NovelReaderFlowMode.vertical
           ? sliver.evaluate().isNotEmpty &&
                 tester.widget<ForumBodyFlowSliver>(sliver).prefix.isComplete
           : observe().ready && observe().complete;
-      Iterable<String> text() => tester
+      Iterable<ForumBodyParagraphSurface> paragraphs() => tester
           .widgetList<ForumBodyParagraphSurface>(
             find.byType(ForumBodyParagraphSurface),
           )
-          .where((surface) => surface.lease.isActive)
-          .map((surface) => surface.lease.content.projection.text);
+          .where((surface) => surface.lease.isActive);
+      Iterable<String> text() =>
+          paragraphs().map((surface) => surface.lease.content.projection.text);
+      double openingIndent() => paragraphs()
+          .singleWhere(
+            (surface) => surface.lease.content.projection.text.contains('臺詞'),
+          )
+          .lease
+          .layout
+          .firstLineIndent
+          .appliedAdvance;
       ReaderOverlayController overlay() => tester
           .widget<ReaderOverlayScaffold>(find.byType(ReaderOverlayScaffold))
           .controller!;
@@ -135,10 +165,13 @@ void main() {
           );
           if (predicate()) return;
         }
-        fail('Reader did not settle for blank line cleanup. Text: ${text()}');
+        fail('Reader did not settle for source cleanup. Text: ${text()}');
       }
 
-      Future<void> toggle({required bool from}) async {
+      Future<void> toggle(
+        String Function(AppLocalizations) labelOf, {
+        required bool from,
+      }) async {
         overlay().showMenu();
         await tester.pumpAndSettle();
         await tester.tap(
@@ -149,7 +182,7 @@ void main() {
           const Key('novel-reader-display-settings-sheet'),
         );
         final context = tester.element(sheet);
-        final label = AppLocalizations.of(context).novelCompressBlankLines;
+        final label = labelOf(AppLocalizations.of(context));
         final control = find.widgetWithText(SwitchListTile, label);
         await tester.ensureVisible(control);
         expect(tester.widget<SwitchListTile>(control).value, from);
@@ -160,17 +193,41 @@ void main() {
         await tester.pumpAndSettle();
       }
 
+      String blankLines(AppLocalizations l10n) => l10n.novelCompressBlankLines;
+      String sourceIndent(AppLocalizations l10n) =>
+          l10n.novelRemoveSourceIndent;
+
       try {
         await wait(() => layoutReady() && text().contains('　'));
         final document = scope.read(provider).requireValue.document;
         expect(document.textConversionIdentity, 'toTraditional');
-        expect(text(), contains('臺詞\n'));
+        expect(text(), contains('　臺詞\n'));
+        expect(openingIndent(), closeTo(70, .01));
         expect(text().where((value) => value == '\n'), hasLength(3));
         final initialConversionCalls = conversionCalls;
         expect(initialConversionCalls, greaterThan(0));
         expect(executor.calls, 1);
+        final beforeCleanupAnchor = mode == NovelReaderFlowMode.vertical
+            ? null
+            : bookCoverage().points
+                  .firstWhere((point) => point.sourceRune == 1)
+                  .anchor;
 
-        await toggle(from: false);
+        await toggle(sourceIndent, from: false);
+        await wait(() => layoutReady() && text().contains('臺詞\n'));
+        expect(
+          openingIndent(),
+          closeTo(profileReaderPreferences.fontSize, .01),
+        );
+        expect(text(), containsAll(['　', '句尾']));
+        expect(text().where((value) => value == '\n'), hasLength(3));
+        if (beforeCleanupAnchor != null) {
+          expect(bookCoverage().locate(beforeCleanupAnchor)?.sourceRune, 1);
+        }
+        expect((await repository().load()).removeSourceIndent, isTrue);
+        expect((await repository().load()).compressBlankLines, isFalse);
+
+        await toggle(blankLines, from: false);
         await wait(() => layoutReady() && !text().contains('　'));
         expect(text().where((value) => value == '\n'), hasLength(1));
         expect(text(), containsAll(['臺詞\n', '句尾', '\u00a0', '下一段']));
@@ -201,7 +258,7 @@ void main() {
         await tester.pumpAndSettle();
         await tester.enterText(
           find.byKey(const Key('novel-reader-text-search-field')),
-          '句尾',
+          '臺詞',
         );
         await tester.pump();
         await tester.tap(
@@ -213,7 +270,7 @@ void main() {
         await tester.tap(
           find.descendant(
             of: find.byType(ListTile),
-            matching: find.textContaining('句尾'),
+            matching: find.textContaining('臺詞'),
           ),
         );
         List<ForumBodySourceRange> highlight() => tester
@@ -246,14 +303,24 @@ void main() {
 
         await wait(navigationSettled);
         final selected = highlight().single;
+        expect(selected.startRune, 1);
         expect(selected.endRune - selected.startRune, 2);
 
-        await toggle(from: true);
+        await toggle(blankLines, from: true);
         await wait(() => layoutReady() && text().contains('　'));
         expect(highlight(), [selected]);
         expect(painted(), isTrue);
         expect(text().where((value) => value == '\n'), hasLength(3));
+        expect(text(), contains('臺詞\n'));
         expect((await repository().load()).compressBlankLines, isFalse);
+        expect((await repository().load()).removeSourceIndent, isTrue);
+
+        await toggle(sourceIndent, from: true);
+        await wait(() => layoutReady() && text().contains('　臺詞\n'));
+        expect(openingIndent(), closeTo(70, .01));
+        expect(highlight(), [selected]);
+        expect(painted(), isTrue);
+        expect((await repository().load()).removeSourceIndent, isFalse);
         expect(scope.read(provider).requireValue.document, same(document));
         expect(conversionCalls, initialConversionCalls);
         expect(executor.calls, 1);

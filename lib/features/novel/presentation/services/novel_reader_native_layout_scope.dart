@@ -320,6 +320,7 @@ ForumBodyReaderStyle _freezeReader(ForumBodyReaderStyle original) =>
       paragraphAfter: original.paragraphAfter,
       firstLineIndent: original.firstLineIndent,
       compressBlankLines: original.compressBlankLines,
+      removeSourceIndent: original.removeSourceIndent,
       policy: ForumBodyStylePolicy(original.policy.values),
       theme: _freezeTheme(original.theme),
     );
@@ -382,6 +383,7 @@ List<Object?> _readerValues(
   reader.firstLineIndent.value,
   reader.firstLineIndent.unit.name,
   reader.compressBlankLines,
+  reader.removeSourceIndent,
   for (final property in ForumBodyStyleProperty.values)
     (reader.policy.values[property] ?? ForumBodyStyleScope.asDefault).name,
 ];

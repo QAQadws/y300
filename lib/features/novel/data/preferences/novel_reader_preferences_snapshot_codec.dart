@@ -41,6 +41,11 @@ final class NovelReaderPreferencesSnapshotCodec {
     } else {
       result.remove('compressBlankLines');
     }
+    if (normalized.removeSourceIndent) {
+      result['removeSourceIndent'] = true;
+    } else {
+      result.remove('removeSourceIndent');
+    }
     final typography = _typography.encode(
       normalized.typography,
       previous: previous?['typography'],
@@ -132,6 +137,10 @@ final class NovelReaderPreferencesSnapshotCodec {
           decoded['compressBlankLines'],
           fallback: defaults.compressBlankLines,
         ),
+        removeSourceIndent: _validBool(
+          decoded['removeSourceIndent'],
+          fallback: defaults.removeSourceIndent,
+        ),
       );
     } on FormatException {
       return defaults;
@@ -162,6 +171,7 @@ final class NovelReaderPreferencesSnapshotCodec {
       conversionMode: preferences.conversionMode,
       safeAreaEnabled: preferences.safeAreaEnabled,
       compressBlankLines: preferences.compressBlankLines,
+      removeSourceIndent: preferences.removeSourceIndent,
     );
   }
 

@@ -24,6 +24,7 @@ void main() {
     expect(defaults.conversionMode, NovelReaderConversionMode.none);
     expect(defaults.safeAreaEnabled, isTrue);
     expect(defaults.compressBlankLines, isFalse);
+    expect(defaults.removeSourceIndent, isFalse);
   });
 
   test('constructor uses the same default theme as the default snapshot', () {
@@ -140,6 +141,33 @@ void main() {
       isFalse,
     );
   });
+
+  test(
+    'source indent cleanup persists independently of blank line cleanup',
+    () {
+      const codec = NovelReaderPreferencesSnapshotCodec();
+      final defaults = NovelReaderPreferences.defaults();
+      final enabled = defaults.copyWith(
+        compressBlankLines: true,
+        removeSourceIndent: true,
+      );
+      final saved = codec.encode(enabled);
+      expect(codec.decode(saved).removeSourceIndent, isTrue);
+      final withoutIndent = codec.encode(
+        enabled.copyWith(removeSourceIndent: false),
+        previousSource: saved,
+      );
+      expect(withoutIndent, isNot(contains('removeSourceIndent')));
+      expect(codec.decode(withoutIndent).compressBlankLines, isTrue);
+      expect(codec.decode(withoutIndent).removeSourceIndent, isFalse);
+      expect(
+        codec
+            .decode('{"schemaVersion":1,"removeSourceIndent":"true"}')
+            .removeSourceIndent,
+        isFalse,
+      );
+    },
+  );
 
   test(
     'safe area preference round-trips and defaults old snapshots to enabled',

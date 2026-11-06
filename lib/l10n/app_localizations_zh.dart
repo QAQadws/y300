@@ -2434,6 +2434,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get novelCompressBlankLinesDescription => '减少普通正文中重复的空行和空白段落';
 
   @override
+  String get novelRemoveSourceIndent => '清理原有缩进';
+
+  @override
+  String get novelRemoveSourceIndentDescription => '清除普通正文开头的空格和作者设置的首行缩进';
+
+  @override
   String get novelSafeContent => '安全显示正文';
 
   @override
@@ -8439,6 +8445,12 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get novelCompressBlankLinesDescription => '減少一般正文中重複的空行與空白段落';
+
+  @override
+  String get novelRemoveSourceIndent => '清理原有縮排';
+
+  @override
+  String get novelRemoveSourceIndentDescription => '清除一般正文開頭的空格與作者設定的首行縮排';
 
   @override
   String get novelSafeContent => '安全顯示正文';

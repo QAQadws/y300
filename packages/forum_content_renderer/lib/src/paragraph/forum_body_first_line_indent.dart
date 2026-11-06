@@ -35,7 +35,7 @@ bool forumBodyHasFirstLineIndent({
     style.indent.value > 0 &&
     !(style.indentFromReader &&
         !startsWithResource &&
-        _leadingSpace.hasMatch(displayText));
+        isForumBodyIndentSpace(displayText.codeUnitAt(0)));
 
 double resolveForumBodyFirstLineIndentValue({
   required ForumBodyResolvedStyle style,
@@ -66,7 +66,7 @@ double resolveForumBodyFirstLineIndentValue({
   // it. Explicit author CSS remains its own intent, even before such spaces.
   if (style.indentFromReader &&
       !startsWithResource &&
-      _leadingSpace.hasMatch(displayText)) {
+      isForumBodyIndentSpace(displayText.codeUnitAt(0))) {
     return 0;
   }
   final size = style.textStyle.fontSize!;
@@ -128,6 +128,14 @@ void validateForumBodyFirstLineIndentAdvanceWithPainter(
   }
 }
 
-final _leadingSpace = RegExp(
-  r'^[\u0009\u0020\u00a0\u1680\u2000-\u200a\u202f\u205f\u3000]',
-);
+bool isForumBodyIndentSpace(int codeUnit) =>
+    const {
+      0x09,
+      0x20,
+      0xa0,
+      0x1680,
+      0x202f,
+      0x205f,
+      0x3000,
+    }.contains(codeUnit) ||
+    codeUnit >= 0x2000 && codeUnit <= 0x200a;

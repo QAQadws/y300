@@ -81,6 +81,7 @@ class DefaultNovelReaderPreferenceImpactAnalyzer
         previous.fontWeight != next.fontWeight ||
         previous.textAlign != next.textAlign ||
         previous.compressBlankLines != next.compressBlankLines ||
+        previous.removeSourceIndent != next.removeSourceIndent ||
         previous.safeAreaEnabled != next.safeAreaEnabled) {
       impacts.add(NovelReaderPreferenceImpact.relayout);
     }

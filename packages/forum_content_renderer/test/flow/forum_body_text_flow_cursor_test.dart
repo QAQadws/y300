@@ -17,16 +17,18 @@ ForumBodyTextFlowCursor _cursor(
   ForumBodyParagraphContentBuilder builder =
       const ForumBodyParagraphContentBuilder(),
   bool compressBlankLines = false,
+  bool removeSourceIndent = false,
+  ForumBodyLength firstLineIndent = ForumBodyLength.zero,
 }) => ForumBodyTextFlowCursor(
   document: document,
-  reader: compressBlankLines
-      ? ForumBodyReaderStyle(
-          textStyle: _reader.textStyle,
-          fontRevision: _reader.fontRevision,
-          linkColor: _reader.linkColor,
-          compressBlankLines: true,
-        )
-      : _reader,
+  reader: ForumBodyReaderStyle(
+    textStyle: _reader.textStyle,
+    fontRevision: _reader.fontRevision,
+    linkColor: _reader.linkColor,
+    compressBlankLines: compressBlankLines,
+    removeSourceIndent: removeSourceIndent,
+    firstLineIndent: firstLineIndent,
+  ),
   paragraphBuilder: builder,
 );
 
@@ -49,6 +51,89 @@ List<ForumBodyTextFlowUnit> _drain(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'source indent cleanup keeps exact graphemes and restores reader indent',
+    () {
+      final document = _document(
+        '<div style="text-indent:30px"><p>　<b>&nbsp;</b>正文<br>　后续　字</p>'
+        '<div class="poem"><p>　诗</p></div><pre>　代码</pre>'
+        '<table><tr><td>　表</td></tr></table><div class="locked">　权限</div>'
+        '<div class="showcollapse_box"><div class="showcollapse_title">标题</div>'
+        '<div class="showcollapse_content">　折叠</div></div>'
+        '<p><a href="https://example.invalid/">　链接</a>后文</p>'
+        '<p>　&#x301;保留</p><p>　</p>'
+        '<p>　<ruby>基<rt>音</rt></ruby>　后</p></div>',
+      );
+      const readerIndent = ForumBodyLength(1.25, ForumBodyLengthUnit.em);
+      final original = _cursor(document, firstLineIndent: readerIndent);
+      final cleaned = _cursor(
+        document,
+        firstLineIndent: readerIndent,
+        removeSourceIndent: true,
+      );
+      addTearDown(original.close);
+      addTearDown(cleaned.close);
+      final baseline = _drain(
+        original,
+      ).whereType<ForumBodyTextFlowParagraph>().first;
+      expect(baseline.content.projection.text, '　\u00a0正文\n');
+      expect(baseline.content.style.indent.value, 30);
+      expect(baseline.content.style.indentFromReader, isFalse);
+
+      final units = _drain(cleaned, budget: 1);
+      final plain = units.whereType<ForumBodyTextFlowParagraph>().toList();
+      expect(plain.map((unit) => unit.content.projection.text), [
+        '正文\n',
+        '后续　字',
+        '　诗',
+        '　代码',
+        '　表',
+        '　权限',
+        '标题',
+        '　折叠',
+        '　链接后文',
+        '　\u0301保留',
+        '　',
+      ]);
+      expect(plain[0].content.style.indent, same(readerIndent));
+      expect(plain[0].content.style.indentFromReader, isTrue);
+      expect(plain[1].content.appliesFirstLineIndent, isFalse);
+      for (final protected in plain.skip(2).take(2)) {
+        expect(protected.content.style.indent.value, 30);
+        expect(protected.content.style.indentFromReader, isFalse);
+      }
+      final projection = plain.first.content.projection;
+      expect(projection.sourceEnvelope(startUtf16: 0, endUtf16: 2), (
+        runeStart: 2,
+        runeEnd: 4,
+      ));
+      expect(
+        projection.displayRangesInSource(
+          sourceStart: 0,
+          sourceEnd: 2,
+          startUtf16: 0,
+          endUtf16: projection.text.length,
+        ),
+        isEmpty,
+      );
+      expect(plain.first.identity, document.identity);
+      expect(document.sourceText, startsWith('　\u00a0正文'));
+
+      final mixed = units.whereType<ForumBodyTextFlowInline>().single.content;
+      expect(mixed.style.indent, same(readerIndent));
+      expect(mixed.parts.first, isA<ForumBodyInlineFlowRuby>());
+      expect(
+        mixed.parts
+            .whereType<ForumBodyInlineFlowText>()
+            .single
+            .content
+            .projection
+            .text,
+        '　后',
+      );
+    },
+  );
 
   test(
     'blank line cleanup preserves canonical sources and remains bounded',

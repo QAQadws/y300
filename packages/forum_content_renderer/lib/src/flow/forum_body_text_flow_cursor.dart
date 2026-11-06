@@ -102,7 +102,7 @@ final class ForumBodyTextFlowCursor {
          collapses: collapses,
          contentRoot: contentRoot,
        );
-  static const revision = 15;
+  static const revision = 16;
   final bool dedicatedTables;
 
   /// Requires a consumer for exclusion controls, including clearance BRs.

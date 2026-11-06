@@ -77,6 +77,7 @@ final class ForumBodyReaderStyle {
     this.paragraphAfter = 10,
     this.firstLineIndent = ForumBodyLength.zero,
     this.compressBlankLines = false,
+    this.removeSourceIndent = false,
     this.theme,
     ForumBodyStylePolicy? policy,
   }) : policy = policy ?? ForumBodyStylePolicy() {
@@ -108,6 +109,7 @@ final class ForumBodyReaderStyle {
   final double paragraphAfter;
   final ForumBodyLength firstLineIndent;
   final bool compressBlankLines;
+  final bool removeSourceIndent;
   final ForumBodyStylePolicy policy;
 
   /// The same immutable semantic palette used by the HTML renderer.
@@ -186,10 +188,14 @@ final class ForumBodyResolvedStyle {
   ForumBodyResolvedStyle withTextStyle(TextStyle value) =>
       _copy(value, textEmphasis);
 
+  ForumBodyResolvedStyle withReaderIndent(ForumBodyLength value) =>
+      _copy(textStyle, textEmphasis, readerIndent: value);
+
   ForumBodyResolvedStyle _copy(
     TextStyle nextText,
-    ForumBodyTextEmphasis value,
-  ) => value == textEmphasis && nextText == textStyle
+    ForumBodyTextEmphasis value, {
+    ForumBodyLength? readerIndent,
+  }) => readerIndent == null && value == textEmphasis && nextText == textStyle
       ? this
       : ForumBodyResolvedStyle(
           textStyle: nextText,
@@ -201,7 +207,7 @@ final class ForumBodyResolvedStyle {
           textEmphasis: value,
           baselineAlignment: baselineAlignment,
           baselineShift: baselineShift,
-          indent: indent,
+          indent: readerIndent ?? indent,
           margin: margin,
           padding: padding,
           box: box,
@@ -217,7 +223,7 @@ final class ForumBodyResolvedStyle {
           boxBackground: boxBackground,
           display: display,
           visibilityHidden: visibilityHidden,
-          indentFromReader: indentFromReader,
+          indentFromReader: readerIndent != null || indentFromReader,
           alignmentFromReader: alignmentFromReader,
           quoteDecoration: quoteDecoration,
           insideQuoteContainer: insideQuoteContainer,

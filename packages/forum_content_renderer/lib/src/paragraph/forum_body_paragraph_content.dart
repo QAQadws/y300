@@ -478,7 +478,7 @@ final class ForumBodyParagraphContentBuilder {
         path: block?.node.path ?? flow.contentRoot?.path,
         fontRevision: flow.fontRevision,
         styleRevision: flow.styleRevision,
-        style: block?.style ?? flow.rootStyle,
+        style: block?.paragraphStyle ?? flow.rootStyle,
         layoutMode: layoutMode,
         singleLineWhitespace:
             block?.node is ForumBodyElement &&

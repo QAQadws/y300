@@ -917,6 +917,8 @@
   "novelConversionMode": "簡繁",
   "novelCompressBlankLines": "壓縮連續空行",
   "novelCompressBlankLinesDescription": "減少一般正文中重複的空行與空白段落",
+  "novelRemoveSourceIndent": "清理原有縮排",
+  "novelRemoveSourceIndentDescription": "清除一般正文開頭的空格與作者設定的首行縮排",
   "novelSafeContent": "安全顯示正文",
   "novelChapterInteractionsDockSetting": "顯示章末互動懸浮按鈕",
   "novelChapterInteractionsSettingSaveFailed": "按鈕設定儲存失敗，已還原先前設定",

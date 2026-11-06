@@ -1,7 +1,10 @@
+import 'package:html_pagination_core/html_pagination_core.dart';
+
 import '../document/forum_body_document.dart';
 import '../inline/forum_body_ruby_content.dart';
 import '../inline/forum_body_inline_image_input.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
+import '../paragraph/forum_body_first_line_indent.dart';
 import '../style/forum_body_style_options.dart';
 import 'forum_body_inline_flow_content.dart';
 import 'forum_body_styled_flow_cursor.dart';
@@ -34,11 +37,12 @@ final class ForumBodyTextFlowSequence {
     required this.rubyLimits,
     this.appliesFirstLineIndent = true,
   }) : _flow = flow,
+       _removeSourceIndent = flow.removeSourceIndent,
        identity = flow.identity,
        fontRevision = flow.fontRevision,
        styleRevision = flow.styleRevision,
        path = block?.node.path ?? flow.contentRoot?.path,
-       style = block?.style ?? flow.rootStyle {
+       style = block?.paragraphStyle ?? flow.rootStyle {
     _plain = _openPlain();
   }
 
@@ -48,6 +52,7 @@ final class ForumBodyTextFlowSequence {
   final ForumBodyParagraphLayoutMode layoutMode;
   final ForumBodyRubyContentLimits rubyLimits;
   final bool appliesFirstLineIndent;
+  final bool _removeSourceIndent;
   final ForumBodyIdentity identity;
   final String fontRevision;
   final int styleRevision;
@@ -63,6 +68,7 @@ final class ForumBodyTextFlowSequence {
   bool _mixed = false;
   bool _visible = false;
   bool _closed = false;
+  int? _firstProtectedTextRune;
 
   final String? path;
   bool get hasContent => _visible || (_plain?.hasDisplayText ?? false);
@@ -72,6 +78,15 @@ final class ForumBodyTextFlowSequence {
 
   void appendEvent(ForumBodyStyledFlowEvent event) {
     _ensureOpen();
+    // A protected inline can share a projection with a plain prose prefix.
+    // Capture its source fence while the style ancestry is still active.
+    if (_removeSourceIndent &&
+        _firstProtectedTextRune == null &&
+        event.node is ForumBodyText &&
+        !event.style.hidden &&
+        !_flow!.isOrdinaryProse) {
+      _firstProtectedTextRune = event.node.source.runeStart;
+    }
     final plain = _plain ??= _openPlain();
     if (!event.style.baselineShift.isEmpty) _mixed = true;
     final before = (plain.inputCodeUnits, plain.runCount);
@@ -183,6 +198,7 @@ final class ForumBodyTextFlowSequence {
       _ignored.addAll(other._ignored);
       _visible |= other._visible;
     }
+    _firstProtectedTextRune ??= other._firstProtectedTextRune;
     issues.addAll(other.issues);
     other.close();
   }
@@ -211,12 +227,36 @@ final class ForumBodyTextFlowSequence {
     try {
       if (!_mixed) {
         return ForumBodyPlainSequenceContent(
-          _plain!
-              .finish(issues: issues)
-              .withFirstLineIndent(appliesFirstLineIndent),
+          _withoutSourceIndent(
+            _plain!.finish(issues: issues),
+          ).withFirstLineIndent(appliesFirstLineIndent),
         );
       }
       _flushPlain();
+      if (_parts.firstOrNull case final ForumBodyInlineFlowText first
+          when _removeSourceIndent) {
+        final cleaned = _withoutSourceIndent(
+          first.content,
+          hasFollowingContent: () => _parts
+              .skip(1)
+              .any(
+                (part) => switch (part) {
+                  ForumBodyInlineFlowRuby() ||
+                  ForumBodyInlineFlowImage() => true,
+                  ForumBodyInlineFlowText(:final content) =>
+                    content.projection.text.trim().isNotEmpty,
+                  ForumBodyInlineFlowExclusion() => false,
+                },
+              ),
+        );
+        if (!identical(cleaned, first.content)) {
+          if (cleaned.projection.text.isEmpty) {
+            _parts.removeAt(0);
+          } else {
+            _parts[0] = ForumBodyInlineFlowText(cleaned);
+          }
+        }
+      }
       return ForumBodyInlineSequenceContent(
         ForumBodyInlineFlowContent(
           identity: identity,
@@ -234,6 +274,48 @@ final class ForumBodyTextFlowSequence {
     } finally {
       close();
     }
+  }
+
+  ForumBodyParagraphContent _withoutSourceIndent(
+    ForumBodyParagraphContent content, {
+    bool Function()? hasFollowingContent,
+  }) {
+    final projection = content.projection;
+    final text = projection.text;
+    if (!_removeSourceIndent ||
+        text.isEmpty ||
+        !isForumBodyIndentSpace(text.codeUnitAt(0))) {
+      return content;
+    }
+    final protected = _firstProtectedTextRune;
+    var end = 0;
+    for (final grapheme in projection.graphemeRanges(
+      startUtf16: 0,
+      endUtf16: text.length,
+    )) {
+      if (grapheme.endUtf16 - grapheme.startUtf16 != 1 ||
+          !isForumBodyIndentSpace(text.codeUnitAt(grapheme.startUtf16))) {
+        break;
+      }
+      if (protected != null &&
+          projection
+                  .sourceAtUtf16(
+                    grapheme.endUtf16,
+                    affinity: HtmlProjectionAffinity.upstream,
+                  )
+                  .sourceRune >
+              protected) {
+        break;
+      }
+      end = grapheme.endUtf16;
+    }
+    // Spacer paragraphs and blank authored lines keep their geometry.
+    if (end == 0 ||
+        (text.substring(end).trim().isEmpty &&
+            hasFollowingContent?.call() != true)) {
+      return content;
+    }
+    return content.displayWindow(startUtf16: end, endUtf16: text.length);
   }
 
   void _ensureOpen() {
