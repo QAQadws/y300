@@ -10,16 +10,18 @@ Finder findNativeBody(String sourceId) => find.byWidgetPredicate(
       widget.prepared.sequence.sourceId == sourceId,
 );
 
-Finder findNativeBodyText(String text) => find.byWidgetPredicate(
-  (widget) => switch (widget) {
-    ForumBodyParagraphSurface() =>
-      widget.lease.content.projection.text.contains(text),
-    ForumBodyInlineParagraphSurface() =>
-      widget.view.content.projection.display.text.contains(text),
-    _ => false,
-  },
-  description: 'native body displaying "$text"',
-);
+Finder findNativeBodyText(String text, {bool skipOffstage = true}) =>
+    find.byWidgetPredicate(
+      (widget) => switch (widget) {
+        ForumBodyParagraphSurface() =>
+          widget.lease.content.projection.text.contains(text),
+        ForumBodyInlineParagraphSurface() =>
+          widget.view.content.projection.display.text.contains(text),
+        _ => false,
+      },
+      description: 'native body displaying "$text"',
+      skipOffstage: skipOffstage,
+    );
 
 Future<void> tapNativeBodyText(WidgetTester tester, String text) async {
   final finder = findNativeBodyText(text);

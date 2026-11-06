@@ -19,12 +19,11 @@ import 'package:y300/shared/widgets/native_primary_tab_bar.dart';
 
 enum MessageCenterTab { messages, notifications }
 
-typedef MessageConversationOpener =
-    void Function(
-      BuildContext context,
-      ForumConversationTarget target,
-      String title,
-    );
+typedef MessageConversationOpener = void Function(
+  BuildContext context,
+  ForumConversationTarget target,
+  String title,
+);
 
 typedef MessageUserOpener = void Function(BuildContext context, String userId);
 
@@ -328,6 +327,7 @@ class _NotificationRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final palette = Theme.of(context).y300NativeContent;
+    final owner = ref.watch(messageAttentionOwnerProvider);
     final authorLabel = item.authorName.isEmpty
         ? l10n.profileSystemNotification
         : item.authorName;
@@ -413,6 +413,11 @@ class _NotificationRow extends ConsumerWidget {
               ],
             ),
             ForumHtmlContentView(
+              key: ValueKey(owner),
+              nativeBody: true,
+              isCurrent: () =>
+                  ref.read(messageAccountIdProvider) == accountId &&
+                  ref.read(messageAttentionOwnerProvider) == owner,
               html: item.noteMarkup,
               sourceId: 'notification:$accountId:${item.id}',
               imageCacheOwnerId: 'notification:$accountId:${item.id}',
@@ -426,9 +431,8 @@ class _NotificationRow extends ConsumerWidget {
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
                   l10n.messageRepeatedNotifications(item.duplicateCount),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: palette.supportingText,
-                  ),
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: palette.supportingText),
                 ),
               ),
             if (item.occurredAt != null || item.rawDateline.isNotEmpty)
@@ -436,9 +440,8 @@ class _NotificationRow extends ConsumerWidget {
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
                   messageTimeLabel(context, item.occurredAt, item.rawDateline),
-                  style: Theme.of(
-                    context,
-                  ).textTheme.labelSmall?.copyWith(color: palette.soft),
+                  style: Theme.of(context).textTheme.labelSmall
+                      ?.copyWith(color: palette.soft),
                 ),
               ),
           ],
@@ -454,9 +457,9 @@ class _UnreadBadge extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsetsDirectional.only(start: 8),
     child: Badge(
-      backgroundColor: Theme.of(
-        context,
-      ).y300NativeContent.notificationBadgeBackground,
+      backgroundColor: Theme.of(context)
+          .y300NativeContent
+          .notificationBadgeBackground,
       textColor: Theme.of(context).y300NativeContent.selectionForeground,
       label: Text(AppLocalizations.of(context).profileNewBadge),
     ),

@@ -20,6 +20,7 @@ import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 import '../../../test_support/localized_test_app.dart';
+import '../../../test_support/native_body_finders.dart';
 import '../support/message_test_repository.dart';
 import '../support/message_input_test_helper.dart';
 import '../support/message_recipient_test_helper.dart';
@@ -239,10 +240,7 @@ void main() {
       await tester.pumpAndSettle();
       await swipeToTab(tester, MessageCenterTab.notifications);
       await tester.pumpAndSettle();
-      expect(
-        find.text('Hidden refresh result', findRichText: true).hitTestable(),
-        findsOneWidget,
-      );
+      expect(findNativeBodyText('Hidden refresh result'), findsOneWidget);
       expect(repository.reads, hasLength(2));
       expect(repository.notificationReads, hasLength(2));
       expect(tester.takeException(), isNull);
@@ -659,11 +657,7 @@ void main() {
         findsNothing,
       );
       expect(
-        find.textContaining(
-          'Old reminder',
-          findRichText: true,
-          skipOffstage: false,
-        ),
+        findNativeBodyText('Old reminder', skipOffstage: false),
         findsNothing,
       );
       expect(find.text('New private message').hitTestable(), findsOneWidget);
@@ -684,10 +678,7 @@ void main() {
         ).pixels,
         0,
       );
-      expect(
-        find.text('New reminder', findRichText: true).hitTestable(),
-        findsOneWidget,
-      );
+      expect(findNativeBodyText('New reminder'), findsOneWidget);
       expect(repository.reads, hasLength(2));
       expect(tester.takeException(), isNull);
     },
@@ -744,11 +735,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Alice'));
       expect(users, ['20']);
-      final body = tester.widget<ForumHtmlContentView>(
-        find.byType(ForumHtmlContentView),
-      );
-      body.onOpenLink?.call('forum.php?mod=viewthread&tid=42');
-      expect(links, ['forum.php?mod=viewthread&tid=42']);
+      expect(findNativeBody('notification:10:1'), findsOneWidget);
+      await tapNativeBodyText(tester, 'Reply 1');
+      expect(links, ['https://bbs.yamibo.com/forum.php?mod=viewthread&tid=42']);
       await tester.tap(find.byTooltip(l10n(tester).messageIgnore));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('notification-ignore-save')));
