@@ -201,6 +201,7 @@ final class NovelReaderNativePagedController {
   int? get unavailableAnchorRevision => _unavailableAnchorRevision;
   int? get visiblePageIndex => _visible?.pageIndex;
   NovelReaderNativePageView? get visibleView => _visible?.view;
+  NovelReaderNativePageDelivery? get visibleDelivery => _visible;
   bool get visibleImageHasFrame => _visibleImageFrame?.call() == true;
   NovelReaderNativePageDelivery? get readyTarget => _target;
   Stream<void> get changes => isClosed
@@ -382,6 +383,8 @@ final class NovelReaderNativePagedController {
         !identical(_target, delivery) ||
         delivery.requestId != _requestId ||
         delivery.view.state != NovelReaderNativePageViewState.transferred ||
+        (delivery.reusesTextMount &&
+            !delivery.view.matchesTextMount(fragments)) ||
         _session!.isClosed ||
         _session!.isLayoutOwnerRetired) {
       return null;
@@ -399,7 +402,21 @@ final class NovelReaderNativePagedController {
         layoutId: _snapshot!.layoutId,
         fragments: fragments,
       );
-    } on ForumBodyTextPageSurfaceException {
+    } catch (error) {
+      if (error is! ForumBodyTextPageSurfaceException &&
+          !(delivery.reusesTextMount && error is StateError)) {
+        rethrow;
+      }
+      if (delivery.reusesTextMount &&
+          identical(_target, delivery) &&
+          !_suspended &&
+          !isClosed) {
+        // The old Element can release its leases on replacement as usual.
+        _window!.forgetPage(delivery.pageIndex, delivery.view);
+        _target = null;
+        _restartProducer(resumeFinalPlan: true);
+        _notify();
+      }
       return null;
     }
     final coverage = delivery.view.coverage;
@@ -607,13 +624,21 @@ final class NovelReaderNativePagedController {
 
   /// Retire work and pending navigation without closing source/native leases.
   /// A hidden surface cannot acknowledge a position or consume deadline time.
-  bool suspend() {
+  bool suspend({bool retainMountedText = false}) {
     if (isClosed ||
         _suspended ||
         _phase == NovelReaderNativePagedPhase.created) {
       return false;
     }
-    _settledBeforeSuspend = _ticket == null ? _visible?.pageIndex : null;
+    final visible = _visible?.view;
+    _settledBeforeSuspend = _ticket == null ? visible?.pageIndex : null;
+    final mountedText =
+        retainMountedText &&
+            _settledBeforeSuspend != null &&
+            _snapshot?.isComplete == true &&
+            visible?.hasLiveTextMount == true
+        ? visible
+        : null;
     _suspended = true;
     _resolvedEntryEdge = null;
     _cancelAnchorWork();
@@ -623,7 +648,7 @@ final class NovelReaderNativePagedController {
     _source = null;
     _probe?.close();
     _probe = null;
-    _window!.close();
+    _window!.close(retainMountedText: mountedText);
     if (_watch?.isClosed == false) _watch!.setSuspended(true);
     _ticket = null;
     _target = null;
@@ -652,7 +677,9 @@ final class NovelReaderNativePagedController {
     final settledPage = _settledBeforeSuspend;
     _settledBeforeSuspend = null;
     _suspended = false;
+    final previous = _visible?.view;
     if (_error != null || _phase == NovelReaderNativePagedPhase.empty) {
+      previous?.close();
       _notify();
       return true;
     }
@@ -674,13 +701,18 @@ final class NovelReaderNativePagedController {
     _phase = NovelReaderNativePagedPhase.loading;
     _resolveStartEntry();
     _syncDemand();
-    final previous = _visible?.view;
     if (residentText &&
         settledPage != null &&
         _requestedPage == settledPage &&
         previous?.pageIndex == settledPage) {
-      _window!.tryPrepareResidentText(previous!);
-      _offerTarget();
+      final reused = _window!.tryReuseMountedText(previous!);
+      if (!reused) {
+        previous.close();
+        _window!.tryPrepareResidentText(previous);
+      }
+      _offerTarget(reusesTextMount: reused);
+    } else {
+      previous?.close();
     }
     _restartProducer(
       resumeFinalPlan: _snapshot?.isComplete == true,
@@ -693,6 +725,7 @@ final class NovelReaderNativePagedController {
   void forgetPage(int page, NovelReaderNativePageView view) {
     final retryNeighbors = _window?.forgetPage(page, view) ?? false;
     if (identical(_visible?.view, view)) {
+      view.close();
       _visible = null;
       _visibleImageFrame = null;
     }
@@ -1248,7 +1281,7 @@ final class NovelReaderNativePagedController {
     }
   }
 
-  void _offerTarget() {
+  void _offerTarget({bool reusesTextMount = false}) {
     if (isClosed ||
         _suspended ||
         (_error != null && !_prefixNavigation) ||
@@ -1276,6 +1309,7 @@ final class NovelReaderNativePagedController {
           ? focus.bounds
           : null,
       chapterEntryEdge: _resolvedEntryEdge,
+      reusesTextMount: reusesTextMount,
     );
     _notify();
   }
@@ -1378,6 +1412,7 @@ final class NovelReaderNativePagedController {
     _scheduler = null;
     _snapshot = null;
     _target = null;
+    _visible?.view.close();
     _visible = null;
     _visibleImageFrame = null;
     _lastPosition = null;

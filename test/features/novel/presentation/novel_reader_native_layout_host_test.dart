@@ -18,6 +18,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_anchor_navi
 import 'package:y300/features/novel/presentation/models/novel_reader_chapter_turn.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_paged_navigation_controller.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_native_prepared_chapter.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_native_text_selection.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_exception.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_owner.dart';
@@ -156,6 +157,7 @@ Future<void> _show(
       const NovelReaderChapterTurnPolicy(),
   NovelReaderPageSeekRequest? seek,
   NovelReaderAnchorNavigationRequest? anchorNavigation,
+  ValueChanged<NovelReaderNativeTextSelection>? onTextSelection,
   bool startsAtBeginning = false,
   NovelReaderChapterEntryRequest? entry,
   NovelReaderPaginationPerformancePolicy performance =
@@ -204,6 +206,7 @@ Future<void> _show(
                   onChapterTurnHintChanged: reader.chapterHints.add,
                   pageSeekRequest: seek,
                   navigationRequest: anchorNavigation,
+                  onTextSelection: onTextSelection,
                   startsAtBeginning: startsAtBeginning,
                   chapterEntryRequest: entry,
                   onChapterEntryApplied: (request) {
@@ -2779,10 +2782,11 @@ void main() {
   });
 
   testWidgets(
-    'visibility resumes the same source and canonical point without reshaping',
+    'visibility resumes the mounted page with a new reading delivery',
     (tester) async {
       final reader = _Reader();
-      await _show(tester, reader);
+      final selections = <NovelReaderNativeTextSelection>[];
+      await _show(tester, reader, onTextSelection: selections.add);
       await tester.pumpAndSettle();
       final controller = reader.statuses.last.controller!;
       controller.requestPage(3);
@@ -2790,9 +2794,16 @@ void main() {
       final actual = reader.positions.last;
       final prefix = controller.snapshot;
       final previousView = controller.visibleView!;
+      final previousDelivery = controller.visibleDelivery!;
       final surface = tester.renderObject(
         find.byType(ForumBodyTextPageSurface),
       );
+      await tester.longPressAt(
+        tester.getTopLeft(find.byType(ForumBodyTextPageSurface)) +
+            const Offset(5, 5),
+      );
+      final selection = selections.single;
+      expect(selection.isCurrent, isTrue);
       final handle = reader.owner.acquireCache();
       final builds = handle.cache.layoutBuildCount;
       await _show(tester, reader, active: false);
@@ -2808,11 +2819,18 @@ void main() {
       );
       await tester.pump(const Duration(seconds: 10));
       expect(reader.positions.last, same(actual));
+      expect(selection.isCurrent, isTrue);
       await _show(tester, reader);
-      final resumed = controller.visibleView!;
-      expect(resumed, isNot(same(previousView)));
-      expect(resumed.coverage, same(previousView.coverage));
-      expect(resumed.work!.coverageSteps, 0);
+      final resumed = controller.visibleDelivery!;
+      expect(resumed, isNot(same(previousDelivery)));
+      expect(resumed.requestId, greaterThan(previousDelivery.requestId));
+      expect(resumed.reusesTextMount, isTrue);
+      expect(resumed.view, same(previousView));
+      expect(selection.isCurrent, isFalse);
+      expect(
+        tester.renderObject(find.byType(ForumBodyTextPageSurface)),
+        same(surface),
+      );
       expect(controller.hasPendingNavigation, isFalse);
       await tester.pumpAndSettle();
       expect(reader.statuses.last.controller, same(controller));

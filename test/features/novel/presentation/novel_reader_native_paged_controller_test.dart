@@ -112,6 +112,58 @@ _failedReadable({
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test(
+    'resident text rejects stale confirmation and replaces a retired mount',
+    () async {
+      final fixture = NativeReaderTestFixture('<p>resident text</p>');
+      final controller = _controller(fixture);
+      controller.start();
+      await _until(() => controller.readyTarget != null);
+      final original = controller.readyTarget!;
+      final fragments = original.view.takeFragments();
+      addTearDown(() => fragments.single.close());
+      final position = controller.confirmPreparedVisible(original, fragments)!;
+
+      expect(controller.suspend(retainMountedText: true), isTrue);
+      expect(controller.confirmPreparedVisible(original, fragments), isNull);
+      expect(
+        controller.resume(afterLayoutFrame: true, residentText: true),
+        isTrue,
+      );
+      final retained = controller.readyTarget!;
+      expect(retained.reusesTextMount, isTrue);
+      expect(retained.view, same(original.view));
+      expect(controller.confirmPreparedVisible(original, fragments), isNull);
+      expect(
+        controller.confirmPreparedVisible(retained, List.of(fragments)),
+        isNull,
+      );
+      expect(controller.readyTarget, same(retained));
+
+      fragments.single.close();
+      expect(controller.confirmPreparedVisible(retained, fragments), isNull);
+      await _until(() => controller.readyTarget != null);
+      final replacement = controller.readyTarget!;
+      expect(replacement.reusesTextMount, isFalse);
+      expect(replacement.view, isNot(same(original.view)));
+      final mounted = replacement.view.takeFragments();
+      addTearDown(() => mounted.single.close());
+      final confirmed = controller.confirmPreparedVisible(
+        replacement,
+        mounted,
+      )!;
+      expect(confirmed.anchor.episodeId, position.anchor.episodeId);
+      expect(confirmed.anchor.nodeId, position.anchor.nodeId);
+      expect(confirmed.anchor.textOffset, position.anchor.textOffset);
+      expect(confirmed.anchor.formatVersion, position.anchor.formatVersion);
+      expect(confirmed.anchor.textIdentity, position.anchor.textIdentity);
+      expect(confirmed.hasUserNavigated, isFalse);
+      controller.close();
+      mounted.single.close();
+      expect(fixture.cache.activeLeases, 0);
+    },
+  );
+
   for (final format in [1, 37]) {
     test(
       'author language inputs keep actual ruby coverage and restore authority format=$format',

@@ -745,6 +745,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       }
       if (_warmReturn && kind != 'turns') {
         final before = latest;
+        final mountedBefore = before.nativeController?.visibleView;
         final cover = PageRouteBuilder<void>(
           transitionDuration: Duration.zero,
           reverseTransitionDuration: Duration.zero,
@@ -778,7 +779,13 @@ class _MainPageProfileState extends State<_MainPageProfile> {
         if (!latest.retainsCompletePlanFrom(before)) {
           throw StateError('Reader did not return to its resident plan');
         }
-        if (native) _emitPageWork(id, 'warm-return', latest);
+        if (native) {
+          final reused =
+              mountedBefore != null &&
+              identical(mountedBefore, latest.nativeController?.visibleView);
+          run['warmReturnReusedMount'] = reused;
+          if (!reused) _emitPageWork(id, 'warm-return', latest);
+        }
         checkVisiblePage('warm-return', latest);
       }
       final turnUs = <int>[];

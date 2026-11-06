@@ -439,6 +439,8 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
               _pending == null &&
               request?.confirmed != null &&
               request!.controller.snapshot?.isComplete == true &&
+              request.scope.chapter.document.imageElements.isEmpty &&
+              request.scope.collapses == null &&
               !request.controller.hasPendingNavigation
           ? request
           : null;
@@ -450,7 +452,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
     _needsLayout = true;
     _busy = active;
     if (!active) {
-      _current?.controller.suspend();
+      _current?.controller.suspend(retainMountedText: _residentResume != null);
       _retireNavigationInput();
       _chapterHintChanged(null);
     }

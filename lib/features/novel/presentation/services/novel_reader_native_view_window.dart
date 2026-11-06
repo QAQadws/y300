@@ -117,33 +117,46 @@ final class NovelReaderNativeViewWindow {
     return view != null && _usable(view) ? view : null;
   }
 
+  bool tryReuseMountedText(NovelReaderNativePageView view) {
+    if (!_canRestoreResidentText(view) ||
+        !view.hasLiveTextMount ||
+        !_admit(view)) {
+      return false;
+    }
+    _views[_center] = view;
+    _notify();
+    return true;
+  }
+
+  bool _canRestoreResidentText(NovelReaderNativePageView view) {
+    final snapshot = _session?.snapshot;
+    final coverage = view.coverage;
+    return !_closed &&
+        _running == null &&
+        _views.isEmpty &&
+        snapshot != null &&
+        snapshot.isComplete &&
+        view.pageIndex == _center &&
+        _center < snapshot.length &&
+        view.state != NovelReaderNativePageViewState.owned &&
+        coverage.identity == snapshot.identity &&
+        coverage.layoutId == snapshot.layoutId &&
+        identical(view.snapshot[_center], snapshot[_center]) &&
+        snapshot[_center].table == null &&
+        snapshot[_center].floatedTables.isEmpty &&
+        !coverage.hasImages &&
+        !coverage.hasClippedResources &&
+        !coverage.hasClippedGlyphs &&
+        coverage.hasLocations;
+  }
+
   /// Issue a fresh delivery for the same sealed text page. The confirmed
   /// coverage is immutable geometry and survives closing the old window.
   /// Its transferred leases still belong to the old mount.
   void tryPrepareResidentText(NovelReaderNativePageView confirmed) {
-    final session = _session;
-    final snapshot = session?.snapshot;
+    if (!_canRestoreResidentText(confirmed)) return;
+    final session = _session!;
     final coverage = confirmed.coverage;
-    if (_closed ||
-        _running != null ||
-        _views.isNotEmpty ||
-        session == null ||
-        snapshot == null ||
-        !snapshot.isComplete ||
-        confirmed.pageIndex != _center ||
-        _center >= snapshot.length ||
-        confirmed.state == NovelReaderNativePageViewState.owned ||
-        coverage.identity != snapshot.identity ||
-        coverage.layoutId != snapshot.layoutId ||
-        !identical(confirmed.snapshot[_center], snapshot[_center]) ||
-        snapshot[_center].table != null ||
-        snapshot[_center].floatedTables.isNotEmpty ||
-        coverage.hasImages ||
-        coverage.hasClippedResources ||
-        coverage.hasClippedGlyphs ||
-        !coverage.hasLocations) {
-      return;
-    }
     final clock = Stopwatch()..start();
     final meter = NovelReaderNativeAdvanceMeter(budget: jobLimits.frameBudget);
     ForumBodyTextPagePreparation? preparation;
@@ -491,7 +504,9 @@ final class NovelReaderNativeViewWindow {
     }
   }
 
-  void close() {
+  /// Releases the window. A confirmed mounted text view may remain with the
+  /// caller until the Surface unmounts or another window adopts it.
+  void close({NovelReaderNativePageView? retainMountedText}) {
     if (_closed) return;
     _closed = true;
     _revision++;
@@ -507,7 +522,10 @@ final class NovelReaderNativeViewWindow {
     _active = null;
     _activePage = null;
     for (final view in _views.values) {
-      view.close();
+      if (!identical(view, retainMountedText) ||
+          view.state != NovelReaderNativePageViewState.transferred) {
+        view.close();
+      }
     }
     _views.clear();
     _deferred.clear();

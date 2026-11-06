@@ -97,6 +97,7 @@ final class NovelReaderNativePageView {
   final NovelReaderNativePageCoverage coverage;
   final NovelReaderNativePageWork? work;
   List<ForumBodyPreparedTextFragment> _fragments;
+  WeakReference<List<ForumBodyPreparedTextFragment>>? _mountedText;
   ForumBodyTablePageLease? _table;
   NovelReaderNativePageViewState _state = NovelReaderNativePageViewState.owned;
   void Function()? _removeParent;
@@ -108,6 +109,18 @@ final class NovelReaderNativePageView {
       _state == NovelReaderNativePageViewState.owned &&
       (_table?.isActive ?? true) &&
       _fragments.every((fragment) => fragment.isActive);
+
+  /// The Surface still owns the exact text fragments transferred by this view.
+  bool get hasLiveTextMount {
+    final fragments = _mountedText?.target;
+    return _state == NovelReaderNativePageViewState.transferred &&
+        fragments != null &&
+        fragments.every((fragment) => fragment.isActive);
+  }
+
+  bool matchesTextMount(List<ForumBodyPreparedTextFragment> fragments) =>
+      _state == NovelReaderNativePageViewState.transferred &&
+      identical(_mountedText?.target, fragments);
 
   void _bind(
     ForumBodyTextPageSession session,
@@ -166,6 +179,9 @@ final class NovelReaderNativePageView {
         fragments: _fragments,
       );
       final mount = (fragments: _fragments, table: _table);
+      if (_table == null && !coverage.hasImages && coverage.hasLocations) {
+        _mountedText = WeakReference(_fragments);
+      }
       _fragments = const [];
       _table = null;
       _state = NovelReaderNativePageViewState.transferred;
@@ -191,6 +207,7 @@ final class NovelReaderNativePageView {
   void close() {
     if (_state == NovelReaderNativePageViewState.closed) return;
     _state = NovelReaderNativePageViewState.closed;
+    _mountedText = null;
     _unbind();
     _table?.close();
     _table = null;

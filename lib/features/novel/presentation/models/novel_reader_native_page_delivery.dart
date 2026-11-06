@@ -16,6 +16,7 @@ final class NovelReaderNativePageDelivery {
     this.restoredAnchor,
     this.tableFocus,
     this.chapterEntryEdge,
+    this.reusesTextMount = false,
   });
   final int requestId;
   final NovelReaderNativePageView view;
@@ -27,5 +28,6 @@ final class NovelReaderNativePageDelivery {
   /// scrolling the actual mounted table window.
   final Rect? tableFocus;
   final NovelReaderChapterEdge? chapterEntryEdge;
+  final bool reusesTextMount;
   int get pageIndex => view.pageIndex;
 }

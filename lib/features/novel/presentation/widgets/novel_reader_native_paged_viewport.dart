@@ -1395,7 +1395,11 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
                                     return;
                                   }
                                   final fragments = _mountedPages[view];
-                                  if (fragments == null) return;
+                                  final delivery = controller.visibleDelivery;
+                                  if (fragments == null ||
+                                      !identical(delivery?.view, view)) {
+                                    return;
+                                  }
                                   widget.onTextSelection!(
                                     NovelReaderNativeTextSelection(
                                       snapshot,
@@ -1403,6 +1407,10 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
                                           mounted &&
                                           !controller.isClosed &&
                                           _page == page &&
+                                          identical(
+                                            controller.visibleDelivery,
+                                            delivery,
+                                          ) &&
                                           _mountedPages.containsKey(view) &&
                                           isCurrent() &&
                                           fragments.every(
