@@ -12,6 +12,7 @@ final class _Fixture {
     double height = 30,
     int fragments = 100,
     ForumBodyPageColumns columns = const ForumBodyPageColumns(),
+    double width = 100,
   }) {
     document = const ForumBodyParser().parse(
       html: html,
@@ -37,7 +38,7 @@ final class _Fixture {
         maxIssuedLeases: 32,
       ),
       layoutId: 'generation',
-      width: 100,
+      width: width,
       height: height,
       columns: columns,
     );
@@ -432,6 +433,126 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     expect(f.cache.activeLeases, 0);
   });
+
+  testWidgets(
+    'single-level ruby and mixed text retain their contours across cuts',
+    (tester) async {
+      final plain =
+          '<span style="background:rgba(255,0,0,.5)">'
+          '${'A' * 20}</span>';
+      const base = '<rb style="background:rgba(0,0,255,.5)">BC</rb>';
+      const rt = '<rt style="background:rgba(255,255,0,.5)">xy</rt>';
+      final html =
+          '<p style="color:transparent">$plain '
+          '<ruby style="background:rgba(0,255,0,.5)">$base$base$base$base$base$base'
+          '$rt$rt$rt$rt$rt$rt</ruby></p>';
+      final continuous = _Fixture(html, width: 40, height: 200)..drain();
+      final sliced = _Fixture(
+        html,
+        height: 20,
+        columns: const ForumBodyPageColumns(count: 2, gap: 20),
+      )..drain();
+      expect(continuous.session.snapshot, hasLength(1));
+      expect(sliced.session.snapshot.length, greaterThan(2));
+      final key = GlobalKey();
+      Future<Uint8List> show(
+        _Fixture fixture,
+        int page,
+        List<ForumBodyPreparedTextFragment> fragments,
+      ) async {
+        final snapshot = fixture.session.snapshot;
+        await tester.pumpWidget(
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: RepaintBoundary(
+                key: key,
+                child: ForumBodyTextBackgroundStyle(
+                  borderRadius: 5,
+                  child: ForumBodyTextPageSurface.prepared(
+                    key: ObjectKey(fragments),
+                    snapshot: snapshot,
+                    pageIndex: page,
+                    layoutId: snapshot.layoutId,
+                    fragments: fragments,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        return _pagePixels(tester, key);
+      }
+
+      final uncut = continuous.prepare(0);
+      final referenceView =
+          (uncut.single as ForumBodyPreparedInlineFragment).view;
+      final text = referenceView.content.projection.display.text;
+      final reference = await show(continuous, 0, uncut);
+      expect(_rgbCount(reference, 0x004080), greaterThan(0)); // RB over ruby.
+      expect(_rgbCount(reference, 0x808000), greaterThan(0)); // RT.
+      final copied = StringBuffer();
+      var previousEnd = 0;
+      var referenceY = 0;
+      var rubyWindows = 0;
+      final snapshot = sliced.session.snapshot;
+      for (var page = 0; page < snapshot.length; page++) {
+        final fragments = sliced.prepare(page);
+        final pixels = await show(sliced, page, fragments);
+        int alpha(int x, int y) => pixels[4 * (y * 100 + x) + 3];
+        if (page == 0) {
+          expect(alpha(1, 0), 0);
+          expect(alpha(1, 19), 128);
+          expect(alpha(61, 0), 128);
+          expect(alpha(61, 19), 128);
+        } else if (page == 1) {
+          expect(alpha(1, 0), 128);
+        }
+        for (final (index, box) in snapshot[page].fragments.indexed) {
+          final view =
+              (fragments[index] as ForumBodyPreparedInlineFragment).view;
+          final start = view.coverageStartUtf16;
+          final end = view.coverageEndUtf16;
+          expect(start, previousEnd);
+          copied.write(
+            view.content.projection.display.text.substring(start, end),
+          );
+          previousEnd = end;
+          if (view.containerBackgrounds.isNotEmpty) rubyWindows++;
+          expect(view.selectionBoxes(start, end), isNotEmpty);
+          expect(box.height, box.height.round());
+          for (var y = 0; y < box.height; y++) {
+            final position =
+                4 * ((box.top.round() + y) * 100 + box.left.round());
+            final expected = 4 * ((referenceY + y) * 40);
+            // Isolated rounded rectangles and equivalent contour paths can
+            // rasterize antialiased edges a few channel values apart.
+            for (var channel = 0; channel < 160; channel++) {
+              final delta =
+                  (pixels[position + channel] - reference[expected + channel])
+                      .abs();
+              if (delta > 16) {
+                fail(
+                  'Page $page, column at ${box.left}, row $y, '
+                  'pixel ${channel ~/ 4} differs by $delta',
+                );
+              }
+            }
+          }
+          referenceY += box.height.round();
+        }
+        for (var y = 0; y < 20; y++) {
+          expect(alpha(50, y), 0);
+        }
+      }
+      expect(copied.toString(), text);
+      expect(rubyWindows, greaterThan(1));
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(continuous.cache.activeLeases, 0);
+      expect(sliced.cache.activeLeases, 0);
+    },
+  );
 
   test(
     'block slices exclude outer margins and repeat neither end padding nor text',
