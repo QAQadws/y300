@@ -1,8 +1,9 @@
-import 'package:y300/app/content_rendering/native_forum_html_render_theme_factory.dart';
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/app/content_rendering/native_forum_html_render_theme_factory.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_sticker_image.dart';
@@ -88,6 +89,7 @@ class BlogPreservedHtml extends ConsumerWidget {
   final String id;
   @override
   Widget build(BuildContext context, WidgetRef ref) => ForumHtmlContentView(
+    nativeBody: true,
     html: html,
     sourceId: 'blog-editor-preserved-$id',
     theme: const ForumHtmlRenderThemeFactory().fromNativeTheme(

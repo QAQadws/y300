@@ -78,11 +78,7 @@ void main() {
           expect(host.details.queries, hasLength(1));
         }
         final sourceId = _sourceId(source);
-        final target = source == 'preview'
-            ? find.byKey(
-                Key('thread-post-html-first-readable-image-$sourceId-1'),
-              )
-            : _nativeImage(sourceId, 1);
+        final target = _nativeImage(sourceId, 1);
         await _revealImage(tester, target);
         final before = tester.getTopLeft(target);
         final gesture = _imageGesture(tester, target);
@@ -221,11 +217,7 @@ Finder _nativeImage(String sourceId, int index) => find.descendant(
 
 GestureDetector _imageGesture(WidgetTester tester, Finder target) =>
     tester.widget<GestureDetector>(
-      tester.widget(target) is GestureDetector
-          ? target
-          : find
-                .ancestor(of: target, matching: find.byType(GestureDetector))
-                .first,
+      find.ancestor(of: target, matching: find.byType(GestureDetector)).first,
     );
 
 Future<void> _revealImage(WidgetTester tester, Finder target) async {
@@ -235,7 +227,7 @@ Future<void> _revealImage(WidgetTester tester, Finder target) async {
     200,
     scrollable: find.byType(Scrollable).first,
   );
-  await tester.pump();
+  await tester.pumpAndSettle();
 }
 
 Future<void> _frames(WidgetTester tester) async {

@@ -6,10 +6,12 @@ import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/profile/presentation/blog/blog_editor_preview.dart';
 import 'package:y300/features/profile/presentation/blog/blog_editor_state.dart';
+import 'package:y300/features/profile/presentation/blog/blog_rich_text_embeds.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 
 import '../../../test_support/localized_test_app.dart';
+import '../../../test_support/native_body_finders.dart';
 
 void main() {
   testWidgets(
@@ -53,11 +55,18 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      final renderer = tester.widget<ForumHtmlWidgetPostRenderer>(
-        find.byType(ForumHtmlWidgetPostRenderer),
+      final renderer = tester.widget<ForumNativeBodyFlow>(
+        findNativeBody('blog-editor-preview-preview-fixture'),
       );
       expect(renderer.preferences, preferences);
-      expect(renderer.html, '<h2>Title &lt;literal&gt;</h2>${draft.bodyHtml}');
+      expect(
+        tester
+            .widget<ForumHtmlContentView>(find.byType(ForumHtmlContentView))
+            .html,
+        '<h2>Title &lt;literal&gt;</h2>${draft.bodyHtml}',
+      );
+      expect(findNativeBodyText('Title <literal>'), findsOneWidget);
+      expect(findNativeBodyText('繁體 & 原文'), findsOneWidget);
       final postTheme = const ForumHtmlRenderThemeFactory().fromThreadPalette(
         palette: ThreadDetailNativePalette.resolve(theme),
         brightness: theme.brightness,
@@ -67,6 +76,34 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('retained editor HTML renders ruby from the original payload', (
+    tester,
+  ) async {
+    const original = '<p><ruby>書<rt>しょ</rt></ruby>を読む。</p>';
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          forumImageRefererProvider.overrideWithValue('https://example.test/'),
+          forumHtmlReaderPreferencesRepositoryProvider.overrideWithValue(
+            _Preferences(ForumHtmlReaderPreferences.defaults()),
+          ),
+        ],
+        child: const LocalizedTestApp(
+          home: Scaffold(
+            body: BlogPreservedHtml(html: original, id: 'ruby'),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(findNativeBody('blog-editor-preserved-ruby'), findsOneWidget);
+    expect(find.byType(ForumBodyInlineParagraphSurface), findsOneWidget);
+    expect(
+      tester.widget<BlogPreservedHtml>(find.byType(BlogPreservedHtml)).html,
+      original,
+    );
+  });
 }
 
 final class _Preferences implements ForumHtmlReaderPreferencesRepository {

@@ -1,7 +1,8 @@
-import 'package:y300/app/content_rendering/native_forum_html_render_theme_factory.dart';
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/app/content_rendering/native_forum_html_render_theme_factory.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/profile/presentation/blog/blog_editor_state.dart';
 import 'package:y300/features/profile/presentation/blog/blog_content_projection.dart';
@@ -11,7 +12,7 @@ import 'package:y300/features/profile/presentation/blog/blog_surface.dart';
 import 'package:y300/features/profile/presentation/blog/blog_image_reader_page.dart';
 import 'package:y300/features/profile/presentation/blog/blog_read_providers.dart';
 
-/// Preview is mounted only on demand. It uses the shared HTML reader without
+/// Preview is mounted only on demand. It uses the shared native reader without
 /// converting its rendered or translated text back into the editable source.
 class BlogEditorPreview extends ConsumerWidget {
   const BlogEditorPreview({
@@ -34,6 +35,8 @@ class BlogEditorPreview extends ConsumerWidget {
     ).convert(display.text(draft.subject));
     return BlogSurface(
       child: ForumHtmlContentView(
+        key: ObjectKey(accountOwner),
+        nativeBody: true,
         html: '<h2>$title</h2>${display.html(draft.bodyHtml)}',
         sourceId: 'blog-editor-preview-$ownerId',
         theme: const ForumHtmlRenderThemeFactory().fromNativeTheme(
