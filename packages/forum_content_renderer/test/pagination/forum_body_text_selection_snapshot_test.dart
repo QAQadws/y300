@@ -672,6 +672,56 @@ void main() {
       }
     },
   );
+  testWidgets(
+    'long press copies one-rune ruby at a reordered source boundary',
+    (tester) async {
+      final f = _Fixture(
+        '<p><ruby><rb>A</rb><rb>B</rb><rt>x</rt><rt>y</rt></ruby></p>',
+      );
+      final bindings = f.prepare(0);
+      final b = bindings.single as ForumBodyPreparedInlineFragment;
+      final fragment = f.session.snapshot.single.fragments.single;
+      expect(b.projection.text, 'AxBy');
+      final box = b.glyphBoxes(1, 2).single.toRect();
+      final point = Offset(box.left + box.width * .25, box.center.dy);
+      final raw = b.view.sourceAt(point);
+      expect(raw.sourceRune, 2);
+      expect(raw.isExact, isFalse);
+      final copies = <ForumBodyTextSelectionSnapshot>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SelectionArea(
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: ForumBodyTextPageSurface.prepared(
+                  snapshot: f.session.snapshot,
+                  pageIndex: 0,
+                  layoutId: 'selection',
+                  fragments: bindings,
+                  onSourceLongPress: (_, selection) => copies.add(selection),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      final pageOrigin = tester.getTopLeft(
+        find.byType(ForumBodyTextPageSurface),
+      );
+      final origin = pageOrigin + Offset(fragment.left, fragment.top);
+      await tester.longPressAt(origin + point);
+      expect(copies, hasLength(1));
+      expect(copies.single.text, 'x');
+      expect(copies.single.isAnnotation, isTrue);
+      expect(copies.single.position.sourceRune, raw.sourceRune);
+      expect(copies.single.position.isExact, isFalse);
+      await tester.longPressAt(origin + Offset(box.right + 1, box.center.dy));
+      expect(copies, hasLength(1));
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(f.cache.activeLeases, 0);
+    },
+  );
   test(
     'local snapshots preserve CJK, emoji, combining and RTL logical text',
     () {

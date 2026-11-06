@@ -430,14 +430,18 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
                   )?.linkTarget,
             acceptsLongPress: registrar == null
                 ? null
-                : (point) =>
-                      ForumBodyTextGlyphHit.at(
-                        binding: binding,
-                        fragment: fragment,
-                        pageSize: pageSize,
-                        point: point,
-                      )?.role ==
-                      ForumBodyTextRole.ruby,
+                : (point) {
+                    final hit = ForumBodyTextGlyphHit.at(
+                      binding: binding,
+                      fragment: fragment,
+                      pageSize: pageSize,
+                      point: point,
+                      requireExactSource: false,
+                    );
+                    return hit != null &&
+                        hit.role == ForumBodyTextRole.ruby &&
+                        hit.paintedRanges.isNotEmpty;
+                  },
             onLongPress: _onSourceLongPress == null
                 ? null
                 : (point) {

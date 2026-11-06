@@ -37,8 +37,15 @@ ForumBodyTextSelectionSnapshot? forumBodyTextSelectionAt({
     fragment: fragment,
     pageSize: pageSize,
     point: point,
+    requireExactSource: false,
   );
-  if (hit == null) return null;
+  // A ruby window can own the painted glyph even when its caret borders
+  // nonadjacent raw source runs. Copy uses that window and the glyph proof
+  // below while keeping the original source precision in the snapshot.
+  if (hit == null ||
+      (!hit.position.isExact && hit.role != ForumBodyTextRole.ruby)) {
+    return null;
+  }
   final projection = hit.body.projection;
   final ranges = forumBodyVisibleTextRanges(
     projection,
