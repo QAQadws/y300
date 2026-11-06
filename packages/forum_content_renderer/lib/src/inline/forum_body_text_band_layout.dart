@@ -88,17 +88,12 @@ final class ForumBodyTextBandLayout implements ForumBodyNativeParagraphLayout {
     double? gutter,
   }) {
     final scales = <double, double>{};
-    final current = <double, double>{};
     for (final context in content.contexts) {
-      context.layoutInput.resolveScalesInto(current, textScaler: textScaler);
-      for (final entry in current.entries) {
-        if (scales.containsKey(entry.key) && scales[entry.key] != entry.value) {
-          throw const ForumBodyParagraphLayoutException(
-            ForumBodyParagraphLayoutFailure.scale,
-          );
-        }
-        scales[entry.key] = entry.value;
-      }
+      context.layoutInput.resolveScalesInto(
+        scales,
+        textScaler: textScaler,
+        mergeWithExisting: true,
+      );
     }
     final separation =
         gutter ?? math.max(1.0, scales.values.reduce(math.max) * 2);

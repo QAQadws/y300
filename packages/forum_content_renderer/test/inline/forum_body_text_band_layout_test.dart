@@ -98,6 +98,33 @@ void main() {
   );
 
   test(
+    'a conflicting size does not hide a later scaler failure in the child',
+    () {
+      final input = ForumBodyTextBandContent(
+        contexts: contexts([
+          '<span>AB</span>',
+          '<span>CD<i style="font-size:10px">xy</i></span>',
+        ]),
+      );
+      final failure = StateError('scaler failed');
+      final seen = <double>[];
+      final scaler = _Scaler((size) {
+        seen.add(size);
+        if (size == 10) throw failure;
+        return size + seen.length;
+      });
+      expect(
+        () => ForumBodyTextBandLayout.validateInputs(
+          content: input,
+          textScaler: scaler,
+        ),
+        throwsA(same(failure)),
+      );
+      expect(seen, [20, 20, 10]);
+    },
+  );
+
+  test(
     'different text and font sizes share one native band with independent geometry/source',
     () {
       final inputs = contexts([

@@ -72,11 +72,14 @@ final class ForumBodyParagraphInputAdmission {
   /// Replays unique sizes in original style order, then any terminal immutable
   /// failure. A later invalid style cannot hide an earlier scaler failure or
   /// skip caller code. The map is request-local, including reentrant requests.
+  /// A band merges child values into one map and rejects conflicting sizes.
   void resolveScalesInto(
     Map<double, double> scales, {
     required TextScaler textScaler,
+    bool mergeWithExisting = false,
   }) {
-    scales.clear();
+    if (!mergeWithExisting) scales.clear();
+    var consistent = true;
     for (final input in _sizes) {
       // Unresolved font sizes fail here, after preceding scaler calls, just as
       // on the uncached input path. They never enter a successful native key.
@@ -87,9 +90,23 @@ final class ForumBodyParagraphInputAdmission {
           ForumBodyParagraphLayoutFailure.scale,
         );
       }
+      if (mergeWithExisting) {
+        final previous = scales[size];
+        if (previous != null) {
+          consistent = consistent && previous == scaled;
+          continue;
+        }
+      }
       scales[size] = scaled;
     }
     final failure = _failure;
     if (failure != null) throw ForumBodyParagraphLayoutException(failure);
+    // A mismatch with another band child must not hide this child's own
+    // validation failure or skip later calls into a custom scaler.
+    if (!consistent) {
+      throw const ForumBodyParagraphLayoutException(
+        ForumBodyParagraphLayoutFailure.scale,
+      );
+    }
   }
 }
