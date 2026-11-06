@@ -35,6 +35,7 @@ void main() {
         lineHeightScale: 1.8,
         paragraphSpacing: 18,
         preserveAuthorFontSize: false,
+        preserveAuthorFontFamily: false,
       ),
     );
     for (final mode in TextConversionMode.values) {
