@@ -33,6 +33,7 @@ final class ThreadPostNativeFlow extends StatefulWidget {
     this.selectEntireBody = false,
     this.isSelectionCurrent,
     required this.onGeometry,
+    this.onLayoutPhase,
     required this.errorBuilder,
     this.imageAnchorController,
   });
@@ -50,6 +51,7 @@ final class ThreadPostNativeFlow extends StatefulWidget {
   final bool selectEntireBody;
   final bool Function()? isSelectionCurrent;
   final void Function(bool ready, bool complete) onGeometry;
+  final ValueChanged<ForumHtmlBodyLayoutPhase>? onLayoutPhase;
   final WidgetBuilder errorBuilder;
   final ForumHtmlImageAnchorController? imageAnchorController;
 
@@ -173,6 +175,18 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
       final run = _shown;
       final table = run?.initialTable;
       final error = _error;
+      final complete =
+          _pending?.prefix?.isComplete == true &&
+          (identical(run, _pending) || _pending!.prefix!.isEmpty);
+      // Report the phase during layout so the outer floor records the extent
+      // of this prefix, even when only the inner LayoutBuilder rebuilt.
+      widget.onLayoutPhase?.call(
+        error != null
+            ? ForumHtmlBodyLayoutPhase.failed
+            : complete
+            ? ForumHtmlBodyLayoutPhase.built
+            : ForumHtmlBodyLayoutPhase.preparing,
+      );
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -224,7 +238,7 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
                     _buildSlice(context, run, snapshot, index, fragments),
               ),
             )
-          else if (error == null)
+          else if (error == null && !complete)
             const ForumHtmlPreparationPlaceholder(),
           if (error != null) ...[
             widget.errorBuilder(context),

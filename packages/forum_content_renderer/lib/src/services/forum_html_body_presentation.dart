@@ -61,7 +61,9 @@ class ForumHtmlBodyPresentation {
   }
 }
 
-/// Restores a measured height only while HtmlWidget is preparing its body.
+enum ForumHtmlBodyLayoutPhase { preparing, built, failed }
+
+/// Restores a measured height while the renderer is preparing its body.
 /// The real child still lays out, then takes over without a scroll command or
 /// a permanent height constraint. This also wraps async nested fold bodies.
 class ForumHtmlBodyLayout extends StatefulWidget {
@@ -70,13 +72,29 @@ class ForumHtmlBodyLayout extends StatefulWidget {
     required this.presentation,
     required this.sourceId,
     required this.revision,
-    required this.builder,
-  });
+    required Widget Function(VoidCallback onBodyBuilt) builder,
+  }) : _builder = builder,
+       _child = null,
+       _phase = null;
+
+  /// [phase] is read after the child has laid out its current prefix.
+  const ForumHtmlBodyLayout.observed({
+    super.key,
+    required this.presentation,
+    required this.sourceId,
+    required this.revision,
+    required Widget child,
+    required ForumHtmlBodyLayoutPhase Function() phase,
+  }) : _child = child,
+       _phase = phase,
+       _builder = null;
 
   final ForumHtmlBodyPresentation presentation;
   final String sourceId;
   final Object revision;
-  final Widget Function(VoidCallback onBodyBuilt) builder;
+  final Widget Function(VoidCallback onBodyBuilt)? _builder;
+  final Widget? _child;
+  final ForumHtmlBodyLayoutPhase Function()? _phase;
 
   @override
   State<ForumHtmlBodyLayout> createState() => _ForumHtmlBodyLayoutState();
@@ -90,10 +108,16 @@ class _ForumHtmlBodyLayoutState extends State<ForumHtmlBodyLayout> {
     presentation: widget.presentation,
     sourceId: widget.sourceId,
     revision: widget.revision,
-    isReady: () => _ready,
-    child: widget.builder(() {
-      if (mounted && widget.presentation.isActive) _ready = true;
-    }),
+    phase:
+        widget._phase ??
+        () => _ready
+            ? ForumHtmlBodyLayoutPhase.built
+            : ForumHtmlBodyLayoutPhase.preparing,
+    child:
+        widget._child ??
+        widget._builder!(() {
+          if (mounted && widget.presentation.isActive) _ready = true;
+        }),
   );
 }
 
@@ -102,18 +126,18 @@ class _BodyMeasurement extends SingleChildRenderObjectWidget {
     required this.presentation,
     required this.sourceId,
     required this.revision,
-    required this.isReady,
+    required this.phase,
     required super.child,
   });
 
   final ForumHtmlBodyPresentation presentation;
   final String sourceId;
   final Object revision;
-  final bool Function() isReady;
+  final ForumHtmlBodyLayoutPhase Function() phase;
 
   @override
   RenderObject createRenderObject(BuildContext context) =>
-      _BodyMeasurementBox(presentation, sourceId, revision, isReady);
+      _BodyMeasurementBox(presentation, sourceId, revision, phase);
 
   @override
   void updateRenderObject(BuildContext context, _BodyMeasurementBox box) {
@@ -121,7 +145,7 @@ class _BodyMeasurement extends SingleChildRenderObjectWidget {
       ..presentation = presentation
       ..sourceId = sourceId
       ..revision = revision
-      ..isReady = isReady
+      ..phase = phase
       ..markNeedsLayout();
   }
 }
@@ -131,13 +155,13 @@ class _BodyMeasurementBox extends RenderProxyBox {
     this.presentation,
     this.sourceId,
     this.revision,
-    this.isReady,
+    this.phase,
   );
 
   ForumHtmlBodyPresentation presentation;
   String sourceId;
   Object revision;
-  bool Function() isReady;
+  ForumHtmlBodyLayoutPhase Function() phase;
 
   @override
   void performLayout() {
@@ -147,13 +171,16 @@ class _BodyMeasurementBox extends RenderProxyBox {
       constraints.maxWidth,
       presentation.expansionRevision,
     );
-    if (isReady()) {
-      presentation.recordLayout(sourceId, layoutRevision, size.height);
-    } else {
-      final height = presentation.heightFor(sourceId, layoutRevision);
-      if (height != null) {
-        size = constraints.constrain(Size(size.width, height));
-      }
+    switch (phase()) {
+      case ForumHtmlBodyLayoutPhase.built:
+        presentation.recordLayout(sourceId, layoutRevision, size.height);
+      case ForumHtmlBodyLayoutPhase.preparing:
+        final height = presentation.heightFor(sourceId, layoutRevision);
+        if (height != null && height > size.height) {
+          size = constraints.constrain(Size(size.width, height));
+        }
+      case ForumHtmlBodyLayoutPhase.failed:
+        break;
     }
   }
 }

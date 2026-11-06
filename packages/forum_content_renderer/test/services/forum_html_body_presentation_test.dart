@@ -3,6 +3,51 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
 void main() {
+  testWidgets('retained height follows the current published layout', (
+    tester,
+  ) async {
+    final presentation = ForumHtmlBodyPresentation();
+    addTearDown(presentation.dispose);
+    final phase = ValueNotifier(ForumHtmlBodyLayoutPhase.built);
+    addTearDown(phase.dispose);
+    const body = Key('body');
+
+    Future<void> pumpBody(double height, {int revision = 1}) =>
+        tester.pumpWidget(
+          Center(
+            child: ForumHtmlBodyLayout.observed(
+              key: body,
+              presentation: presentation,
+              sourceId: 'floor',
+              revision: revision,
+              phase: () => phase.value,
+              child: SizedBox(height: height),
+            ),
+          ),
+        );
+
+    Future<void> expectHeight(double childHeight, double bodyHeight) async {
+      await pumpBody(childHeight);
+      expect(tester.getSize(find.byKey(body)).height, bodyHeight);
+    }
+
+    await expectHeight(120, 120);
+    await tester.pumpWidget(const SizedBox());
+    phase.value = ForumHtmlBodyLayoutPhase.preparing;
+    await expectHeight(20, 120);
+    await expectHeight(160, 160);
+    phase.value = ForumHtmlBodyLayoutPhase.failed;
+    await expectHeight(40, 40);
+    phase.value = ForumHtmlBodyLayoutPhase.preparing;
+    await expectHeight(20, 120);
+    await pumpBody(20, revision: 2);
+    expect(tester.getSize(find.byKey(body)).height, 20);
+    phase.value = ForumHtmlBodyLayoutPhase.built;
+    await expectHeight(96, 96);
+    phase.value = ForumHtmlBodyLayoutPhase.preparing;
+    await expectHeight(20, 96);
+  });
+
   test('inline size memory is bounded and keeps recently read entries', () {
     final presentation = ForumHtmlBodyPresentation();
     addTearDown(presentation.dispose);

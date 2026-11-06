@@ -131,6 +131,8 @@ class _ThreadPostHtmlFirstBodyState
   final _bodyLayoutConsumer = Object();
   ThreadBodyLayoutLease? _bodyLayoutLease;
   ThreadBodyLayoutPhase _bodyLayoutPhase = ThreadBodyLayoutPhase.preparing;
+  ForumHtmlBodyLayoutPhase _nativeLayoutPhase =
+      ForumHtmlBodyLayoutPhase.preparing;
 
   void _onPreparationChanged() {
     if (mounted) setState(() {});
@@ -210,6 +212,22 @@ class _ThreadPostHtmlFirstBodyState
       theme: widget.theme,
       font: fontBinding.resolvedFont,
     );
+    final retained = widget.bodyPresentation;
+    if (widget.nativeBody && retained != null && retained.isActive) {
+      _releaseBodyLayout();
+      if (!fontBinding.isReady) {
+        widget.readingCoordinator?.unregister(this);
+        _clearReading();
+      }
+      return _buildRetainedNativeBody(
+        html,
+        preferences,
+        textStyle: textStyle,
+        fontIdentity: fontBinding.cacheKey,
+        fontReady: fontBinding.isReady,
+        presentation: retained,
+      );
+    }
     if (!fontBinding.isReady) {
       _releaseBodyLayout();
       widget.readingCoordinator?.unregister(this);
@@ -288,6 +306,48 @@ class _ThreadPostHtmlFirstBodyState
     );
   }
 
+  Widget _buildRetainedNativeBody(
+    String html,
+    ForumHtmlReaderPreferences preferences, {
+    required TextStyle textStyle,
+    required Object fontIdentity,
+    required bool fontReady,
+    required ForumHtmlBodyPresentation presentation,
+  }) {
+    try {
+      final request = _requestForBody(html, preferences);
+      return ForumHtmlBodyLayout.observed(
+        presentation: presentation,
+        sourceId: request.sourceId,
+        revision: (
+          request.identity,
+          preferences.renderOptions,
+          fontIdentity,
+          textStyle,
+          MediaQuery.textScalerOf(context),
+          Directionality.of(context),
+          Localizations.localeOf(context),
+        ),
+        phase: () => _nativeLayoutPhase,
+        child: _buildHtmlBody(
+          html,
+          preferences,
+          textStyle: textStyle,
+          fontIdentity: fontIdentity,
+          fontReady: fontReady,
+          preparationRequest: request,
+        ),
+      );
+    } catch (error, stackTrace) {
+      _logRenderFailure(
+        htmlLength: html.length,
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return widget.fallback ?? const ThreadPostHtmlBodyError();
+    }
+  }
+
   ForumHtmlPreparationRequest _requestForBody(
     String html,
     ForumHtmlReaderPreferences preferences,
@@ -335,11 +395,13 @@ class _ThreadPostHtmlFirstBodyState
       final preparedDocument = _preparation.resolve(request);
       if (preparedDocument == null || !fontReady) {
         _bodyLayoutPhase = ThreadBodyLayoutPhase.preparing;
+        _nativeLayoutPhase = ForumHtmlBodyLayoutPhase.preparing;
         return const ForumHtmlPreparationPlaceholder();
       }
       if (widget.onPreparedBody?.call(context, request, preparedDocument) ==
           true) {
         _bodyLayoutPhase = ThreadBodyLayoutPhase.preparing;
+        _nativeLayoutPhase = ForumHtmlBodyLayoutPhase.preparing;
         widget.readingCoordinator?.unregister(this);
         _clearReading();
         return const ForumHtmlPreparationPlaceholder();
@@ -459,6 +521,9 @@ class _ThreadPostHtmlFirstBodyState
                 isSelectionCurrent: widget.isSelectionCurrent,
                 errorBuilder: (_) =>
                     widget.fallback ?? const ThreadPostHtmlBodyError(),
+                onLayoutPhase: widget.bodyPresentation == null
+                    ? null
+                    : (phase) => _nativeLayoutPhase = phase,
                 onGeometry: (ready, complete) {
                   if (!mounted || _readingIdentity != readingIdentity) return;
                   _readingReady = ready;
@@ -516,6 +581,7 @@ class _ThreadPostHtmlFirstBodyState
             );
     } catch (error, stackTrace) {
       _bodyLayoutPhase = ThreadBodyLayoutPhase.failed;
+      _nativeLayoutPhase = ForumHtmlBodyLayoutPhase.failed;
       _logRenderFailure(
         htmlLength: html.length,
         error: error,
