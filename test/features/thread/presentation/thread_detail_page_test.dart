@@ -263,10 +263,14 @@ void main() {
           AppLocalizations.of(tester.element(floorActions)).threadPostActions,
         );
         await tester.tap(floorActions);
-        await tester.pumpAndSettle();
-        expect(find.byKey(const Key('thread-post-action-sheet')), findsOneWidget);
+        await _pumpThreadUiTransition(tester);
+        expect(
+          find.byKey(const Key('thread-post-action-sheet')),
+          findsOneWidget,
+        );
         await tester.binding.handlePopRoute();
-        await tester.pumpAndSettle();
+        await _pumpThreadUiTransition(tester);
+        expect(find.byKey(const Key('thread-post-action-sheet')), findsNothing);
 
         final opening = find.byWidgetPredicate(
           (widget) =>
@@ -283,7 +287,7 @@ void main() {
                 (glyph.top + glyph.bottom) / 2,
               ),
         );
-        await tester.pumpAndSettle();
+        await _pumpThreadUiTransition(tester);
         final toolbar = tester.widget<AdaptiveTextSelectionToolbar>(
           find.byType(AdaptiveTextSelectionToolbar),
         );
@@ -291,14 +295,14 @@ void main() {
             .singleWhere((item) => item.type == ContextMenuButtonType.copy)
             .onPressed!;
         copy();
-        await tester.pumpAndSettle();
+        await _pumpThreadUiTransition(tester);
         expect(copiedTexts, ['Opening']);
 
         final region = tester.state<SelectableRegionState>(
           find.byType(SelectableRegion),
         );
         region.selectAll(SelectionChangedCause.toolbar);
-        await tester.pumpAndSettle();
+        await _pumpThreadUiTransition(tester);
         final openLink = tester
             .widget<AdaptiveTextSelectionToolbar>(
               find.byType(AdaptiveTextSelectionToolbar),
@@ -312,11 +316,17 @@ void main() {
             .onPressed!;
         openLink();
         openLink();
-        await tester.pumpAndSettle();
+        await _pumpThreadUiTransition(tester);
         expect(openedThreads, ['456']);
         expect(find.text('Selected thread fixture'), findsOneWidget);
         await tester.binding.handlePopRoute();
-        await tester.pumpAndSettle();
+        await _pumpThreadBodyUntil(
+          tester,
+          () => find
+              .text('Selected thread fixture', skipOffstage: false)
+              .evaluate()
+              .isEmpty,
+        );
 
         final viewport = tester.widget<ForumBodyTableFlowViewport>(table);
         expect(viewport.verticalController, isNull);
@@ -325,11 +335,11 @@ void main() {
           greaterThan(0),
         );
         await tester.drag(table, const Offset(-180, 0));
-        await tester.pumpAndSettle();
+        await _pumpThreadUiTransition(tester);
         expect(viewport.horizontalController.offset, greaterThan(0));
 
         await tester.tap(images.last);
-        await tester.pumpAndSettle();
+        await _pumpThreadUiTransition(tester);
         final reader = tester.widget<ThreadImageReaderPage>(
           find.byType(ThreadImageReaderPage),
         );
