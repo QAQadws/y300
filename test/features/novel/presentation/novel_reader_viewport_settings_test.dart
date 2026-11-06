@@ -115,7 +115,7 @@ void main() {
         SharedPreferences.setMockInitialValues({});
         var latest = NovelReaderPreferences.defaults().copyWith(
           flowMode: NovelReaderFlowMode.vertical,
-          viewport: _selected,
+          viewport: _selected.withColumns(NovelReaderColumnCount.triple),
         );
         await tester.pumpWidget(
           ProviderScope(
@@ -144,13 +144,26 @@ void main() {
         await tester.ensureVisible(toggle);
         expect(tester.widget<SwitchListTile>(toggle).onChanged, isNull);
         expect(find.text(l10n.novelViewportUnavailable), findsOneWidget);
+        final columns = find.descendant(
+          of: find.byKey(const Key('novel-reader-viewport-columns')),
+          matching: find.byType(OutlinedButton),
+        );
+        expect(columns, findsNWidgets(3));
+        expect(
+          tester
+              .widgetList<OutlinedButton>(columns)
+              .every((button) => button.onPressed == null),
+          isTrue,
+        );
         final reset = find.byKey(const Key('novel-reader-viewport-left-reset'));
         await tester.ensureVisible(reset);
         await tester.tap(reset);
         await tester.pump();
         expect(
           latest.viewport,
-          _selected.withMargin(NovelReaderViewportEdge.left, null),
+          _selected
+              .withMargin(NovelReaderViewportEdge.left, null)
+              .withColumns(NovelReaderColumnCount.triple),
         );
         expect(latest.flowMode, NovelReaderFlowMode.vertical);
       },

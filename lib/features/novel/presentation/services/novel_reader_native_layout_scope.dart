@@ -37,6 +37,7 @@ final class NovelReaderNativeLayoutScope {
     required this.backgroundColor,
     required this.width,
     required this.height,
+    required this.columns,
     required this.paginationKey,
     required this.maxNativeHandlesPerPage,
     required this.maxNativeEntriesPerPage,
@@ -62,6 +63,7 @@ final class NovelReaderNativeLayoutScope {
   final Color backgroundColor;
   final double width;
   final double height;
+  final ForumBodyPageColumns columns;
   final String paginationKey;
   final int maxNativeHandlesPerPage;
   final int? maxNativeEntriesPerPage;
@@ -79,6 +81,7 @@ final class NovelReaderNativeLayoutScope {
     required NovelReaderNativeRenderEnvironment environment,
     required double width,
     required double height,
+    ForumBodyPageColumns columns = const ForumBodyPageColumns(),
     required NovelReaderPaginationCancellationToken cancellation,
     int maxScaledFontSizes = 2048,
     int fontCollectionGeneration = 0,
@@ -177,6 +180,8 @@ final class NovelReaderNativeLayoutScope {
       document.identity.cacheIdentity,
       width,
       height,
+      if (columns.count > 1)
+        [columns.count, columns.gap, columns.readingOrder.name],
       pageHandleLimit,
       pageEntryLimit,
       pageByteLimit,
@@ -201,6 +206,7 @@ final class NovelReaderNativeLayoutScope {
       backgroundColor: background,
       width: width,
       height: height,
+      columns: columns,
       maxNativeHandlesPerPage: pageHandleLimit,
       maxNativeEntriesPerPage: pageEntryLimit,
       maxNativeEstimatedBytesPerPage: pageByteLimit,
@@ -223,12 +229,14 @@ final class NovelReaderNativeLayoutScope {
     required NovelReaderNativeRenderEnvironment environment,
     required double width,
     required double height,
+    ForumBodyPageColumns columns = const ForumBodyPageColumns(),
     required int fontCollectionGeneration,
     required bool Function() isCurrent,
   }) {
     if (!isCurrent() ||
         width != this.width ||
         height != this.height ||
+        columns != this.columns ||
         environment.avoidIsolatedLines != _avoidIsolatedLines ||
         environment.keepHeadingWithNext != _keepHeadingWithNext ||
         fontCollectionGeneration != _fontCollectionGeneration) {
@@ -261,6 +269,7 @@ final class NovelReaderNativeLayoutScope {
       backgroundColor: background,
       width: width,
       height: height,
+      columns: columns,
       maxNativeHandlesPerPage: maxNativeHandlesPerPage,
       maxNativeEntriesPerPage: maxNativeEntriesPerPage,
       maxNativeEstimatedBytesPerPage: maxNativeEstimatedBytesPerPage,
@@ -293,6 +302,7 @@ final class NovelReaderNativeLayoutScope {
       textScaler: textScaler,
       width: width,
       height: height,
+      columns: columns,
       cache: cache,
       layoutId: layoutId,
       limits: limits,

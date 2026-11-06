@@ -97,7 +97,11 @@ void main() {
     final global = NovelReaderPreferences.defaults().copyWith(
       fontSize: 22,
       showRubyAnnotations: false,
-      viewport: const NovelReaderViewportOverrides(left: 12, top: 8),
+      viewport: const NovelReaderViewportOverrides(
+        left: 12,
+        top: 8,
+        columns: NovelReaderColumnCount.double,
+      ),
       colors: const NovelReaderColorOverrides(foreground: 0x010203),
       typography: const NovelReaderTypographyOverrides(
         roleFontSizes: NovelReaderRoleFontSizes(heading: 125, ruby: 135),
@@ -115,7 +119,11 @@ void main() {
         fontSize: 24,
         showRubyAnnotations: true,
         colors: const NovelReaderColorOverrides(),
-        viewport: const NovelReaderViewportOverrides(left: 0, top: 8),
+        viewport: const NovelReaderViewportOverrides(
+          left: 0,
+          top: 8,
+          columns: NovelReaderColumnCount.single,
+        ),
         typography: const NovelReaderTypographyOverrides(
           roleFontSizes: NovelReaderRoleFontSizes(heading: 125, ruby: 100),
         ),
@@ -131,6 +139,7 @@ void main() {
       'fontSize': 24,
       'showRubyAnnotations': true,
       'viewport.left': {'unit': 'logicalPixels', 'value': 0, 'enabled': true},
+      'viewport.columns': 'single',
       'typography.roleFontSizes.ruby': 100,
       'colors.foreground': null,
     });
@@ -139,7 +148,11 @@ void main() {
     final updatedGlobal = global.copyWith(
       fontSize: 28,
       lineHeight: 2,
-      viewport: const NovelReaderViewportOverrides(left: 19, top: 30),
+      viewport: const NovelReaderViewportOverrides(
+        left: 19,
+        top: 30,
+        columns: NovelReaderColumnCount.triple,
+      ),
       colors: const NovelReaderColorOverrides(
         foreground: 0x102030,
         background: 0xf0f0f0,
@@ -162,7 +175,14 @@ void main() {
     expect(a.fontSize, 24);
     expect(a.showRubyAnnotations, isTrue);
     expect(a.lineHeight, 2);
-    expect(a.viewport, const NovelReaderViewportOverrides(left: 0, top: 30));
+    expect(
+      a.viewport,
+      const NovelReaderViewportOverrides(
+        left: 0,
+        top: 30,
+        columns: NovelReaderColumnCount.single,
+      ),
+    );
     expect(
       a.typography.roleFontSizes,
       const NovelReaderRoleFontSizes(heading: 140, ruby: 100),

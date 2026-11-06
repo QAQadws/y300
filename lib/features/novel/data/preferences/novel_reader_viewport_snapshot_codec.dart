@@ -18,6 +18,7 @@ final class NovelReaderViewportSnapshotCodec {
       contentWidth: input.contentWidth?.isValid == true
           ? input.contentWidth
           : null,
+      columns: input.columns,
     );
   }
 
@@ -66,8 +67,14 @@ final class NovelReaderViewportSnapshotCodec {
           : (rawWidth as Map<String, dynamic>)['mode'] == 'available'
           ? NovelReaderContentWidth.available(logicalPixels: limit)
           : NovelReaderContentWidth.limited(limit),
+      columns: _decodeColumns(input['columns']),
     );
   }
+
+  NovelReaderColumnCount? _decodeColumns(Object? value) =>
+      NovelReaderColumnCount.values
+          .where((count) => count.name == value)
+          .firstOrNull;
 
   Map<String, Object?>? _encodeNumber(
     Object? previous,
@@ -104,8 +111,18 @@ final class NovelReaderViewportSnapshotCodec {
       throw const NovelReaderPreferencesUnsupportedSnapshot();
     }
     final prior = previous as Map<String, dynamic>?;
+    if (prior != null &&
+        prior.containsKey('columns') &&
+        _decodeColumns(prior['columns']) == null) {
+      throw const NovelReaderPreferencesUnsupportedSnapshot();
+    }
     final normalized = normalize(input);
     final result = <String, Object?>{...?prior, 'schemaVersion': schemaVersion};
+    if (normalized.columns case final columns?) {
+      result['columns'] = columns.name;
+    } else {
+      result.remove('columns');
+    }
     final requests = <String, Map<String, Object?>?>{
       for (final edge in NovelReaderViewportEdge.values)
         edge.name: _encodeNumber(prior?[edge.name], normalized.marginFor(edge)),

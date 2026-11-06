@@ -71,6 +71,8 @@ void main() {
           episodeId: source.episodeId,
         );
         final navigator = GlobalKey<NavigatorState>();
+        final scaler = ValueNotifier<TextScaler>(TextScaler.noScaling);
+        addTearDown(scaler.dispose);
         var readerKey = GlobalKey();
         Future<void> mount() => tester.pumpWidget(
           data.scope(
@@ -87,6 +89,13 @@ void main() {
               ),
               localizationsDelegates: AppLocalizations.localizationsDelegates,
               supportedLocales: AppLocalizations.supportedLocales,
+              builder: (context, child) => ValueListenableBuilder(
+                valueListenable: scaler,
+                builder: (context, value, _) => MediaQuery(
+                  data: MediaQuery.of(context).copyWith(textScaler: value),
+                  child: child!,
+                ),
+              ),
               home: const Scaffold(),
             ),
             preferences: repository(),
@@ -350,6 +359,67 @@ void main() {
         final stored = await repository().load();
         expect(stored.viewport, expected);
         expect(stored.typography, initial.typography);
+        if (!mixed) {
+          final strings = await settings();
+          final triple = find.descendant(
+            of: find.byKey(const Key('novel-reader-viewport-columns')),
+            matching: find.text(strings.novelViewportTripleColumn),
+          );
+          await tester.ensureVisible(triple);
+          await tester.tap(triple);
+          await closeSettings();
+          final requested = expected.withColumns(NovelReaderColumnCount.triple);
+          Future<ProfileReaderObservation> columns(int count) => wait(
+            (o) =>
+                o.ready &&
+                o.complete &&
+                o.nativeController!.snapshot!.columns.count == count &&
+                state().persistedPreferences.viewport == requested,
+          );
+          void checkAnchor(ProfileReaderObservation current) {
+            expect(position(), savedPosition);
+            expect(
+              current.nativeController!.visibleView!.coverage.locate(anchor),
+              isNotNull,
+            );
+          }
+
+          final dormant = await columns(1);
+          checkAnchor(dormant);
+          expect(dormant.paginationKey, observation.paginationKey);
+          await tester.binding.setSurfaceSize(const Size(1040, 560));
+          addTearDown(() => tester.binding.setSurfaceSize(null));
+          final expanded = await columns(3);
+          checkAnchor(expanded);
+          expect(expanded.paginationKey, isNot(dormant.paginationKey));
+          expect(expanded.count, lessThan(dormant.count));
+          expect(
+            expanded.nativeController!.snapshot!.width,
+            greaterThan(initial.contentMaxWidth),
+          );
+          await tester.binding.setSurfaceSize(const Size(500, 560));
+          final narrow = await columns(1);
+          checkAnchor(narrow);
+          expect(narrow.paginationKey, isNot(expanded.paginationKey));
+          expect((await repository().load()).viewport, requested);
+          await tester.binding.setSurfaceSize(const Size(1040, 560));
+          observation = await columns(3);
+          checkAnchor(observation);
+          expect(observation.paginationKey, expanded.paginationKey);
+          scaler.value = const TextScaler.linear(1.5);
+          checkAnchor(await columns(1));
+          expect((await repository().load()).viewport, requested);
+          scaler.value = TextScaler.noScaling;
+          observation = await columns(3);
+          checkAnchor(observation);
+          final next = observation.page! + 1;
+          await tester.drag(find.byType(PageView), const Offset(-620, 0));
+          observation = await wait(
+            (o) => o.ready && o.businessConfirmed && o.page == next,
+          );
+          expect(observation.nativeController!.snapshot!.columns.count, 3);
+          expect(position(), isNot(savedPosition));
+        }
         final finalOwner = observation.nativeOwner!;
         navigator.currentState!.pop();
         await tester.pumpAndSettle();

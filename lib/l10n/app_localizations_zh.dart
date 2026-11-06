@@ -5867,6 +5867,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get novelViewportWidthReset => '重置最大宽度';
 
   @override
+  String get novelViewportColumns => '正文栏数';
+
+  @override
+  String get novelViewportSingleColumn => '单栏';
+
+  @override
+  String get novelViewportDoubleColumn => '双栏';
+
+  @override
+  String get novelViewportTripleColumn => '三栏';
+
+  @override
+  String get novelViewportColumnsHint =>
+      '分栏用于横向分页。当前宽度或字号放不下所选栏数时，阅读器会暂用单栏，并保留所选栏数。';
+
+  @override
   String novelViewportPixels(String value) {
     return '$value px';
   }
@@ -11991,6 +12007,22 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get novelViewportWidthReset => '重設最大寬度';
+
+  @override
+  String get novelViewportColumns => '正文欄數';
+
+  @override
+  String get novelViewportSingleColumn => '單欄';
+
+  @override
+  String get novelViewportDoubleColumn => '雙欄';
+
+  @override
+  String get novelViewportTripleColumn => '三欄';
+
+  @override
+  String get novelViewportColumnsHint =>
+      '分欄用於橫向分頁。當目前寬度或字級放不下所選欄數時，閱讀器會暫用單欄，並保留所選欄數。';
 
   @override
   String novelViewportPixels(String value) {

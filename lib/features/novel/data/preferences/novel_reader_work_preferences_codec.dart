@@ -50,6 +50,7 @@ final class NovelReaderWorkPreferencesCodec {
       for (final edge in NovelReaderViewportEdge.values)
         'viewport.${edge.name}',
       'viewport.contentWidth',
+      'viewport.columns',
       'colors.foreground',
       'colors.background',
       'colors.foregroundScope',

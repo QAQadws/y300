@@ -9886,6 +9886,36 @@ abstract class AppLocalizations {
   /// **'重置最大宽度'**
   String get novelViewportWidthReset;
 
+  /// No description provided for @novelViewportColumns.
+  ///
+  /// In zh, this message translates to:
+  /// **'正文栏数'**
+  String get novelViewportColumns;
+
+  /// No description provided for @novelViewportSingleColumn.
+  ///
+  /// In zh, this message translates to:
+  /// **'单栏'**
+  String get novelViewportSingleColumn;
+
+  /// No description provided for @novelViewportDoubleColumn.
+  ///
+  /// In zh, this message translates to:
+  /// **'双栏'**
+  String get novelViewportDoubleColumn;
+
+  /// No description provided for @novelViewportTripleColumn.
+  ///
+  /// In zh, this message translates to:
+  /// **'三栏'**
+  String get novelViewportTripleColumn;
+
+  /// No description provided for @novelViewportColumnsHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'分栏用于横向分页。当前宽度或字号放不下所选栏数时，阅读器会暂用单栏，并保留所选栏数。'**
+  String get novelViewportColumnsHint;
+
   /// No description provided for @novelViewportPixels.
   ///
   /// In zh, this message translates to:

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui' show TextDirection;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -120,6 +121,79 @@ void main() {
     },
   );
   test(
+    'column choice round trips independently of width and margins',
+    () async {
+      for (final count in NovelReaderColumnCount.values) {
+        final viewport = _viewport
+            .withColumns(count)
+            .withMargin(NovelReaderViewportEdge.right, 5)
+            .withContentWidth(null);
+        await _repository().save(_prefs(viewport));
+        expect((await _repository().load()).viewport, viewport);
+      }
+    },
+  );
+
+  test('effective columns respect width, font size and flow direction', () {
+    final preferences = _prefs(
+      const NovelReaderViewportOverrides(
+        columns: NovelReaderColumnCount.triple,
+      ),
+    );
+    ({double width, int count, TextDirection order}) geometry(
+      NovelReaderPreferences value,
+      double available, {
+      double font = 18.5,
+    }) {
+      final resolved = resolveNovelReaderNativePageBox(
+        value,
+        availableWidth: available,
+        maximumWidth: resolveNovelReaderNativeViewport(value).maximumWidth,
+        scaledBodyFontSize: font,
+      );
+      return (
+        width: resolved.width,
+        count: resolved.columns.count,
+        order: resolved.columns.readingOrder,
+      );
+    }
+
+    expect(geometry(preferences, 827), (
+      width: 720.0,
+      count: 1,
+      order: TextDirection.ltr,
+    ));
+    expect(geometry(preferences, 828), (
+      width: 828.0,
+      count: 3,
+      order: TextDirection.ltr,
+    ));
+    expect(geometry(preferences, 1060, font: 28).count, 3);
+    expect(geometry(preferences, 1060, font: 29).count, 1);
+    final limited = preferences.copyWith(
+      viewport: preferences.viewport.withContentWidth(
+        const NovelReaderContentWidth.limited(800),
+      ),
+    );
+    expect(geometry(limited, 1200), (
+      width: 800.0,
+      count: 1,
+      order: TextDirection.ltr,
+    ));
+    final rtl = preferences.copyWith(flowMode: NovelReaderFlowMode.pagedRtl);
+    expect(geometry(rtl, 900), (
+      width: 900.0,
+      count: 3,
+      order: TextDirection.rtl,
+    ));
+    expect(
+      geometry(rtl.copyWith(flowMode: NovelReaderFlowMode.vertical), 900).count,
+      1,
+    );
+    expect(rtl.viewport.columns, NovelReaderColumnCount.triple);
+  });
+
+  test(
     'invalid values are isolated by codec and rejected at native projection',
     () {
       for (final edge in NovelReaderViewportEdge.values) {
@@ -190,6 +264,7 @@ void main() {
     ('top', 'futureShape'),
     ('contentWidth', {'unit': 'logicalPixels', 'mode': 'future', 'value': 500}),
     ('contentWidth', {'unit': 'em', 'mode': 'limited', 'value': 500}),
+    ('columns', 'future'),
   ]) {
     test(
       'unknown viewport data survives unrelated edits and reset ($field, $unknown)',

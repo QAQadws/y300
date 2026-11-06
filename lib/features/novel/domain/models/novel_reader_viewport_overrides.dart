@@ -2,6 +2,15 @@ enum NovelReaderViewportEdge { left, top, right, bottom }
 
 enum NovelReaderContentWidthMode { limited, available }
 
+enum NovelReaderColumnCount {
+  single(1),
+  double(2),
+  triple(3);
+
+  const NovelReaderColumnCount(this.count);
+  final int count;
+}
+
 /// A remembered finite limit remains available when full width is selected.
 final class NovelReaderContentWidth {
   const NovelReaderContentWidth.limited(this.logicalPixels)
@@ -36,6 +45,7 @@ final class NovelReaderViewportOverrides {
     this.right,
     this.bottom,
     this.contentWidth,
+    this.columns,
   });
   static const minimumMargin = 0.0;
   static const maximumMargin = 96.0;
@@ -45,6 +55,7 @@ final class NovelReaderViewportOverrides {
   final double? right;
   final double? bottom;
   final NovelReaderContentWidth? contentWidth;
+  final NovelReaderColumnCount? columns;
   static bool validMargin(double value) =>
       value.isFinite && value >= minimumMargin && value <= maximumMargin;
   bool get isValid =>
@@ -55,7 +66,8 @@ final class NovelReaderViewportOverrides {
       top == null &&
       right == null &&
       bottom == null &&
-      contentWidth == null;
+      contentWidth == null &&
+      columns == null;
   double? marginFor(NovelReaderViewportEdge edge) => switch (edge) {
     NovelReaderViewportEdge.left => left,
     NovelReaderViewportEdge.top => top,
@@ -71,6 +83,7 @@ final class NovelReaderViewportOverrides {
     right: edge == NovelReaderViewportEdge.right ? value : right,
     bottom: edge == NovelReaderViewportEdge.bottom ? value : bottom,
     contentWidth: contentWidth,
+    columns: columns,
   );
   NovelReaderViewportOverrides withContentWidth(
     NovelReaderContentWidth? value,
@@ -80,7 +93,17 @@ final class NovelReaderViewportOverrides {
     right: right,
     bottom: bottom,
     contentWidth: value,
+    columns: columns,
   );
+  NovelReaderViewportOverrides withColumns(NovelReaderColumnCount value) =>
+      NovelReaderViewportOverrides(
+        left: left,
+        top: top,
+        right: right,
+        bottom: bottom,
+        contentWidth: contentWidth,
+        columns: value,
+      );
   NovelReaderViewportOverrides over(NovelReaderViewportOverrides base) =>
       NovelReaderViewportOverrides(
         left: left ?? base.left,
@@ -88,6 +111,7 @@ final class NovelReaderViewportOverrides {
         right: right ?? base.right,
         bottom: bottom ?? base.bottom,
         contentWidth: contentWidth ?? base.contentWidth,
+        columns: columns ?? base.columns,
       );
   @override
   bool operator ==(Object other) =>
@@ -96,7 +120,9 @@ final class NovelReaderViewportOverrides {
       other.top == top &&
       other.right == right &&
       other.bottom == bottom &&
-      other.contentWidth == contentWidth;
+      other.contentWidth == contentWidth &&
+      other.columns == columns;
   @override
-  int get hashCode => Object.hash(left, top, right, bottom, contentWidth);
+  int get hashCode =>
+      Object.hash(left, top, right, bottom, contentWidth, columns);
 }

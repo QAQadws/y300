@@ -47,6 +47,24 @@ class NovelReaderViewportSettingsPanel extends StatelessWidget {
             enabled ? l10n.novelViewportHint : l10n.novelViewportUnavailable,
           ),
         ),
+        ReaderSegmentControl<NovelReaderColumnCount>(
+          key: const Key('novel-reader-viewport-columns'),
+          label: l10n.novelViewportColumns,
+          value: value.columns ?? NovelReaderColumnCount.single,
+          values: NovelReaderColumnCount.values,
+          enabled: enabled,
+          labelBuilder: (count) => switch (count) {
+            NovelReaderColumnCount.single => l10n.novelViewportSingleColumn,
+            NovelReaderColumnCount.double => l10n.novelViewportDoubleColumn,
+            NovelReaderColumnCount.triple => l10n.novelViewportTripleColumn,
+          },
+          onChanged: (count) => onChanged(value.withColumns(count)),
+        ),
+        if (enabled)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: Text(l10n.novelViewportColumnsHint),
+          ),
         for (final edge in NovelReaderViewportEdge.values)
           _ViewportMarginControl(
             keyPrefix: 'novel-reader-viewport-${edge.name}',

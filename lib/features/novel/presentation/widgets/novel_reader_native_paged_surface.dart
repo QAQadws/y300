@@ -380,24 +380,24 @@ class _NativePagedSurfaceState extends State<NovelReaderNativePagedSurface> {
                 _invalidWindow = false;
                 _windowRevision++;
               }
-              final width = math.max(
-                0.0,
-                math.min(
-                  constraints.maxWidth,
-                  viewport.maximumWidth ?? constraints.maxWidth,
-                ),
+              final box = resolveNovelReaderNativePageBox(
+                widget.preferences,
+                availableWidth: constraints.maxWidth,
+                maximumWidth: viewport.maximumWidth,
+                scaledBodyFontSize: scaler.scale(widget.preferences.fontSize),
               );
               final footer = math.min(footerHeight, constraints.maxHeight);
               return Align(
                 alignment: Alignment.topCenter,
                 child: SizedBox(
-                  width: width,
+                  width: box.width,
                   height: constraints.maxHeight,
                   child: Column(
                     children: [
                       Expanded(
                         child: _withTextSelection(
                           NovelReaderNativeLayoutHost(
+                            columns: box.columns,
                             owner: widget.owner,
                             sourceId: widget.episode.episodeId,
                             rawHtml: widget.rawHtml,

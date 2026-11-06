@@ -27,7 +27,11 @@ void main() {
         fontSize: 25,
         fontFamily: font,
         showRubyAnnotations: false,
-        viewport: const NovelReaderViewportOverrides(left: 0, right: 22),
+        viewport: const NovelReaderViewportOverrides(
+          left: 0,
+          right: 22,
+          columns: NovelReaderColumnCount.triple,
+        ),
         typography: const NovelReaderTypographyOverrides(
           roleFontSizes: NovelReaderRoleFontSizes(ruby: 135),
         ),

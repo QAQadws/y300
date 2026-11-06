@@ -53,6 +53,7 @@ class NovelReaderNativeLayoutHost extends StatefulWidget {
     required this.progressSnapshot,
     required this.readingAuthorityIdentity,
     required this.preparationService,
+    this.columns = const ForumBodyPageColumns(),
     this.converter = const IdentityTextConverter(),
     this.imageHost,
     this.imagePolicy = const ForumCacheHtmlPreparationImagePolicy(),
@@ -109,6 +110,7 @@ class NovelReaderNativeLayoutHost extends StatefulWidget {
   final NovelReaderProgressSnapshot progressSnapshot;
   final Object readingAuthorityIdentity;
   final NovelReaderNativePreparationService preparationService;
+  final ForumBodyPageColumns columns;
   final TextConverter converter;
   final ForumHtmlImageHost? imageHost;
   final ForumHtmlPreparationImagePolicy imagePolicy;
@@ -365,6 +367,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         oldWidget.rawHtml != widget.rawHtml ||
         !identical(oldWidget.semanticDocument, widget.semanticDocument) ||
         oldWidget.resolvedFont != widget.resolvedFont ||
+        oldWidget.columns != widget.columns ||
         oldWidget.converter.id != widget.converter.id ||
         oldWidget.converter.mode != widget.converter.mode ||
         !identical(oldWidget.preparationService, widget.preparationService) ||
@@ -525,6 +528,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         environment: environment,
         width: box.width,
         height: box.height,
+        columns: widget.columns,
         fontCollectionGeneration: widget.owner.fontGeneration,
         isCurrent: current,
       );
@@ -925,6 +929,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         environment: environment!,
         width: box.width,
         height: box.height,
+        columns: config.columns,
         cancellation: token,
         fontCollectionGeneration: handle.fontGeneration,
         maxIssuedLeases: config.sessionLimits.maxIssuedLeases,
@@ -960,6 +965,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
           environment: environment,
           width: box.width,
           height: box.height,
+          columns: config.columns,
           fontCollectionGeneration: handle.fontGeneration,
           isCurrent: current,
         );

@@ -215,6 +215,46 @@ Future<void> _unmount(WidgetTester tester, _Reader reader) async {
 }
 
 void main() {
+  testWidgets('a wide table takes one screen in a two-column reader', (
+    tester,
+  ) async {
+    final reader = _Reader(
+      html: '<p>before</p><table width="900"><tr><td>cell</td></tr></table><p>after</p>',
+    );
+    await _show(
+      tester,
+      reader,
+      width: 620,
+      preferences: reader.preferences.copyWith(
+        viewport: const NovelReaderViewportOverrides(
+          columns: NovelReaderColumnCount.double,
+          contentWidth: NovelReaderContentWidth.available(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final snapshot = reader.statuses.last.controller!.snapshot!;
+    expect(snapshot.columns.count, 2);
+    expect(snapshot, hasLength(3));
+    expect(snapshot[1].table!.bounds.width, snapshot.width);
+    expect(reader.navigation.turnNext(), isTrue);
+    await tester.pumpAndSettle();
+    final table = find.byType(ForumBodyTableBookViewport);
+    expect(tester.getSize(table).width, snapshot.width);
+    final horizontal = tester
+        .widget<ForumBodyTableBookViewport>(table)
+        .horizontalController;
+    expect(horizontal.position.maxScrollExtent, greaterThan(0));
+    horizontal.jumpTo(horizontal.position.maxScrollExtent);
+    await tester.pumpAndSettle();
+    expect(horizontal.offset, horizontal.position.maxScrollExtent);
+    expect(reader.positions.last.pageIndex, 1);
+    await tester.tap(find.byKey(const Key('novel-reader-table-next')));
+    await tester.pumpAndSettle();
+    expect(reader.positions.last.pageIndex, 2);
+    await _unmount(tester, reader);
+  });
+
   testWidgets('a native table owns its drag and keeps its offsets on return', (
     tester,
   ) async {

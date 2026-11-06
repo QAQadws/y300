@@ -1,4 +1,7 @@
 import 'dart:math' as math;
+import 'dart:ui' show TextDirection;
+
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 import '../../domain/models/novel_reader_preferences.dart';
 
@@ -21,4 +24,36 @@ resolveNovelReaderNativeViewport(NovelReaderPreferences preferences) {
         ? null
         : width.logicalPixels,
   );
+}
+
+/// Freeze the screen and its columns together after safe area and margins.
+/// The default single-column cap applies per column on wide displays. An
+/// explicitly requested width always caps the whole screen.
+({double width, ForumBodyPageColumns columns}) resolveNovelReaderNativePageBox(
+  NovelReaderPreferences preferences, {
+  required double availableWidth,
+  required double? maximumWidth,
+  required double scaledBodyFontSize,
+}) {
+  const gap = 24.0;
+  final count = preferences.viewport.columns?.count ?? 1;
+  final singleWidth = math.min(availableWidth, maximumWidth ?? availableWidth);
+  if (count > 1 && preferences.flowMode != NovelReaderFlowMode.vertical) {
+    final cap =
+        maximumWidth != null && preferences.viewport.contentWidth == null
+        ? maximumWidth * count + gap * (count - 1)
+        : maximumWidth;
+    final width = math.min(availableWidth, cap ?? availableWidth);
+    final columns = ForumBodyPageColumns(
+      count: count,
+      gap: gap,
+      readingOrder: preferences.flowMode == NovelReaderFlowMode.pagedRtl
+          ? TextDirection.rtl
+          : TextDirection.ltr,
+    );
+    if (columns.widthFor(width) >= math.max(260, scaledBodyFontSize * 12)) {
+      return (width: width, columns: columns);
+    }
+  }
+  return (width: singleWidth, columns: const ForumBodyPageColumns());
 }
