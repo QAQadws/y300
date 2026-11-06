@@ -579,7 +579,7 @@ final class ForumBodyInlineParagraphView {
     RangeError.checkValidRange(
       startUtf16,
       endUtf16,
-      content.projection.display.text.length,
+      _parent!.content.projection.display.text.length,
     );
     final start = startUtf16.clamp(coverageStartUtf16, coverageEndUtf16);
     final end = endUtf16.clamp(coverageStartUtf16, coverageEndUtf16);
