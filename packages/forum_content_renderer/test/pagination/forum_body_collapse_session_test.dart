@@ -1,4 +1,7 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
@@ -260,6 +263,27 @@ void main() {
       ),
     );
     expect(tester.getSize(toggle), title.collapseHeader!.bounds.size);
+    final node = tester.getSemantics(find.bySemanticsLabel('Open fold'));
+    final data = node.getSemanticsData();
+    expect(node.rect.size, tester.getSize(toggle));
+    expect(data.flagsCollection.isButton, isTrue);
+    expect(data.flagsCollection.isExpanded, ui.Tristate.isFalse);
+    expect(data.flagsCollection.isToggled, ui.Tristate.none);
+    expect(data.hasAction(ui.SemanticsAction.expand), isTrue);
+    expect(data.hasAction(ui.SemanticsAction.collapse), isFalse);
+    expect(data.hasAction(ui.SemanticsAction.tap), isTrue);
+    node.owner!.performAction(node.id, ui.SemanticsAction.expand);
+    expect(toggled.removeLast(), same(title));
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(
+      node.getSemanticsData().flagsCollection.isFocused,
+      ui.Tristate.isTrue,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    expect(toggled.removeLast(), same(title));
+
     final onTap = tester.widget<InkWell>(toggle).onTap!;
     await tester.tap(toggle);
     expect(toggled.single, same(title));

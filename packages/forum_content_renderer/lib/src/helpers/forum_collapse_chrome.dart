@@ -25,9 +25,12 @@ class ForumCollapseHeaderControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Semantics(
+    container: true,
     button: true,
-    toggled: expanded,
+    expanded: expanded,
     label: label,
+    onExpand: expanded ? null : onTap,
+    onCollapse: expanded ? onTap : null,
     child: InkWell(key: toggleKey, onTap: onTap, child: child),
   );
 }
