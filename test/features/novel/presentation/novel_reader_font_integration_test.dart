@@ -656,7 +656,11 @@ Widget _app(
     imageCacheServiceProvider.overrideWithValue(_NoImages()),
   ],
   child: const LocalizedTestApp(
-    home: NovelReaderPage(novelId: _work, initialEpisodeId: _chapter),
+    home: NovelReaderPage(
+      novelId: _work,
+      initialEpisodeId: _chapter,
+      nativePagination: false,
+    ),
   ),
 );
 

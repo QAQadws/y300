@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import '../../../test_support/localized_test_app.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -343,8 +345,7 @@ void main() {
         preferences: NovelReaderPreferences.defaults().copyWith(
           flowMode: NovelReaderFlowMode.pagedLtr,
         ),
-        firstRawHtml:
-            '<p><span style="font-style:italic">会话缓存正文。</span><ruby>保护<rt>reading</rt></ruby></p>',
+        firstRawHtml: '<p><span style="font-style:italic">会话缓存正文。</span><ruby>保护<rt>reading</rt></ruby></p>',
       );
       await tester.pumpWidget(_buildReaderApp(repository: repository));
       await _pumpPagedCacheReady(tester);
@@ -423,6 +424,7 @@ void main() {
             builder: (_, episodeId, _) => NovelReaderPage(
               novelId: 'novel:49:100',
               initialEpisodeId: episodeId,
+              nativePagination: false,
             ),
           ),
         ),
@@ -495,6 +497,7 @@ void main() {
     final route = PageRouteBuilder<void>(
       transitionDuration: const Duration(seconds: 1),
       pageBuilder: (_, _, _) => const NovelReaderPage(
+        nativePagination: false,
         novelId: 'novel:49:100',
         initialEpisodeId: 'novel:49:100:5001',
       ),
@@ -1966,9 +1969,8 @@ void main() {
       );
       final provider = novelReaderControllerProvider(args);
       final initial = container.read(provider).value!;
-      final failureText = AppLocalizations.of(
-        context,
-      ).novelSaveDisplaySettingsFailed;
+      final failureText = AppLocalizations.of(context)
+          .novelSaveDisplaySettingsFailed;
       await _showReaderMenu(tester);
       await tester.tap(
         find.byKey(const Key('shared-reader-bottom-action-display')),
@@ -2075,9 +2077,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       final context = tester.element(find.byType(NovelReaderPage));
-      final failureText = AppLocalizations.of(
-        context,
-      ).novelSaveDisplaySettingsFailed;
+      final failureText = AppLocalizations.of(context)
+          .novelSaveDisplaySettingsFailed;
       final container = ProviderScope.containerOf(context, listen: false);
       const args = NovelReaderArgs(
         novelId: 'novel:49:100',
@@ -3177,6 +3178,7 @@ void main() {
             ),
           ],
           child: const NovelReaderPage(
+            nativePagination: false,
             novelId: 'novel:49:100',
             initialEpisodeId: 'novel:49:100:5001',
           ),
@@ -3220,6 +3222,7 @@ void main() {
             ),
           ],
           child: const NovelReaderPage(
+            nativePagination: false,
             novelId: 'novel:49:100',
             initialEpisodeId: 'novel:49:100:5001',
           ),
@@ -3423,8 +3426,7 @@ void main() {
             preferences: NovelReaderPreferences.defaults().copyWith(
               flowMode: flowMode,
             ),
-            firstRawHtml:
-                '<p><a href="https://elsewhere.test/read?a=1&amp;a=2#section">External link</a></p>',
+            firstRawHtml: '<p><a href="https://elsewhere.test/read?a=1&amp;a=2#section">External link</a></p>',
             firstParagraphs: const ['External link'],
           ),
           clipboardWriter: clipboard,
@@ -3459,8 +3461,7 @@ void main() {
     await tester.pumpWidget(
       _buildReaderApp(
         repository: _FakeNovelRepository(
-          firstRawHtml:
-              '<p><a href="https://bbs.yamibo.com/misc.php?mod=tag&amp;id=28">Forum tag</a></p>',
+          firstRawHtml: '<p><a href="https://bbs.yamibo.com/misc.php?mod=tag&amp;id=28">Forum tag</a></p>',
           firstParagraphs: const ['Forum tag'],
         ),
         clipboardWriter: clipboard,
@@ -3563,8 +3564,7 @@ void main() {
       await tester.pumpWidget(
         _buildReaderApp(
           repository: _FakeNovelRepository(
-            firstRawHtml:
-                '<p><a href="forum.php?mod=redirect&amp;goto=findpost&amp;ptid=200&amp;pid=5001">Target floor</a></p>',
+            firstRawHtml: '<p><a href="forum.php?mod=redirect&amp;goto=findpost&amp;ptid=200&amp;pid=5001">Target floor</a></p>',
             firstParagraphs: const ['Target floor'],
           ),
           threadPostLocator: locator,
@@ -3984,6 +3984,7 @@ Widget _buildReaderApp({
                 NovelReaderPage(
                   novelId: 'novel:49:100',
                   initialEpisodeId: initialEpisodeId,
+                  nativePagination: false,
                 ),
           )
         : ValueListenableBuilder<ThemeData>(
@@ -3996,6 +3997,7 @@ Widget _buildReaderApp({
                     NovelReaderPage(
                       novelId: 'novel:49:100',
                       initialEpisodeId: initialEpisodeId,
+                      nativePagination: false,
                     ),
               );
             },
@@ -4033,6 +4035,7 @@ class _NovelReaderRoundTripHost extends StatelessWidget {
             novelId: 'novel:49:100',
             initialEpisodeId: 'novel:49:100:5001',
             openPolicy: policy,
+            nativePagination: false,
           ),
         ),
       );

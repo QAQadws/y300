@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'dart:ui' show Tristate;
+
 import 'package:y300/l10n/app_localizations.dart';
 
 import 'package:flutter/material.dart';
+
 import '../../../test_support/localized_test_app.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
@@ -34,6 +37,7 @@ import 'package:y300/features/novel/domain/services/novel_chapter_sync_service.d
 import 'package:y300/features/novel/domain/services/novel_chapter_update_service.dart';
 import 'package:y300/features/novel/presentation/novel_detail_page.dart';
 import 'package:y300/features/novel/presentation/novel_reader_page.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_native_paged_viewport.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 
@@ -585,28 +589,41 @@ void main() {
     expect(reading.progressCommitCount, 0);
   });
 
-  testWidgets('reader mode keeps opening chapters in NovelReaderPage', (
-    tester,
-  ) async {
-    final resolver = _FakeNovelChapterSourceRouteResolver.success();
-    await _pumpNovelDetail(
-      tester,
-      preferences: _MemoryNovelInteractionPreferencesRepository(),
-      routeResolver: resolver,
-    );
+  testWidgets(
+    'the detail route opens chapters in the native reader by default',
+    (tester) async {
+      final resolver = _FakeNovelChapterSourceRouteResolver.success();
+      await _pumpNovelDetail(
+        tester,
+        preferences: _MemoryNovelInteractionPreferencesRepository(),
+        routeResolver: resolver,
+        repository: _FakeNovelRepository(
+          content: const NovelChapterContent(
+            episodeId: 'novel:1:e1',
+            rawHtml: '<p>Chapter body</p>',
+            plainText: 'Chapter body',
+            paragraphs: ['Chapter body'],
+          ),
+        ),
+      );
 
-    await _scrollNovelChapterIntoTapArea(tester);
-    await tester.tap(find.text('Chapter 1'));
-    await tester.pumpAndSettle();
-    await tester.pump(const Duration(milliseconds: 300));
+      await _scrollNovelChapterIntoTapArea(tester);
+      await tester.tap(find.text('Chapter 1'));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.byType(NovelReaderPage), findsOneWidget);
-    expect(
-      tester.widget<NovelReaderPage>(find.byType(NovelReaderPage)).openPolicy,
-      NovelEpisodeOpenPolicy.startAtBeginning,
-    );
-    expect(resolver.callCount, 0);
-  });
+      expect(find.byType(NovelReaderPage), findsOneWidget);
+      expect(
+        tester.widget<NovelReaderPage>(find.byType(NovelReaderPage)).openPolicy,
+        NovelEpisodeOpenPolicy.startAtBeginning,
+      );
+      final viewport = tester.widget<NovelReaderNativePagedViewport>(
+        find.byType(NovelReaderNativePagedViewport),
+      );
+      expect(viewport.controller.visibleView, isNotNull);
+      expect(resolver.callCount, 0);
+    },
+  );
 
   testWidgets('continue resumes the single last-read progress', (tester) async {
     await _pumpNovelDetail(
@@ -1674,9 +1691,10 @@ class _MemoryNovelReadingStateRepository
 }
 
 class _FakeNovelRepository implements NovelRepository {
-  _FakeNovelRepository({this.progress});
+  _FakeNovelRepository({this.progress, this.content});
 
   final NovelReadingProgress? progress;
+  final NovelChapterContent? content;
 
   @override
   Future<String> createCategory({required String name}) async => 'created';
@@ -1699,7 +1717,7 @@ class _FakeNovelRepository implements NovelRepository {
   @override
   Future<NovelChapterContent?> getChapterContent({
     required String episodeId,
-  }) async => null;
+  }) async => content?.episodeId == episodeId ? content : null;
 
   @override
   Future<NovelItem?> getDetail({required String novelId}) async {

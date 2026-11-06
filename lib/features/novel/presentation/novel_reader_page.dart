@@ -100,9 +100,7 @@ class NovelReaderPage extends ConsumerStatefulWidget {
     required this.novelId,
     required this.initialEpisodeId,
     this.openPolicy = NovelEpisodeOpenPolicy.resumeLastRead,
-    this.nativePagination = const bool.fromEnvironment(
-      'Y300_NATIVE_PAGINATION',
-    ),
+    this.nativePagination = true,
     this.nativeIdleScheduler,
   });
 
@@ -110,8 +108,8 @@ class NovelReaderPage extends ConsumerStatefulWidget {
   final String initialEpisodeId;
   final NovelEpisodeOpenPolicy openPolicy;
 
-  /// Consumer-wide controlled entry while the native format/settings gates are
-  /// being completed. Native pagination never falls back on a document/error.
+  /// Selects one backend for the entire route. The explicit legacy choice is
+  /// used by the comparison harness and its regression tests.
   final bool nativePagination;
   final NovelReaderPaginationIdleScheduler? nativeIdleScheduler;
 
