@@ -52,7 +52,7 @@ class NovelReaderNativePagedSurface extends StatefulWidget {
     required this.preparationService,
     this.converter = const IdentityTextConverter(),
     this.imageHost,
-    this.imagePolicy = const ForumCacheHtmlPreparationImagePolicy(),
+    this.imagePolicy = defaultForumHtmlPreparationImagePolicy,
     this.imageCacheOwnerId,
     this.chromeInsets = const ReaderChromeInsets.zero(),
     this.active = true,

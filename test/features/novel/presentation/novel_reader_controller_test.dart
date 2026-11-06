@@ -2887,7 +2887,7 @@ Future<void> _showNativeControllerSurface(
               ),
               imageHost: imageHost,
               imagePolicy:
-                  imageHost ?? const ForumCacheHtmlPreparationImagePolicy(),
+                  imageHost ?? defaultForumHtmlPreparationImagePolicy,
               startsAtBeginning: controller.startsPagedAtBeginning,
               active: active,
               navigationController: navigation,

@@ -1503,8 +1503,8 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         imageCacheOwnerId: tid,
         imageReferer: referer,
       );
-      _nativeImagePolicy = ForumCacheHtmlPreparationImagePolicy(
-        imageRequestResolver: base.imageRequestResolver,
+      _nativeImagePolicy = forumHtmlPreparationImagePolicyFor(
+        base.imageRequestResolver,
       );
     }
   }

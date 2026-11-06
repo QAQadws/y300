@@ -6,6 +6,16 @@ import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:y300/features/content_rendering_shared/presentation/contracts/forum_html_render_preparer.dart';
 import 'forum_html_render_preferences_projection.dart';
 
+const ForumHtmlPreparationImagePolicy defaultForumHtmlPreparationImagePolicy =
+    ForumCacheHtmlPreparationImagePolicy();
+
+/// Uses the same request resolver for prepared and displayed image resources.
+ForumHtmlPreparationImagePolicy forumHtmlPreparationImagePolicyFor(
+  ForumImageRequestResolver imageRequestResolver,
+) => ForumCacheHtmlPreparationImagePolicy(
+  imageRequestResolver: imageRequestResolver,
+);
+
 /// Unknown preparers may consume every preference, including conversion mode.
 extension ForumHtmlPreparationPreferencesIdentity on ForumHtmlRenderPreparer {
   Object preparationPreferencesIdentity(
@@ -90,9 +100,7 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
         ForumHtmlPreparationPipeline(
           imagePolicy:
               _imagePolicy ??
-              ForumCacheHtmlPreparationImagePolicy(
-                imageRequestResolver: _imageRequestResolver,
-              ),
+              forumHtmlPreparationImagePolicyFor(_imageRequestResolver),
           // The legacy default deduplicator has its own site resolver, even when
           // callers customize the resolver used for document image preparation.
           imageDeduplicator:

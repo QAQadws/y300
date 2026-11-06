@@ -57,7 +57,7 @@ class NovelReaderNativeLayoutHost extends StatefulWidget {
     this.columns = const ForumBodyPageColumns(),
     this.converter = const IdentityTextConverter(),
     this.imageHost,
-    this.imagePolicy = const ForumCacheHtmlPreparationImagePolicy(),
+    this.imagePolicy = defaultForumHtmlPreparationImagePolicy,
     this.imageThreadId,
     this.imageCacheOwnerId,
     this.stylePolicy,
