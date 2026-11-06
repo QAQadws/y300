@@ -101,6 +101,50 @@ void main() {
   });
 
   group('ThreadDetailPage', () {
+    testWidgets('native body prepares a short post within widget frames', (
+      tester,
+    ) async {
+      final repository = _FakeThreadRepository(
+        (String tid, int page) async => ApiSuccess(
+          ThreadDetailData(
+            tid: tid,
+            fid: '33',
+            subject: 'Short post',
+            author: 'Author',
+            replies: 0,
+            views: 1,
+            currentPage: page,
+            perPage: 20,
+            posts: [
+              ThreadPost(
+                pid: '200',
+                author: 'Author',
+                authorId: '10',
+                message: '<p><ruby>書<rt>しょ</rt></ruby>を読む。</p>',
+                number: 1,
+                isFirst: true,
+                dateline: '',
+              ),
+            ],
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          home: const ThreadDetailPage(tid: '100', nativeBody: true),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final flow = tester.widget<ForumBodyFlowBox>(
+        find.byType(ForumBodyFlowBox),
+      );
+      expect(flow.prefix.isComplete, isTrue);
+      expect(flow.prefix.length, greaterThan(0));
+    });
+
     testWidgets(
       'native body copies text, opens a selected link and preserves table and image interaction',
       (tester) async {

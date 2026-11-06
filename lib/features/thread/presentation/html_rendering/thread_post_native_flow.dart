@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:isolate';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -69,10 +68,9 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
     maxEntries: 128,
     maxEstimatedBytes: 8 << 20,
   );
-  final _preparation = ForumPreparationScheduler.shared.createScope();
+  final _preparation = ForumBodyPreparationController();
   final _resolvedImages = <String, ForumHtmlImageLayout>{};
   final _changedImages = <String, _ThreadImageChange>{};
-  ForumPreparationLease<ForumBodyDocument>? _work;
   ForumBodyDocument? _document;
   _ThreadFlowRun? _pending, _shown;
   Object? _layoutKey;
@@ -84,7 +82,7 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
   void initState() {
     super.initState();
     widget.imageAnchorController?.bindSequence(widget.prepared.sequence);
-    ForumPreparationScheduler.shared.addListener(_prepare);
+    _preparation.addListener(_prepare);
     WidgetsBinding.instance.addPostFrameCallback((_) => _prepare());
   }
 
@@ -96,8 +94,7 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
       widget.imageAnchorController?.bindSequence(widget.prepared.sequence);
     }
     if (identical(oldWidget.prepared, widget.prepared)) return;
-    _work?.release();
-    _work = null;
+    _preparation.reset();
     _document = null;
     _resolvedImages.clear();
     _changedImages.clear();
@@ -107,35 +104,23 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
   }
 
   void _prepare() {
-    if (!mounted || _document != null || _work != null || _error != null) {
+    if (!mounted || _document != null || _error != null) {
       return;
     }
     final prepared = widget.prepared;
-    final html = prepared.preparedHtml, source = prepared.sequence.sourceId;
-    final work = _preparation.tryAcquire(
-      identity: (source, html),
-      codeUnits: html.length,
-      work: () => _parseThreadNativeBody(source, html),
-    );
-    if (work == null) return;
-    _work = work;
-    unawaited(
-      work.future
-          .then<void>(
-            (value) {
-              if (mounted && identical(_work, work) && value != null) {
-                setState(() => _document = value);
-              }
-            },
-            onError: (Object error, StackTrace stack) {
-              if (mounted && identical(_work, work)) _fail(error, stack);
-            },
-          )
-          .whenComplete(() {
-            work.release();
-            if (identical(_work, work)) _work = null;
-          }),
-    );
+    try {
+      final document = _preparation.resolve(
+        ForumBodyPreparationInput(
+          html: prepared.preparedHtml,
+          sourceId: prepared.sequence.sourceId,
+          conversionIdentity: 'prepared-thread',
+        ),
+        owner: this,
+      );
+      if (document != null) setState(() => _document = document);
+    } catch (error, stack) {
+      _fail(error, stack);
+    }
   }
 
   bool _current(_ThreadFlowRun run) => mounted && identical(_pending, run);
@@ -508,6 +493,7 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
   }
 
   void _retry() {
+    if (_document == null) _preparation.reset();
     setState(() {
       _error = null;
       _layoutKey = null;
@@ -524,25 +510,12 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
 
   @override
   void dispose() {
-    ForumPreparationScheduler.shared.removeListener(_prepare);
-    _preparation.close();
-    _work?.release();
-    _work = null;
+    _preparation.dispose();
     _retireLayouts();
     _cache.close();
     super.dispose();
   }
 }
-
-Future<ForumBodyDocument> _parseThreadNativeBody(String source, String html) =>
-    Isolate.run(
-      () => const ForumBodyParser().parse(
-        html: html,
-        sourceId: source,
-        conversionIdentity: 'prepared-thread',
-      ),
-      debugName: 'thread-native-body',
-    );
 
 enum _ThreadImageChange { block, source, table }
 
