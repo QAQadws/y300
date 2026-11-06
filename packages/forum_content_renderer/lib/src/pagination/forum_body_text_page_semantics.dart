@@ -38,12 +38,15 @@ final class ForumBodyTextPageSemantics extends StatefulWidget {
     if (binding.imageCount > 0) return true;
     final parts = binding.projection.parts;
     final end = fragment.coverageEndUtf16;
+    // A run-table read checks the whole inline view. Borrow it once for this
+    // synchronous scan of the prepared styles.
+    final runs = binding.runs;
     for (
       var i = _partAt(parts, fragment.coverageStartUtf16);
       i < parts.length && parts[i].utf16Start < end;
       i++
     ) {
-      final style = binding.runs[parts[i].runIndex].style;
+      final style = runs[parts[i].runIndex].style;
       if (!style.visibilityHidden && _linkTarget(style) != null) return true;
     }
     return false;
@@ -209,6 +212,7 @@ List<_TextSpan> _textSpans(
   if (!binding.isActive) return const [];
   final projection = binding.projection;
   final parts = projection.parts;
+  final runs = binding.runs;
   final start = fragment.coverageStartUtf16;
   final end = fragment.coverageEndUtf16;
   final ranges = <({int start, int end, _SpanStyle style})>[];
@@ -218,7 +222,7 @@ List<_TextSpan> _textSpans(
     i++
   ) {
     final part = parts[i];
-    final run = binding.runs[part.runIndex];
+    final run = runs[part.runIndex];
     if (run.style.visibilityHidden) continue;
     final target = linksEnabled ? _linkTarget(run.style) : null;
     final style = (
