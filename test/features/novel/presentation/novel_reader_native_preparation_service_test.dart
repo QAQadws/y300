@@ -3,8 +3,11 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:html_pagination_core/html_pagination_core.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_anchor_format.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_native_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_exception.dart';
@@ -34,6 +37,7 @@ NovelReaderDocument _semantic(
     wordCount: value.wordCount,
     textConversionIdentity: conversion,
     sourceProvenance: value.sourceProvenance,
+    storedParagraphSource: value.storedParagraphSource,
   );
 }
 
@@ -142,13 +146,102 @@ void main() {
     expect(empty, isA<NovelReaderNativeEmptyChapter>());
     expect(empty.episodeId, 'episode');
     expect(empty.identity.conversionIdentity, 'none');
-    await expectLater(
-      _prepare(html, _semantic(html, fallback: ['fallback has no DOM origin'])),
-      throwsA(
-        _bindingFailure(NovelReaderNativeAnchorBindingFailure.provenance),
-      ),
-    );
   });
+
+  for (final html in ['   ', '<script>irrelevant</script>']) {
+    test(
+      'stored paragraphs use literal text with exact, distinct anchors ($html)',
+      () async {
+        const text = '🙂 <img src=x> & 字\n再一行';
+        final semantic = _semantic(html, fallback: [text, ' ', text]);
+        expect(semantic.sourceProvenance, isNull);
+        final prepared =
+            await _prepare(html, semantic) as NovelReaderNativePreparedChapter;
+        expect(prepared.document.imageElements, isEmpty);
+        expect(prepared.document.sourceMap.runeLength, text.runes.length * 2);
+        expect(prepared.anchors.unmappedPaths, isEmpty);
+        for (var index = 0; index < 2; index++) {
+          final node =
+              prepared.document.nodeAtPath('$index/0') as ForumBodyText;
+          final segment = prepared.anchors.segments[index];
+          expect(node.text, text);
+          expect(segment.sourceStart, node.source.runeStart);
+          expect(segment.sourceEnd, node.source.runeEnd);
+          expect(segment.projection.baseAnchor.nodeId, 'node-$index');
+          expect(
+            segment.projection.baseAnchor.textIdentity,
+            NovelReaderAnchorFormat.textIdentity(text),
+          );
+          final anchor = prepared.anchors.anchorAtSourceRune(
+            segment.sourceStart + 1,
+            affinity: HtmlProjectionAffinity.downstream,
+          )!;
+          expect((anchor.nodeId, anchor.textOffset), ('node-$index', 1));
+        }
+        await expectLater(
+          _prepare('<p>new HTML</p>', semantic),
+          throwsA(
+            _bindingFailure(NovelReaderNativeAnchorBindingFailure.identity),
+          ),
+        );
+      },
+    );
+  }
+
+  test(
+    'native stored text uses the semantic conversion exactly once',
+    () async {
+      const channel = MethodChannel('flutter_open_chinese_convert');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      var calls = 0;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls++;
+        return ((call.arguments as List<Object?>).first as String).replaceAll(
+          '臺',
+          '台',
+        );
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final converter = resolveTextConverter(TextConversionMode.toSimplified);
+      final semantic = await container
+          .read(novelReaderDocumentBuildServiceProvider)
+          .build(
+            const NovelReaderDocumentBuildRequest(
+              episodeId: 'episode',
+              rawHtml: '',
+              fallbackParagraphs: ['臺 & 字'],
+            ),
+            converter: converter,
+          );
+      final before = calls;
+      expect(before, greaterThan(0));
+      final prepared =
+          await container
+                  .read(novelReaderNativePreparationServiceProvider)
+                  .prepare(
+                    episodeId: 'episode',
+                    sourceId: 'source',
+                    rawHtml: '',
+                    semanticDocument: semantic,
+                    cancellation: NovelReaderPaginationCancellationToken(),
+                    converter: converter,
+                  )
+              as NovelReaderNativePreparedChapter;
+      expect(calls, before);
+      expect(prepared.identity.conversionIdentity, 'toSimplified');
+      expect(
+        (prepared.document.nodeAtPath('0/0') as ForumBodyText).text,
+        '台 & 字',
+      );
+      expect(
+        prepared.anchors.segments.single.projection.baseAnchor.textIdentity,
+        NovelReaderAnchorFormat.textIdentity('台 & 字'),
+      );
+    },
+  );
 
   test(
     'missing provenance and different exact input fail without text matching',

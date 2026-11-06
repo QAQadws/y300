@@ -166,6 +166,7 @@ void main() {
       final document = _parse(html, fallback: ['fallback']);
       expect(document.plainText, 'fallback');
       expect(document.sourceProvenance, isNull);
+      expect(document.storedParagraphSource, isNotNull);
     }
   });
 

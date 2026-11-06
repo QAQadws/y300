@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
 import 'package:y300/features/novel/presentation/novel_reader_page.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_native_paged_viewport.dart';
@@ -212,6 +213,11 @@ void main() {
     (native: true, mixed: true, fixture: null),
     (
       native: true,
+      mixed: false,
+      fixture: (name: 'stored-paragraphs', html: ''),
+    ),
+    (
+      native: true,
       mixed: true,
       fixture: (
         name: 'single-ruby-rule',
@@ -241,6 +247,7 @@ void main() {
       (tester) async {
         SharedPreferences.setMockInitialValues({});
         final data = NovelMainPageProfileData();
+        final stored = scenario.fixture?.name == 'stored-paragraphs';
         final source = data.add(
           scenario.fixture?.html ??
               (scenario.mixed
@@ -249,6 +256,12 @@ void main() {
                       12,
                       '<p>Synthetic paragraph for a real visible page. 正文分页。</p>',
                     ).join()),
+          storedParagraphs: stored
+              ? List.filled(
+                  32,
+                  'Stored paragraph <字> & literal text. Saved before HTML was available.',
+                )
+              : null,
         );
         final args = NovelReaderArgs(
           novelId: source.novelId,
@@ -411,7 +424,8 @@ void main() {
         // new mounted layout without asking the reader to confirm a new anchor.
         expect(observation.paginationKey, isNot(originalKey));
         checkLanguages(observation);
-        for (final page in scenario.fixture == null ? [1] : [1, 2, 3, 2, 1]) {
+        for (final page
+            in scenario.fixture == null || stored ? [1] : [1, 2, 3, 2, 1]) {
           (page > observation.page!
               ? observation.overlay!.onRightTap!
               : observation.overlay!.onLeftTap!)();
@@ -446,6 +460,32 @@ void main() {
           expect(owner.estimatedRetainedBytes, 0);
         } else {
           expect(legacyReleased!(), isTrue);
+        }
+        if (stored) {
+          final saved = (await data.getChapterProgress(
+            novelId: source.novelId,
+            episodeId: source.episodeId,
+          ))!;
+          expect(saved.anchorFormatVersion, 1);
+          final anchor = NovelReaderTextAnchor(
+            episodeId: saved.episodeId,
+            nodeId: saved.anchorNodeId,
+            textOffset: saved.anchorTextOffset,
+            formatVersion: saved.anchorFormatVersion,
+            textIdentity: saved.anchorTextIdentity,
+          );
+          final reopening = unawaitedPush();
+          observation = await wait((value) => value.ready && value.complete);
+          // The earlier preview used a different font size. A physical page
+          // number can change across the reopen while its anchor remains exact.
+          expect(
+            observation.nativeController!.visibleView!.coverage.locate(anchor),
+            isNotNull,
+          );
+          navigator.currentState!.pop();
+          await tester.pumpAndSettle();
+          await reopening;
+          expect(observation.nativeOwner!.activeCacheHandles, 0);
         }
         data.release(source.episodeId);
         expect(data.retainedChapters, 0);

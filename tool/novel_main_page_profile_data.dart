@@ -31,14 +31,18 @@ final class NovelMainPageProfileData
 
   int get retainedChapters => _chapters.length;
 
-  ({String novelId, String episodeId}) add(String source) {
+  ({String novelId, String episodeId}) add(
+    String source, {
+    List<String>? storedParagraphs,
+  }) {
     final id = 'synthetic-profile:${++_serial}';
-    final text = html.parseFragment(source).text ?? '';
+    final text =
+        storedParagraphs?.join('\n') ?? html.parseFragment(source).text ?? '';
     _chapters[id] = NovelChapterContent(
       episodeId: id,
       rawHtml: source,
       plainText: text,
-      paragraphs: [text],
+      paragraphs: storedParagraphs ?? [text],
     );
     // Every open starts without a persisted position or typography preview.
     _preferences.value = profileReaderPreferences;

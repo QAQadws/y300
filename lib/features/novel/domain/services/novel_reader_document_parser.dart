@@ -130,6 +130,12 @@ class DiscuzNovelReaderDocumentParser implements NovelReaderDocumentParser {
       rawHtml,
       blocks,
       sourceProvenance: blocks.isEmpty ? emptyProvenance : null,
+      storedParagraphSource: captureSourceProvenance && blocks.isNotEmpty
+          ? (
+              inputHash: sha256.convert(utf8.encode(rawHtml.trim())).toString(),
+              limits: sourceProvenanceLimits,
+            )
+          : null,
     );
   }
 
@@ -138,6 +144,8 @@ class DiscuzNovelReaderDocumentParser implements NovelReaderDocumentParser {
     String rawHtml,
     List<RichBlock> blocks, {
     NovelReaderSourceProvenance? sourceProvenance,
+    ({String inputHash, NovelReaderSourceProvenanceLimits limits})?
+    storedParagraphSource,
   }) {
     final plainText = blocks
         .map((block) => block.novelPlainText.trim())
@@ -154,6 +162,7 @@ class DiscuzNovelReaderDocumentParser implements NovelReaderDocumentParser {
           .length,
       textConversionIdentity: 'none',
       sourceProvenance: sourceProvenance,
+      storedParagraphSource: storedParagraphSource,
     );
   }
 
@@ -703,6 +712,36 @@ final class _SourceOriginRecorder {
           images: _images,
         )
       : null;
+}
+
+/// Build a renderer input from already normalized, converted plain text.
+/// The generated paths address the exact emitted paragraphs in document order.
+({String html, NovelReaderSourceProvenance provenance})?
+projectNovelReaderStoredParagraphs(NovelReaderDocument document) {
+  final source = document.storedParagraphSource;
+  if (source == null) return null;
+  final origins = _SourceOriginRecorder(source.limits);
+  const escape = HtmlEscape(HtmlEscapeMode.element);
+  final html = StringBuffer();
+  for (final (index, block) in document.blocks.indexed) {
+    if (block is! RichTextBlock || block.runs.length != 1) return null;
+    final run = block.runs.single;
+    origins.record(
+      path: '$index/0',
+      sourceText: run.text,
+      run: run,
+      nodeId: block.anchorId,
+      semanticStart: 0,
+      policy: NovelReaderSourceTextPolicy.inlineTextNode,
+    );
+    if (!origins.isRecording) return null;
+    html
+      ..write('<p style="white-space:pre-wrap">')
+      ..write(escape.convert(run.text))
+      ..write('</p>');
+  }
+  final input = html.toString();
+  return (html: input, provenance: origins.finish(input)!);
 }
 
 class _LinkInfo {

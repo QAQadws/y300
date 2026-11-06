@@ -29,6 +29,7 @@ class NovelReaderDocument {
     required this.wordCount,
     this.textConversionIdentity,
     this.sourceProvenance,
+    this.storedParagraphSource,
   });
 
   final String episodeId;
@@ -44,6 +45,11 @@ class NovelReaderDocument {
   /// Absent for uncaptured/fallback/over-budget inputs; never infer DOM origins
   /// from literal equality when this proof is unavailable.
   final NovelReaderSourceProvenance? sourceProvenance;
+
+  /// The parser deliberately used stored plain paragraphs. The exact HTML
+  /// input must still agree before a renderer projects these paragraphs.
+  final ({String inputHash, NovelReaderSourceProvenanceLimits limits})?
+  storedParagraphSource;
 
   /// Block tree in document order.
   List<RichBlock> get blocks => body.blocks;

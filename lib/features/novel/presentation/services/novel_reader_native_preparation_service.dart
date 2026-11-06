@@ -1,5 +1,9 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
+import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/html_text_node_conversion_service.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/identity_text_converter.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
@@ -141,8 +145,33 @@ NovelReaderNativeChapterPreparation _build(
       NovelReaderNativeAnchorBindingFailure.conversion,
     );
   }
+  var html = request.convertedHtml;
+  var bindingDocument = semantic;
+  if (semantic.storedParagraphSource case final source?) {
+    if (sha256.convert(utf8.encode(html)).toString() != source.inputHash) {
+      throw const NovelReaderNativeAnchorBindingException(
+        NovelReaderNativeAnchorBindingFailure.identity,
+      );
+    }
+    final projection = projectNovelReaderStoredParagraphs(semantic);
+    if (projection == null) {
+      throw const NovelReaderNativeAnchorBindingException(
+        NovelReaderNativeAnchorBindingFailure.budget,
+      );
+    }
+    html = projection.html;
+    bindingDocument = NovelReaderDocument(
+      episodeId: semantic.episodeId,
+      rawHtmlHash: semantic.rawHtmlHash,
+      body: semantic.body,
+      plainText: semantic.plainText,
+      wordCount: semantic.wordCount,
+      textConversionIdentity: conversion,
+      sourceProvenance: projection.provenance,
+    );
+  }
   final body = const ForumBodyParser().parse(
-    html: request.convertedHtml,
+    html: html,
     sourceId: request.sourceId,
     conversionIdentity: conversion,
   );
@@ -158,7 +187,7 @@ NovelReaderNativeChapterPreparation _build(
   final anchors = const NovelReaderNativeAnchorBinder().bind(
     episodeId: request.episodeId,
     sourceId: request.sourceId,
-    semanticDocument: semantic,
+    semanticDocument: bindingDocument,
     bodyDocument: body,
   );
   return NovelReaderNativePreparedChapter(

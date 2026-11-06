@@ -106,6 +106,7 @@ class AdaptiveNovelReaderDocumentBuildService
       wordCount: document.wordCount,
       textConversionIdentity: converter.mode.name,
       sourceProvenance: document.sourceProvenance,
+      storedParagraphSource: document.storedParagraphSource,
     );
   }
 
