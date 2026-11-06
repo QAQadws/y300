@@ -259,6 +259,17 @@ void main() {
         expect(sample.finalBoundaryKnown, isTrue);
         expect(sample.bodyHeight, greaterThan(180));
 
+        final floorActions = find.byKey(const Key('thread-post-more-200'));
+        expect(
+          tester.widget<IconButton>(floorActions).tooltip,
+          AppLocalizations.of(tester.element(floorActions)).threadPostActions,
+        );
+        await tester.tap(floorActions);
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('thread-post-action-sheet')), findsOneWidget);
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+
         final opening = find.byWidgetPredicate(
           (widget) =>
               widget is ForumBodyParagraphSurface &&

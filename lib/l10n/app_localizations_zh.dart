@@ -3474,6 +3474,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get threadDetailMore => '更多';
 
   @override
+  String get threadPostActions => '楼层操作';
+
+  @override
   String get threadDetailDisplaySettings => '显示设置';
 
   @override
@@ -9615,6 +9618,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get threadDetailMore => '更多';
+
+  @override
+  String get threadPostActions => '樓層操作';
 
   @override
   String get threadDetailDisplaySettings => '顯示設定';

@@ -5877,6 +5877,12 @@ abstract class AppLocalizations {
   /// **'更多'**
   String get threadDetailMore;
 
+  /// No description provided for @threadPostActions.
+  ///
+  /// In zh, this message translates to:
+  /// **'楼层操作'**
+  String get threadPostActions;
+
   /// No description provided for @threadDetailDisplaySettings.
   ///
   /// In zh, this message translates to:
