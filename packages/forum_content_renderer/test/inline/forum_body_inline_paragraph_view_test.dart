@@ -99,6 +99,39 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test(
+    'retired ruby child invalidates reads while its parent lease is active',
+    () {
+      final input = mixedInlineInput(prefix: '', suffix: '');
+      final cache = ForumBodyParagraphCache(
+        maxEntries: 4,
+        maxEstimatedBytes: 1 << 20,
+      );
+      addTearDown(cache.close);
+      final child = group(cache, input);
+      final parent = cache.acquireInline(
+        content: input.content,
+        width: 100,
+        dimensions: [child.placeholderDimensions],
+      );
+      final subject = ForumBodyInlineParagraphView.adopt(
+        cache: cache,
+        parent: parent,
+        startLine: 0,
+        endLine: 1,
+        rubyGroups: {0: child},
+      );
+      addTearDown(subject.close);
+      expect(subject.content, same(input.content));
+      child.close();
+      expect(parent.isActive, isTrue);
+      expect(() => subject.content, throwsStateError);
+      expect(() => subject.glyphBoxes(0, 1), throwsStateError);
+      subject.close();
+      expect(cache.activeLeases, 0);
+    },
+  );
+
+  test(
     'fractional native placeholder overhang preserves all child pixels',
     () async {
       final input = mixedInlineInput(

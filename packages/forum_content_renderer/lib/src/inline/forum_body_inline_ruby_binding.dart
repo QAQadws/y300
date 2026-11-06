@@ -12,6 +12,9 @@ sealed class _RubyBinding {
   Size get size;
   double get baseline;
   bool get isActive;
+
+  /// True when [ensureActive] can call into an external owner.
+  bool get checksExternalOwner => false;
   void ensureActive() {
     if (!isActive) throw StateError('Inline ruby binding is retired');
   }
@@ -174,6 +177,8 @@ final class _RubyEmphasisTreeBinding extends _RubyBinding {
   @override
   bool get isActive => tree.isActive;
   @override
+  bool get checksExternalOwner => true;
+  @override
   void ensureActive() => tree.ensureActive();
   @override
   Iterable<ForumBodyNativeParagraphLease> get nativeLeases => tree.nativeLeases;
@@ -225,6 +230,8 @@ final class _RubyRootFrameBinding extends _RubyBinding {
   double get baseline => frame.baseline;
   @override
   bool get isActive => child.isActive;
+  @override
+  bool get checksExternalOwner => child.checksExternalOwner;
   @override
   void ensureActive() => child.ensureActive();
   @override

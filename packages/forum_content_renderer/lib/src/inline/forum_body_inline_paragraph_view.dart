@@ -134,6 +134,7 @@ final class ForumBodyInlineParagraphView {
   List<({Rect rect, ForumBodyRubyContainerFontBox font})> _backgrounds;
   List<int> _backgroundRows;
   _InlineFontFrameBinding? _fontFrames;
+  bool? _hasExternalOwnerChecks;
 
   /// Actual parent row ownership of each already-bound container surface.
   /// Coordinates remain local to this natural source window; allocation is
@@ -631,6 +632,12 @@ final class ForumBodyInlineParagraphView {
   void _ensureActive() {
     _fontFrames?.guard();
     if (!isActive) throw StateError('Inline paragraph view is retired');
+    // Simple children only check lease liveness, already covered by isActive.
+    // An owner callback can retire siblings, so keep both checks on that path.
+    final hasOwnerChecks = _hasExternalOwnerChecks ??= _children.values.any(
+      (binding) => binding.checksExternalOwner,
+    );
+    if (!hasOwnerChecks) return;
     for (final binding in _children.values) {
       binding.ensureActive();
     }
