@@ -177,6 +177,17 @@ final class HtmlInlineTextProjection {
   /// Native layout must verify its geometry; this cannot prove glyph coverage.
   final String enginePrefix;
 
+  /// First atom whose end lies after the display offset, or [atoms].length.
+  /// An empty resource fence at the offset is outside that half-open range.
+  int firstAtomEndingAfterDisplayUtf16(int offset) {
+    RangeError.checkValueInInterval(offset, 0, display.text.length, 'offset');
+    final index = _lastAtomAtOrBefore(offset, engine: false);
+    if (index >= 0 && atoms[index].displayEndUtf16 > offset) {
+      return index;
+    }
+    return index + 1;
+  }
+
   HtmlInlineTextPosition engineAtDisplayUtf16(
     int offset, {
     HtmlProjectionAffinity affinity = HtmlProjectionAffinity.downstream,

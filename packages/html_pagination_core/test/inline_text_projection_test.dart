@@ -12,6 +12,36 @@ HtmlDisplayTextProjection project(String text, [int source = 0]) =>
 
 void main() {
   test(
+    'atom range lookup preserves interior offsets and coincident fences',
+    () {
+      final map = HtmlInlineTextProjection.build(
+        display: project('ABCDEFGH'),
+        atomicRanges: [
+          (startUtf16: 0, endUtf16: 2),
+          (startUtf16: 2, endUtf16: 2),
+          (startUtf16: 2, endUtf16: 2),
+          (startUtf16: 2, endUtf16: 4),
+          (startUtf16: 6, endUtf16: 6),
+          (startUtf16: 6, endUtf16: 6),
+          (startUtf16: 7, endUtf16: 8),
+        ],
+        resourceAtoms: {1, 2, 4, 5},
+      );
+      expect(List.generate(9, map.firstAtomEndingAfterDisplayUtf16), [
+        0,
+        0,
+        3,
+        3,
+        4,
+        4,
+        6,
+        6,
+        7,
+      ]);
+    },
+  );
+
+  test(
     'multi-unit mechanical prefix stays indivisible and is included in mapping identity',
     () {
       final display = project('AB', 50);

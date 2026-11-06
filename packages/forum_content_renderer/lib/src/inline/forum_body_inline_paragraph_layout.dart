@@ -853,8 +853,13 @@ final class ForumBodyInlineParagraphLayout
     }
 
     var cursor = start;
-    for (final atom in projection.atoms) {
-      if (atom.displayEndUtf16 <= start) continue;
+    final atoms = projection.atoms;
+    for (
+      var index = projection.firstAtomEndingAfterDisplayUtf16(start);
+      index < atoms.length;
+      index++
+    ) {
+      final atom = atoms[index];
       if (atom.displayStartUtf16 >= end) break;
       text(cursor, atom.displayStartUtf16.clamp(start, end));
       if (!atom.isResource && _trimmedAtoms?[atom.index] != 1) {
