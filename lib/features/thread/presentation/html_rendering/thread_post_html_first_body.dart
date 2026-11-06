@@ -65,6 +65,8 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
     this.preparerSelector,
     this.imageReaderBridge = const ThreadHtmlImageReaderBridge(),
     this.nativeBody = false,
+    this.selectEntireBody = false,
+    this.isSelectionCurrent,
   });
 
   final ThreadPost post;
@@ -100,6 +102,8 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
   final ThreadPreparedBodyPreparerSelector? preparerSelector;
   final ThreadHtmlImageReaderBridge imageReaderBridge;
   final bool nativeBody;
+  final bool selectEntireBody;
+  final bool Function()? isSelectionCurrent;
 
   @override
   ConsumerState<ThreadPostHtmlFirstBody> createState() =>
@@ -363,7 +367,8 @@ class _ThreadPostHtmlFirstBodyState
         if (tracked) {
           _readingImages = ThreadBodyReadingImageTracker(coordinator!.schedule);
         }
-        if (widget.nativeBody || preparedDocument.sequence.entries.isNotEmpty) {
+        if (preparedDocument.sequence.entries.isNotEmpty ||
+            (widget.nativeBody && preparedDocument.skippedStickerCount > 0)) {
           final delegate = ref
               .read(forumHtmlImageHostProvider)
               .forContent(
@@ -444,12 +449,14 @@ class _ThreadPostHtmlFirstBodyState
                 theme: widget.theme,
                 textStyle: textStyle,
                 fontRevision: fontIdentity.toString(),
-                imageHost: _readingImageHost!,
+                imageHost: _readingImageHost,
                 imageAnchorController: widget.imageAnchorController,
                 expansion: expansion ?? _readingExpansion,
                 callbacks: callbacks,
                 clipboardTextWriter: ref.read(clipboardTextWriterProvider),
                 onOpenSelectedLink: widget.onOpenSelectedPostLink,
+                selectEntireBody: widget.selectEntireBody,
+                isSelectionCurrent: widget.isSelectionCurrent,
                 errorBuilder: (_) =>
                     widget.fallback ?? const ThreadPostHtmlBodyError(),
                 onGeometry: (ready, complete) {
@@ -661,6 +668,8 @@ class ThreadPostHtmlBody extends StatelessWidget {
     this.preparerSelector,
     this.imageReaderBridge = const ThreadHtmlImageReaderBridge(),
     this.nativeBody = false,
+    this.selectEntireBody = false,
+    this.isSelectionCurrent,
   });
 
   final ThreadPost post;
@@ -695,6 +704,8 @@ class ThreadPostHtmlBody extends StatelessWidget {
   final ThreadPreparedBodyPreparerSelector? preparerSelector;
   final ThreadHtmlImageReaderBridge imageReaderBridge;
   final bool nativeBody;
+  final bool selectEntireBody;
+  final bool Function()? isSelectionCurrent;
 
   @override
   Widget build(BuildContext context) {
@@ -724,6 +735,8 @@ class ThreadPostHtmlBody extends StatelessWidget {
       preparerSelector: preparerSelector,
       imageReaderBridge: imageReaderBridge,
       nativeBody: nativeBody,
+      selectEntireBody: selectEntireBody,
+      isSelectionCurrent: isSelectionCurrent,
     );
   }
 }

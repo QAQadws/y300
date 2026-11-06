@@ -3,7 +3,6 @@ import 'dart:convert';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
@@ -51,9 +50,8 @@ void main() {
     expect(lease?.call(), isTrue);
     expect(find.text(label), findsNothing);
     expect(
-      _region(tester).contextMenuButtonItems.where(
-        (item) => item.type == ContextMenuButtonType.copy,
-      ),
+      _region(tester).contextMenuButtonItems
+          .where((item) => item.type == ContextMenuButtonType.copy),
       isEmpty,
     );
     expect(tester.takeException(), isNull);
@@ -108,9 +106,8 @@ void main() {
       expect(find.text(_openLabel(tester)), findsNothing);
       expect(
         find.text(
-          MaterialLocalizations.of(
-            tester.element(find.byType(SelectionArea)),
-          ).copyButtonLabel,
+          MaterialLocalizations.of(tester.element(find.byType(SelectionArea)))
+              .copyButtonLabel,
         ),
         findsOneWidget,
       );
@@ -281,9 +278,9 @@ SelectableRegionState _region(WidgetTester tester) => tester
     .state<SelectionAreaState>(find.byType(SelectionArea))
     .selectableRegion;
 
-String _openLabel(WidgetTester tester) => AppLocalizations.of(
-  tester.element(find.byType(SelectionArea)),
-).selectionOpenForumLink;
+String _openLabel(WidgetTester tester) =>
+    AppLocalizations.of(tester.element(find.byType(SelectionArea)))
+        .selectionOpenForumLink;
 
 Future<void> _selectAll(WidgetTester tester) async {
   _region(tester).selectAll(SelectionChangedCause.toolbar);
@@ -295,39 +292,24 @@ Future<void> _selectTextPrefix(
   String text,
   int end,
 ) async {
-  final finder = find
-      .byWidgetPredicate(
-        (widget) =>
-            widget is RichText && widget.text.toPlainText().contains(text),
-      )
-      .first;
-  final paragraph = tester.renderObject<RenderParagraph>(finder);
-  final startOffset = paragraph.text.toPlainText().indexOf(text);
-  final startBox = paragraph
-      .getBoxesForSelection(
-        TextSelection(baseOffset: startOffset, extentOffset: startOffset + 1),
-      )
-      .first;
-  final endBox = paragraph
-      .getBoxesForSelection(
-        TextSelection(
-          baseOffset: startOffset + end - 1,
-          extentOffset: startOffset + end,
-        ),
-      )
-      .last;
+  final finder = find.byWidgetPredicate(
+    (widget) =>
+        widget is ForumBodyParagraphSurface &&
+        widget.lease.content.projection.text == text,
+  );
+  final layout = tester.widget<ForumBodyParagraphSurface>(finder).lease.layout;
+  final origin = tester.getTopLeft(finder);
+  final startBox = layout.selectionBoxes(0, 1).first.toRect();
+  final endBox = layout.selectionBoxes(end - 1, end).last.toRect();
   final gesture = await tester.startGesture(
-    paragraph.localToGlobal(Offset(startBox.left, startBox.toRect().center.dy)),
+    origin + startBox.centerLeft,
     kind: PointerDeviceKind.mouse,
   );
-  await gesture.moveTo(
-    paragraph.localToGlobal(Offset(endBox.right, endBox.toRect().center.dy)),
-  );
+  await gesture.moveTo(origin + endBox.centerRight);
   await gesture.up();
   await tester.pumpAndSettle();
-  final point = paragraph.localToGlobal(endBox.toRect().center);
   final menuGesture = await tester.startGesture(
-    point,
+    origin + endBox.center,
     kind: PointerDeviceKind.mouse,
     buttons: kSecondaryMouseButton,
   );

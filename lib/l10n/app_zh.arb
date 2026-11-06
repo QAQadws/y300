@@ -1586,6 +1586,7 @@
   "threadHtmlRenderFailed": "正文渲染失败，可长按楼层复制正文或打开原帖查看",
   "threadSelectionCopyTitle": "选择复制",
   "selectionOpenForumLink": "打开链接",
+  "selectionCopyAllFailed": "无法复制全部正文，请缩小选区后重试",
   "novelSelectionStart": "设为选区起点",
   "novelSelectionEnd": "延伸选区至此",
   "novelSelectionChooseEnd": "翻页或滚动后选择另一端",

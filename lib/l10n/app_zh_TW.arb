@@ -1209,6 +1209,7 @@
   "threadHtmlRenderFailed": "正文渲染失敗，可長按樓層複製正文或開啟原帖查看",
   "threadSelectionCopyTitle": "選擇複製",
   "selectionOpenForumLink": "開啟連結",
+  "selectionCopyAllFailed": "無法複製全部正文，請縮小選取範圍後重試",
   "novelSelectionStart": "設為選取起點",
   "novelSelectionEnd": "延伸選取範圍至此",
   "novelSelectionChooseEnd": "翻頁或捲動後選擇另一端",

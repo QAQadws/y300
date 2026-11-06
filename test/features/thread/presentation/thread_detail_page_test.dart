@@ -5731,27 +5731,23 @@ void main() {
         find.byKey(const Key('thread-post-html-selection-copy-body-copy-1')),
         findsOneWidget,
       );
-      expect(
-        find.descendant(
-          of: find.byKey(
-            const Key('thread-post-html-selection-copy-body-copy-1'),
-          ),
-          matching: find.byType(SelectionArea),
-        ),
-        findsNothing,
+      await _pumpThreadBodyUntil(
+        tester,
+        () => find.byType(ForumBodyParagraphSurface).evaluate().isNotEmpty,
       );
-      final copyPageRichTexts = tester.widgetList<RichText>(
-        find.descendant(
-          of: find.byKey(
-            const Key('thread-post-html-selection-copy-body-copy-1'),
-          ),
-          matching: find.byType(RichText),
-        ),
+      expect(find.byType(SelectionArea), findsOneWidget);
+      expect(find.byType(ForumBodyFlowBox), findsOneWidget);
+      await tester.pumpAndSettle();
+      final region = tester.state<SelectableRegionState>(
+        find.byType(SelectableRegion),
       );
-      expect(
-        copyPageRichTexts.any((text) => text.selectionRegistrar != null),
-        isTrue,
+      region.selectAll(SelectionChangedCause.toolbar);
+      await tester.pumpAndSettle();
+      final selection = tester.state<ForumBodyFlowSelectionScopeState>(
+        find.byType(ForumBodyFlowSelectionScope),
       );
+      expect(selection.isWholeBodySelected, isTrue);
+      expect(selection.selectedText, isNotEmpty);
     });
 
     testWidgets('opens a valid floor edit link in the existing WebView', (

@@ -10,9 +10,12 @@ import 'package:y300/features/content_rendering_shared/content_rendering.dart'
     show
         ForumBodyFlowSelectionScope,
         ForumBodyFlowSelectionScopeState,
-        ForumBodySourceRange;
+        ForumBodySelectionCopyCursor,
+        ForumBodySourceRange,
+        ForumBodyTextPageSession;
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
+import 'package:y300/shared/widgets/transient_feedback.dart';
 
 /// The caller owns navigation/failure feedback and checks `isCurrent` before
 /// applying asynchronous results to this selection's source page.
@@ -36,6 +39,7 @@ class ForumContentSelectionCopyPage extends StatelessWidget {
     this.onOpenForumLink,
     this.clipboardTextWriter,
     this.isCurrent,
+    this.childOwnsSelection = false,
   }) : assert((resolveForumLink == null) == (onOpenForumLink == null));
 
   final String title;
@@ -48,41 +52,45 @@ class ForumContentSelectionCopyPage extends StatelessWidget {
   final ForumSelectionLinkOpener? onOpenForumLink;
   final ClipboardTextWriter? clipboardTextWriter;
   final bool Function()? isCurrent;
+  final bool childOwnsSelection;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final native = theme.y300NativeContent;
+    final body = ListView(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 18),
+      children: [
+        Container(
+          key: bodyKey,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: native.card,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: ForumNativeSurfaceShadows.card(native.stateLayer),
+          ),
+          child: DefaultTextStyle.merge(
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: native.body,
+              height: 1.5,
+            ),
+            child: child,
+          ),
+        ),
+      ],
+    );
     return Scaffold(
       backgroundColor: native.background,
       appBar: AppBar(centerTitle: false, title: Text(title)),
-      body: ForumContentSelectionRegion(
-        resolveForumLink: resolveForumLink,
-        onOpenForumLink: onOpenForumLink,
-        clipboardTextWriter: clipboardTextWriter,
-        isCurrent: isCurrent,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 18),
-          children: [
-            Container(
-              key: bodyKey,
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: native.card,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: ForumNativeSurfaceShadows.card(native.stateLayer),
-              ),
-              child: DefaultTextStyle.merge(
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: native.body,
-                  height: 1.5,
-                ),
-                child: child,
-              ),
+      body: childOwnsSelection
+          ? body
+          : ForumContentSelectionRegion(
+              resolveForumLink: resolveForumLink,
+              onOpenForumLink: onOpenForumLink,
+              clipboardTextWriter: clipboardTextWriter,
+              isCurrent: isCurrent,
+              child: body,
             ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -100,8 +108,10 @@ class ForumContentSelectionRegion extends StatefulWidget {
     this.readSelectionAuthority,
     this.onSelectionStarted,
     this.rangeAction,
+    this.wholeBodySelection,
     this.nativeFlow = false,
   }) : assert(rangeAction == null || nativeFlow),
+       assert(wholeBodySelection == null || nativeFlow),
        assert(
          nativeFlow
              ? resolveForumLink == null
@@ -119,6 +129,7 @@ class ForumContentSelectionRegion extends StatefulWidget {
   final Object? Function()? readSelectionAuthority;
   final VoidCallback? onSelectionStarted;
   final ForumSelectionRangeAction? rangeAction;
+  final ({ForumBodyTextPageSession session, bool complete})? wholeBodySelection;
   final bool nativeFlow;
 
   @override
@@ -136,6 +147,7 @@ class _ForumContentSelectionRegionState
   int _selectionGeneration = 0;
   int _actionGeneration = 0;
   int? _pendingCopyGeneration;
+  ForumBodySelectionCopyCursor? _wholeCopy;
   bool _refreshScheduled = false;
   bool _closingForOpen = false;
 
@@ -147,9 +159,25 @@ class _ForumContentSelectionRegionState
   String? get _liveText =>
       widget.nativeFlow ? _flowKey.currentState?.selectedText : _selectedText;
 
+  ({ForumBodyTextPageSession session, bool complete})? get _selectedWholeBody =>
+      _flowKey.currentState?.isWholeBodySelected == true
+      ? widget.wholeBodySelection
+      : null;
+
   String? _resolveLink(String text) {
     if (!widget.nativeFlow) return widget.resolveForumLink?.call(text);
     if (widget.onOpenForumLink == null) return null;
+    final whole = _selectedWholeBody;
+    if (whole != null) {
+      final prefix = whole.session.snapshot;
+      // A virtualized Select All may include other URLs outside the live
+      // selection. Only offer link navigation when the full slice is present.
+      if (!whole.complete ||
+          prefix.length != 1 ||
+          prefix.single.tableFrames.isNotEmpty) {
+        return null;
+      }
+    }
     final occurrence = const ForumSelectedLinkPolicy().resolveOccurrence(text);
     return occurrence != null &&
             _flowKey.currentState?.confirmsSelectedLink(occurrence) == true
@@ -182,6 +210,7 @@ class _ForumContentSelectionRegionState
     if (oldWidget.resolveForumLink != widget.resolveForumLink ||
         oldWidget.onOpenForumLink != widget.onOpenForumLink ||
         oldWidget.rangeAction != widget.rangeAction ||
+        oldWidget.wholeBodySelection != widget.wholeBodySelection ||
         oldWidget.clipboardTextWriter != widget.clipboardTextWriter) {
       _invalidateSelection();
     }
@@ -189,6 +218,7 @@ class _ForumContentSelectionRegionState
 
   @override
   void dispose() {
+    _wholeCopy?.close();
     _selectionDetails.removeListener(_rangeChanged);
     _selectionDetails.dispose();
     _toolbarRevision.dispose();
@@ -207,6 +237,8 @@ class _ForumContentSelectionRegionState
   }
 
   void _invalidateSelection() {
+    _wholeCopy?.close();
+    _wholeCopy = null;
     _selectionGeneration++;
     if (!_closingForOpen) _actionGeneration++;
     // Selection notifications can arrive during layout. Retire old callbacks
@@ -239,6 +271,12 @@ class _ForumContentSelectionRegionState
             if (item.type != ContextMenuButtonType.copy ||
                 widget.clipboardTextWriter == null) {
               return item;
+            }
+            if (_selectedWholeBody?.complete == false) {
+              return const ContextMenuButtonItem(
+                type: ContextMenuButtonType.copy,
+                onPressed: null,
+              );
             }
             return item.copyWith(
               onPressed: () => unawaited(_copy(region, generation)),
@@ -288,19 +326,30 @@ class _ForumContentSelectionRegionState
     int generation, {
     bool fromToolbar = true,
   }) async {
-    final text = _liveText;
+    final whole = _selectedWholeBody;
+    final liveText = _liveText;
     final writer = widget.clipboardTextWriter;
     if (!_menuCurrent(generation, region) ||
-        text == null ||
-        text.isEmpty ||
+        (whole == null && (liveText == null || liveText.isEmpty)) ||
+        whole?.complete == false ||
         writer == null ||
         _pendingCopyGeneration == generation) {
       return;
     }
     _pendingCopyGeneration = generation;
+    bool current() =>
+        _menuCurrent(generation, region) && _selectedWholeBody == whole;
     try {
+      final text = whole == null
+          ? liveText
+          : await _readWholeBody(whole.session, current);
+      if (!current()) return;
+      if (text == null || text.isEmpty) {
+        if (whole != null) _showWholeCopyFailure();
+        return;
+      }
       await writer.writeText(text);
-      if (!fromToolbar || !_menuCurrent(generation, region)) return;
+      if (!fromToolbar || !current()) return;
       // Match Flutter's public toolbar behavior without invoking its default
       // Copy callback, which would write to the clipboard a second time.
       switch (defaultTargetPlatform) {
@@ -317,10 +366,42 @@ class _ForumContentSelectionRegionState
     } on Object {
       // Keep the selection and menu available for an explicit retry. Failed
       // writes never produce self-copy evidence in the injected adapter.
+      if (whole != null && current()) _showWholeCopyFailure();
     } finally {
       if (_pendingCopyGeneration == generation) _pendingCopyGeneration = null;
     }
   }
+
+  Future<String?> _readWholeBody(
+    ForumBodyTextPageSession session,
+    bool Function() current,
+  ) async {
+    final cursor = session.openWholeBodyCopy(
+      maxCodeUnits:
+          session.limits.maxTextCodeUnits + session.limits.maxFragments,
+      maxWork: 8 * session.limits.maxParagraphs,
+    );
+    if (cursor == null) return null;
+    _wholeCopy = cursor;
+    try {
+      while (current() && !cursor.isDone) {
+        final clock = Stopwatch()..start();
+        do {
+          cursor.advance(maxWork: 16);
+        } while (!cursor.isDone && clock.elapsedMicroseconds < 2500);
+        if (!cursor.isDone) await WidgetsBinding.instance.endOfFrame;
+      }
+      return cursor.text;
+    } finally {
+      cursor.close();
+      if (identical(_wholeCopy, cursor)) _wholeCopy = null;
+    }
+  }
+
+  void _showWholeCopyFailure() => showTransientSnackBar(
+    context,
+    AppLocalizations.of(context).selectionCopyAllFailed,
+  );
 
   Future<void> _open(
     SelectableRegionState region,

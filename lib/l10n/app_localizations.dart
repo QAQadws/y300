@@ -6435,6 +6435,12 @@ abstract class AppLocalizations {
   /// **'打开链接'**
   String get selectionOpenForumLink;
 
+  /// No description provided for @selectionCopyAllFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法复制全部正文，请缩小选区后重试'**
+  String get selectionCopyAllFailed;
+
   /// No description provided for @novelSelectionStart.
   ///
   /// In zh, this message translates to:

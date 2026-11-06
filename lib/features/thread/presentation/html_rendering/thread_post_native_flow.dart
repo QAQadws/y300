@@ -30,6 +30,8 @@ final class ThreadPostNativeFlow extends StatefulWidget {
     required this.callbacks,
     required this.clipboardTextWriter,
     this.onOpenSelectedLink,
+    this.selectEntireBody = false,
+    this.isSelectionCurrent,
     required this.onGeometry,
     required this.errorBuilder,
     this.imageAnchorController,
@@ -40,11 +42,13 @@ final class ThreadPostNativeFlow extends StatefulWidget {
   final ForumHtmlThemeContext theme;
   final TextStyle textStyle;
   final String fontRevision;
-  final ForumHtmlImageHost imageHost;
+  final ForumHtmlImageHost? imageHost;
   final Map<String, bool> expansion;
   final ForumHtmlRenderCallbacks callbacks;
   final ClipboardTextWriter clipboardTextWriter;
   final ForumSelectionLinkOpener? onOpenSelectedLink;
+  final bool selectEntireBody;
+  final bool Function()? isSelectionCurrent;
   final void Function(bool ready, bool complete) onGeometry;
   final WidgetBuilder errorBuilder;
   final ForumHtmlImageAnchorController? imageAnchorController;
@@ -178,7 +182,13 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
               clipboardTextWriter: widget.clipboardTextWriter,
               onOpenForumLink: widget.onOpenSelectedLink,
               selectionIdentity: _pending,
-              isCurrent: () => _current(run) && _error == null,
+              isCurrent: () =>
+                  _current(run) &&
+                  _error == null &&
+                  (widget.isSelectionCurrent?.call() ?? true),
+              wholeBodySelection: widget.selectEntireBody
+                  ? (session: run.session!, complete: run.prefix!.isComplete)
+                  : null,
               onSelectionStarted: widget.callbacks.onInteraction,
               child: ForumBodyFlowBox(
                 key: run.boundsKey,
@@ -248,9 +258,11 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
       final previousImages = _shown?.host == config.imageHost
           ? _shown?.images
           : null;
+      final host = config.imageHost;
       final images = ThreadNativeBodyImages(document);
       final clock = Stopwatch()..start();
       for (final (index, element) in document.imageElements.indexed) {
+        if (host == null) break;
         if (index != 0 &&
             (index % 48 == 0 || clock.elapsedMicroseconds >= 3000)) {
           await WidgetsBinding.instance.endOfFrame;
@@ -261,7 +273,7 @@ class _ThreadPostNativeFlowState extends State<ThreadPostNativeFlow> {
         images.add(
           element: element,
           sequence: config.prepared.sequence,
-          host: config.imageHost,
+          host: host,
           // Host estimates can learn from other images in the thread. Keep
           // already laid-out occurrences stable until their own size arrives.
           learnedLayout:

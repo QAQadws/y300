@@ -11,6 +11,7 @@ import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/domain/repositories/thread_post_locator.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
+import 'package:y300/features/thread/presentation/html_rendering/thread_post_native_flow.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_actions.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
@@ -52,9 +53,8 @@ void main() {
       expect(fragment.querySelectorAll('a'), hasLength(2));
       expect(fragment.querySelectorAll('a a'), isEmpty);
       expect(document.sequence.entries, isEmpty);
-      final rendered = _textSpans(
-        tester,
-      ).where((entry) => entry.$1.contains('https://bbs.yamibo.com'));
+      final rendered = _textSpans(tester)
+          .where((entry) => entry.$1.contains('https://bbs.yamibo.com'));
       expect(rendered, isNotEmpty);
       expect(rendered.first.$2.fontSize, closeTo(22 * 1.6, 0.001));
       expect(rendered.first.$2.color, const Color(0xFF005522));
@@ -198,16 +198,21 @@ void main() {
         find.byKey(const Key('thread-post-html-selection-copy-page')),
         findsOneWidget,
       );
-      expect(
-        html_parser
-            .parseFragment(_document(tester).preparedHtml)
-            .querySelector('a')!
-            .attributes['href'],
-        url,
+      final body = tester.widget<ThreadPostNativeFlow>(
+        find.byType(ThreadPostNativeFlow),
       );
+      final link = html_parser.parseFragment(body.prepared.preparedHtml);
+      expect(link.querySelector('a')!.attributes['href'], url);
       final source = tester.element(find.byType(SelectionArea));
       observer.pushed.clear();
-      await _tapText(tester, url);
+      final surface = find.byWidgetPredicate(
+        (widget) =>
+            widget is ForumBodyParagraphSurface &&
+            widget.lease.content.projection.text == url,
+      );
+      final layout = tester.widget<ForumBodyParagraphSurface>(surface);
+      final glyph = layout.lease.layout.selectionBoxes(0, 1).single;
+      await tester.tapAt(tester.getTopLeft(surface) + glyph.toRect().center);
       await tester.idle();
       expect(observer.pushed, hasLength(1));
       final route = observer.pushed.single as MaterialPageRoute;
@@ -341,9 +346,8 @@ Widget _host(
   child: LocalizedTestApp(
     navigatorObservers: observers,
     builder: (context, child) => MediaQuery(
-      data: MediaQuery.of(
-        context,
-      ).copyWith(textScaler: TextScaler.linear(textScale)),
+      data: MediaQuery.of(context)
+          .copyWith(textScaler: TextScaler.linear(textScale)),
       child: child!,
     ),
     home: Scaffold(body: body),

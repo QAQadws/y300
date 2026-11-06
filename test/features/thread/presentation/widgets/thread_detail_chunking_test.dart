@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart' show LogicalKeyboardKey, SystemChannels;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
@@ -653,7 +654,7 @@ void main() {
   );
 
   testWidgets(
-    'selection copy page keeps all 3000 units outside the lazy host',
+    'selection copy page copies all 3000 units from a virtualized native body',
     (tester) async {
       final post = _post('long', _html(3000, paragraphs: true), 1);
       final container = ProviderContainer(
@@ -664,6 +665,17 @@ void main() {
         ],
       );
       addTearDown(container.dispose);
+      final copies = <String>[];
+      final messenger = tester.binding.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copies.add((call.arguments as Map)['text'] as String);
+        }
+        return null;
+      });
+      addTearDown(
+        () => messenger.setMockMethodCallHandler(SystemChannels.platform, null),
+      );
       await tester.binding.setSurfaceSize(const Size(440, 800));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
@@ -684,11 +696,65 @@ void main() {
           ),
         ),
       );
-      await _ready(tester, 'unit[2999]');
-      expect(_renderers(tester, 'long'), hasLength(1));
-      expect(_renderers(tester, 'long').single.html, post.message);
-      expect(_units(tester), hasLength(3000));
+      final flow = find.byType(ForumBodyFlowBox);
+      await _pumpUntil(
+        tester,
+        () =>
+            flow.evaluate().length == 1 &&
+            tester.widget<ForumBodyFlowBox>(flow).prefix.isComplete,
+      );
+      expect(_renderers(tester, 'long'), isEmpty);
+      expect(
+        tester.widget<ForumBodyFlowBox>(flow).prefix.length,
+        greaterThan(1),
+      );
       expect(find.byType(SelectionArea), findsOneWidget);
+      final region = tester
+          .state<SelectionAreaState>(find.byType(SelectionArea))
+          .selectableRegion;
+      region.selectAll(SelectionChangedCause.toolbar);
+      await tester.pumpAndSettle();
+      final selection = tester.state<ForumBodyFlowSelectionScopeState>(
+        find.byType(ForumBodyFlowSelectionScope),
+      );
+      expect(selection.selectedText, contains('unit[0]'));
+      expect(selection.selectedText, isNot(contains('unit[2999]')));
+      final toolbar = tester.widget<AdaptiveTextSelectionToolbar>(
+        find.byType(AdaptiveTextSelectionToolbar),
+      );
+      toolbar.buttonItems!
+          .singleWhere((item) => item.type == ContextMenuButtonType.copy)
+          .onPressed!();
+      await _pumpUntil(tester, () => copies.isNotEmpty);
+      final expected = post.message
+          .substring(3, post.message.length - 4)
+          .replaceAll('</p><p>', '\n');
+      expect(copies, [expected]);
+
+      final scroll = tester.state<ScrollableState>(find.byType(Scrollable));
+      scroll.position.jumpTo(scroll.position.maxScrollExtent);
+      await tester.pumpAndSettle();
+      final tail = find.byWidgetPredicate(
+        (widget) =>
+            widget is ForumBodyParagraphSurface &&
+            widget.lease.content.projection.text.startsWith('unit[2999]'),
+      );
+      final paragraph = tester.widget<ForumBodyParagraphSurface>(tail);
+      final glyph = paragraph.lease.layout.selectionBoxes(0, 1).single;
+      await tester.tapAt(tester.getTopLeft(tail) + glyph.toRect().center);
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+      expect(selection.isWholeBodySelected, isTrue);
+      expect(selection.selectedText, contains('unit[2999]'));
+      expect(selection.selectedText, isNot(contains('unit[0]')));
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await _pumpUntil(tester, () => copies.length == 2);
+      expect(copies, [expected, expected]);
     },
   );
 

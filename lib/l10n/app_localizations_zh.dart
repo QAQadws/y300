@@ -3803,6 +3803,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get selectionOpenForumLink => '打开链接';
 
   @override
+  String get selectionCopyAllFailed => '无法复制全部正文，请缩小选区后重试';
+
+  @override
   String get novelSelectionStart => '设为选区起点';
 
   @override
@@ -9941,6 +9944,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get selectionOpenForumLink => '開啟連結';
+
+  @override
+  String get selectionCopyAllFailed => '無法複製全部正文，請縮小選取範圍後重試';
 
   @override
   String get novelSelectionStart => '設為選取起點';

@@ -29,6 +29,9 @@ final class ForumBodyFlowSelectionScopeState
     extends State<ForumBodyFlowSelectionScope> {
   final _delegate = _FlowSelectionDelegate();
 
+  /// True after an explicit Select All, even if the view only mounts a slice.
+  bool get isWholeBodySelected => _delegate.selectedAll;
+
   /// Live copy payload. Retired or unmounted deliveries contribute nothing.
   String? get selectedText => _delegate.getSelectedContent()?.plainText;
 
@@ -71,6 +74,13 @@ final class _FlowSelectionRegistry extends InheritedWidget {
 
 final class _FlowSelectionDelegate extends StaticSelectionContainerDelegate {
   final fragments = <_RenderSelectableFragment>{};
+  bool selectedAll = false;
+
+  @override
+  SelectionResult dispatchSelectionEvent(SelectionEvent event) {
+    selectedAll = event is SelectAllSelectionEvent;
+    return super.dispatchSelectionEvent(event);
+  }
 
   List<_RenderSelectableFragment> get _selected =>
       fragments

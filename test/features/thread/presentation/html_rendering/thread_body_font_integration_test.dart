@@ -12,6 +12,7 @@ import 'package:y300/features/fonts/fonts.dart';
 import 'package:y300/features/thread/domain/contracts/thread_body_reading_observer.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_selection_copy_page.dart';
+import 'package:y300/features/thread/presentation/html_rendering/thread_post_native_flow.dart';
 import 'package:y300/features/thread/presentation/services/thread_body_reading_coordinator.dart';
 
 import '../../../../test_support/localized_test_app.dart';
@@ -187,39 +188,55 @@ void main() {
         fontFamily: _first.id,
         typography: preferences.value.typography.copyWith(fontScale: 1.4),
       );
-      await tester.pumpWidget(_app(container, selection: true));
-      await _ready(tester, FontIdentity.runtimeFamily(_first.id));
-      final selectionElement = tester.element(find.byType(SelectionArea));
-      final bodyElement = tester.element(
-        find.byKey(const Key('forum-html-renderer-font-post')),
+      final body = find.byType(ThreadPostNativeFlow);
+      final paragraph = find.byWidgetPredicate(
+        (widget) =>
+            widget is ForumBodyParagraphSurface &&
+            widget.lease.content.projection.text == 'Default body',
       );
-      final document = _renderer(tester).preparedDocument;
+      TextStyle displayedStyle() => tester
+          .widget<ForumBodyParagraphSurface>(paragraph)
+          .lease
+          .content
+          .style
+          .textStyle;
+      Future<void> ready(String? family) => _pumpUntil(tester, () {
+        if (paragraph.evaluate().length != 1) return false;
+        final system = Theme.of(tester.element(body)).textTheme.bodyMedium;
+        return displayedStyle().fontFamily == (family ?? system?.fontFamily);
+      });
+
+      await tester.pumpWidget(_app(container, selection: true));
+      await ready(FontIdentity.runtimeFamily(_first.id));
+      final selectionElement = tester.element(find.byType(SelectionArea));
+      final bodyElement = tester.element(body);
+      final document = tester.widget<ThreadPostNativeFlow>(body).prepared;
       final loadedFont = Completer<void>();
       runtime.gates[_second.id] = loadedFont;
       final selection = _controller(container).setFontFamily(_second.id);
       await _pumpUntil(tester, () => runtime.requested.contains(_second.id));
       expect(
-        _renderer(tester).textStyle!.fontFamily,
+        displayedStyle().fontFamily,
         FontIdentity.runtimeFamily(_first.id),
       );
       loadedFont.complete();
       await selection;
-      await _ready(tester, FontIdentity.runtimeFamily(_second.id));
+      await ready(FontIdentity.runtimeFamily(_second.id));
       await tester.runAsync(() => service.deleteFont(_second.id));
-      await _ready(tester, null);
+      await ready(null);
       await tester.pumpAndSettle();
       expect(preferences.value.fontFamily, FontIdentity.system);
       expect(preferences.value.typography.fontScale, 1.4);
-      expect(_renderer(tester).preparedDocument, same(document));
+      expect(
+        tester.widget<ThreadPostNativeFlow>(body).prepared,
+        same(document),
+      );
       expect(
         tester.element(find.byType(SelectionArea)),
         same(selectionElement),
       );
-      expect(
-        tester.element(find.byKey(const Key('forum-html-renderer-font-post'))),
-        same(bodyElement),
-      );
-      expect(find.text('Default body', findRichText: true), findsOneWidget);
+      expect(tester.element(body), same(bodyElement));
+      expect(displayedStyle().fontSize, closeTo(20 * 1.4, 0.001));
       expect(tester.takeException(), isNull);
     },
   );
