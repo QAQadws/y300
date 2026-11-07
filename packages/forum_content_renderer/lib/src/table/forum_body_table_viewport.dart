@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show precisionErrorTolerance;
 import 'package:flutter/rendering.dart' show RenderBox, ScrollDirection;
 import 'package:flutter/widgets.dart';
 
+import '../flow/forum_body_preload_scope.dart';
 import '../pagination/forum_body_prepared_text_fragment.dart';
 import '../pagination/forum_body_text_page_binding.dart';
 import '../pagination/forum_body_text_page_composer.dart';
@@ -124,9 +125,16 @@ final class ForumBodyTableFlowViewport extends _ForumBodyTableViewport {
     super.onReadyChanged,
     super.onWindowChanged,
     this.initialSlice,
+    this.preloadExtentFactor = 0,
+    this.preloadScope,
   });
 
   final ForumBodyTablePreparedSlice? initialSlice;
+
+  /// Optional vertical preparation around the enclosing document viewport.
+  /// Actual readiness and borrowed windows still describe physical visibility.
+  final double preloadExtentFactor;
+  final ForumBodyPreloadScope? preloadScope;
 
   /// The mounted portion of a settled viewport, even while other cells
   /// prepare. It may contain only the slice transferred for restoration.
@@ -211,8 +219,11 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
   final _ready = <_Slice, List<ForumBodyPreparedTextFragment>>{};
   final _nested = <_Slice, List<_NestedTable>>{};
   final _failed = <_Slice>{};
+  final _deferredWarm = <_Slice>{};
   Set<_Slice> _visible = const {};
+  Set<_Slice> _wanted = const {};
   Rect? _window;
+  Rect? _warmBounds;
   Rect? _userScrollOrigin;
   ForumBodyTableVisibleWindow? _publishedWindow;
   int _scrollRevision = 0;
@@ -228,6 +239,8 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
   @override
   void initState() {
     super.initState();
+    _validatePreload();
+    _preloadScope?.addListener(_schedule);
     _adoptInitialSlice();
     _listen();
   }
@@ -248,6 +261,15 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
   @override
   void didUpdateWidget(covariant _ForumBodyTableViewport oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _validatePreload();
+    final oldScope = oldWidget is ForumBodyTableFlowViewport
+        ? oldWidget.preloadScope
+        : null;
+    if (oldScope != _preloadScope) {
+      oldScope?.removeListener(_schedule);
+      oldScope?.setVisibleWork(this, false);
+      _preloadScope?.addListener(_schedule);
+    }
     if (oldWidget.layout != widget.layout ||
         oldWidget.horizontalController != widget.horizontalController ||
         oldWidget.verticalController != widget.verticalController) {
@@ -255,6 +277,24 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
       _clear();
       _adoptInitialSlice();
       _listen();
+    }
+  }
+
+  ForumBodyPreloadScope? get _preloadScope =>
+      widget is ForumBodyTableFlowViewport
+      ? (widget as ForumBodyTableFlowViewport).preloadScope
+      : null;
+
+  double get _preloadFactor => widget is ForumBodyTableFlowViewport
+      ? (widget as ForumBodyTableFlowViewport).preloadExtentFactor
+      : 0;
+
+  bool get _mayPreload => _preloadScope?.mayPreload ?? true;
+
+  void _validatePreload() {
+    final factor = _preloadFactor;
+    if (!factor.isFinite || factor < 0 || factor > 2) {
+      throw ArgumentError.value(factor, 'preloadExtentFactor');
     }
   }
 
@@ -356,7 +396,18 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
       return;
     }
     final window = _currentBounds() ?? Rect.zero;
-    if (window != _window) _updateWindow(window);
+    final warm = _preloadBounds(window);
+    if (window != _window || warm != _warmBounds) {
+      _window = window;
+      _warmBounds = warm;
+      _visible = window.isEmpty ? const {} : _slicesIn(window).toSet();
+      _wanted = warm.isEmpty ? _visible : _slicesIn(warm).toSet();
+      _deferredWarm.clear();
+    }
+    final missing = _nextVisibleSlice();
+    _preloadScope?.setVisibleWork(this, missing != null);
+    _updateRetention();
+    if (!_visible.contains(_working) && missing != null) _stopWork();
     final ready =
         !window.isEmpty &&
         _visible.every(
@@ -392,6 +443,11 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
         );
         final step = preparation.advance(maxFragments: 8, maxParts: 32);
         _waiting = step.waitingForLayoutBudget;
+        if (_waiting && !_visible.contains(slice)) {
+          _deferredWarm.add(slice);
+          _stopWork();
+          continue;
+        }
         if (step.isReady) {
           final fragments = preparation.takeFragments();
           late final List<_NestedTable> nested;
@@ -408,8 +464,10 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
         }
       } catch (error, stackTrace) {
         _stopWork();
-        _failed.add(slice);
-        if (!widget.layout.isClosed) {
+        if (!_visible.contains(slice)) {
+          _deferredWarm.add(slice);
+        } else if (!widget.layout.isClosed) {
+          _failed.add(slice);
           widget.onFailure(error, stackTrace);
         }
         break;
@@ -450,6 +508,26 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
     return horizontal.hasClients && horizontal.position.hasPixels
         ? clip.shift(Offset(horizontal.offset, 0))
         : clip;
+  }
+
+  Rect _preloadBounds(Rect visible) {
+    if (_preloadFactor == 0) return visible;
+    final box = _flowBoxKey?.currentContext?.findRenderObject();
+    if (box is! RenderBox) return visible;
+    final viewport = forumBodyBoxViewportBounds(box, _outerPosition);
+    if (viewport == null || viewport.isEmpty) return visible;
+    final padding = viewport.height * _preloadFactor;
+    final expanded = Rect.fromLTRB(
+      viewport.left,
+      viewport.top - padding,
+      viewport.right,
+      viewport.bottom + padding,
+    ).intersect(Offset.zero & box.size);
+    if (expanded.isEmpty) return Rect.zero;
+    final h = widget.horizontalController;
+    return h.hasClients && h.position.hasPixels
+        ? expanded.shift(Offset(h.offset, 0))
+        : expanded;
   }
 
   bool get _scrolling {
@@ -594,19 +672,33 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
     widget.onReadyChanged?.call(value);
   }
 
-  _Slice? _nextSlice() {
+  _Slice? _nextVisibleSlice() {
     for (final slice in _visible) {
       if (!_ready.containsKey(slice) && !_failed.contains(slice)) return slice;
     }
     return null;
   }
 
-  void _updateWindow(Rect window) {
-    _window = window;
-    _visible = window.isEmpty ? const {} : _slicesIn(window).toSet();
-    if (!_visible.contains(_working)) _stopWork();
-    _failed.retainAll(_visible);
-    final offscreen = _ready.keys.where((s) => !_visible.contains(s)).toList();
+  _Slice? _nextSlice() {
+    final visible = _nextVisibleSlice();
+    if (visible != null || !_mayPreload) return visible;
+    for (final slice in _wanted) {
+      if (!_ready.containsKey(slice) &&
+          !_deferredWarm.contains(slice) &&
+          !_failed.contains(slice)) {
+        return slice;
+      }
+    }
+    return null;
+  }
+
+  bool _wants(_Slice? slice) =>
+      _visible.contains(slice) || (_mayPreload && _wanted.contains(slice));
+
+  void _updateRetention() {
+    if (!_wants(_working)) _stopWork();
+    _failed.removeWhere((slice) => !_wants(slice));
+    final offscreen = _ready.keys.where((s) => !_wants(s)).toList();
     if (offscreen.isEmpty) return;
     setState(() {
       for (final slice in offscreen) {
@@ -654,6 +746,7 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
   }
 
   void _clear() {
+    _preloadScope?.setVisibleWork(this, false);
     _stopWork();
     _scrollRevision++;
     for (final tables in _nested.values) {
@@ -667,8 +760,11 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
     }
     _ready.clear();
     _failed.clear();
+    _deferredWarm.clear();
     _visible = const {};
+    _wanted = const {};
     _window = null;
+    _warmBounds = null;
     _userScrollOrigin = null;
   }
 
@@ -699,7 +795,10 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
           return ForumBodyCompositionObserver(
             key: _flowBoxKey ??= GlobalKey(),
             onComposited: () {
-              if (mounted && (_flowBounds() ?? Rect.zero) != _window) {
+              final window = _flowBounds() ?? Rect.zero;
+              if (mounted &&
+                  (window != _window ||
+                      _preloadBounds(window) != _warmBounds)) {
                 _schedule();
               }
             },
@@ -758,11 +857,19 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
             // surface must receive the original published dimensions exactly.
             width: entry.key.area.snapshot.width,
             height: entry.key.area.snapshot[entry.key.page].usedHeight,
-            child: widget.buildSlice(
-              context,
-              entry.key.area,
-              entry.key.page,
-              entry.value,
+            child: TickerMode(
+              enabled:
+                  _visible.contains(entry.key) ||
+                  entry.value.any((fragment) => !fragment.hasRenderedImages),
+              child: ExcludeSemantics(
+                excluding: !_visible.contains(entry.key),
+                child: widget.buildSlice(
+                  context,
+                  entry.key.area,
+                  entry.key.page,
+                  entry.value,
+                ),
+              ),
             ),
           ),
         for (final entry in _nested.entries)
@@ -773,6 +880,8 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
                 key: table.key,
                 layout: table.lease.layout,
                 horizontalController: table.horizontal,
+                preloadExtentFactor: _preloadFactor,
+                preloadScope: _preloadScope,
                 buildSlice: widget.buildSlice,
                 onFailure: (error, stack) {
                   if (_ownsNested(entry.key, table)) {
@@ -817,6 +926,8 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
 
   @override
   void dispose() {
+    _preloadScope?.removeListener(_schedule);
+    _preloadScope?.setVisibleWork(this, false);
     _unlistenOuter();
     _unlisten(widget);
     _clear();

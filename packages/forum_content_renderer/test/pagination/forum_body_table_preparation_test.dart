@@ -182,6 +182,110 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'flow table cells preload before entry without publishing a visible window',
+    (tester) async {
+      final cache = _cache();
+      final layout = _layout(
+        _start(
+          _parse(
+            '<table width="100" cellspacing="0" cellpadding="0">'
+            '${List.generate(12, (i) => '<tr height="30"><td>row$i</td></tr>').join()}'
+            '</table>',
+          ),
+          cache,
+          availableWidth: 100,
+        ),
+      );
+      final scope = ForumBodyPreloadScope();
+      final outer = ScrollController(), horizontal = ScrollController();
+      addTearDown(scope.dispose);
+      addTearDown(outer.dispose);
+      addTearDown(horizontal.dispose);
+      addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
+      final consumer = Object();
+      scope.setVisibleWork(consumer, true);
+      final prepared =
+          <ForumBodyTableAreaLayout, List<ForumBodyPreparedTextFragment>>{};
+      final errors = <Object>[];
+      final windows = <ForumBodyTableVisibleWindow?>[];
+      var ready = false;
+      final key = GlobalKey();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 100,
+              height: 70,
+              child: SingleChildScrollView(
+                controller: outer,
+                child: Column(
+                  children: [
+                    const SizedBox(height: 100),
+                    ForumBodyTableFlowViewport(
+                      key: key,
+                      layout: layout,
+                      horizontalController: horizontal,
+                      preloadExtentFactor: 1,
+                      preloadScope: scope,
+                      onFailure: (error, _) => errors.add(error),
+                      onReadyChanged: (value) => ready = value,
+                      onWindowChanged: windows.add,
+                      buildSlice: (_, area, page, fragments) {
+                        prepared[area] = fragments;
+                        return ForumBodyTextPageSurface.prepared(
+                          snapshot: area.snapshot,
+                          pageIndex: page,
+                          layoutId: area.snapshot.layoutId,
+                          fragments: fragments,
+                          compactHeight: true,
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 400),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(prepared, isEmpty);
+      scope.setVisibleWork(consumer, false);
+      await tester.pumpAndSettle();
+      final first = prepared[layout.cells.first]!;
+      expect(first.every((fragment) => fragment.isActive), isTrue);
+      expect(prepared.length, lessThan(layout.cells.length));
+      expect(ready, isFalse);
+      expect(
+        ForumBodyTableFlowViewport.borrowPaintedWindow(key.currentContext!),
+        isNull,
+      );
+      expect(windows.whereType<ForumBodyTableVisibleWindow>(), isEmpty);
+      outer.jumpTo(70);
+      await tester.pumpAndSettle();
+      expect(ready, isTrue);
+      expect(prepared[layout.cells.first], same(first));
+      expect(
+        windows.last!.slices.map((slice) => slice.area),
+        contains(layout.cells.first),
+      );
+      outer.jumpTo(0);
+      await tester.pumpAndSettle();
+      scope.pause();
+      await tester.pumpAndSettle();
+      expect(cache.activeLeases, 0);
+      expect(first.every((fragment) => !fragment.isActive), isTrue);
+      expect(errors, isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(scope.mayPreload, isFalse);
+      expect(cache.activeLeases, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   test('a whole native table publishes as one ordered book page', () {
     final document = _parse(
       '<p>before</p><table width="190" height="100"><caption>cap</caption>'

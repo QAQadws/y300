@@ -754,7 +754,12 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
                 right: 0,
                 height: widget.prefix[entry.key].usedHeight,
                 child: TickerMode(
-                  enabled: _intersects(entry.key),
+                  enabled:
+                      _intersects(entry.key) ||
+                      entry.value.tables.isNotEmpty ||
+                      entry.value.fragments.any(
+                        (fragment) => !fragment.hasRenderedImages,
+                      ),
                   child: ExcludeSemantics(
                     excluding: !_intersects(entry.key),
                     child: _slice(context, entry.key, entry.value),
@@ -869,6 +874,10 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
       child: ForumBodyTableFlowViewport(
         layout: layout,
         horizontalController: table.horizontal,
+        preloadExtentFactor: widget.isCurrentLayout
+            ? widget.preloadExtentFactor
+            : 0,
+        preloadScope: widget.preloadScope,
         initialSlice:
             seed != null &&
                 (layout.cells.contains(seed.area) ||

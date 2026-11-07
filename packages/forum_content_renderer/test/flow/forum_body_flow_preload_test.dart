@@ -3,6 +3,114 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
 void main() {
+  testWidgets('flow box warms table leaf surfaces before the table enters', (
+    tester,
+  ) async {
+    final cache = ForumBodyParagraphCache(
+      maxEntries: 64,
+      maxEstimatedBytes: 4 << 20,
+    );
+    final scope = ForumBodyPreloadScope();
+    final scroll = ScrollController();
+    final session = ForumBodyTextPageSession(
+      document: const ForumBodyParser().parse(
+        html:
+            '<table width="100" cellspacing="0" cellpadding="0">'
+            '${List.generate(12, (i) => '<tr height="30"><td>row$i</td></tr>').join()}'
+            '</table>',
+        sourceId: 'warm-table',
+        conversionIdentity: 'none',
+      ),
+      width: 100,
+      height: 100,
+      layoutId: 'warm-table',
+      tableExtent: ForumBodyTableExtent.natural,
+      reader: ForumBodyReaderStyle(
+        textStyle: const TextStyle(fontFamily: 'Ahem', fontSize: 10, height: 1),
+        fontRevision: 'ahem',
+        linkColor: Colors.blue,
+        paragraphAfter: 0,
+      ),
+      cache: cache,
+      limits: const ForumBodyTextPageSessionLimits(
+        maxPages: 64,
+        maxFragments: 128,
+        maxParagraphs: 32,
+        maxTextCodeUnits: 4096,
+        maxRuns: 128,
+        maxIssuedLeases: 128,
+      ),
+    );
+    addTearDown(cache.close);
+    addTearDown(session.close);
+    addTearDown(scope.dispose);
+    addTearDown(scroll.dispose);
+    addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
+    for (var i = 0; i < 2000 && !session.isComplete; i++) {
+      expect(
+        session.advance(maxEvents: 16, maxLines: 4).waitingForLayoutBudget,
+        false,
+      );
+    }
+    expect(session.isComplete, true);
+    final leaves = <List<ForumBodyPreparedTextFragment>>[];
+    final errors = <Object>[];
+    var ready = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            width: 100,
+            height: 70,
+            child: SingleChildScrollView(
+              controller: scroll,
+              child: Column(
+                children: [
+                  const SizedBox(height: 100),
+                  ForumBodyFlowBox(
+                    session: session,
+                    prefix: session.snapshot,
+                    preloadExtentFactor: 1,
+                    preloadScope: scope,
+                    onFailure: (error, _) => errors.add(error),
+                    onReadyChanged: (value) => ready = value,
+                    buildSlice: (_, snapshot, index, fragments) {
+                      if (fragments.isNotEmpty) leaves.add(fragments);
+                      return ForumBodyTextPageSurface.prepared(
+                        snapshot: snapshot,
+                        pageIndex: index,
+                        layoutId: snapshot.layoutId,
+                        fragments: fragments,
+                        compactHeight: true,
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 400),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(ForumBodyTableFlowViewport), findsOneWidget);
+    expect(leaves, isNotEmpty);
+    final first = leaves.first;
+    expect(ready, false);
+    scroll.jumpTo(70);
+    await tester.pumpAndSettle();
+    expect(ready, true);
+    expect(first.every((fragment) => fragment.isActive), true);
+    expect(leaves.any((fragments) => identical(fragments, first)), true);
+    expect(errors, isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(session.activeIssuedFragments, 0);
+    expect(cache.activeLeases, 0);
+    expect(scope.mayPreload, true);
+  });
+
   for (final leaseLimit in [6, 128]) {
     testWidgets(
       'offscreen neighbor is ready before entry and yields to visible demand (leases=$leaseLimit)',
