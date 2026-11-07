@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show precisionErrorTolerance;
 import 'package:flutter/widgets.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_tap_zones.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_paged_turn_motion.dart';
@@ -1304,7 +1305,11 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
                     child: PageView.builder(
                       controller: _pages,
                       reverse: widget.reverse,
-                      allowImplicitScrolling: false,
+                      // Native window jobs prepare text/coverage independently.
+                      // Mount the adjacent ready views too, so their image first
+                      // frames and table cells are ready before a physical turn.
+                      allowImplicitScrolling: true,
+                      scrollCacheExtent: const ScrollCacheExtent.viewport(1),
                       physics: widget.frozen || controller.isClosed
                           ? const NeverScrollableScrollPhysics()
                           : const AlwaysScrollableScrollPhysics(
@@ -1317,6 +1322,20 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
                             .where((view) => view.pageIndex == page)
                             .firstOrNull;
                         final target = controller.readyTarget;
+                        final origin = controller.visiblePageIndex ?? _page;
+                        final demand = controller.requestedPageIndex ?? origin;
+                        final tablePending =
+                            target != null &&
+                            target.view.snapshot[target.pageIndex].table !=
+                                null &&
+                            !_readyTables.contains(target.view);
+                        if (page != origin &&
+                            ((page - demand).abs() > 1 ||
+                                (tablePending && page != target.pageIndex))) {
+                          // Retire distant warm mounts before the requested
+                          // page reserves resources. The readable origin stays.
+                          return widget.placeholder;
+                        }
                         // Cancelling a far-away request may reprepare this page
                         // after its window metadata was dropped. Keep its actual
                         // mounted leases until a new exact delivery replaces it.
@@ -1344,6 +1363,7 @@ class _NativeLayoutViewportState extends State<_NativeLayoutViewport>
                               : (fragment) => _toggleCollapse(view, fragment),
                           key: ObjectKey(view),
                           view: view,
+                          active: page == _page && !widget.frozen,
                           // Freezing blocks input, but the confirmed delivery
                           // remains mounted. Keep its selection registration
                           // stable until the visible page actually changes.
@@ -1464,6 +1484,7 @@ class _NativeMountedPage extends StatefulWidget {
   const _NativeMountedPage({
     super.key,
     required this.view,
+    required this.active,
     required this.keepAlive,
     required this.selectionEnabled,
     required this.onMounted,
@@ -1496,6 +1517,7 @@ class _NativeMountedPage extends StatefulWidget {
   )?
   onImageTap;
   final ValueChanged<ForumBodyTextPageFragment>? onCollapseToggle;
+  final bool active;
   final bool keepAlive;
   final bool selectionEnabled;
   final void Function(
@@ -1526,6 +1548,8 @@ class _NativeMountedPageState extends State<_NativeMountedPage>
   late final List<ForumBodyPreparedTextFragment> _fragments;
   ForumBodyTablePageLease? _table;
   ScrollController? _tableHorizontal, _tableVertical;
+  ForumBodyTableVisibleWindow? _warmTableWindow;
+  bool _warmRefreshScheduled = false;
 
   @override
   void initState() {
@@ -1579,9 +1603,51 @@ class _NativeMountedPageState extends State<_NativeMountedPage>
   @override
   bool get wantKeepAlive => widget.keepAlive;
 
+  bool get _warmImagesReady =>
+      _fragments.every((fragment) => fragment.hasRenderedImages) &&
+      (_table == null ||
+          (_warmTableWindow?.isCurrent == true &&
+              _warmTableWindow!.slices.every(
+                (slice) => slice.fragments.every(
+                  (fragment) => fragment.hasRenderedImages,
+                ),
+              )));
+
+  void _imageDisplayChanged() {
+    widget.onImageDisplayChanged();
+    _refreshWarmDisplay();
+  }
+
+  void _refreshWarmDisplay() {
+    if (widget.active || _warmRefreshScheduled || !mounted) return;
+    _warmRefreshScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _warmRefreshScheduled = false;
+      if (mounted) setState(() {});
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    return TickerMode(
+      // Warm images need their first decoded frame before animation pauses.
+      enabled: widget.active || !_warmImagesReady,
+      child: ExcludeFocus(
+        excluding: !widget.active,
+        child: IgnorePointer(
+          ignoring: !widget.active,
+          child: ExcludeSemantics(
+            excluding: !widget.active,
+            child: _buildBody(context),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
     if (_fragments.any((fragment) => !fragment.isActive)) {
       return const SizedBox.shrink();
     }
@@ -1607,7 +1673,11 @@ class _NativeMountedPageState extends State<_NativeMountedPage>
                 horizontalController: _tableHorizontal!,
                 verticalController: _tableVertical!,
                 onReadyChanged: widget.onTableReadyChanged,
-                onWindowChanged: widget.onTableWindowChanged,
+                onWindowChanged: (window) {
+                  _warmTableWindow = window;
+                  widget.onTableWindowChanged(window);
+                  _refreshWarmDisplay();
+                },
                 onFailure: (error, _) => widget.onTableFailure(error),
                 buildSlice: (context, area, page, fragments) => _buildSurface(
                   area.snapshot,
@@ -1648,8 +1718,8 @@ class _NativeMountedPageState extends State<_NativeMountedPage>
               collapsedSemanticsLabel: l10n.threadHtmlCollapseCollapsed,
             ),
       onCollapseToggle: widget.onCollapseToggle,
-      onImageDisplayChanged: (_, _) => widget.onImageDisplayChanged(),
-      onInlineImageDisplayChanged: (_, _, _) => widget.onImageDisplayChanged(),
+      onImageDisplayChanged: (_, _) => _imageDisplayChanged(),
+      onInlineImageDisplayChanged: (_, _, _) => _imageDisplayChanged(),
       onImageTap: widget.onImageTap == null
           ? null
           : (fragment) => widget.onImageTap?.call(fragment, null),

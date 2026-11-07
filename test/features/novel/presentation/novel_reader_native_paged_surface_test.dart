@@ -237,6 +237,24 @@ void main() {
     expect(snapshot.columns.count, 2);
     expect(snapshot, hasLength(3));
     expect(snapshot[1].table!.bounds.width, snapshot.width);
+    final warmTable = find.byType(
+      ForumBodyTableBookViewport,
+      skipOffstage: false,
+    );
+    expect(warmTable, findsOneWidget);
+    expect(reader.positions.last.pageIndex, 0);
+    expect(
+      find.descendant(
+        of: warmTable,
+        matching: find.byType(ForumBodyTextPageSurface, skipOffstage: false),
+        skipOffstage: false,
+      ),
+      findsWidgets,
+      reason: 'The neighboring table already owns painted cell deliveries.',
+    );
+    final warmHorizontal = tester
+        .widget<ForumBodyTableBookViewport>(warmTable)
+        .horizontalController;
     expect(reader.navigation.turnNext(), isTrue);
     await tester.pumpAndSettle();
     final table = find.byType(ForumBodyTableBookViewport);
@@ -244,6 +262,7 @@ void main() {
     final horizontal = tester
         .widget<ForumBodyTableBookViewport>(table)
         .horizontalController;
+    expect(horizontal, same(warmHorizontal));
     expect(horizontal.position.maxScrollExtent, greaterThan(0));
     horizontal.jumpTo(horizontal.position.maxScrollExtent);
     await tester.pumpAndSettle();

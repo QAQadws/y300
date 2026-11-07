@@ -82,6 +82,7 @@ Widget _reader(
   bool chapterInFlight = false,
   bool active = true,
   Color? background,
+  ForumHtmlImageHost? imageHost,
 }) => Directionality(
   textDirection: TextDirection.ltr,
   child: Align(
@@ -96,6 +97,7 @@ Widget _reader(
         reverse: reverse,
         active: active,
         backgroundColor: background,
+        imageHost: imageHost,
         navigationController: navigation,
         onTurnToAdjacentChapter: onChapter,
         chapterTurnIsInFlight: chapterInFlight,
@@ -141,6 +143,63 @@ Future<void> _startTapMotion(WidgetTester tester, int from) async {
 }
 
 void main() {
+  testWidgets(
+    'neighbor image reports its first frame before navigation and then pauses',
+    (tester) async {
+      const url = 'https://example.invalid/warm.png';
+      final host = _WarmImageHost();
+      final fixture = NativeReaderTestFixture(
+        '<p>before</p><img src="$url" width="100" height="100"><p>after</p>',
+        width: 100,
+        height: 100,
+        complete: false,
+        imageResolver: (identity, element) => ForumBodyImageInput(
+          identity: identity,
+          element: element,
+          layout: const ForumHtmlImageLayout(aspectRatio: 1),
+          entry: const ForumHtmlReadableImageEntry(
+            index: 0,
+            url: url,
+            rawSrc: url,
+            htmlWidth: 100,
+            htmlHeight: 100,
+            resource: _WarmImageResource(),
+          ),
+        ),
+      );
+      final controller = _controller(fixture);
+      final reports = <NovelReaderPaginationPosition>[];
+      await tester.pumpWidget(
+        _reader(
+          controller,
+          Object(),
+          Object(),
+          reports,
+          height: 100,
+          imageHost: host,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(fixture.session.snapshot, hasLength(3));
+      expect(controller.visiblePageIndex, 0);
+      expect(reports.map((report) => report.pageIndex), [0]);
+      expect(host.firstFrames, 1);
+      final image = find.byType(_WarmFirstFrame, skipOffstage: false);
+      expect(image, findsOneWidget);
+      expect(TickerMode.valuesOf(tester.element(image)).enabled, false);
+      expect(controller.requestPage(1), true);
+      await tester.pumpAndSettle();
+      expect(reports.last.pageIndex, 1);
+      expect(reports.last.isWholeBodyVisible, true);
+      expect(host.firstFrames, 1);
+      expect(TickerMode.valuesOf(tester.element(image)).enabled, true);
+      await tester.pumpWidget(const SizedBox.shrink());
+      controller.close();
+      expect(fixture.cache.activeLeases, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'canvas updates follow the accepted controller and retain retired paint',
     (tester) async {
@@ -255,7 +314,9 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        expect(controller.viewForPage(1)!.isReady, isTrue);
+        final warmedNext = controller.viewForPage(1)!;
+        expect(warmedNext.hasLiveTextMount, isTrue);
+        expect(reports.map((report) => report.pageIndex), [0]);
         expect(navigation.turnNext(), isTrue);
         await tester.pump(const Duration(milliseconds: 16));
         await tester.pump(const Duration(milliseconds: 16));
@@ -272,6 +333,7 @@ void main() {
           expect(tester.takeException(), isNull);
         }
         expect(reports.map((report) => report.pageIndex), [0, 1]);
+        expect(controller.viewForPage(1), same(warmedNext));
         // Return before the former origin's Element has a cleanup frame. It
         // must be reused without trying to transfer its handles a second time.
         expect(controller.viewForPage(0), isNotNull);
@@ -294,6 +356,43 @@ void main() {
   }
 
   for (final reverse in [false, true]) {
+    testWidgets(
+      'both neighbors mount before entry and overlap survives a turn (reverse=$reverse)',
+      (tester) async {
+        final fixture = _fixture();
+        final controller = _controller(fixture);
+        final reports = <NovelReaderPaginationPosition>[];
+        await tester.pumpWidget(
+          _reader(controller, Object(), Object(), reports, reverse: reverse),
+        );
+        await tester.pumpAndSettle();
+        expect(reports.map((report) => report.pageIndex), [0]);
+        expect(controller.requestPage(2), true);
+        await tester.pumpAndSettle();
+        expect(reports.map((report) => report.pageIndex), [0, 2]);
+        for (final page in [1, 2, 3]) {
+          expect(controller.viewForPage(page)!.hasLiveTextMount, true);
+        }
+        final previous = controller.viewForPage(2)!;
+        final next = controller.viewForPage(3)!;
+        expect(controller.requestPage(3), true);
+        await tester.pumpAndSettle();
+        expect(controller.visiblePageIndex, 3);
+        expect(controller.viewForPage(2), same(previous));
+        expect(controller.viewForPage(3), same(next));
+        expect(previous.hasLiveTextMount, true);
+        expect(controller.requestPage(10), true);
+        await tester.pumpAndSettle();
+        expect(controller.visiblePageIndex, 10);
+        expect(controller.error, isNull);
+        expect(previous.hasLiveTextMount, false);
+        await tester.pumpWidget(const SizedBox.shrink());
+        controller.close();
+        expect(fixture.cache.activeLeases, 0);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
     testWidgets(
       'dense mixed turns retire far mounted pages before admitting the next target (reverse=$reverse)',
       (tester) async {
@@ -1185,4 +1284,98 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+}
+
+final class _WarmImageResource implements ForumHtmlPreparedImageResource {
+  const _WarmImageResource();
+  @override
+  String get cacheKey => 'warm-image';
+}
+
+final class _WarmDisplay implements ForumHtmlDisplayImage {
+  const _WarmDisplay(this.sourceUrl);
+  @override
+  final String sourceUrl;
+  @override
+  String get cacheKey => 'warm-image';
+  @override
+  Object get identity => sourceUrl;
+  @override
+  bool get isSticker => false;
+  @override
+  Size get htmlSize => const Size(100, 100);
+  @override
+  ForumHtmlImageLayout get initialLayout =>
+      const ForumHtmlImageLayout(aspectRatio: 1);
+}
+
+final class _WarmImageHost implements ForumHtmlImageHost {
+  int firstFrames = 0;
+  @override
+  ForumHtmlDisplayImage resolveImage({
+    required Uri url,
+    required int? imageIndex,
+    required bool isSticker,
+    Size? htmlSize,
+  }) => _WarmDisplay(url.toString());
+  @override
+  Future<({Size size, ForumHtmlImageLayout layout})?> loadDimensions(
+    ForumHtmlDisplayImage image,
+  ) async => null;
+  @override
+  void onBlockImageResolved(ForumHtmlDisplayImage image, Size size) {}
+  @override
+  Future<void> prefetchDisk(
+    ForumHtmlDisplayImage image, {
+    required ForumHtmlImageWorkScope scope,
+  }) async {}
+  @override
+  Widget buildImage({
+    required ForumHtmlDisplayImage image,
+    required BoxFit fit,
+    required Widget placeholder,
+    double? width,
+    double? height,
+    Widget? errorPlaceholder,
+    VoidCallback? onRetry,
+    ValueChanged<Size>? onImageResolved,
+    VoidCallback? onImageFailed,
+    VoidCallback? onFirstFrameRendered,
+    bool showDelayedLoadingIndicator = false,
+    bool waitForCacheWrite = false,
+    int retryToken = 0,
+  }) => _WarmFirstFrame(
+    key: ValueKey(image.identity),
+    onFrame: () {
+      firstFrames++;
+      onFirstFrameRendered?.call();
+    },
+  );
+}
+
+/// Mirrors Image's ticker-gated stream listening without network/codec timing.
+final class _WarmFirstFrame extends StatefulWidget {
+  const _WarmFirstFrame({super.key, required this.onFrame});
+  final VoidCallback onFrame;
+  @override
+  State<_WarmFirstFrame> createState() => _WarmFirstFrameState();
+}
+
+final class _WarmFirstFrameState extends State<_WarmFirstFrame> {
+  bool sent = false;
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!sent && TickerMode.valuesOf(context).enabled) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !sent && TickerMode.valuesOf(context).enabled) {
+          sent = true;
+          widget.onFrame();
+        }
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.expand();
 }
