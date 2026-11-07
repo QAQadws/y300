@@ -19,8 +19,8 @@ import 'package:y300/features/novel/presentation/services/novel_forum_html_rende
 import './legacy/novel/presentation/services/novel_reader_complex_html_boundary_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
 import './legacy/novel/presentation/services/novel_reader_pagination_cache.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
+import './legacy/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
+import './legacy/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
 import './legacy/novel/presentation/widgets/novel_reader_html_paged_surface.dart';
 import 'package:y300/l10n/app_localizations.dart';
 

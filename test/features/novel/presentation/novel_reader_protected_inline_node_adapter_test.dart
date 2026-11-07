@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/parser.dart' as html_parser;
-import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_flowability_inspector.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_protected_inline_node_adapter.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_reader_complex_html_flowability_inspector.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_reader_protected_inline_node_adapter.dart';
 
 void main() {
   const adapter = DefaultNovelReaderProtectedInlineNodeAdapter();

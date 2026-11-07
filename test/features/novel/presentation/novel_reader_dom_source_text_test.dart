@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
-import 'package:y300/features/novel/presentation/services/novel_reader_dom_source_text.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_reader_dom_source_text.dart';
 
 void main() {
   group('NovelReaderDomSourceText', () {

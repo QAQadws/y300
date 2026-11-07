@@ -2,8 +2,8 @@ import 'dart:collection';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_page_fragment.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_page_snapshot.dart';
+import '../../../../tool/legacy/novel/presentation/models/novel_reader_page_fragment.dart';
+import '../../../../tool/legacy/novel/presentation/models/novel_reader_page_snapshot.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import '../../../../tool/legacy/novel/presentation/models/novel_reader_pagination_plan.dart';
 

@@ -1,3 +1,4 @@
+import '../../../../../tool/legacy/content_rendering.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -22,8 +23,7 @@ void main() {
       final sizes = <String, Size>{};
       addTearDown(presentation.dispose);
       addTearDown(viewport.dispose);
-      Widget host({bool shown = true}) => ProviderScope(
-        child: LocalizedTestApp(
+      Widget host({bool shown = true}) => ProviderScope(overrides: [legacyComparisonBodyOverride], child: LocalizedTestApp(
           home: Scaffold(
             body: SingleChildScrollView(
               child: Align(

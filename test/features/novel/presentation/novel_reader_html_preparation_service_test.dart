@@ -1,3 +1,4 @@
+import '../../../../tool/legacy/novel/legacy_preparation_provider.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,14 +8,14 @@ import 'package:y300/features/novel/presentation/services/novel_reader_document_
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
-import 'package:y300/features/novel/presentation/services/novel_html_reader_preferences_adapter.dart';
-import 'package:y300/features/novel/presentation/services/novel_html_chapter_render_preparer.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_html_flow_unit_extractor.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_html_reader_preferences_adapter.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_html_chapter_render_preparer.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_reader_html_preparation_service.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_reader_html_flow_unit_extractor.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_legacy_markup_normalizer.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_reader_legacy_markup_normalizer.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
+import '../../../../tool/legacy/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 
 void main() {

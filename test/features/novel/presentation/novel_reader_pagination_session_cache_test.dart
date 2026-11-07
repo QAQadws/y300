@@ -8,15 +8,15 @@ import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import '../../../../tool/legacy/novel/presentation/models/novel_reader_pagination_plan.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
+import '../../../../tool/legacy/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import '../../../../tool/legacy/novel/presentation/models/novel_reader_complex_html_slice.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_source_anchor_projection.dart';
 import '../../../../tool/legacy/novel/presentation/services/novel_reader_complex_html_boundary_cache.dart';
 import '../../../../tool/legacy/novel/presentation/services/novel_reader_complex_html_boundary_indexer.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_reader_html_preparation_service.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
 import '../../../../tool/legacy/novel/presentation/services/novel_reader_pagination_session_cache.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
 
 void main() {
   test(

@@ -1,3 +1,4 @@
+import '../../../../../tool/legacy/content_rendering.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -246,6 +247,7 @@ void main() {
       final locator = _Locator();
       final container = ProviderContainer(
         overrides: [
+          legacyComparisonBodyOverride,
           forumHtmlReaderPreferencesRepositoryProvider.overrideWithValue(
             _PreferencesRepository(),
           ),
@@ -343,6 +345,7 @@ void main() {
 
 ProviderContainer _container() => ProviderContainer(
   overrides: [
+    legacyComparisonBodyOverride,
     forumHtmlReaderPreferencesRepositoryProvider.overrideWithValue(
       _PreferencesRepository(),
     ),

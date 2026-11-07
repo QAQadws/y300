@@ -1,9 +1,9 @@
-import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_complex_block_pagination.dart';
+import '../models/novel_reader_classified_pagination_atom.dart';
+import '../models/novel_reader_complex_block_pagination.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_complex_block_inspectors.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
+import '../models/novel_reader_prepared_chapter.dart';
+import './novel_reader_complex_block_inspectors.dart';
+import './novel_reader_pagination_measure_adapter.dart';
 
 abstract interface class NovelReaderComplexBlockMeasurer {
   Future<NovelReaderPaginationMeasureResult> measure({

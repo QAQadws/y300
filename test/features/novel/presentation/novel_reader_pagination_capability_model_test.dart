@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_pagination_layout_policy.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_flowability_inspector.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_pagination_layout_policy_resolver.dart';
+import '../../../../tool/legacy/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
+import '../../../../tool/legacy/novel/presentation/models/novel_reader_pagination_layout_policy.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_reader_complex_html_flowability_inspector.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_reader_pagination_layout_policy_resolver.dart';
 
 void main() {
   const resolver = DefaultNovelReaderPaginationLayoutPolicyResolver();

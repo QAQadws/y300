@@ -1,5 +1,5 @@
-import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_pagination_layout_policy.dart';
+import '../models/novel_reader_classified_pagination_atom.dart';
+import '../models/novel_reader_pagination_layout_policy.dart';
 
 abstract interface class NovelReaderPaginationLayoutPolicyResolver {
   NovelReaderPaginationLayoutPolicy resolve(NovelReaderPaginationRoute route);

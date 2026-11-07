@@ -1,4 +1,4 @@
-import 'package:y300/features/novel/presentation/models/novel_reader_legacy_markup_normalization.dart';
+import '../models/novel_reader_legacy_markup_normalization.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 abstract interface class NovelReaderLegacyMarkupNormalizer {

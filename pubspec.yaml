@@ -41,8 +41,6 @@ dependencies:
     path: packages/continuous_image_geometry
   forum_content_renderer:
     path: packages/forum_content_renderer
-  forum_html_comparison:
-    path: packages/forum_html_comparison
   flutter_localizations:
     sdk: flutter
   intl: ^0.20.3
@@ -86,6 +84,8 @@ dependencies:
   font_awesome_flutter: ^11.0.0
 
 dev_dependencies:
+  forum_html_comparison:
+    path: packages/forum_html_comparison
   html_pagination_core:
     path: packages/html_pagination_core
   flutter_test:

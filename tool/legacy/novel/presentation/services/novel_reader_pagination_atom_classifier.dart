@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
-import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_flowability_inspector.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_pagination_layout_policy_resolver.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_protected_inline_node_adapter.dart';
+import '../models/novel_reader_classified_pagination_atom.dart';
+import '../models/novel_reader_pagination_atom.dart';
+import './novel_reader_complex_html_flowability_inspector.dart';
+import './novel_reader_pagination_layout_policy_resolver.dart';
+import './novel_reader_protected_inline_node_adapter.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 final class NovelReaderPaginationAtomClassifier {

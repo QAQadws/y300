@@ -3,13 +3,13 @@ import 'dart:convert';
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_page_fragment.dart';
+import '../models/novel_reader_pagination_atom.dart';
+import '../models/novel_reader_page_fragment.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import '../models/novel_reader_pagination_plan.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_pagination_atom_extractor.dart';
+import '../models/novel_reader_prepared_chapter.dart';
+import './novel_reader_pagination_measure_adapter.dart';
+import './novel_reader_pagination_atom_extractor.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 

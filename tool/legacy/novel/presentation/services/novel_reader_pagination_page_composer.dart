@@ -1,12 +1,12 @@
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_complex_block_pagination.dart';
+import '../models/novel_reader_classified_pagination_atom.dart';
+import '../models/novel_reader_complex_block_pagination.dart';
 import '../models/novel_reader_flowable_complex_pagination.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_page_fragment.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_page_snapshot.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_text_pagination.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
+import '../models/novel_reader_page_fragment.dart';
+import '../models/novel_reader_page_snapshot.dart';
+import '../models/novel_reader_pagination_atom.dart';
+import '../models/novel_reader_text_pagination.dart';
+import './novel_reader_pagination_measure_adapter.dart';
 
 final class NovelReaderPaginationPageComposer {
   NovelReaderPaginationPageComposer({

@@ -1,3 +1,5 @@
+import '../../../../../tool/legacy/content_rendering.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,11 +12,60 @@ import 'package:y300/features/thread/presentation/html_rendering/thread_post_htm
 import '../../../../test_support/localized_test_app.dart';
 
 void main() {
+  testWidgets('ordinary body uses native without a comparison override', (
+    tester,
+  ) async {
+    final container = ProviderContainer(
+      overrides: [
+        forumHtmlReaderPreferencesRepositoryProvider.overrideWithValue(
+          _PreferencesRepository(),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    final theme = ThemeData.light();
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: LocalizedTestApp(
+          theme: theme,
+          home: Scaffold(
+            body: ThreadPostHtmlFirstBody(
+              post: ThreadPost(
+                pid: 'native-default',
+                author: 'author',
+                authorId: '1',
+                message: '<p>Native body</p>',
+                number: 1,
+                isFirst: true,
+                dateline: 'date',
+              ),
+              threadId: '123',
+              imageReferer: '',
+              onOpenPostLink: (_) {},
+              onOpenPostImage: null,
+              theme: const ForumHtmlRenderThemeFactory().fromMaterialTheme(
+                theme: theme,
+                surface: theme.colorScheme.surface,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(container.read(forumHtmlComparisonBodyBuilderProvider), isNull);
+    expect(find.byType(ForumNativeBodyFlow), findsOneWidget);
+    expect(find.byType(ForumHtmlWidgetPostRenderer), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('default preparation survives typography changes and relayouts', (
     tester,
   ) async {
     final container = ProviderContainer(
       overrides: [
+        legacyComparisonBodyOverride,
         forumHtmlReaderPreferencesRepositoryProvider.overrideWithValue(
           _PreferencesRepository(),
         ),
@@ -98,6 +149,7 @@ void main() {
   ) async {
     final container = ProviderContainer(
       overrides: [
+        legacyComparisonBodyOverride,
         forumHtmlReaderPreferencesRepositoryProvider.overrideWithValue(
           _PreferencesRepository(),
         ),
@@ -182,6 +234,7 @@ void main() {
     final repository = _PreferencesRepository();
     final container = ProviderContainer(
       overrides: [
+        legacyComparisonBodyOverride,
         forumHtmlReaderPreferencesRepositoryProvider.overrideWithValue(
           repository,
         ),

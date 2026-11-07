@@ -1,7 +1,8 @@
+import '../../../../tool/legacy/content_rendering.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/parser.dart' as parser;
-import 'package:y300/features/novel/presentation/services/novel_reader_scroll_markup.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_reader_scroll_markup.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 import '../../../test_support/localized_test_app.dart';

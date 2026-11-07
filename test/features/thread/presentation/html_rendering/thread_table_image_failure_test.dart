@@ -1,3 +1,4 @@
+import '../../../../../tool/legacy/content_rendering.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -28,7 +29,8 @@ void main() {
     ).forContent(threadId: 'table-failure');
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [imageCacheServiceProvider.overrideWithValue(cache)],
+        overrides: [
+          legacyComparisonBodyOverride,imageCacheServiceProvider.overrideWithValue(cache)],
         child: LocalizedTestApp(
           home: Scaffold(
             body: Align(

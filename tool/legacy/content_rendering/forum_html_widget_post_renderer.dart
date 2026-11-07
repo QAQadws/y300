@@ -1,4 +1,4 @@
-import '../../application/forum_html_render_preferences_projection.dart';
+import 'package:y300/features/content_rendering_shared/application/forum_html_render_preferences_projection.dart';
 
 import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
@@ -16,12 +16,12 @@ import 'package:y300/features/content_rendering_shared/application/host/cache_fo
 import 'package:y300/features/content_rendering_shared/domain/models/forum_html_reader_preferences.dart';
 import 'package:y300/features/content_rendering_shared/application/forum_html_render_preparer.dart';
 
-import '../../application/forum_html_preparation_controller.dart';
-import '../../application/forum_html_preparation_executor.dart';
+import 'package:y300/features/content_rendering_shared/application/forum_html_preparation_controller.dart';
+import 'package:y300/features/content_rendering_shared/application/forum_html_preparation_executor.dart';
 
 import 'package:y300/l10n/app_localizations.dart';
 
-import 'forum_html_preparation_placeholder.dart';
+import 'package:y300/features/content_rendering_shared/presentation/html_rendering/forum_html_preparation_placeholder.dart';
 
 export 'package:forum_html_comparison/forum_html_comparison.dart';
 

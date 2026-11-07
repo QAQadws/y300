@@ -1,3 +1,5 @@
+import '../../../../tool/legacy/content_rendering.dart';
+import '../../../../tool/legacy/novel/legacy_preparation_provider.dart';
 import '../../../../tool/legacy/novel/legacy_reader_surface.dart';
 
 import 'dart:async';
@@ -35,16 +37,16 @@ import 'package:y300/features/novel/domain/repositories/novel_reading_state_repo
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_native_paged_controller.dart';
 import 'package:y300/features/novel/presentation/novel_reader_page.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
+import '../../../../tool/legacy/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_native_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_native_page_coverage.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_native_source_location.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_reader_html_preparation_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_preparation_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reading_body_sliver.dart';
 import '../../../../tool/legacy/novel/presentation/widgets/novel_reader_html_paged_surface.dart';
-import 'package:y300/features/novel/presentation/widgets/novel_reader_html_document_view.dart';
+import '../../../../tool/legacy/novel/presentation/widgets/novel_reader_html_document_view.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_native_flow_host.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_native_paged_surface.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_native_paged_viewport.dart';
@@ -2600,6 +2602,7 @@ Widget _app(
   Future<void> Function()? nativeIdleScheduler,
 }) => ProviderScope(
   overrides: [
+    legacyComparisonBodyOverride,
     novelRepositoryProvider.overrideWithValue(repository),
     novelReaderPreferencesRepositoryProvider.overrideWithValue(
       _ReadingPreferences()

@@ -5,12 +5,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import '../../../../tool/legacy/novel/presentation/models/novel_reader_pagination_plan.dart';
 import '../../../../tool/legacy/novel/presentation/models/novel_reader_pagination_progress.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
+import '../../../../tool/legacy/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import '../../../../tool/legacy/novel/presentation/services/novel_reader_html_page_breaker.dart';
 import '../../../../tool/legacy/novel/presentation/services/novel_reader_incremental_pagination_planner.dart';
 import '../../../../tool/legacy/novel/presentation/services/novel_reader_pagination_coordinator.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 void main() {

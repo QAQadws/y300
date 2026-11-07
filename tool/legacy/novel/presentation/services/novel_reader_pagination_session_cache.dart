@@ -1,7 +1,7 @@
 import './novel_reader_complex_html_boundary_cache.dart';
 import './novel_reader_pagination_cache.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
+import './novel_reader_pagination_measure_adapter.dart';
+import './novel_reader_prepared_chapter_cache.dart';
 
 /// Owns derived data for one reader owner, without retaining a measurement
 /// session, context or overlay. Chapter/layout changes can reuse exact keys;

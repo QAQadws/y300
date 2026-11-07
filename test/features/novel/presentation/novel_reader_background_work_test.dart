@@ -3,9 +3,9 @@ import 'dart:isolate';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_background_work.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_work_slice.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_reader_work_slice.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
 
 void main() {
   testWidgets('cancelling a yielded slice removes its pending timer', (

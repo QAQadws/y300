@@ -1,3 +1,4 @@
+import '../../../../../tool/legacy/content_rendering.dart';
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -49,6 +50,7 @@ void main() {
     service = FontLibraryService(repository: fonts, runtimeLoader: runtime);
     container = ProviderContainer(
       overrides: [
+        legacyComparisonBodyOverride,
         forumHtmlReaderPreferencesRepositoryProvider.overrideWithValue(
           preferences,
         ),

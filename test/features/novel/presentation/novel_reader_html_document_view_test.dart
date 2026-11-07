@@ -1,3 +1,4 @@
+import '../../../../tool/legacy/content_rendering.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -13,9 +14,9 @@ import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
-import 'package:y300/features/novel/presentation/services/novel_html_chapter_render_preparer.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_html_chapter_render_preparer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
-import 'package:y300/features/novel/presentation/widgets/novel_reader_html_document_view.dart';
+import '../../../../tool/legacy/novel/presentation/widgets/novel_reader_html_document_view.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 void main() {
@@ -49,8 +50,7 @@ void main() {
     ).join();
     var ready = false;
     await tester.pumpWidget(
-      ProviderScope(
-        child: LocalizedTestApp(
+      ProviderScope(overrides: [legacyComparisonBodyOverride], child: LocalizedTestApp(
           home: CustomScrollView(
             slivers: [
               NovelReaderHtmlDocumentView(
@@ -117,8 +117,7 @@ void main() {
       addTearDown(scroll.dispose);
       var ready = 0;
       await tester.pumpWidget(
-        ProviderScope(
-          child: LocalizedTestApp(
+        ProviderScope(overrides: [legacyComparisonBodyOverride], child: LocalizedTestApp(
             home: Scaffold(
               body: CustomScrollView(
                 controller: scroll,
@@ -484,6 +483,7 @@ Widget _host({
 }) {
   return ProviderScope(
     overrides: [
+      legacyComparisonBodyOverride,
       if (imageCacheService != null)
         imageCacheServiceProvider.overrideWithValue(imageCacheService),
     ],

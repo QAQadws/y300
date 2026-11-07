@@ -33,7 +33,7 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/ide
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_page_fragment.dart';
+import '../../../../tool/legacy/novel/presentation/models/novel_reader_page_fragment.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import '../../../../tool/legacy/novel/presentation/models/novel_reader_pagination_plan.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';

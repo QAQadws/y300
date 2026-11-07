@@ -1,3 +1,4 @@
+import '../../../../../tool/legacy/content_rendering.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
@@ -340,7 +341,8 @@ void main() {
         });
         await tester.pumpWidget(
           ProviderScope(
-            overrides: [imageCacheServiceProvider.overrideWithValue(cache)],
+            overrides: [
+              legacyComparisonBodyOverride,imageCacheServiceProvider.overrideWithValue(cache)],
             child: LocalizedTestApp(
               home: Scaffold(
                 body: Align(
@@ -530,6 +532,7 @@ Future<_VisibleImageFixture> _mountVisibleImage(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        legacyComparisonBodyOverride,
         imageCacheServiceProvider.overrideWithValue(cache),
         if (dimensionProbe != null)
           encodedImageDimensionProbeProvider.overrideWithValue(dimensionProbe),

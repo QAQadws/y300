@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_quill_prototype_page.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_renderer_prototype_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 class MoreDebugTools {
@@ -20,18 +19,6 @@ class MoreDebugTools {
           Navigator.of(context).push(
             MaterialPageRoute<void>(
               builder: (_) => const ComposerQuillPrototypePage(),
-            ),
-          );
-        },
-      ),
-      ListTile(
-        key: const Key('more-html-renderer-prototype-entry'),
-        leading: const Icon(Icons.article_outlined),
-        title: Text(l10n.moreDebugHtmlRenderer),
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => const ForumHtmlRendererPrototypePage(),
             ),
           );
         },

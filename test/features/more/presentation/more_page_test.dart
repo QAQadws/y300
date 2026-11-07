@@ -39,7 +39,6 @@ import 'package:y300/features/profile/presentation/friends/my_friends_page.dart'
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
 import 'package:y300/features/profile/presentation/user_profile_page.dart';
 import 'package:y300/l10n/app_localizations.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_renderer_prototype_page.dart';
 import '../../profile/test_support/blog_directory_fixture.dart';
 import '../../profile/test_support/friend_read_fixture.dart';
 import '../../messages/support/message_test_repository.dart';
@@ -54,6 +53,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+
             ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
             appAppearanceControllerProvider.overrideWith(
               () => _FakeAppAppearanceController(),
@@ -87,6 +87,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+
             ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: true)),
             userThreadDirectoryRepositoryProvider.overrideWithValue(directory),
 
@@ -118,6 +119,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+
             ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: true)),
             userThreadDirectoryRepositoryProvider.overrideWithValue(
               _ThreadDirectoryRepository(),
@@ -503,6 +505,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+
           ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
 
           appAppearanceControllerProvider.overrideWith(
@@ -523,6 +526,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+
           ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
 
           appAppearanceControllerProvider.overrideWith(
@@ -587,13 +591,9 @@ void main() {
       find.byKey(const Key('more-composer-quill-prototype-entry')),
       findsOneWidget,
     );
-    await _scrollUntilVisibleIfNeeded(
-      tester,
-      find.byKey(const Key('more-html-renderer-prototype-entry')),
-    );
     expect(
       find.byKey(const Key('more-html-renderer-prototype-entry')),
-      findsOneWidget,
+      findsNothing,
     );
     expect(
       find.byKey(const Key('more-thread-detail-diagnostic-switch')),
@@ -623,6 +623,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+
           ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
 
           appAppearanceControllerProvider.overrideWith(
@@ -655,35 +656,6 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('MorePage opens the HTML renderer prototype in debug builds', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
-
-          appAppearanceControllerProvider.overrideWith(
-            () => _FakeAppAppearanceController(),
-          ),
-        ],
-        child: const LocalizedTestApp(home: MorePage()),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    final entry = find.byKey(const Key('more-html-renderer-prototype-entry'));
-    await _scrollUntilVisibleIfNeeded(tester, entry);
-    await tester.drag(find.byType(ListView), const Offset(0, -80));
-    await tester.pumpAndSettle();
-    await tester.tap(entry);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(find.byType(ForumHtmlRendererPrototypePage), findsOneWidget);
-    expect(find.text('HTML 正文渲染原型'), findsWidgets);
-  });
-
   testWidgets('MorePage renders logout entry when signed in', (tester) async {
     final repository = _FakeAuthRepository(isLoggedIn: true);
     final profileRepository = _SignedProfileRepository();
@@ -699,6 +671,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+
           ..._moreAuthOverrides(
             repository,
             summaryRepository: summaryRepository,
@@ -825,6 +798,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+
           ..._moreAuthOverrides(repository),
 
           appAppearanceControllerProvider.overrideWith(
@@ -867,6 +841,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+
           ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
           forumWebViewRouteFactoryProvider.overrideWithValue(
             _profileWebRoutes(webLaunches),
@@ -924,6 +899,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+
           ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
 
           appAppearanceControllerProvider.overrideWith(
@@ -962,6 +938,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+
           ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: true)),
           forumWebViewRouteFactoryProvider.overrideWithValue(
             _profileWebRoutes(webLaunches),
@@ -1005,6 +982,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+
             ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
 
             appAppearanceControllerProvider.overrideWith(
@@ -1044,6 +1022,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+
           ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
 
           appAppearanceControllerProvider.overrideWith(
@@ -1082,6 +1061,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+
           ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
 
           appAppearanceControllerProvider.overrideWith(
@@ -1181,6 +1161,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+
           appAppearanceControllerProvider.overrideWith(
             _FakeAppAppearanceController.new,
           ),
@@ -1230,6 +1211,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+
             appAppearanceControllerProvider.overrideWith(
               () => appearanceController,
             ),
@@ -1317,6 +1299,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+
           ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
 
           appAppearanceControllerProvider.overrideWith(
@@ -1383,6 +1366,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+
           ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
 
           appAppearanceControllerProvider.overrideWith(
@@ -1460,6 +1444,7 @@ Future<void> _pumpMyContentPage(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+
         ..._moreAuthOverrides(
           _FakeAuthRepository(isLoggedIn: isLoggedIn),
           summaryRepository: summary,
@@ -1517,6 +1502,7 @@ Future<void> _pumpCreditPage(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+
         ..._moreAuthOverrides(
           _FakeAuthRepository(isLoggedIn: true),
           summaryRepository: summary,

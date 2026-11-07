@@ -1,6 +1,7 @@
 import 'package:y300/features/thread/presentation/services/thread_post_navigation.dart';
 import 'package:y300/features/thread/presentation/services/thread_image_reader_return_coordinator.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_actions.dart';
+
 import 'dart:async';
 
 import 'package:flutter/foundation.dart' show kReleaseMode;
@@ -115,6 +116,11 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage>
   @override
   void initState() {
     super.initState();
+    assert(
+      widget.nativeBody ||
+          ref.read(forumHtmlComparisonBodyBuilderProvider) != null,
+      'Legacy comparison requires an explicit development body builder',
+    );
     _scrollController = ReaderLayoutScrollController();
     _imageReaderReturnCoordinator = ThreadImageReaderReturnCoordinator(
       scrollController: _scrollController,

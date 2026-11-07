@@ -1,3 +1,4 @@
+import '../../../../../tool/legacy/content_rendering.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../test_support/localized_test_app.dart';
@@ -531,6 +532,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          legacyComparisonBodyOverride,
           imageCacheServiceProvider.overrideWithValue(
             _RecordingImageCacheService(),
           ),
@@ -608,6 +610,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          legacyComparisonBodyOverride,
           imageCacheServiceProvider.overrideWithValue(cacheService),
           appImageCacheManagerProvider.overrideWith(
             (ref) async =>
@@ -666,6 +669,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          legacyComparisonBodyOverride,
           imageCacheServiceProvider.overrideWithValue(cacheService),
           appImageCacheManagerProvider.overrideWith(
             (ref) async => throw StateError('fixture network failure'),
@@ -725,6 +729,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          legacyComparisonBodyOverride,
           imageCacheServiceProvider.overrideWithValue(cacheService),
           appImageCacheManagerProvider.overrideWith(
             (ref) async => throw StateError('fixture network failure'),
@@ -769,6 +774,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          legacyComparisonBodyOverride,
           imageCacheServiceProvider.overrideWithValue(
             _RecordingImageCacheService(),
           ),
@@ -810,7 +816,8 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
+        overrides: [
+          legacyComparisonBodyOverride,imageCacheServiceProvider.overrideWithValue(cacheService)],
         child: const LocalizedTestApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
@@ -848,6 +855,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          legacyComparisonBodyOverride,
           imageCacheServiceProvider.overrideWithValue(
             _RecordingImageCacheService(),
           ),
@@ -890,6 +898,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          legacyComparisonBodyOverride,
           imageCacheServiceProvider.overrideWithValue(
             _RecordingImageCacheService(),
           ),
@@ -939,7 +948,8 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
+        overrides: [
+          legacyComparisonBodyOverride,imageCacheServiceProvider.overrideWithValue(cacheService)],
         child: const LocalizedTestApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
@@ -973,6 +983,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          legacyComparisonBodyOverride,
           imageCacheServiceProvider.overrideWithValue(
             _RecordingImageCacheService(),
           ),
@@ -1006,6 +1017,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          legacyComparisonBodyOverride,
           imageCacheServiceProvider.overrideWithValue(
             _RecordingImageCacheService(),
           ),
@@ -1058,6 +1070,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          legacyComparisonBodyOverride,
           imageCacheServiceProvider.overrideWithValue(
             _RecordingImageCacheService(),
           ),
@@ -1104,6 +1117,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            legacyComparisonBodyOverride,
             imageCacheServiceProvider.overrideWithValue(
               _RecordingImageCacheService(),
             ),
@@ -1166,6 +1180,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            legacyComparisonBodyOverride,
             imageCacheServiceProvider.overrideWithValue(
               _RecordingImageCacheService(),
             ),
@@ -1245,6 +1260,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          legacyComparisonBodyOverride,
           imageCacheServiceProvider.overrideWithValue(
             _RecordingImageCacheService(),
           ),
@@ -1295,7 +1311,8 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
+        overrides: [
+          legacyComparisonBodyOverride,imageCacheServiceProvider.overrideWithValue(cacheService)],
         child: const LocalizedTestApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(
@@ -1348,7 +1365,8 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [imageCacheServiceProvider.overrideWithValue(cacheService)],
+        overrides: [
+          legacyComparisonBodyOverride,imageCacheServiceProvider.overrideWithValue(cacheService)],
         child: const LocalizedTestApp(
           home: Scaffold(
             body: ForumHtmlWidgetPostRenderer(

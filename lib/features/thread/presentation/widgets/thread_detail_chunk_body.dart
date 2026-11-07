@@ -22,21 +22,24 @@ Widget _chunkRenderer(
   ThreadDetailPreparedChunk chunk, {
   required ForumHtmlReaderPreferences preferences,
   required TextStyle textStyle,
+  required ForumHtmlComparisonBodyBuilder comparisonBuilder,
   ForumHtmlRenderCallbacks callbacks = const ForumHtmlRenderCallbacks(),
   VoidCallback? onBodyBuilt,
 }) {
   final request = manifest.request;
-  return ForumHtmlWidgetPostRenderer(
-    html: chunk.html,
-    theme: request.theme,
-    preferences: preferences,
-    textStyle: textStyle,
-    preparedDocument: chunk.document,
-    sourceId: request.sourceId,
-    threadId: request.threadId,
-    hasTrailingContent: chunk.hasTrailingContent,
-    callbacks: callbacks,
-    onBodyBuilt: onBodyBuilt,
+  return comparisonBuilder(
+    ForumHtmlComparisonBodyInput(
+      html: chunk.html,
+      theme: request.theme,
+      preferences: preferences,
+      textStyle: textStyle,
+      preparedDocument: chunk.document,
+      sourceId: request.sourceId,
+      threadId: request.threadId,
+      hasTrailingContent: chunk.hasTrailingContent,
+      callbacks: callbacks,
+      onBodyBuilt: onBodyBuilt,
+    ),
   );
 }
 
@@ -224,6 +227,7 @@ class _ThreadPostChunkBodyState extends ConsumerState<_ThreadPostChunkBody> {
         child: _chunkRenderer(
           widget.manifest,
           _chunk!,
+          comparisonBuilder: ref.watch(forumHtmlComparisonBodyBuilderProvider)!,
           preferences: preferences,
           textStyle: resolveForumHtmlReaderTextStyle(
             context,

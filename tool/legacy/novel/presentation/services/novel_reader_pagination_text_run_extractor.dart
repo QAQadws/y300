@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_pagination_text_run.dart';
+import '../models/novel_reader_classified_pagination_atom.dart';
+import '../models/novel_reader_pagination_text_run.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 final class NovelReaderPaginationTextRunExtractor {

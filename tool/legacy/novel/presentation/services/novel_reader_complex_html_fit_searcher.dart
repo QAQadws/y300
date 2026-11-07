@@ -2,10 +2,10 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 import '../models/novel_reader_complex_html_fit.dart';
 import '../models/novel_reader_complex_html_slice.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
+import '../models/novel_reader_prepared_chapter.dart';
 import './novel_reader_complex_html_search_budget.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
+import './novel_reader_pagination_measure_adapter.dart';
 
 final class NovelReaderPaginationMeasureContext {
   const NovelReaderPaginationMeasureContext({

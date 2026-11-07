@@ -1,10 +1,10 @@
 import 'dart:collection';
 
 import 'package:flutter/material.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_pagination_text_run.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_text_pagination.dart';
+import '../models/novel_reader_classified_pagination_atom.dart';
+import '../models/novel_reader_pagination_atom.dart';
+import '../models/novel_reader_pagination_text_run.dart';
+import '../models/novel_reader_text_pagination.dart';
 import './novel_reader_html_text_range_slicer.dart';
 
 abstract interface class NovelReaderTextPaginationEngine {

@@ -1,3 +1,4 @@
+import '../../../../../tool/legacy/content_rendering.dart';
 import 'dart:io';
 
 import 'package:y300/core/network/yamibo_forum_client_provider.dart';
@@ -687,6 +688,7 @@ Widget _host(
 }) {
   return ProviderScope(
     overrides: [
+      legacyComparisonBodyOverride,
       if (commentService != null)
         threadPostCommentServiceProvider.overrideWithValue(commentService),
       if (preferences != null)

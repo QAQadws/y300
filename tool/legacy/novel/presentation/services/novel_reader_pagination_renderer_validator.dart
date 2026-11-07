@@ -1,6 +1,6 @@
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
+import '../models/novel_reader_prepared_chapter.dart';
+import './novel_reader_pagination_measure_adapter.dart';
 
 final class NovelReaderRendererValidationResult {
   const NovelReaderRendererValidationResult({

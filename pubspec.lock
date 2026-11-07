@@ -627,7 +627,7 @@ packages:
     source: path
     version: "0.1.0"
   forum_html_comparison:
-    dependency: "direct main"
+    dependency: "direct dev"
     description:
       path: "packages/forum_html_comparison"
       relative: true

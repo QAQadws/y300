@@ -1,3 +1,4 @@
+import '../../../../../tool/legacy/content_rendering.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -12,7 +13,7 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter_factory.dart';
 import 'package:y300/features/thread/domain/html_rendering/forum_html_sample_document.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
-import 'package:y300/features/thread/presentation/html_rendering/forum_html_renderer_prototype_page.dart';
+import '../../../../../tool/legacy/content_rendering/forum_html_renderer_prototype_page.dart';
 
 void main() {
   const samples = <ForumHtmlSampleDocument>[
@@ -550,6 +551,7 @@ Widget _wrapWithProviders(
   );
   return ProviderScope(
     overrides: [
+      legacyComparisonBodyOverride,
       forumHtmlReaderPreferencesRepositoryProvider.overrideWithValue(
         preferencesRepository,
       ),

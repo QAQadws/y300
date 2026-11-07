@@ -3,11 +3,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_conversion_position.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_legacy_markup_normalization.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_conversion_restore_service.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_html_flow_unit_extractor.dart';
+import '../../../../tool/legacy/novel/presentation/models/novel_reader_conversion_position.dart';
+import '../../../../tool/legacy/novel/presentation/models/novel_reader_prepared_chapter.dart';
+import '../../../../tool/legacy/novel/presentation/models/novel_reader_legacy_markup_normalization.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_reader_conversion_restore_service.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_reader_html_flow_unit_extractor.dart';
 
 void main() {
   const service = NovelReaderConversionRestoreService();

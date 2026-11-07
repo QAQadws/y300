@@ -1,14 +1,14 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_complex_block_pagination.dart';
+import '../../../../tool/legacy/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
+import '../../../../tool/legacy/novel/presentation/models/novel_reader_complex_block_pagination.dart';
 import '../../../../tool/legacy/novel/presentation/models/novel_reader_complex_html_slice.dart';
 import '../../../../tool/legacy/novel/presentation/models/novel_reader_flowable_complex_pagination.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_page_snapshot.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_pagination_layout_policy_resolver.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_text_pagination.dart';
+import '../../../../tool/legacy/novel/presentation/models/novel_reader_pagination_atom.dart';
+import '../../../../tool/legacy/novel/presentation/models/novel_reader_page_snapshot.dart';
+import '../../../../tool/legacy/novel/presentation/models/novel_reader_prepared_chapter.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_reader_pagination_layout_policy_resolver.dart';
+import '../../../../tool/legacy/novel/presentation/models/novel_reader_text_pagination.dart';
 import '../../../../tool/legacy/novel/presentation/services/novel_reader_pagination_page_composer.dart';
 
 void main() {

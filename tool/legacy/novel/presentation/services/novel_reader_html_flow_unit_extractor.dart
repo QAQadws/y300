@@ -7,9 +7,9 @@ import 'package:y300/features/novel/domain/models/novel_reader_anchor_format.dar
 import 'package:y300/features/novel/domain/services/novel_reader_text_normalization.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_rich_block_text.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
+import '../models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_source_anchor_projection.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_dom_source_text.dart';
+import './novel_reader_dom_source_text.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 abstract interface class NovelReaderHtmlFlowUnitExtractor {

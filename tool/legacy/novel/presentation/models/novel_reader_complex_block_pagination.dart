@@ -1,5 +1,5 @@
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
+import './novel_reader_classified_pagination_atom.dart';
 
 final class NovelReaderRubyCluster {
   const NovelReaderRubyCluster({

@@ -1,3 +1,4 @@
+import '../../../../tool/legacy/content_rendering.dart';
 import 'dart:async';
 import 'dart:io' as io;
 
@@ -1422,6 +1423,7 @@ void main() {
           );
       Widget content(ThreadPostLanding landing) => ProviderScope(
         overrides: [
+          legacyComparisonBodyOverride,
           imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
         ],
         child: LocalizedTestApp(
@@ -4123,6 +4125,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            legacyComparisonBodyOverride,
             imageCacheServiceProvider.overrideWithValue(
               _NoopImageCacheService(),
             ),
@@ -4200,6 +4203,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            legacyComparisonBodyOverride,
             imageCacheServiceProvider.overrideWithValue(
               _NoopImageCacheService(),
             ),
@@ -4267,6 +4271,7 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
+              legacyComparisonBodyOverride,
               imageCacheServiceProvider.overrideWithValue(
                 _NoopImageCacheService(),
               ),
@@ -5279,6 +5284,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            legacyComparisonBodyOverride,
             imageCacheServiceProvider.overrideWithValue(images),
             forumImageDimensionIndexProvider.overrideWithValue(dimensions),
           ],
@@ -7567,6 +7573,7 @@ Widget _buildTestApp(
 }) {
   return ProviderScope(
     overrides: <riverpod_misc.Override>[
+          legacyComparisonBodyOverride,
       ..._threadDetailOverrides(
         repository,
         replyRepository: replyRepository,

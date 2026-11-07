@@ -18,3 +18,7 @@ NovelReaderPage(
 对比测试和工具通过相对路径导入此目录，生产 `lib/` 不能导入 `tool/`。性能记录须明确后端、固定来源、字体、布局、缓存状态和实际绘制时间；同一页面的恢复和业务语义仍由 App 回归覆盖。
 
 旧 HTML 分页的 engine/model/cache/coordinator 唯一实现位于 `novel/presentation/`。`html_pagination_core` 是 App 开发依赖，生产 `lib/` 不导入旧包或本目录；只有显式对比入口和对应集成测试消费它们。
+
+旧正文 Widget、测量与 HTML preparation/provider 同样归本目录；`forum_html_comparison`、`flutter_widget_from_html_core` 只属于开发依赖。正式 App 的 `ForumHtmlComparisonBodyInput` 是可选显示端口，默认没有 builder，普通正文直接使用原生显示。对照帖子页面需在自己的 `ProviderScope` 显式安装 `legacyComparisonBodyOverride`，再传 `nativeBody: false`；正式页面继续拥有长按抽屉、独立复制页及阅读回调，不复制业务 UI。
+
+合成 HTML 对照入口为 `flutter run -t tool/forum_renderer_comparison.dart`，不再放在应用的“更多”菜单中。此入口不建立认证；真实来源对照必须使用现有 Host 会话并注明认证、移动 UA 与缓存来源，不将合成页面视作实际论坛验收。

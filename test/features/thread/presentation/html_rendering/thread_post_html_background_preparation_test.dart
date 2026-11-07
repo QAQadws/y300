@@ -1,3 +1,4 @@
+import '../../../../../tool/legacy/content_rendering.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -250,6 +251,7 @@ final class _Harness {
 
   final container = ProviderContainer(
     overrides: [
+      legacyComparisonBodyOverride,
       forumHtmlReaderPreferencesRepositoryProvider.overrideWithValue(
         const _Preferences(),
       ),

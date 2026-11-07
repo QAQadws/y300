@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_pagination_render_environment.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_reader_pagination_render_environment.dart';
 
 void main() {
   testWidgets('restores local reader inheritance outside its original host', (

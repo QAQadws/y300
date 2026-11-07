@@ -31,7 +31,7 @@ import 'package:y300/features/novel/domain/repositories/novel_reading_state_repo
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
 import 'package:y300/features/novel/presentation/novel_reader_page.dart';
-import 'package:y300/features/novel/presentation/widgets/novel_reader_html_document_view.dart';
+import '../../../../tool/legacy/novel/presentation/widgets/novel_reader_html_document_view.dart';
 import '../../../../tool/legacy/novel/presentation/widgets/novel_reader_html_paged_surface.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reading_body_sliver.dart';
 

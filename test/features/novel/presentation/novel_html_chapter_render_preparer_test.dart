@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:material_color_utilities/hct/hct.dart';
-import 'package:y300/features/novel/presentation/services/novel_html_chapter_render_preparer.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_html_chapter_render_preparer.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/html_text_node_conversion_service.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';

@@ -1,6 +1,6 @@
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
-import 'package:y300/features/novel/presentation/models/novel_reader_complex_block_pagination.dart';
+import '../models/novel_reader_complex_block_pagination.dart';
 
 final class NovelReaderRubyPaginationAdapter {
   const NovelReaderRubyPaginationAdapter();

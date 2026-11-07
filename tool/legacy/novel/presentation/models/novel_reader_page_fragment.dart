@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
+import './novel_reader_pagination_atom.dart';
 
 enum NovelReaderPageOverflowState { none, atomicWidget, minimumTextFragment }
 

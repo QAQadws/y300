@@ -110,6 +110,8 @@ class ThreadPostHtmlFirstBody extends ConsumerStatefulWidget {
 
 class _ThreadPostHtmlFirstBodyState
     extends ConsumerState<ThreadPostHtmlFirstBody> {
+  ForumHtmlComparisonBodyBuilder? _comparisonBuilder;
+  bool get _nativeBody => widget.nativeBody || _comparisonBuilder == null;
   bool _loggedEmptyBody = false;
   String? _lastPreparedLogKey;
   String? _lastRenderFailureLogKey;
@@ -185,6 +187,9 @@ class _ThreadPostHtmlFirstBodyState
 
   @override
   Widget build(BuildContext context) {
+    _comparisonBuilder = widget.nativeBody
+        ? null
+        : ref.watch(forumHtmlComparisonBodyBuilderProvider);
     final html = widget.post.message.trim();
     final sourcePost = widget.sourcePost ?? widget.post;
     if (html.isEmpty) {
@@ -211,7 +216,7 @@ class _ThreadPostHtmlFirstBodyState
       font: fontBinding.resolvedFont,
     );
     final retained = widget.bodyPresentation;
-    if (widget.nativeBody && retained != null && retained.isActive) {
+    if (_nativeBody && retained != null && retained.isActive) {
       _releaseBodyLayout();
       if (!fontBinding.isReady) {
         widget.readingCoordinator?.unregister(this);
@@ -416,11 +421,10 @@ class _ThreadPostHtmlFirstBodyState
         sourcePost.message,
         widget.imageReferer,
         widget.imagePrecacheService,
-        widget.nativeBody,
+        _nativeBody,
         widget.bodyPresentation,
       );
-      if ((tracked || widget.nativeBody) &&
-          _readingIdentity != readingIdentity) {
+      if ((tracked || _nativeBody) && _readingIdentity != readingIdentity) {
         // A font or image-host change retires layout readiness, while folds
         // still belong to the same prepared HTML document.
         _clearReading(preserveExpansion: true);
@@ -429,7 +433,7 @@ class _ThreadPostHtmlFirstBodyState
           _readingImages = ThreadBodyReadingImageTracker(coordinator!.schedule);
         }
         if (preparedDocument.sequence.entries.isNotEmpty ||
-            (widget.nativeBody && preparedDocument.skippedStickerCount > 0)) {
+            (_nativeBody && preparedDocument.skippedStickerCount > 0)) {
           final delegate = ref
               .read(forumHtmlImageHostProvider)
               .forContent(
@@ -457,13 +461,12 @@ class _ThreadPostHtmlFirstBodyState
             pid: sourcePost.pid,
             bodyIdentity: readingIdentity,
             htmlReady: () =>
-                _readingReady && (!widget.nativeBody || _nativeBoundaryKnown),
+                _readingReady && (!_nativeBody || _nativeBoundaryKnown),
             imagesReady: (viewport) =>
                 _readingImages?.readyIn(viewport) ?? true,
             // This boundary measures the current rendered body. Closed folds
             // contribute their visible header, not their unmounted contents.
-            finalBoundaryKnown: () =>
-                !widget.nativeBody || _nativeBoundaryKnown,
+            finalBoundaryKnown: () => !_nativeBody || _nativeBoundaryKnown,
             layoutRevision: () => (
               _readingRevision,
               Object.hashAll(
@@ -497,14 +500,14 @@ class _ThreadPostHtmlFirstBodyState
           widget.onOpenPostLink(url);
           return true;
         },
-        onTapImage: widget.nativeBody
+        onTapImage: _nativeBody
             ? null
             : (request) => _handleTapImage(preparedDocument.sequence, request),
         onImageLayoutShift: widget.onImageLayoutShift,
       );
       final body = KeyedSubtree(
         key: Key('thread-post-html-first-body-${sourcePost.pid}'),
-        child: widget.nativeBody
+        child: _nativeBody
             ? ForumNativeBodyFlow(
                 key: widget.bodyPresentation == null
                     ? null
@@ -554,46 +557,49 @@ class _ThreadPostHtmlFirstBodyState
                   coordinator?.schedule();
                 },
               )
-            : ForumHtmlWidgetPostRenderer(
-                html: html,
-                theme: widget.theme,
-                textStyle: textStyle,
-                preparedDocument: preparedDocument,
-                sourceId: sourceId,
-                threadId: widget.threadId,
-                imageReferer: widget.imageReferer,
-                imageCacheOwnerId: widget.threadId,
-                imageFallbackAspectRatioFor: widget.imageFallbackAspectRatioFor,
-                onBlockImageResolved: widget.onBlockImageResolved,
-                imageViewportCoordinator: widget.imageViewportCoordinator,
-                imageAnchorController: widget.imageAnchorController,
-                bodyPresentation:
-                    bodyLayout?.rendering ?? widget.bodyPresentation,
-                collapseExpansion: expansion,
-                imageHost: tracked ? _readingImageHost : null,
-                onBodyBuilt: !tracked && bodyLayout == null
-                    ? null
-                    : () {
-                        if (tracked &&
-                            mounted &&
-                            readingRevision == _readingRevision) {
-                          _readingReady = true;
-                          coordinator!.schedule();
-                        }
-                        if (mounted &&
-                            identical(_bodyLayoutLease, bodyLayout) &&
-                            _preparation.identity == identity &&
-                            bodyLayout?.isCurrent == true) {
-                          _bodyLayoutPhase = ThreadBodyLayoutPhase.built;
-                        }
-                      },
-                imagePrecacheService: widget.imagePrecacheService,
-                preferences: preferences,
-                callbacks: callbacks,
+            : _comparisonBuilder!(
+                ForumHtmlComparisonBodyInput(
+                  html: html,
+                  theme: widget.theme,
+                  textStyle: textStyle,
+                  preparedDocument: preparedDocument,
+                  sourceId: sourceId,
+                  threadId: widget.threadId,
+                  imageReferer: widget.imageReferer,
+                  imageCacheOwnerId: widget.threadId,
+                  imageFallbackAspectRatioFor:
+                      widget.imageFallbackAspectRatioFor,
+                  onBlockImageResolved: widget.onBlockImageResolved,
+                  imageViewportCoordinator: widget.imageViewportCoordinator,
+                  imageAnchorController: widget.imageAnchorController,
+                  bodyPresentation:
+                      bodyLayout?.rendering ?? widget.bodyPresentation,
+                  collapseExpansion: expansion,
+                  imageHost: tracked ? _readingImageHost : null,
+                  onBodyBuilt: !tracked && bodyLayout == null
+                      ? null
+                      : () {
+                          if (tracked &&
+                              mounted &&
+                              readingRevision == _readingRevision) {
+                            _readingReady = true;
+                            coordinator!.schedule();
+                          }
+                          if (mounted &&
+                              identical(_bodyLayoutLease, bodyLayout) &&
+                              _preparation.identity == identity &&
+                              bodyLayout?.isCurrent == true) {
+                            _bodyLayoutPhase = ThreadBodyLayoutPhase.built;
+                          }
+                        },
+                  imagePrecacheService: widget.imagePrecacheService,
+                  preferences: preferences,
+                  callbacks: callbacks,
+                ),
               ),
       );
       final viewport = widget.imageViewportCoordinator;
-      final viewportBody = widget.nativeBody && viewport != null
+      final viewportBody = _nativeBody && viewport != null
           ? ForumHtmlImageViewportScope(coordinator: viewport, child: body)
           : body;
       return !tracked

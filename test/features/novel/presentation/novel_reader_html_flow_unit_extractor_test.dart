@@ -3,9 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/novel/domain/services/novel_reader_document_parser.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_anchor_format.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_dom_source_text.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_html_flow_unit_extractor.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_reader_dom_source_text.dart';
+import '../../../../tool/legacy/novel/presentation/models/novel_reader_prepared_chapter.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_reader_html_flow_unit_extractor.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 void main() {

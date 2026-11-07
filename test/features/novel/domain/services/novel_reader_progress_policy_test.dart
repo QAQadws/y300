@@ -3,7 +3,7 @@ import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/models/novel_reading_body_geometry.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_page_fragment.dart';
+import '../../../../../tool/legacy/novel/presentation/models/novel_reader_page_fragment.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import '../../../../../tool/legacy/novel/presentation/models/novel_reader_pagination_plan.dart';
 import '../../../../../tool/legacy/novel/presentation/services/novel_reader_pagination_restore_policy.dart';

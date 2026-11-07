@@ -1,5 +1,5 @@
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
+import './novel_reader_prepared_chapter.dart';
 
 /// A visible position in an actual display projection, scoped to this reader.
 /// It is a conversion hint, never a replacement for persisted reading progress.

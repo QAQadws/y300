@@ -1,6 +1,6 @@
 import 'dart:collection';
 
-import 'package:y300/features/novel/presentation/models/novel_reader_page_fragment.dart';
+import './novel_reader_page_fragment.dart';
 
 /// A fixed, read-only prefix of pages that have already been sealed.
 ///

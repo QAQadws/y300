@@ -1,3 +1,4 @@
+import '../../../../../tool/legacy/content_rendering.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -674,6 +675,7 @@ void main() {
       final post = _post('long', _html(3000, paragraphs: true), 1);
       final container = ProviderContainer(
         overrides: [
+          legacyComparisonBodyOverride,
           forumHtmlReaderPreferencesControllerProvider.overrideWith(
             _Preferences.new,
           ),
@@ -917,6 +919,7 @@ class _Host {
     ForumHtmlReaderPreferencesRepository? readerPreferences,
   }) : container = ProviderContainer(
          overrides: [
+           legacyComparisonBodyOverride,
            if (readerPreferences == null)
              forumHtmlReaderPreferencesControllerProvider.overrideWith(
                _Preferences.new,

@@ -2,8 +2,8 @@ import 'package:characters/characters.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_conversion_position.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
+import '../models/novel_reader_conversion_position.dart';
+import '../models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_background_work.dart';
 
 /// Retains a visible semantic position across typography-only reflow, or

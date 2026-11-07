@@ -1,16 +1,16 @@
-import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
+import '../models/novel_reader_classified_pagination_atom.dart';
 import '../models/novel_reader_complex_html_fit.dart';
 import '../models/novel_reader_complex_html_slice.dart';
 import '../models/novel_reader_flowable_complex_pagination.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_pagination_layout_policy.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
+import '../models/novel_reader_pagination_layout_policy.dart';
+import '../models/novel_reader_prepared_chapter.dart';
 import './novel_reader_complex_html_boundary_cache.dart';
 import './novel_reader_complex_html_boundary_indexer.dart';
 import './novel_reader_complex_html_fit_searcher.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_work_slice.dart';
+import './novel_reader_pagination_measure_adapter.dart';
+import './novel_reader_work_slice.dart';
 
 abstract interface class NovelReaderFlowableComplexPaginationEngine {
   Future<NovelReaderFlowableComplexPaginationResult> paginate({

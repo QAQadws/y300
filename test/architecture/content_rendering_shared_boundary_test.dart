@@ -13,10 +13,9 @@ const _comparisonLib = 'packages/forum_html_comparison/lib/';
 const _comparisonEntry = '${_comparisonLib}forum_html_comparison.dart';
 const _sharedRoot = 'lib/features/content_rendering_shared/';
 const _publicEntry = '${_sharedRoot}content_rendering.dart';
-const _comparisonAdapter =
-    '${_sharedRoot}presentation/html_rendering/forum_html_widget_post_renderer.dart';
 const _threadHtmlRoot = 'lib/features/thread/presentation/html_rendering/';
 const _retiredRenderingEntries = {
+  '${_sharedRoot}presentation/html_rendering/forum_html_widget_post_renderer.dart',
   '${_sharedRoot}presentation/html_rendering/forum_html_render_preparer.dart',
   '${_threadHtmlRoot}forum_html_cached_image_widget_factory.dart',
   '${_threadHtmlRoot}forum_html_content_layout.dart',
@@ -69,6 +68,19 @@ const _cacheNeutralDisplayFiles = {
 };
 
 void main() {
+  test('legacy comparison dependencies are development only', () {
+    final manifest = File('pubspec.yaml').readAsStringSync(encoding: utf8);
+    final split = manifest.indexOf('\ndev_dependencies:');
+    expect(split, greaterThan(0));
+    for (final name in [
+      'forum_html_comparison',
+      'flutter_widget_from_html_core',
+    ]) {
+      expect(manifest.substring(0, split), isNot(contains('  $name:')));
+      expect(manifest.substring(split), contains('  $name:'));
+    }
+  });
+
   test('text foundation has no Flutter, Host or legacy pagination imports', () {
     const textRoot = '${_packageLib}src/text/';
     for (final file in [
@@ -152,7 +164,10 @@ import 'package:crypto/src/sha256.dart';
     expect(entry, isNot(contains('forum_html_image_widget_factory.dart')));
     for (final uri in dartDependencyDirectiveUris(entry)) {
       final path = _target(_packageEntry, uri);
-      expect(path == _textEntry || path.startsWith('${_packageLib}src/'), isTrue);
+      expect(
+        path == _textEntry || path.startsWith('${_packageLib}src/'),
+        isTrue,
+      );
       expect(File(path).existsSync(), isTrue, reason: path);
     }
   });
@@ -246,6 +261,7 @@ import '$comparison';
       '${_packageRoot}test',
       '${_packageRoot}example',
       _comparisonLib,
+      'tool/legacy',
     ]) {
       for (final file in Directory(
         root,
@@ -456,6 +472,7 @@ String _target(String source, String uri) =>
 
 bool _isForbidden(String source, String target) {
   if (_retiredRenderingEntries.contains(target)) return true;
+  if (source.startsWith('lib/') && target.startsWith('tool/')) return true;
   if (source.startsWith(_comparisonLib)) {
     return !(target.startsWith('${_comparisonLib}src/') ||
         target == _packageEntry ||
@@ -518,8 +535,7 @@ bool _isForbidden(String source, String target) {
     return true;
   }
   if (target.startsWith(_comparisonLib) &&
-      (target != _comparisonEntry ||
-          (source.startsWith('lib/') && source != _comparisonAdapter))) {
+      (target != _comparisonEntry || source.startsWith('lib/'))) {
     return true;
   }
   if (source.startsWith('lib/') &&
@@ -528,6 +544,9 @@ bool _isForbidden(String source, String target) {
   }
   // App adapter tests may inspect their own Host internals, but never pkg src.
   if (source.startsWith('test/')) return false;
+  // Development Host adapters reuse the App's existing provider/cache binding;
+  // the package-private checks above still apply, and fixtures stay test-owned.
+  if (source.startsWith('tool/legacy/')) return target.startsWith('test/');
   if (!source.startsWith(_sharedRoot)) {
     return target.startsWith(_sharedRoot) && target != _publicEntry;
   }
