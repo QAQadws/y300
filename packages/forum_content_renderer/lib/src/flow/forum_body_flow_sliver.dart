@@ -409,16 +409,21 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
         _deliver(index, _makeDelivery(index, const []));
       } else {
         final work = _preparation ??= session.openPagePreparation(index);
-        final steps = index == target ? 6 : 1;
-        final clock = steps > 1 ? (Stopwatch()..start()) : null;
-        for (var step = 0; step < steps; step++) {
+        final clock = Stopwatch()..start();
+        // Reuse cached fragments within the slice budget instead of waiting
+        // a frame for each one. Ordinary views still shape at most once.
+        for (var step = 0; step < 6; step++) {
           final progress = work.advance(maxFragments: 1, maxParts: 8);
           _waiting = progress.waitingForLayoutBudget;
           if (progress.isReady) {
             _deliver(index, _makeDelivery(index, work.takeFragments()));
             break;
           }
-          if (_waiting || (clock?.elapsedMicroseconds ?? 0) >= 2000) break;
+          if (_waiting ||
+              (index != target && progress.layoutsBuilt > 0) ||
+              clock.elapsedMicroseconds >= 2000) {
+            break;
+          }
         }
       }
     } catch (error, stackTrace) {
