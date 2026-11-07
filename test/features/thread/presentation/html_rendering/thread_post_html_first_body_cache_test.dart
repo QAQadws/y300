@@ -13,90 +13,138 @@ import 'package:y300/features/thread/presentation/services/thread_body_presentat
 import '../../../../test_support/localized_test_app.dart';
 
 void main() {
-  testWidgets(
-    'page cache reuses HTML, native document and glyphs across remounts',
-    (tester) async {
-      final store = ThreadBodyPresentationStore();
-      addTearDown(store.clear);
-      final preparer = _CountingPreparer();
-      final post = ThreadPost(
-        pid: 'cached-native',
-        author: 'author',
-        authorId: '1',
-        message: '<p>Cached native text</p><p>Second paragraph</p>',
-        number: 1,
-        isFirst: true,
-        dateline: 'date',
-      );
-      final presentation = store.obtain(post.pid, post.message);
-      final container = ProviderContainer(
-        overrides: [
-          forumHtmlReaderPreferencesRepositoryProvider.overrideWithValue(
-            _PreferencesRepository(),
-          ),
-        ],
-      );
-      addTearDown(container.dispose);
-      final theme = ThemeData.light();
-      Widget host(bool shown) => UncontrolledProviderScope(
-        container: container,
-        child: LocalizedTestApp(
-          theme: theme,
-          home: Scaffold(
-            body: SingleChildScrollView(
-              child: SizedBox(
-                width: 300,
-                child: shown
-                    ? ThreadPostHtmlFirstBody(
-                        post: post,
-                        threadId: 'cache-thread',
-                        imageReferer: '',
-                        onOpenPostLink: (_) {},
-                        onOpenPostImage: null,
-                        theme: const ForumHtmlRenderThemeFactory()
-                            .fromMaterialTheme(
-                              theme: theme,
-                              surface: theme.colorScheme.surface,
-                            ),
-                        nativeBody: true,
-                        wholeBodyPresentation: presentation,
-                        renderPreparer: preparer,
-                      )
-                    : const SizedBox.shrink(),
+  for (final restoreOffset in [0.0, 1200.0]) {
+    testWidgets(
+      'page cache reuses first visible text across remounts at $restoreOffset',
+      (tester) async {
+        final store = ThreadBodyPresentationStore();
+        addTearDown(store.clear);
+        final preparer = _CountingPreparer();
+        final post = ThreadPost(
+          pid: 'cached-native',
+          author: 'author',
+          authorId: '1',
+          message: restoreOffset == 0
+              ? '<p>Cached native text</p><p>Second paragraph</p>'
+              : List.generate(
+                  3,
+                  (i) => '<p>Section $i. ${'Cached native text. ' * 120}</p>',
+                ).join(),
+          number: 1,
+          isFirst: true,
+          dateline: 'date',
+        );
+        final presentation = store.obtain(post.pid, post.message);
+        final container = ProviderContainer(
+          overrides: [
+            forumHtmlReaderPreferencesRepositoryProvider.overrideWithValue(
+              _PreferencesRepository(),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+        final scroll = ScrollController();
+        addTearDown(scroll.dispose);
+        final theme = ThemeData.light();
+        var retainedHeight = 0.0;
+        Widget host(bool shown) => UncontrolledProviderScope(
+          container: container,
+          child: LocalizedTestApp(
+            theme: theme,
+            home: Scaffold(
+              body: SingleChildScrollView(
+                controller: scroll,
+                child: SizedBox(
+                  width: 300,
+                  child: shown
+                      ? ThreadPostHtmlFirstBody(
+                          post: post,
+                          threadId: 'cache-thread',
+                          imageReferer: '',
+                          onOpenPostLink: (_) {},
+                          onOpenPostImage: null,
+                          theme: const ForumHtmlRenderThemeFactory()
+                              .fromMaterialTheme(
+                                theme: theme,
+                                surface: theme.colorScheme.surface,
+                              ),
+                          nativeBody: true,
+                          wholeBodyPresentation: presentation,
+                          renderPreparer: preparer,
+                        )
+                      : SizedBox(height: retainedHeight),
+                ),
               ),
             ),
           ),
-        ),
-      );
-      await tester.pumpWidget(host(true));
-      await tester.pumpAndSettle();
-      final cache = presentation.nativeCache;
-      final builds = cache.paragraphs.layoutBuildCount;
-      expect(builds, greaterThan(0));
-      expect(preparer.calls, 1);
-      await tester.pumpWidget(host(false));
-      await tester.pumpAndSettle();
-      expect(cache.paragraphs.activeLeases, 0);
-      expect(cache.paragraphs.isClosed, false);
-      await tester.pumpWidget(host(true));
-      await tester.pumpAndSettle();
-      expect(preparer.calls, 1);
-      expect(cache.documentHits, greaterThan(0));
-      expect(cache.preparedHits, greaterThan(0));
-      expect(cache.paragraphs.layoutBuildCount, builds);
-    final visibleLeases = cache.paragraphs.activeLeases;
-    expect(visibleLeases, greaterThan(0));
-    cache.trim();
-    expect(cache.documentCount, 0);
-    expect(cache.paragraphs.activeLeases, visibleLeases);
-    await tester.pump();
-      expect(tester.takeException(), isNull);
-      await tester.pumpWidget(host(false));
-      store.clear();
-      expect(cache.isClosed, true);
-      expect(cache.paragraphs.activeLeases, 0);
-    },
-  );
+        );
+        await tester.pumpWidget(host(true));
+        await tester.pumpAndSettle();
+        retainedHeight = tester.getSize(find.byType(ForumBodyFlowBox)).height;
+        if (restoreOffset > 0) {
+          expect(scroll.position.maxScrollExtent, greaterThan(restoreOffset));
+          scroll.jumpTo(restoreOffset);
+          await tester.pumpAndSettle();
+        }
+        final cache = presentation.nativeCache;
+        final builds = cache.paragraphs.layoutBuildCount;
+        expect(builds, greaterThan(0));
+        expect(preparer.calls, 1);
+        await tester.pumpWidget(host(false));
+        await tester.pumpAndSettle();
+        expect(cache.paragraphs.activeLeases, 0);
+        expect(cache.paragraphs.isClosed, false);
+        await tester.pumpWidget(host(true));
+        for (
+          var frame = 0;
+          frame < 4 && find.byType(ForumBodyFlowBox).evaluate().isEmpty;
+          frame++
+        ) {
+          await tester.pump();
+        }
+        expect(find.byType(ForumBodyFlowBox), findsOneWidget);
+        // A cached body must paint text on its first mounted content frame.
+        expect(find.byType(ForumBodyParagraphSurface), findsWidgets);
+        final viewport = tester.getRect(find.byType(SingleChildScrollView));
+        expect(
+          find.byType(ForumBodyParagraphSurface).evaluate().any((e) {
+            final box = e.renderObject! as RenderBox;
+            return (box.localToGlobal(Offset.zero) & box.size).overlaps(
+              viewport,
+            );
+          }),
+          true,
+        );
+        await tester.pumpAndSettle();
+        expect(preparer.calls, 1);
+        expect(cache.documentHits, greaterThan(0));
+        expect(cache.preparedHits, greaterThan(0));
+        expect(cache.paragraphs.layoutBuildCount, builds);
+        await tester.pumpWidget(host(false));
+        await tester.pumpAndSettle();
+        await tester.pumpWidget(host(true));
+        // Source publication may stage leases before the first content mount.
+        expect(find.byType(ForumBodyFlowBox), findsNothing);
+        expect(cache.paragraphs.activeLeases, greaterThan(0));
+        await tester.pumpWidget(host(false));
+        await tester.pumpAndSettle();
+        expect(cache.paragraphs.activeLeases, 0);
+        await tester.pumpWidget(host(true));
+        await tester.pumpAndSettle();
+        final visibleLeases = cache.paragraphs.activeLeases;
+        expect(visibleLeases, greaterThan(0));
+        cache.trim();
+        expect(cache.documentCount, 0);
+        expect(cache.paragraphs.activeLeases, visibleLeases);
+        await tester.pump();
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(host(false));
+        store.clear();
+        expect(cache.isClosed, true);
+        expect(cache.paragraphs.activeLeases, 0);
+      },
+    );
+  }
 
   testWidgets('ordinary body uses native without a comparison override', (
     tester,

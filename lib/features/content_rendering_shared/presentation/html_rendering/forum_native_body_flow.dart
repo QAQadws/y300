@@ -493,6 +493,8 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
         !_preserveImageReflow(previous, run)) {
       return;
     }
+    // A live replacement keeps its existing image/source anchor handoff.
+    if (previous == null || identical(previous, run)) _seedCachedSlice(run);
     setState(() {
       if (!identical(_shown, run)) _shown?.close();
       _shown = run;
@@ -502,6 +504,62 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
         widget.onGeometry?.call(run.ready, snapshot.isComplete);
       }
     });
+  }
+
+  void _seedCachedSlice(_FlowRun run) {
+    if (widget.cache == null ||
+        run.initialSlice != null ||
+        run.seedAttempted ||
+        run.boundsKey.currentContext != null) {
+      return;
+    }
+    final box = context.findRenderObject();
+    final viewport = box == null ? null : RenderAbstractViewport.maybeOf(box);
+    if (box is! RenderBox || !box.attached || viewport == null) return;
+    final clip = MatrixUtils.transformRect(
+      viewport.getTransformTo(box),
+      viewport.paintBounds,
+    );
+    final prefix = run.prefix!;
+    // The old placeholder's height is not the new body's occupied height.
+    // Project the viewport into this origin and use the published prefix.
+    if (!clip.isFinite ||
+        clip.right <= 0 ||
+        clip.left >= prefix.width ||
+        clip.bottom <= 0 ||
+        clip.top >= run.height) {
+      return;
+    }
+    var first = 0, end = prefix.length;
+    while (first < end) {
+      final mid = (first + end) ~/ 2;
+      if (run.pageTops[mid] + prefix[mid].usedHeight <= clip.top) {
+        first = mid + 1;
+      } else {
+        end = mid;
+      }
+    }
+    if (first >= prefix.length) return;
+    run.seedAttempted = true;
+    if (prefix[first].tableFrames.isNotEmpty) return;
+    final job = run.session!.openPagePreparation(first);
+    try {
+      if (_FlowQueue.prepareCached(job) && _current(run)) {
+        run.initialSlice = ForumBodyFlowPreparedSlice(
+          session: run.session!,
+          index: first,
+          fragments: job.takeFragments(),
+        );
+      }
+    } on ForumBodyTextPagePreparationException {
+      // Optional cached delivery yields to the ordinary pressure/error path.
+    } on ForumBodyTextPageSessionException {
+      // A retired owner cannot transfer a display to a later mount.
+    } on ForumBodyParagraphBudgetException {
+      // The visible window owns admission and retries after pins are released.
+    } finally {
+      job.close();
+    }
   }
 
   Widget _buildSlice(
@@ -716,6 +774,7 @@ final class _FlowRun {
   double height = 0;
   bool ready = false, waiting = false;
   bool reflowScheduled = false;
+  bool seedAttempted = false;
 
   void append(ForumBodyTextPage page) {
     pageTops.add(height);
@@ -795,6 +854,17 @@ abstract final class _FlowQueue {
 
   static void remove(VoidCallback? work) => _pending.remove(work);
 
+  static bool prepareCached(ForumBodyTextPagePreparation job) {
+    // Share the source frame's remaining budget. A warm delivery must not
+    // introduce another independent slice or perform shaping/picture work.
+    while (_draining && _steps < 64 && _clock.elapsedMicroseconds < 3000) {
+      _steps++;
+      if (job.tryPrepareCached(maxParts: 32)) return true;
+      if (job.cacheMiss || job.waitingForLayoutBudget) return false;
+    }
+    return false;
+  }
+
   static void _schedule() {
     if (_scheduled || _pending.isEmpty) return;
     _scheduled = true;
@@ -812,11 +882,10 @@ abstract final class _FlowQueue {
     try {
       // Starts already arrive after layout. Use this frame's remaining shared
       // slice instead of imposing another vsync; no floor gets a fresh budget.
-      for (
-        ;
-        _steps < 64 && _pending.isNotEmpty && _clock.elapsedMicroseconds < 3000;
-        _steps++
-      ) {
+      while (_steps < 64 &&
+          _pending.isNotEmpty &&
+          _clock.elapsedMicroseconds < 3000) {
+        _steps++;
         final step = _pending.first;
         _pending.remove(step);
         step();
