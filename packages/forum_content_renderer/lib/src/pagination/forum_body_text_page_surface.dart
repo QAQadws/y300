@@ -263,7 +263,8 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
 
   static Object _bindingKey(ForumBodyPreparedTextFragment binding) =>
       switch (binding) {
-        ForumBodyPreparedImageFragment() => binding,
+        ForumBodyPreparedImageFragment() ||
+        ForumBodyPreparedHiddenImageFragment() => binding,
         ForumBodyPreparedListItemFragment() => binding.picture,
         ForumBodyPreparedParagraphFragment() => binding.lease,
         ForumBodyPreparedInlineFragment() => binding.view,
@@ -308,6 +309,7 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
         : (HtmlProjectedSourcePosition position) =>
               _onSourceTap(fragment, position);
     final surface = switch (binding) {
+      ForumBodyPreparedHiddenImageFragment() => const SizedBox.expand(),
       ForumBodyPreparedImageFragment() => _ImageFragmentSurface(
         binding: binding,
         host: _imageHost!,
@@ -409,7 +411,9 @@ final class ForumBodyTextPageSurface extends StatelessWidget {
             ),
           )
         : _fragmentSurface(fragment, binding);
-    final body = fragment.kind == ForumBodyTextPageFragmentKind.image
+    final body =
+        (fragment.kind == ForumBodyTextPageFragmentKind.image ||
+            fragment.kind == ForumBodyTextPageFragmentKind.hiddenImage)
         ? surface
         : _TextInteractionSurface(
             identity: identity,

@@ -121,6 +121,7 @@ final class ForumBodyTextPagePreparation {
         (input) =>
             input is ForumBodyListItemPageContent ||
             input is ForumBodyImagePageContent ||
+            input is ForumBodyHiddenImagePageContent ||
             input is ForumBodyEmphasisPageContent ||
             (input is ForumBodyInlinePageContent && input.fontFrames != null),
       );
@@ -381,6 +382,18 @@ final class ForumBodyTextPagePreparation {
       }
       return !step.cacheMiss;
     }
+    if (input is ForumBodyHiddenImagePageContent) {
+      input.nativeHandleCountFor(fragment);
+      _guard();
+      _acceptBody(
+        ForumBodyPreparedHiddenImageFragment(
+          content: input,
+          ensureOwner: _ensureOwner!,
+        ),
+      );
+      _completedWork++;
+      return true;
+    }
     if (input is ForumBodyImagePageContent) {
       input.nativeHandleCountFor(fragment);
       _guard();
@@ -558,7 +571,8 @@ final class ForumBodyTextPagePreparation {
       final body = input.bodyContent;
       final fragment = page.fragments[index];
       var parent = true;
-      if (body is ForumBodyImagePageContent) {
+      if (body is ForumBodyImagePageContent ||
+          body is ForumBodyHiddenImagePageContent) {
         // Inspect the resource once, then any real marker font and picture.
         yield (
           startsFragment: true,

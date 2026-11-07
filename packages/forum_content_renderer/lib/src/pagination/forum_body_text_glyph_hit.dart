@@ -55,6 +55,7 @@ final class ForumBodyTextGlyphHit {
     var end = fragment.coverageEndUtf16;
     ForumBodyTextRole role;
     switch (body) {
+      case ForumBodyPreparedHiddenImageFragment():
       case ForumBodyPreparedImageFragment():
       case ForumBodyPreparedListItemFragment():
         return null;

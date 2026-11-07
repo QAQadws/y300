@@ -116,6 +116,48 @@ final class ForumBodyPreparedImageFragment
   }
 }
 
+/// An invisible physical box can carry an independently visible list marker.
+/// There is no image binding or font lease to await for the box itself.
+final class ForumBodyPreparedHiddenImageFragment
+    extends ForumBodyPreparedTextFragment {
+  ForumBodyPreparedHiddenImageFragment({
+    required this.content,
+    required void Function() ensureOwner,
+  }) : _ensureOwner = ensureOwner,
+       super._();
+  final ForumBodyHiddenImagePageContent content;
+  void Function()? _ensureOwner;
+  static final _emptyProjection = HtmlDisplayTextProjection.build(const []);
+  @override
+  bool get isActive {
+    final guard = _ensureOwner;
+    if (guard == null) return false;
+    try {
+      guard();
+      return _ensureOwner != null;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  Iterable<ForumBodyNativeParagraphLease> get nativeLeases => const [];
+  @override
+  HtmlDisplayTextProjection get projection => _emptyProjection;
+  @override
+  List<ForumBodyParagraphRun> get runs => const [];
+  @override
+  Iterable<ForumBodyParagraphLine> get lines => const [];
+  @override
+  List<TextBox> glyphBoxes(int startUtf16, int endUtf16) {
+    RangeError.checkValidRange(startUtf16, endUtf16, 0);
+    return const [];
+  }
+
+  @override
+  void close() => _ensureOwner = null;
+}
+
 /// The body keeps its original source/geometry. The picture owns no source.
 final class ForumBodyPreparedListItemFragment
     extends ForumBodyPreparedTextFragment {

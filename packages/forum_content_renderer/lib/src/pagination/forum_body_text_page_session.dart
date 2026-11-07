@@ -1445,13 +1445,37 @@ final class ForumBodyTextPageSession {
       _intrinsic.add(minimum, preferred);
     }
     if (style.visibilityHidden) {
-      // Visibility retains the atomic image box, but owns no loaded resource,
-      // first-frame wait, hit target or reading/image coverage.
-      _composer.appendPadding(
-        frame.height,
-        spaceBefore: _margin,
-        keepTogether: true,
-      );
+      if (_listPlan == null) {
+        _composer.appendPadding(
+          frame.height,
+          spaceBefore: _margin,
+          keepTogether: true,
+        );
+      } else {
+        // Only the marker needs a delivery. The hidden image owns geometry,
+        // but no display resource, first-frame wait or reading coverage.
+        final content = _decorate(
+          ForumBodyHiddenImagePageContent(
+            identity: unit.identity,
+            element: node,
+            frame: frame,
+            fontRevision: _flow.fontRevision,
+            styleRevision: _flow.styleRevision,
+          ),
+        );
+        _composer.appendHiddenImage(
+          sourceIdentity: unit.identity,
+          element: node,
+          frame: frame,
+          inputIndex: _content.items.length,
+          fontRevision: _flow.fontRevision,
+          styleRevision: _flow.styleRevision,
+          left: unit.contentLeft,
+          spaceBefore: _margin,
+          listMarkers: _listPlan,
+        );
+        _content.add(content);
+      }
     } else {
       _appendImage(input!, frame, left: unit.contentLeft);
     }

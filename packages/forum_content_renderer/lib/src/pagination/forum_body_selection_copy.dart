@@ -126,7 +126,9 @@ extension ForumBodySelectionChunkSource on ForumBodyTextPageSession {
             content.projection.display,
             content.runs,
           ),
-          ForumBodyImagePageContent() || ForumBodyListItemPageContent() => null,
+          ForumBodyHiddenImagePageContent() ||
+          ForumBodyImagePageContent() ||
+          ForumBodyListItemPageContent() => null,
         };
         if (text == null) continue;
         final (projection, runs) = text;

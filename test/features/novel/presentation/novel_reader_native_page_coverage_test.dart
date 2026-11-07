@@ -149,6 +149,29 @@ Matcher _failure(NovelReaderNativeCoverageFailure failure) => throwsA(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('a hidden-only image list marker grants no text or image coverage', () {
+    final fixture = _Fixture(
+      '<ol style="margin:0;padding-left:25px"><li>'
+      '<img src="hidden" width="100" height="20" '
+      'style="display:block;visibility:hidden"></li></ol>',
+    );
+    final fragments = fixture.prepareFragments(0);
+    try {
+      expect(fragments.single, isA<ForumBodyPreparedListItemFragment>());
+      expect(fragments.single.hasRenderedImages, isTrue);
+      final coverage = _finish(fixture.preparedCursor(0, fragments));
+      expect(coverage.points, isEmpty);
+      expect(coverage.images, isEmpty);
+      expect(coverage.hasUnanchoredImages, isFalse);
+      expect(coverage.hasClippedResources, isFalse);
+    } finally {
+      for (final fragment in fragments) {
+        fragment.close();
+      }
+    }
+    expect(fixture.cache.activeLeases, 0);
+  });
+
   test('a cell viewport proves only complete glyphs inside both clip axes', () {
     final fixture = _Fixture(
       '<table width="110"><tr><td><p>abc</p><p>def</p></td></tr></table>',
@@ -471,9 +494,9 @@ void main() {
           try {
             final fragment = fragments.single;
             final raw = switch (fragment) {
-              ForumBodyPreparedImageFragment() => throw StateError(
-                'Unexpected image in SPACE fixture',
-              ),
+              ForumBodyPreparedHiddenImageFragment() ||
+              ForumBodyPreparedImageFragment() =>
+                throw StateError('Unexpected image in SPACE fixture'),
               ForumBodyPreparedListItemFragment() => throw StateError(
                 'Unexpected list in SPACE fixture',
               ),

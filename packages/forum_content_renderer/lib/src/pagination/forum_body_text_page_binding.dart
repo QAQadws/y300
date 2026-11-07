@@ -84,7 +84,9 @@ ForumBodyTextPage validateForumBodyPreparedTextPageBinding({
     }
     if (delivery is ForumBodyPreparedListItemFragment) {
       final baseline = switch (binding) {
-        ForumBodyPreparedImageFragment() => delivery.plan.blockTopBaseline,
+        ForumBodyPreparedImageFragment() ||
+        ForumBodyPreparedHiddenImageFragment() =>
+          delivery.plan.blockTopBaseline,
         ForumBodyPreparedParagraphFragment() when binding.lines.isEmpty =>
           binding.lease.layout.alphabeticBaseline,
         _ => binding.lines.first.baseline,
@@ -101,6 +103,11 @@ ForumBodyTextPage validateForumBodyPreparedTextPageBinding({
       _fail(ForumBodyTextPageSurfaceFailure.leases);
     }
     switch (binding) {
+      case ForumBodyPreparedHiddenImageFragment():
+        if (binding.content.identity != snapshot.identity) {
+          _fail(ForumBodyTextPageSurfaceFailure.identity);
+        }
+        binding.content.nativeHandleCountFor(fragment);
       case ForumBodyPreparedImageFragment():
         if (binding.content.identity != snapshot.identity) {
           _fail(ForumBodyTextPageSurfaceFailure.identity);

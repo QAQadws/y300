@@ -35,7 +35,13 @@ enum ForumBodyTextPageFailure {
   backgroundDepth,
 }
 
-enum ForumBodyTextPageFragmentKind { paragraph, inline, emphasis, image }
+enum ForumBodyTextPageFragmentKind {
+  paragraph,
+  inline,
+  emphasis,
+  image,
+  hiddenImage,
+}
 
 final class ForumBodyTextPageException implements Exception {
   const ForumBodyTextPageException(this.failure);
@@ -350,7 +356,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 42;
+  static const revision = 43;
   final ForumBodyIdentity identity;
   final String layoutId;
 
@@ -642,10 +648,63 @@ final class ForumBodyTextPageComposer {
     required double left,
     double spaceBefore = 0,
     ForumBodyListMarkerPlan? listMarkers,
+  }) => _appendImageBox(
+    sourceIdentity: input.identity,
+    path: input.element.path,
+    frame: frame,
+    inputIndex: inputIndex,
+    fontRevision: fontRevision,
+    styleRevision: styleRevision,
+    left: left,
+    spaceBefore: spaceBefore,
+    listMarkers: listMarkers,
+    hidden: false,
+  );
+
+  /// Preserve decoration and the atomic box without a display resource.
+  void appendHiddenImage({
+    required ForumBodyIdentity sourceIdentity,
+    required ForumBodyElement element,
+    required ForumBodyImageFrame frame,
+    required int inputIndex,
+    required String fontRevision,
+    required int styleRevision,
+    required double left,
+    double spaceBefore = 0,
+    ForumBodyListMarkerPlan? listMarkers,
+  }) {
+    if (element.kind != ForumBodyElementKind.image) {
+      throw ArgumentError('Hidden image requires an actual image element');
+    }
+    _appendImageBox(
+      sourceIdentity: sourceIdentity,
+      path: element.path,
+      frame: frame,
+      inputIndex: inputIndex,
+      fontRevision: fontRevision,
+      styleRevision: styleRevision,
+      left: left,
+      spaceBefore: spaceBefore,
+      listMarkers: listMarkers,
+      hidden: true,
+    );
+  }
+
+  void _appendImageBox({
+    required ForumBodyIdentity sourceIdentity,
+    required String path,
+    required ForumBodyImageFrame frame,
+    required int inputIndex,
+    required String fontRevision,
+    required int styleRevision,
+    required double left,
+    required double spaceBefore,
+    required ForumBodyListMarkerPlan? listMarkers,
+    required bool hidden,
   }) {
     _ensureOpen();
     if (!needsInput) throw StateError('Composition input is still pending');
-    if (input.identity != identity || inputIndex != _nextParagraphIndex) {
+    if (sourceIdentity != identity || inputIndex != _nextParagraphIndex) {
       throw ArgumentError('Unordered or foreign image input');
     }
     if (listMarkers != null && listMarkers.identity != identity) {
@@ -659,7 +718,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid image composition inputs');
     }
     _image = _ActiveImage(
-      input.element.path,
+      path,
       frame,
       inputIndex,
       fontRevision,
@@ -667,6 +726,7 @@ final class ForumBodyTextPageComposer {
       left,
       spaceBefore,
       listMarkers,
+      hidden,
     );
     _nextParagraphIndex++;
   }
@@ -684,7 +744,9 @@ final class ForumBodyTextPageComposer {
         _seal(forceScreen: true);
         return (pagesPublished: 1, isComplete: false);
       }
-      if (maxImagesPerPage != null && _usedImages >= maxImagesPerPage!) {
+      if (!active.hidden &&
+          maxImagesPerPage != null &&
+          _usedImages >= maxImagesPerPage!) {
         _seal(forceScreen: true);
         return (pagesPublished: 1, isComplete: false);
       }
@@ -772,12 +834,16 @@ final class ForumBodyTextPageComposer {
           top: top,
           width: active.frame.width,
           height: active.frame.height,
-          kind: ForumBodyTextPageFragmentKind.image,
+          kind: active.hidden
+              ? ForumBodyTextPageFragmentKind.hiddenImage
+              : ForumBodyTextPageFragmentKind.image,
           listMarker: marker,
           collapseHeader: _collapseHeader?.place(top - inset, bottom),
           imageFrame: active.frame,
-          imageCount: 1,
-          imagePaths: List.unmodifiable([active.path]),
+          imageCount: active.hidden ? 0 : 1,
+          imagePaths: active.hidden
+              ? const []
+              : List.unmodifiable([active.path]),
         ),
       );
       _fragmentCount++;
@@ -785,8 +851,8 @@ final class ForumBodyTextPageComposer {
       _lastFragmentNativeHandles = handles;
       if (addedEntries != null) _nativeEntries.addAll(addedEntries);
       _nativeBytes += addedBytes;
-      _usedImages++;
-      _lastFragmentImages = 1;
+      if (!active.hidden) _usedImages++;
+      _lastFragmentImages = active.hidden ? 0 : 1;
       _lastSceneReservation = null;
       _flowHeight = bottom;
       _usedHeight = math.max(_usedHeight, bottom);
@@ -1808,12 +1874,14 @@ final class _ActiveImage {
     this.left,
     this.spaceBefore,
     this.listMarkers,
+    this.hidden,
   );
   final String path, fontRevision;
   final ForumBodyImageFrame frame;
   final int index, styleRevision;
   final double left, spaceBefore;
   final ForumBodyListMarkerPlan? listMarkers;
+  final bool hidden;
 }
 
 final class _ActiveRule {

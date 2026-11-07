@@ -1,9 +1,17 @@
-import 'package:flutter/painting.dart';
+import 'dart:ui' as ui;
+
+import 'package:flutter/rendering.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
 final _reader = ForumBodyReaderStyle(
-  textStyle: const TextStyle(fontFamily: 'Ahem', fontSize: 10, height: 1),
+  textStyle: const TextStyle(
+    fontFamily: 'Ahem',
+    fontSize: 10,
+    height: 1,
+    color: Color(0xff123456),
+  ),
   fontRevision: 'hidden-image',
   linkColor: const Color(0xff0000ff),
   paragraphBefore: 0,
@@ -21,6 +29,8 @@ final class _Fixture {
     String html, {
     double height = 80,
     int maxPages = 100,
+    int? pageHandles,
+    int? pageImages,
     bool captureFloats = false,
     ForumBodyTableExtent extent = ForumBodyTableExtent.bookPage,
     TextScaler textScaler = TextScaler.noScaling,
@@ -45,6 +55,8 @@ final class _Fixture {
       layoutId: 'hidden-image',
       width: 100,
       height: height,
+      maxNativeHandlesPerPage: pageHandles,
+      maxImagesPerPage: pageImages,
       textScaler: textScaler,
       captureFloats: captureFloats,
       tableExtent: extent,
@@ -111,6 +123,136 @@ final class _Fixture {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('a visible list marker survives a hidden-only block image item', () {
+    final f = _Fixture(
+      '<ol style="margin:0;padding-left:25px"><li>'
+      '<img src="hidden" width="100" height="50" '
+      'style="display:block;visibility:hidden"></li></ol>',
+    )..finish();
+    final fragments = f.session.snapshot.expand((page) => page.fragments);
+    expect(fragments.where((part) => part.listMarker != null), hasLength(1));
+    expect(f.resolved, isEmpty);
+    final delivered = f.prepare(0).single as ForumBodyPreparedListItemFragment;
+    expect(delivered.body, isA<ForumBodyPreparedHiddenImageFragment>());
+    expect(delivered.projection.text, isEmpty);
+    expect(delivered.glyphBoxes(0, 0), isEmpty);
+    expect(delivered.imageCount, 0);
+    expect(delivered.hasRenderedImages, isTrue);
+    delivered.close();
+    expect(f.session.activeIssuedImages, 0);
+    expect(f.cache.activeLeases, 0);
+  });
+
+  test('hidden-only list items charge marker handles but no image slots', () {
+    const body =
+        '<ol style="margin:0;padding-left:25px">'
+        '<li><img src="hidden" width="100" height="10" '
+        'style="display:block;visibility:hidden"></li>'
+        '<li><img src="hidden" width="100" height="10" '
+        'style="display:block;visibility:hidden"></li></ol>';
+    final images = _Fixture(body, pageImages: 1)..finish();
+    expect(images.session.snapshot, hasLength(1));
+    expect(images.session.snapshot.single.fragments, hasLength(2));
+    expect(
+      images.session.snapshot.single.fragments.every(
+        (part) => part.imageCount == 0,
+      ),
+      isTrue,
+    );
+    final handles = _Fixture(body, pageHandles: 3)..finish();
+    expect(handles.session.snapshot, hasLength(2));
+    for (var page = 0; page < 2; page++) {
+      final parts = handles.prepare(page);
+      expect(parts, hasLength(1));
+      parts.single.close();
+    }
+    expect(handles.resolved, isEmpty);
+    expect(handles.cache.activeLeases, 0);
+  });
+
+  test('hidden marker metadata cannot bypass the retained-input limit', () {
+    final f = _Fixture(
+      '<ol><li><img src="hidden" alt="${'a' * 10000}" '
+      'style="display:block;visibility:hidden"></li></ol>',
+    );
+    expect(
+      f.finish,
+      throwsA(
+        isA<ForumBodyTextPageSessionException>().having(
+          (error) => error.failure,
+          'failure',
+          ForumBodyTextPageSessionFailure.textLimit,
+        ),
+      ),
+    );
+    expect(f.resolved, isEmpty);
+    expect(f.cache.activeLeases, 0);
+  });
+
+  testWidgets(
+    'a hidden-only list paints its marker without a Host or source hit',
+    (tester) async {
+      final f = _Fixture(
+        '<ol style="margin:0;padding-left:25px"><li>'
+        '<img src="hidden" width="100" height="50" '
+        'style="display:block;visibility:hidden"></li></ol>',
+      )..finish();
+      final parts = f.prepare(0);
+      const key = ValueKey('hidden-list-pixels');
+      var sourceHits = 0;
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 100,
+              height: 80,
+              child: RepaintBoundary(
+                key: key,
+                child: ForumBodyTextPageSurface.prepared(
+                  snapshot: f.session.snapshot,
+                  pageIndex: 0,
+                  layoutId: 'hidden-image',
+                  fragments: parts,
+                  onSourceTap: (_, _) => sourceHits++,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      final render = tester.renderObject<RenderRepaintBoundary>(
+        find.byKey(key),
+      );
+      await tester.runAsync(() async {
+        final image = await render.toImage();
+        try {
+          final bytes = (await image.toByteData(
+            format: ui.ImageByteFormat.rawRgba,
+          ))!;
+          var ink = 0;
+          for (var y = 0; y < image.height; y++) {
+            for (var x = 0; x < image.width; x++) {
+              if (bytes.getUint8((y * image.width + x) * 4 + 3) == 0) continue;
+              ink++;
+              expect(x, lessThan(25));
+            }
+          }
+          expect(ink, greaterThan(0));
+        } finally {
+          image.dispose();
+        }
+      });
+      await tester.tapAt(const Offset(40, 10));
+      expect(sourceHits, 0);
+      expect(f.resolved, isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(f.session.activeIssuedFragments, 0);
+      expect(f.cache.activeLeases, 0);
+    },
+  );
 
   test('scrolling keeps a tall invisible block in one natural slice', () {
     final f = _Fixture(

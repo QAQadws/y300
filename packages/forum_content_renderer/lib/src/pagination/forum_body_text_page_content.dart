@@ -145,6 +145,74 @@ final class ForumBodyImagePageContent extends ForumBodyTextPageContent {
   }
 }
 
+/// A real invisible image box. It can carry visible list/chrome decoration,
+/// but retains no display resource, text projection or image coverage.
+final class ForumBodyHiddenImagePageContent extends ForumBodyTextPageContent {
+  ForumBodyHiddenImagePageContent({
+    required this.identity,
+    required this.element,
+    required this.frame,
+    required this.fontRevision,
+    required this.styleRevision,
+  }) : super._() {
+    if (element.kind != ForumBodyElementKind.image) {
+      throw ArgumentError('Hidden image box requires an image occurrence');
+    }
+  }
+  @override
+  final ForumBodyIdentity identity;
+  final ForumBodyElement element;
+  final ForumBodyImageFrame frame;
+  final String fontRevision;
+  final int styleRevision;
+  @override
+  int get textCodeUnits => 0;
+  @override
+  int get runCount => 0;
+  @override
+  int get retainedTextCodeUnits =>
+      element.path.length +
+      (element.resource?.rawSource?.length ?? 0) +
+      (element.resource?.alt?.length ?? 0) +
+      (element.resource?.title?.length ?? 0);
+  @override
+  double requestWidthFor(ForumBodyTextPageFragment fragment) => frame.width;
+  @override
+  int nativeHandleCountFor(ForumBodyTextPageFragment fragment) {
+    if (fragment.kind != ForumBodyTextPageFragmentKind.hiddenImage ||
+        fragment.path != element.path ||
+        fragment.fontRevision != fontRevision ||
+        fragment.styleRevision != styleRevision) {
+      throw const ForumBodyTextPageSurfaceException(
+        ForumBodyTextPageSurfaceFailure.identity,
+      );
+    }
+    if (!identical(fragment.imageFrame, frame) ||
+        fragment.width != frame.width ||
+        fragment.height != frame.height ||
+        fragment.startLine != 0 ||
+        fragment.endLine != 0 ||
+        fragment.coverageStartUtf16 != 0 ||
+        fragment.coverageEndUtf16 != 0 ||
+        fragment.sourceHint != null ||
+        fragment.imageCount != 0 ||
+        fragment.imagePaths.isNotEmpty) {
+      throw const ForumBodyTextPageSurfaceException(
+        ForumBodyTextPageSurfaceFailure.geometry,
+      );
+    }
+    return 0;
+  }
+
+  @override
+  Iterable<ForumBodyNativeRequestSlot> nativeFootprintFor(
+    ForumBodyTextPageFragment fragment,
+  ) {
+    nativeHandleCountFor(fragment);
+    return const [];
+  }
+}
+
 final class ForumBodyListItemPageContent extends ForumBodyTextPageContent {
   ForumBodyListItemPageContent(this.body, this.markers) : super._() {
     if (body is ForumBodyListItemPageContent ||
@@ -175,7 +243,8 @@ final class ForumBodyListItemPageContent extends ForumBodyTextPageContent {
       body.requestWidthFor(fragment);
   void _validate(ForumBodyTextPageFragment fragment) {
     final marker = fragment.listMarker;
-    if (body is ForumBodyImagePageContent &&
+    if ((body is ForumBodyImagePageContent ||
+            body is ForumBodyHiddenImagePageContent) &&
         marker?.baseline != markers.blockTopBaseline) {
       throw const ForumBodyTextPageSurfaceException(
         ForumBodyTextPageSurfaceFailure.geometry,
