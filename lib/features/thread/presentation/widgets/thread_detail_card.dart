@@ -15,7 +15,6 @@ class _ThreadPostCardHeaderEntry extends StatelessWidget {
     required this.imageReferer,
     required this.onOpenAuthorProfile,
     required this.onOpenPostActions,
-    required this.showPostActionsButton,
   });
 
   final ThreadPost sourcePost;
@@ -27,7 +26,6 @@ class _ThreadPostCardHeaderEntry extends StatelessWidget {
   final String? imageReferer;
   final ValueChanged<ThreadPost> onOpenAuthorProfile;
   final ValueChanged<ThreadPost> onOpenPostActions;
-  final bool showPostActionsButton;
 
   @override
   Widget build(BuildContext context) {
@@ -85,14 +83,6 @@ class _ThreadPostCardHeaderEntry extends StatelessWidget {
                         : () => onOpenAuthorProfile(sourcePost),
                   ),
                 ),
-                if (showPostActionsButton)
-                  IconButton(
-                    key: Key('thread-post-more-${sourcePost.pid}'),
-                    tooltip: AppLocalizations.of(context).threadPostActions,
-                    icon: const Icon(Icons.more_horiz),
-                    color: palette.softText,
-                    onPressed: () => onOpenPostActions(sourcePost),
-                  ),
               ],
             ),
           ],
@@ -198,10 +188,8 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
           position: _ThreadPostCardSegmentPosition.middle,
         ),
         child: DefaultTextStyle.merge(
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: palette.bodyText,
-            height: 1.5,
-          ),
+          style: Theme.of(context).textTheme.bodyMedium
+              ?.copyWith(color: palette.bodyText, height: 1.5),
           child: bodyManifest != null
               ? LayoutBuilder(
                   builder: (context, constraints) => _ThreadPostChunkBody(
@@ -633,7 +621,6 @@ class _ThreadPostCardEntryState extends State<_ThreadPostCardEntry>
           imageReferer: widget.imageReferer,
           onOpenAuthorProfile: widget.onOpenAuthorProfile,
           onOpenPostActions: widget.onOpenPostActions,
-          showPostActionsButton: widget.nativeBody,
         ),
         _ThreadPostCardBodyEntry(
           nativeBody: widget.nativeBody,
@@ -911,14 +898,6 @@ class ThreadPostCard extends StatelessWidget {
                       : () => authorProfileCallback(post),
                 ),
               ),
-              if (postActionCallback != null)
-                IconButton(
-                  key: Key('thread-post-more-${post.pid}'),
-                  tooltip: l10n.threadPostActions,
-                  icon: const Icon(Icons.more_horiz),
-                  color: resolvedPalette.softText,
-                  onPressed: () => postActionCallback(post),
-                ),
             ],
           ),
           if (showBody) ...[

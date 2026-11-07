@@ -308,7 +308,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(copied, 'comic body 軟體正文\nafter image');
       expect(post.message, contains('软件正文'));
-      await tester.tap(find.byKey(const Key('thread-post-more-1')));
+      await tester.longPress(find.byKey(const Key('thread-author-avatar-1')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('thread-post-select-copy-action')));
       await tester.pumpAndSettle();

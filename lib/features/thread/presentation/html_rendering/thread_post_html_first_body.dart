@@ -523,6 +523,7 @@ class _ThreadPostHtmlFirstBodyState
                 onOpenImage: _handleTapImage,
                 clipboardTextWriter: ref.read(clipboardTextWriterProvider),
                 onOpenSelectedLink: widget.onOpenSelectedPostLink,
+                selectionEnabled: widget.selectEntireBody,
                 selectEntireBody: widget.selectEntireBody,
                 isSelectionCurrent: widget.isSelectionCurrent,
                 errorBuilder: (_) =>

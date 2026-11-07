@@ -949,7 +949,6 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
           imageReferer: widget.imageReferer,
           onOpenAuthorProfile: widget.onOpenAuthorProfile,
           onOpenPostActions: widget.onOpenPostActions,
-          showPostActionsButton: widget.nativeBody,
         );
         return KeyedSubtree(
           key: chunks?.store[entry.sourcePost!.pid] == null

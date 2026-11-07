@@ -144,7 +144,7 @@ void main() {
     });
 
     testWidgets(
-      'native body copies text, opens a selected link and preserves table and image interaction',
+      'native body uses independent copy and preserves link, table and image interaction',
       (tester) async {
         final copiedTexts = <String>[];
         final openedThreads = <String?>[];
@@ -257,20 +257,26 @@ void main() {
         expect(sample.finalBoundaryKnown, isTrue);
         expect(sample.bodyHeight, greaterThan(180));
 
-        final floorActions = find.byKey(const Key('thread-post-more-200'));
-        expect(
-          tester.widget<IconButton>(floorActions).tooltip,
-          AppLocalizations.of(tester.element(floorActions)).threadPostActions,
-        );
-        await tester.tap(floorActions);
+        expect(find.byKey(const Key('thread-post-more-200')), findsNothing);
+        expect(find.byType(SelectionArea), findsNothing);
+        final floorActions = find.byKey(const Key('thread-post-header-200'));
+        await tester.longPress(floorActions);
         await _pumpThreadUiTransition(tester);
         expect(
           find.byKey(const Key('thread-post-action-sheet')),
           findsOneWidget,
         );
-        await tester.binding.handlePopRoute();
+        await _tapPostActionSheetItem(
+          tester,
+          const Key('thread-post-select-copy-action'),
+        );
         await _pumpThreadUiTransition(tester);
         expect(find.byKey(const Key('thread-post-action-sheet')), findsNothing);
+        await _pumpThreadBodyUntil(
+          tester,
+          () => find.byType(SelectionArea).evaluate().isNotEmpty,
+        );
+        await _pumpThreadUiTransition(tester);
 
         final opening = find.byWidgetPredicate(
           (widget) =>
@@ -298,34 +304,31 @@ void main() {
         await _pumpThreadUiTransition(tester);
         expect(copiedTexts, ['Opening']);
 
-        final region = tester.state<SelectableRegionState>(
-          find.byType(SelectableRegion),
-        );
-        region.selectAll(SelectionChangedCause.toolbar);
+        await tester.tap(find.byType(BackButton));
         await _pumpThreadUiTransition(tester);
-        final openLink = tester
-            .widget<AdaptiveTextSelectionToolbar>(
-              find.byType(AdaptiveTextSelectionToolbar),
-            )
-            .buttonItems!
-            .singleWhere(
-              (item) =>
-                  item.label ==
-                  AppLocalizations.of(region.context).selectionOpenForumLink,
-            )
-            .onPressed!;
-        openLink();
-        openLink();
+        await _pumpThreadBodyUntil(
+          tester,
+          () => find.byType(SelectionArea).evaluate().isEmpty,
+        );
+        expect(find.byType(SelectionArea), findsNothing);
+        final link = find.byWidgetPredicate(
+          (widget) =>
+              widget is ForumBodyParagraphSurface &&
+              widget.lease.isActive &&
+              widget.lease.content.projection.text == forumUrl,
+        );
+        final linkParagraph = tester.widget<ForumBodyParagraphSurface>(link);
+        final linkGlyph = linkParagraph.lease.layout.selectionBoxes(1, 2).first;
+        await tester.tapAt(tester.getTopLeft(link) + linkGlyph.toRect().center);
         await _pumpThreadUiTransition(tester);
         expect(openedThreads, ['456']);
         expect(find.text('Selected thread fixture'), findsOneWidget);
         await tester.binding.handlePopRoute();
+        await _pumpThreadUiTransition(tester);
         await _pumpThreadBodyUntil(
           tester,
-          () => find
-              .text('Selected thread fixture', skipOffstage: false)
-              .evaluate()
-              .isEmpty,
+          () => find.text('Selected thread fixture', skipOffstage: false)
+              .evaluate().isEmpty,
         );
 
         final viewport = tester.widget<ForumBodyTableFlowViewport>(table);
@@ -334,6 +337,8 @@ void main() {
           viewport.horizontalController.position.maxScrollExtent,
           greaterThan(0),
         );
+        await tester.ensureVisible(table);
+        await tester.pump();
         await tester.drag(table, const Offset(-180, 0));
         await _pumpThreadUiTransition(tester);
         expect(viewport.horizontalController.offset, greaterThan(0));
@@ -362,7 +367,6 @@ void main() {
         final session = tester.widget<ForumBodyFlowBox>(body).session;
         await tester.pumpWidget(const SizedBox.shrink());
         copy();
-        openLink();
         await tester.pump();
         expect(copiedTexts, ['Opening']);
         expect(openedThreads, ['456']);
@@ -5631,7 +5635,7 @@ void main() {
       expect(body.prefix.isComplete, isTrue);
       expect(body.prefix.length, greaterThan(1));
       expect(body.session.activeIssuedFragments, lessThan(body.prefix.length));
-      expect(find.byType(SelectionArea), findsOneWidget);
+      expect(find.byType(SelectionArea), findsNothing);
     });
 
     testWidgets('uses one native body entry for image dense posts', (
@@ -5764,7 +5768,7 @@ void main() {
           of: find.byKey(const Key('thread-post-body-copy-1')),
           matching: find.byType(SelectionArea),
         ),
-        findsOneWidget,
+        findsNothing,
       );
       expect(
         find.ancestor(
@@ -5786,8 +5790,8 @@ void main() {
       );
       expect(find.byKey(const Key('thread-post-card-copy-1')), findsOneWidget);
 
-      final menu = find.byKey(const Key('thread-post-more-copy-1'));
-      await tester.tap(menu);
+      final menu = find.byKey(const Key('thread-post-header-copy-1'));
+      await tester.longPress(menu);
       await _pumpThreadUiTransition(tester);
 
       expect(find.byKey(const Key('thread-post-action-sheet')), findsOneWidget);
@@ -5808,7 +5812,7 @@ void main() {
       expect(copiedTexts.single, isNot(contains('page.jpg')));
       expect(find.text('1# 正文已复制'), findsOneWidget);
 
-      await tester.tap(menu);
+      await tester.longPress(menu);
       await _pumpThreadUiTransition(tester);
       await _tapPostActionSheetItem(
         tester,
@@ -5827,8 +5831,9 @@ void main() {
       );
       await _pumpThreadBodyUntil(
         tester,
-        () => find.byType(ForumBodyParagraphSurface).evaluate().isNotEmpty,
+        () => find.byType(SelectionArea).evaluate().isNotEmpty,
       );
+      await _pumpThreadUiTransition(tester);
       expect(find.byType(SelectionArea), findsOneWidget);
       expect(find.byType(ForumBodyFlowBox), findsOneWidget);
       await tester.pumpAndSettle();
@@ -5885,7 +5890,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('thread-post-more-101')));
+      await tester.longPress(find.byKey(const Key('thread-post-header-101')));
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('thread-post-edit-action')), findsOneWidget);
@@ -6015,10 +6020,10 @@ void main() {
         '106',
         '107',
       ]) {
-        final menu = find.byKey(Key('thread-post-more-$pid'));
+        final menu = find.byKey(Key('thread-post-header-$pid'));
         await tester.ensureVisible(menu);
         await tester.pump();
-        await tester.tap(menu);
+        await tester.longPress(menu);
         await tester.pumpAndSettle();
         expect(find.byKey(const Key('thread-post-action-sheet')), findsOneWidget);
         expect(
@@ -6112,7 +6117,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
 
-      await tester.tap(find.byKey(const Key('thread-post-more-41585107')));
+      await tester.longPress(find.byKey(const Key('thread-post-header-41585107')));
       await tester.pumpAndSettle();
 
       final l10n = await AppLocalizations.delegate.load(const Locale('zh'));
@@ -6233,7 +6238,7 @@ void main() {
 
       await _openPostAction(
         tester,
-        menuKey: const Key('thread-post-more-p1'),
+        menuKey: const Key('thread-post-header-p1'),
         actionKey: const Key('thread-post-rate-action'),
       );
       await tester.pumpAndSettle();
@@ -6303,7 +6308,7 @@ void main() {
 
       await _openPostAction(
         tester,
-        menuKey: const Key('thread-post-more-p1'),
+        menuKey: const Key('thread-post-header-p1'),
         actionKey: const Key('thread-post-comment-action'),
       );
       await tester.pumpAndSettle();
@@ -6366,7 +6371,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('thread-post-more-p2')));
+      await tester.longPress(find.byKey(const Key('thread-post-header-p2')));
       await tester.pumpAndSettle();
 
       final actionSheet = find.byKey(const Key('thread-post-action-sheet'));
@@ -6408,7 +6413,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 120));
 
-      await tester.tap(find.byKey(const Key('thread-post-more-p1')));
+      await tester.longPress(find.byKey(const Key('thread-post-header-p1')));
       await tester.pumpAndSettle();
 
       expect(
@@ -8214,7 +8219,7 @@ Future<void> _openPostAction(
   required Key menuKey,
   required Key actionKey,
 }) async {
-  await tester.tap(find.byKey(menuKey));
+  await tester.longPress(find.byKey(menuKey));
   await tester.pumpAndSettle();
   expect(find.byKey(const Key('thread-post-action-sheet')), findsOneWidget);
   await _tapPostActionSheetItem(tester, actionKey);
