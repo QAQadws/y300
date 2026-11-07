@@ -291,14 +291,14 @@ final class NovelReaderNativeViewWindow {
     return retry;
   }
 
-  Future<void> prepareAvailable({bool resumeTarget = false}) {
+  Future<void> prepareAvailable() {
     if (_closed) throw StateError('Native view window is closed');
     final running = _running;
     if (running != null) return running;
     final completion = Completer<void>();
     _running = completion.future;
     unawaited(
-      _drive(resumeRevision: resumeTarget ? _revision : null).then<void>(
+      _drive().then<void>(
         completion.complete,
         onError: (Object error, StackTrace stack) =>
             completion.completeError(error, stack),
@@ -307,7 +307,7 @@ final class NovelReaderNativeViewWindow {
     return completion.future;
   }
 
-  Future<void> _drive({required int? resumeRevision}) async {
+  Future<void> _drive() async {
     var observedRevision = _revision;
     final attempted = <int>{};
     try {
@@ -372,9 +372,7 @@ final class NovelReaderNativeViewWindow {
           );
           _active = job;
           _activePage = page;
-          ready = await job.run(
-            resumeTarget: revision == resumeRevision && page == _center,
-          );
+          ready = await job.run();
           if (!identical(_active, job)) {
             ready.close();
             ready = null;

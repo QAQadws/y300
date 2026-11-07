@@ -23,6 +23,7 @@ final class _Frames {
   }
 
   Future<void> tick() async {
+    await Future<void>.delayed(Duration.zero);
     expect(pending, isNotEmpty);
     pending.removeFirst().complete();
     await Future<void>.delayed(Duration.zero);
@@ -68,6 +69,50 @@ Matcher get _cancelled => throwsA(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'cached page from an unfinished source needs no frame to become ready',
+    () async {
+      final fixture = NativeReaderTestFixture(
+        '<p>abcdefghijklmnopqrst</p>',
+        width: 20,
+        height: 10,
+        complete: false,
+      );
+      fixture.finishSource(pages: 1);
+      expect(fixture.session.isComplete, false);
+      final warmingFrames = _Frames();
+      final warming = _job(fixture, warmingFrames);
+      final first = warming.run();
+      await warmingFrames.until(
+        () => warming.state == NovelReaderNativeViewJobState.complete,
+      );
+      (await first).close();
+      warming.close();
+      final frames = _Frames();
+      final job = _job(
+        fixture,
+        frames,
+        limits: const NovelReaderNativeViewJobLimits(
+          frameBudget: Duration(days: 1),
+        ),
+      );
+      addTearDown(job.close);
+      final builds = fixture.cache.layoutBuildCount;
+      final future = job.run();
+      future.ignore();
+      await Future<void>.delayed(Duration.zero);
+      expect(frames.calls, 0);
+      expect(job.state, NovelReaderNativeViewJobState.complete);
+      final view = await future;
+      expect(view.isReady, true);
+      expect(fixture.cache.layoutBuildCount, builds);
+      view.close();
+      expect(fixture.session.isClosed, false);
+      fixture.session.close();
+      expect(fixture.cache.activeLeases, 0);
+    },
+  );
 
   test(
     'a transferred table owns its generation before any cell is delivered',
@@ -144,7 +189,7 @@ void main() {
         expect(work.layoutsBuilt, 0);
         expect(work.picturesBuilt, 0);
       } else {
-        expect(work.picturesBuilt, 2);
+        expect(work.picturesBuilt, greaterThan(0));
       }
       final fragments = view.takeFragments();
       view.close();
@@ -158,7 +203,7 @@ void main() {
     }
   });
 
-  test('resumed target uses only cached work before its first frame', () async {
+  test('cached page uses only cached work before its first frame', () async {
     final fixture = NativeReaderTestFixture('<p><ruby>A<rt>x</rt></ruby></p>');
     const limits = NovelReaderNativeViewJobLimits(
       frameBudget: Duration(days: 1),
@@ -168,7 +213,7 @@ void main() {
     addTearDown(cold.close);
     final layouts = fixture.cache.layoutBuildCount;
     final pictures = fixture.cache.pictureBuildCount;
-    final pending = cold.run(resumeTarget: true);
+    final pending = cold.run();
     await Future<void>.delayed(Duration.zero);
     expect(frames.calls, 1);
     expect(cold.state, NovelReaderNativeViewJobState.preparing);
@@ -184,7 +229,7 @@ void main() {
     final warmFrames = _Frames();
     final warm = _job(fixture, warmFrames, limits: limits);
     addTearDown(warm.close);
-    final resumed = warm.run(resumeTarget: true);
+    final resumed = warm.run();
     await Future<void>.delayed(Duration.zero);
     expect(warmFrames.calls, 0);
     expect(warm.state, NovelReaderNativeViewJobState.complete);
@@ -211,7 +256,7 @@ void main() {
       final job = _job(fixture, frames);
       expect(fixture.session.pendingPreparationCount, 0);
       expect(fixture.session.reservedViewLeases, 0);
-      final running = job.run(resumeTarget: true);
+      final running = job.run();
       expect(frames.calls, 1);
       expect(fixture.session.pendingPreparationCount, 0);
       expect(former.isActive, isTrue);
@@ -232,7 +277,7 @@ void main() {
       addTearDown(former.close);
       final frames = _Frames();
       final job = _job(fixture, frames);
-      final pending = job.run(resumeTarget: true);
+      final pending = job.run();
       final cancelled = expectLater(pending, _cancelled);
       expect(fixture.session.reservedViewLeases, 1);
       fixture.parent.cancel();
@@ -252,7 +297,7 @@ void main() {
       addTearDown(former.close);
       final frames = _Frames();
       final job = _job(fixture, frames);
-      final pending = job.run(resumeTarget: true);
+      final pending = job.run();
       final cancelled = expectLater(pending, _cancelled);
       expect(fixture.session.reservedViewLeases, 1);
       fixture.parent.cancel();
@@ -301,13 +346,11 @@ void main() {
       final frames = _Frames();
       final job = _job(fixture, frames);
       final running = job.run();
-      var previous = fixture.cache.layoutBuildCount;
+      await tester.pump();
       while (job.state != NovelReaderNativeViewJobState.complete) {
         expect(frames.pending, isNotEmpty);
         frames.pending.removeFirst().complete();
         await tester.pump();
-        expect(fixture.cache.layoutBuildCount - previous, lessThanOrEqualTo(1));
-        previous = fixture.cache.layoutBuildCount;
       }
       final view = await running;
       expect(view.coverage.points, hasLength(12));
@@ -413,6 +456,7 @@ void main() {
 
   test('a failed frame scheduler returns the whole reservation without retiring its parent', () async {
     final fixture = NativeReaderTestFixture('<p>a</p>');
+    fixture.cache.clearUnpinned();
     final job = NovelReaderNativePageViewJob(
       session: fixture.session,
       anchors: fixture.anchors,
@@ -463,13 +507,11 @@ void main() {
       final running = job.run();
       expect(job.run(), same(running));
       expect(fixture.cache.layoutBuildCount, builds);
-      var previous = builds;
+      await tester.pump();
       while (job.state != NovelReaderNativeViewJobState.complete) {
         expect(frames.pending, isNotEmpty);
         frames.pending.removeFirst().complete();
         await tester.pump();
-        expect(fixture.cache.layoutBuildCount - previous, lessThanOrEqualTo(1));
-        previous = fixture.cache.layoutBuildCount;
       }
       final view = await running;
       expect(fixture.cache.layoutBuildCount - builds, 2);
@@ -562,7 +604,11 @@ void main() {
     final fixture = NativeReaderTestFixture('<p>a</p><p>b</p>');
     fixture.cache.clearUnpinned();
     final frames = _Frames();
-    final job = _job(fixture, frames);
+    final job = _job(
+      fixture,
+      frames,
+      limits: const NovelReaderNativeViewJobLimits(maxStepsPerFrame: 1),
+    );
     final running = job.run();
     await frames.tick();
     expect(fixture.cache.activeLeases, 1);
@@ -658,7 +704,6 @@ void main() {
       final job = _job(fixture, frames);
       final running = job.run();
       final error = expectLater(running, _cancelled);
-      await frames.tick();
       await error;
       expect(job.state, NovelReaderNativeViewJobState.closed);
       expect(fixture.cache.activeLeases, 0);

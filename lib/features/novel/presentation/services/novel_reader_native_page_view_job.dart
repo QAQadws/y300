@@ -47,8 +47,8 @@ final class NovelReaderNativeViewJobLimits {
 }
 
 /// One published-page task, subordinate to a layout's cancellation token.
-/// Coverage shares the prepared native layouts. A resumed target may use the
-/// current slice for cached work; cold work always starts after a frame.
+/// Coverage shares prepared native layouts. Any immutable published page may
+/// use the current slice for cached work; cold work starts after a frame.
 /// The Host serializes priority; this task does not own source
 /// pagination, deadlines, reading mode, navigation or persisted positions.
 final class NovelReaderNativePageViewJob {
@@ -167,7 +167,7 @@ final class NovelReaderNativePageViewJob {
     }
   }
 
-  Future<NovelReaderNativePageView> run({bool resumeTarget = false}) {
+  Future<NovelReaderNativePageView> run() {
     final current = _running;
     if (current != null) return current;
     if (_state != NovelReaderNativeViewJobState.pending) {
@@ -177,7 +177,7 @@ final class NovelReaderNativePageViewJob {
     _running = completion.future;
     _state = NovelReaderNativeViewJobState.preparing;
     unawaited(
-      _drive(resumeTarget).then<void>(
+      _drive().then<void>(
         completion.complete,
         onError: (Object error, StackTrace stack) =>
             completion.completeError(error, stack),
@@ -186,7 +186,7 @@ final class NovelReaderNativePageViewJob {
     return completion.future;
   }
 
-  Future<NovelReaderNativePageView> _drive(bool resumeTarget) async {
+  Future<NovelReaderNativePageView> _drive() async {
     final elapsed = Stopwatch()..start();
     final preparationWork = NovelReaderNativeAdvanceMeter(
       budget: limits.frameBudget,
@@ -198,10 +198,8 @@ final class NovelReaderNativePageViewJob {
     var picturesBuilt = 0;
     try {
       _guard();
-      if (resumeTarget && _session!.isComplete) {
-        _clock.start();
-        _preparation = _tryReserveResumedPage();
-      }
+      _clock.start();
+      _preparation = _tryReservePage();
       if (_preparation == null) {
         // Let a former mounted page unpin its handles before reserving more.
         await _yieldFrame();
@@ -241,10 +239,6 @@ final class NovelReaderNativePageViewJob {
           );
           _guard();
           _state = NovelReaderNativeViewJobState.preparing;
-          await _yieldFrame();
-        } else if (step.layoutsBuilt > 0 && !preparation.isReady) {
-          // At most one new native paragraph per frame for this task. Warm
-          // acquisitions and box checks share the remaining bounded slice.
           await _yieldFrame();
         }
       }
@@ -304,6 +298,13 @@ final class NovelReaderNativePageViewJob {
       _state = NovelReaderNativeViewJobState.deferred;
       rethrow;
     } catch (_) {
+      // A synchronous scaler/admission callback can retire the source before
+      // its stream notification reaches this job. Preserve cancellation type.
+      if (_session?.isClosed != false ||
+          _session!.isLayoutOwnerRetired ||
+          _parent?.isCancelled == true) {
+        close();
+      }
       if (_token.isCancelled) {
         _token.throwIfCancelled();
       }
@@ -318,7 +319,7 @@ final class NovelReaderNativePageViewJob {
     }
   }
 
-  ForumBodyTextPagePreparation? _tryReserveResumedPage() {
+  ForumBodyTextPagePreparation? _tryReservePage() {
     try {
       return _session!.openPagePreparation(_pageIndex);
     } on ForumBodyTextPageSessionException catch (error) {

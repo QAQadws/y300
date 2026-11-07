@@ -255,7 +255,7 @@ final class NovelReaderNativePagedController {
     _window!.setCenter(page);
     _offerTarget();
     _syncDemand();
-    _restartProducer();
+    _restartProducer(resumeFinalPlan: _session!.isComplete);
     _notify();
     return true;
   }
@@ -714,10 +714,7 @@ final class NovelReaderNativePagedController {
     } else {
       previous?.close();
     }
-    _restartProducer(
-      resumeFinalPlan: _snapshot?.isComplete == true,
-      resumedPage: afterLayoutFrame ? settledPage : null,
-    );
+    _restartProducer(resumeFinalPlan: _snapshot?.isComplete == true);
     _notify();
     return true;
   }
@@ -1043,7 +1040,7 @@ final class NovelReaderNativePagedController {
     }
   }
 
-  void _restartProducer({bool resumeFinalPlan = false, int? resumedPage}) {
+  void _restartProducer({bool resumeFinalPlan = false}) {
     final epoch = ++_producerEpoch;
     _source?.close();
     try {
@@ -1052,8 +1049,7 @@ final class NovelReaderNativePagedController {
         demand: _demand!,
         parent: _lifetime,
         scheduler: _scheduler!,
-        onPublication: (prefix, token) =>
-            _publication(epoch, prefix, token, resumedPage: resumedPage),
+        onPublication: (prefix, token) => _publication(epoch, prefix, token),
       );
       _source = source;
       unawaited(
@@ -1074,9 +1070,8 @@ final class NovelReaderNativePagedController {
   Future<void> _publication(
     int epoch,
     ForumBodyTextPageSnapshot prefix,
-    NovelReaderPaginationCancellationToken token, {
-    required int? resumedPage,
-  }) async {
+    NovelReaderPaginationCancellationToken token,
+  ) async {
     _guard(epoch, token);
     final verifier = _verifier;
     if (verifier != null) {
@@ -1149,9 +1144,7 @@ final class NovelReaderNativePagedController {
         );
       }
       _window!.setCenter(requested);
-      await _window!.prepareAvailable(
-        resumeTarget: prefix.isComplete && requested == resumedPage,
-      );
+      await _window!.prepareAvailable();
       _guard(epoch, token);
       _offerTarget();
     }
@@ -1315,7 +1308,9 @@ final class NovelReaderNativePagedController {
   }
 
   void _syncDemand() => _demand?.update(
-    targetPending: _ticket != null,
+    // Source demand ends when the target can be delivered, independently of
+    // the later physical acknowledgement that confirms reading authority.
+    targetPending: _ticket != null && _target == null,
     pageIndex: _requestedPage ?? _visible?.pageIndex ?? 0,
     requireComplete:
         _entryEdge == NovelReaderChapterEdge.end ||
