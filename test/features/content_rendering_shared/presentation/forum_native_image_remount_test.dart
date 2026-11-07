@@ -34,9 +34,12 @@ Widget _scene(
   _Images host,
   ForumHtmlBodyPresentation presentation, {
   bool shown = true,
+  ScrollController? scroll,
+  ForumHtmlImageAnchorController? anchors,
 }) => LocalizedTestApp(
   home: Scaffold(
     body: SingleChildScrollView(
+      controller: scroll,
       child: Align(
         alignment: Alignment.topLeft,
         child: SizedBox(
@@ -49,6 +52,7 @@ Widget _scene(
                   textStyle: const TextStyle(fontSize: 16, color: Colors.black),
                   fontRevision: 'fixed',
                   imageHost: host,
+                  imageAnchorController: anchors,
                   expansion: presentation.collapseExpansion,
                   callbacks: const ForumHtmlRenderCallbacks(),
                   bodyPresentation: presentation,
@@ -86,6 +90,12 @@ void main() {
       'table',
       '<table><tr><td><img src="https://example.test/same.png"></td></tr></table>',
     ),
+    (
+      'nested table',
+      '<table><tr><td><div><table><tr><td>'
+          '<img src="https://example.test/same.png">'
+          '</td></tr></table></div></td></tr></table>',
+    ),
   ]) {
     testWidgets('$name image geometry survives native remount', (tester) async {
       final prepared = _prepare(html);
@@ -122,6 +132,75 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets(
+    'fractional nested image heights preserve the exact measured surface size',
+    (tester) async {
+      final prepared = _prepare(
+        '<table><tr><td><table><tr>'
+        '<td style="padding-top:500.6px"><img src="https://example.test/same.png">'
+        '</td></tr></table></td></tr></table>',
+      );
+      final host = _Images(prepared, initialRatio: 675 / 277);
+      final presentation = ForumHtmlBodyPresentation();
+      final scroll = ScrollController();
+      addTearDown(presentation.dispose);
+      addTearDown(scroll.dispose);
+      await tester.pumpWidget(
+        _scene(prepared, host, presentation, scroll: scroll),
+      );
+      await _ready(tester);
+      scroll.jumpTo(scroll.position.maxScrollExtent);
+      await tester.pumpAndSettle();
+      expect(find.byType(ForumHtmlImageView), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'offscreen nested table reveals the selected repeated image occurrence',
+    (tester) async {
+      final prepared = _prepare(
+        '<div style="padding-top:1200px"><table><tr><td><table><tr><td>'
+        '<img width="100" height="100" src="https://example.test/same.png">'
+        '<p>between</p><img width="100" height="100" src="https://example.test/same.png">'
+        '</td></tr></table></td></tr></table></div><div style="padding-bottom:1000px">end</div>',
+      );
+      final host = _Images(prepared);
+      final presentation = ForumHtmlBodyPresentation();
+      final scroll = ScrollController();
+      final anchors = ForumHtmlImageAnchorController();
+      addTearDown(presentation.dispose);
+      addTearDown(scroll.dispose);
+      addTearDown(anchors.dispose);
+      await tester.pumpWidget(
+        _scene(prepared, host, presentation, scroll: scroll, anchors: anchors),
+      );
+      await _ready(tester);
+      expect(find.byType(ForumHtmlImageView), findsNothing);
+      final entry = prepared.sequence.entries.last;
+      bool? revealed;
+      anchors
+          .revealImage(
+            index: entry.index,
+            cacheKey: entry.cacheKey,
+            url: entry.url,
+            scrollController: scroll,
+            isCurrent: () => true,
+          )
+          .then((value) => revealed = value);
+      await _until(tester, () => revealed != null);
+      expect(revealed, isTrue);
+      final target = find.byKey(
+        ValueKey(('native-readable-image', 'body', entry.index)),
+      );
+      expect(tester.getTopLeft(target).dy, closeTo(0, 1));
+      expect(scroll.offset, greaterThan(1200));
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'learned image ratio survives a native remount before metadata returns',

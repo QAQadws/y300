@@ -45,7 +45,7 @@ final class NovelReaderNativeTableWindowProof {
     for (final slice in window.slices) {
       if (!window.isCurrent) return null;
       final snapshot = slice.area.snapshot;
-      final clip = visible.intersect(slice.bounds);
+      final clip = visible.intersect(slice.clip);
       if (clip.isEmpty) continue;
       NovelReaderNativePageCoverageCursor? cursor;
       try {

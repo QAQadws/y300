@@ -381,6 +381,8 @@ final class ForumBodyTablePreparation {
       layoutId: '$layoutId/${element.path}',
       width: width,
       height: _extentLimit,
+      // A cell remains continuous; descendant tables keep their own grids.
+      tableExtent: ForumBodyTableExtent.natural,
       intrinsicAvailableWidth: probe ? _widthReference : null,
       limits: probe
           ? limits
@@ -415,6 +417,14 @@ final class ForumBodyTablePreparation {
       tops.add(height);
       height += page.usedHeight;
       _fragments += page.itemCount;
+      for (final frame in page.tableFrames) {
+        final nested = session.tableLayoutForPage(
+          page.index,
+          path: frame.path,
+        )!;
+        _pages += nested.usage.pages;
+        _fragments += nested.usage.items;
+      }
     }
     _pages += snapshot.length;
     _paragraphs += session.retainedParagraphCount;
@@ -580,6 +590,16 @@ final class _TableFingerprint implements Sink<Digest> {
   void addPage(ForumBodyTextPage page) => _write([
     page.index,
     page.usedHeight,
+    for (final table in page.tableFrames)
+      [
+        table.path,
+        table.sourceRange.runeStart,
+        table.sourceRange.runeEnd,
+        rect(table.bounds),
+        table.contentSize.width,
+        table.contentSize.height,
+        table.fingerprint,
+      ],
     for (final f in page.fragments)
       [
         f.path,

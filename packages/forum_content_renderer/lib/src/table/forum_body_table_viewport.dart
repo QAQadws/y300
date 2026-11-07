@@ -7,7 +7,9 @@ import 'package:flutter/widgets.dart';
 
 import '../pagination/forum_body_prepared_text_fragment.dart';
 import '../pagination/forum_body_text_page_binding.dart';
+import '../pagination/forum_body_text_page_composer.dart';
 import '../pagination/forum_body_text_page_preparation.dart';
+import '../pagination/forum_body_text_page_session.dart';
 import '../services/forum_body_scroll_geometry.dart';
 import 'forum_body_table_preparation.dart';
 
@@ -19,10 +21,13 @@ typedef ForumBodyTableSliceBuilder =
       List<ForumBodyPreparedTextFragment> fragments,
     );
 
+/// Leaf geometry remains in the outer table's coordinates. [clip] includes
+/// every ancestor viewport without changing the measured surface's origin.
 typedef ForumBodyTableVisibleSlice = ({
   ForumBodyTableAreaLayout area,
   int page,
   Rect bounds,
+  Rect clip,
   List<ForumBodyPreparedTextFragment> fragments,
 });
 
@@ -169,12 +174,42 @@ abstract class _ForumBodyTableViewport extends StatefulWidget {
 
 typedef _Slice = ({ForumBodyTableAreaLayout area, int page});
 
+final class _NestedTable {
+  _NestedTable(this.area, this.page, this.frame, this.lease)
+    : horizontal = ScrollController(
+        initialScrollOffset: area.flowTableOffset(page, frame.path) ?? 0,
+      ) {
+    horizontal.addListener(_rememberOffset);
+  }
+  final ForumBodyTableAreaLayout area;
+  final int page;
+  final ForumBodyTextPageTable frame;
+  final ForumBodyTablePageLease lease;
+  final ScrollController horizontal;
+  final key = GlobalKey();
+  bool ready = false;
+  ForumBodyTableVisibleWindow? window;
+
+  void _rememberOffset() {
+    if (lease.isActive && horizontal.hasClients) {
+      area.setFlowTableOffset(page, frame.path, horizontal.offset);
+    }
+  }
+
+  void close() {
+    _rememberOffset();
+    horizontal.dispose();
+    lease.close();
+  }
+}
+
 final class _TableViewportState extends State<_ForumBodyTableViewport> {
   static const _physics = AlwaysScrollableScrollPhysics(
     parent: ClampingScrollPhysics(),
   );
 
   final _ready = <_Slice, List<ForumBodyPreparedTextFragment>>{};
+  final _nested = <_Slice, List<_NestedTable>>{};
   final _failed = <_Slice>{};
   Set<_Slice> _visible = const {};
   Rect? _window;
@@ -229,7 +264,31 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
     final seed = table.initialSlice;
     final fragments = seed?._take(table.layout);
     if (fragments != null) {
-      _ready[(area: seed!.area, page: seed.page)] = fragments;
+      final slice = (area: seed!.area, page: seed.page);
+      try {
+        _nested[slice] = _openNested(slice);
+        _ready[slice] = fragments;
+      } catch (_) {
+        _release(fragments);
+        rethrow;
+      }
+    }
+  }
+
+  List<_NestedTable> _openNested(_Slice slice) {
+    final result = <_NestedTable>[];
+    try {
+      for (final frame in slice.area.snapshot[slice.page].tableFrames) {
+        final lease = slice.area.acquireTablePage(slice.page, path: frame.path);
+        if (lease == null) throw StateError('Missing nested table layout');
+        result.add(_NestedTable(slice.area, slice.page, frame, lease));
+      }
+      return result;
+    } catch (_) {
+      for (final table in result) {
+        table.close();
+      }
+      rethrow;
     }
   }
 
@@ -298,7 +357,19 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
     }
     final window = _currentBounds() ?? Rect.zero;
     if (window != _window) _updateWindow(window);
-    final ready = !window.isEmpty && _visible.every(_ready.containsKey);
+    final ready =
+        !window.isEmpty &&
+        _visible.every(
+          (slice) =>
+              _ready.containsKey(slice) &&
+              (_nested[slice] ?? const <_NestedTable>[]).every(
+                (table) =>
+                    !table.frame.bounds
+                        .shift(_sliceBounds(slice).topLeft)
+                        .overlaps(window) ||
+                    (table.ready && table.window?.isCurrent == true),
+              ),
+        );
     _reportReady(ready);
     _publishWindow(ready && !_scrolling ? window : null);
     if (!mounted || _waiting) return;
@@ -313,8 +384,18 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
       _waiting = step.waitingForLayoutBudget;
       if (step.isReady) {
         final fragments = preparation.takeFragments();
+        late final List<_NestedTable> nested;
+        try {
+          nested = _openNested(slice);
+        } catch (_) {
+          _release(fragments);
+          rethrow;
+        }
         _stopWork();
-        setState(() => _ready[slice] = fragments);
+        setState(() {
+          _ready[slice] = fragments;
+          _nested[slice] = nested;
+        });
       }
       if (!_waiting) _schedule();
     } catch (error, stackTrace) {
@@ -371,21 +452,12 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
     if (bounds == null || bounds.isEmpty || _scrolling) return null;
     final revision = _scrollRevision;
     final layout = widget.layout;
-    final slices = <ForumBodyTableVisibleSlice>[
-      for (final slice in _slicesIn(bounds))
-        if (_ready[slice] case final fragments?)
-          (
-            area: slice.area,
-            page: slice.page,
-            bounds: _sliceBounds(slice),
-            fragments: fragments,
-          ),
-    ];
-    if (slices.isEmpty) return null;
+    final visible = _collectSlices(bounds);
+    if (visible.slices.isEmpty) return null;
     return ForumBodyTableVisibleWindow._(
       layout,
       bounds,
-      List.unmodifiable(slices),
+      visible.slices,
       false,
       () =>
           mounted &&
@@ -393,12 +465,73 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
           revision == _scrollRevision &&
           _currentBounds() == bounds &&
           !_scrolling &&
-          slices.every(
-            (slice) => identical(
-              _ready[(area: slice.area, page: slice.page)],
-              slice.fragments,
-            ),
-          ),
+          visible.isCurrent(),
+    );
+  }
+
+  ({
+    List<ForumBodyTableVisibleSlice> slices,
+    bool hasUserScrolled,
+    bool Function() isCurrent,
+  })
+  _collectSlices(Rect bounds) {
+    final slices = <ForumBodyTableVisibleSlice>[];
+    final roots = <_Slice, List<ForumBodyPreparedTextFragment>>{};
+    final children = <ForumBodyTableVisibleWindow>[];
+    var hasUserScrolled = false;
+    for (final slice in _slicesIn(bounds)) {
+      final fragments = _ready[slice];
+      if (fragments == null) continue;
+      roots[slice] = fragments;
+      final rect = _sliceBounds(slice), clip = rect.intersect(bounds);
+      if (fragments.isNotEmpty) {
+        slices.add((
+          area: slice.area,
+          page: slice.page,
+          bounds: rect,
+          clip: clip,
+          fragments: fragments,
+        ));
+      }
+      for (final table in _nested[slice] ?? const <_NestedTable>[]) {
+        final context = table.key.currentContext;
+        final window = table.window?.isCurrent == true
+            ? table.window
+            : context == null
+            ? null
+            : ForumBodyTableFlowViewport.borrowPaintedWindow(context);
+        if (window == null || !window.isCurrent) continue;
+        children.add(window);
+        hasUserScrolled |= window.hasUserScrolled;
+        final origin =
+            rect.topLeft +
+            table.frame.bounds.topLeft -
+            Offset(
+              table.horizontal.hasClients ? table.horizontal.offset : 0,
+              0,
+            );
+        final nestedClip = clip.intersect(window.bounds.shift(origin));
+        for (final leaf in window.slices) {
+          final shown = leaf.clip.shift(origin).intersect(nestedClip);
+          if (shown.isEmpty) continue;
+          slices.add((
+            area: leaf.area,
+            page: leaf.page,
+            bounds: leaf.bounds.shift(origin),
+            clip: shown,
+            fragments: leaf.fragments,
+          ));
+        }
+      }
+    }
+    return (
+      slices: List.unmodifiable(slices),
+      hasUserScrolled: hasUserScrolled,
+      isCurrent: () =>
+          roots.entries.every(
+            (entry) => identical(_ready[entry.key], entry.value),
+          ) &&
+          children.every((window) => window.isCurrent),
     );
   }
 
@@ -414,31 +547,26 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
     if (_publishedWindow?.isCurrent == true) return;
     final revision = _scrollRevision;
     final layout = widget.layout;
+    final visible = _collectSlices(bounds);
     final userOrigin = _userScrollOrigin;
     _userScrollOrigin = null;
     late final ForumBodyTableVisibleWindow window;
     window = ForumBodyTableVisibleWindow._(
       layout,
       bounds,
-      List.unmodifiable([
-        for (final slice in _visible)
-          (
-            area: slice.area,
-            page: slice.page,
-            bounds: _sliceBounds(slice),
-            fragments: _ready[slice]!,
-          ),
-      ]),
-      userOrigin != null &&
-          (widget.verticalController == null
-              ? userOrigin.left != bounds.left
-              : userOrigin.topLeft != bounds.topLeft),
+      visible.slices,
+      visible.hasUserScrolled ||
+          (userOrigin != null &&
+              (widget.verticalController == null
+                  ? userOrigin.left != bounds.left
+                  : userOrigin.topLeft != bounds.topLeft)),
       () =>
           mounted &&
           identical(widget.layout, layout) &&
           revision == _scrollRevision &&
           identical(_publishedWindow, window) &&
           _currentBounds() == bounds &&
+          visible.isCurrent() &&
           !_scrolling,
     );
     _publishedWindow = window;
@@ -467,6 +595,9 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
     if (offscreen.isEmpty) return;
     setState(() {
       for (final slice in offscreen) {
+        for (final table in _nested.remove(slice) ?? const <_NestedTable>[]) {
+          table.close();
+        }
         _release(_ready.remove(slice)!);
       }
     });
@@ -510,6 +641,12 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
   void _clear() {
     _stopWork();
     _scrollRevision++;
+    for (final tables in _nested.values) {
+      for (final table in tables) {
+        table.close();
+      }
+    }
+    _nested.clear();
     for (final fragments in _ready.values) {
       _release(fragments);
     }
@@ -598,9 +735,14 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
     child: Stack(
       children: [
         for (final entry in _ready.entries)
-          Positioned.fromRect(
+          Positioned(
             key: ValueKey(entry.key),
-            rect: _sliceBounds(entry.key),
+            left: _sliceBounds(entry.key).left,
+            top: _sliceBounds(entry.key).top,
+            // Rect subtraction can round fractional image extents. The
+            // surface must receive the original published dimensions exactly.
+            width: entry.key.area.snapshot.width,
+            height: entry.key.area.snapshot[entry.key.page].usedHeight,
             child: widget.buildSlice(
               context,
               entry.key.area,
@@ -608,9 +750,45 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
               entry.value,
             ),
           ),
+        for (final entry in _nested.entries)
+          for (final table in entry.value)
+            Positioned.fromRect(
+              rect: table.frame.bounds.shift(_sliceBounds(entry.key).topLeft),
+              child: ForumBodyTableFlowViewport(
+                key: table.key,
+                layout: table.lease.layout,
+                horizontalController: table.horizontal,
+                buildSlice: widget.buildSlice,
+                onFailure: (error, stack) {
+                  if (_ownsNested(entry.key, table)) {
+                    widget.onFailure(error, stack);
+                  }
+                },
+                onReadyChanged: (ready) {
+                  if (!_ownsNested(entry.key, table)) {
+                    return;
+                  }
+                  table.ready = ready;
+                  _schedule();
+                },
+                onWindowChanged: (window) {
+                  if (!_ownsNested(entry.key, table)) {
+                    return;
+                  }
+                  table.window = window;
+                  _scrollRevision++;
+                  _schedule();
+                },
+              ),
+            ),
       ],
     ),
   );
+
+  bool _ownsNested(_Slice slice, _NestedTable table) =>
+      mounted &&
+      table.lease.isActive &&
+      _nested[slice]?.contains(table) == true;
 
   Rect _sliceBounds(_Slice slice) {
     final area = slice.area;

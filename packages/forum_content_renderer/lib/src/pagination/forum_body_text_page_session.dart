@@ -189,7 +189,7 @@ final class ForumBodyTablePageLease {
 /// demand scheduler or persisted semantic anchor is owned by this layer.
 final class ForumBodyTextPageSession {
   static const inlinePlanRevision = ForumBodyInlinePlanInput.revision;
-  static const paragraphPlanRevision = 2;
+  static const paragraphPlanRevision = 3;
   static const inlineFontFrameRevision = ForumBodyInlineFontFramePlan.revision;
   // Same numeric ceiling as an individual natural table extent. The native
   // text slice height is a work boundary, not a block image fitting limit.
@@ -1566,7 +1566,10 @@ final class ForumBodyTextPageSession {
         1.0,
         math.min(right - left, layout.size.width),
       );
-      _intrinsic?.add(preferred, preferred);
+      // A cell probe must report the descendant grid's readable width, not
+      // just the provisional viewport that clipped it during measurement.
+      final intrinsic = _scopedTable ? preferred : layout.size.width;
+      _intrinsic?.add(intrinsic, intrinsic);
       _composer.publishTable(
         (
           path: table.element.path,

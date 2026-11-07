@@ -59,7 +59,7 @@ final class ForumBodyFlowImageAnchor implements ForumBodyFlowSourceAnchor {
     if (!window.isCurrent) return null;
     for (final slice in window.slices) {
       final snapshot = slice.area.snapshot;
-      final visible = window.bounds.intersect(slice.bounds);
+      final visible = window.bounds.intersect(slice.clip);
       if (visible.isEmpty) continue;
       for (final frame in _frames(
         snapshot[slice.page],

@@ -24,6 +24,19 @@ final class ForumBodyTableAreaLayout {
 
   bool ownsPreparedFragments(List<ForumBodyPreparedTextFragment> fragments) =>
       _body.session.ownsPreparedFragments(fragments);
+
+  /// Nested grids retain their cell sessions under this area's original owner.
+  ForumBodyTableLayout? tableLayoutForPage(int page, {String? path}) =>
+      _body.session.tableLayoutForPage(page, path: path);
+
+  ForumBodyTablePageLease? acquireTablePage(int page, {String? path}) =>
+      _body.session.acquireTablePage(page, path: path);
+
+  double? flowTableOffset(int page, String path) =>
+      _body.session.flowTableOffset(page, path);
+
+  void setFlowTableOffset(int page, String path, double? offset) =>
+      _body.session.setFlowTableOffset(page, path, offset);
 }
 
 extension ForumBodyTableSelectionChunkSource on ForumBodyTableAreaLayout {

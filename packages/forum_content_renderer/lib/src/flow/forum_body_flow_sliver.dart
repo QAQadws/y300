@@ -14,6 +14,7 @@ import '../pagination/forum_body_text_page_session.dart';
 import '../services/forum_body_scroll_geometry.dart';
 import '../services/forum_html_image_anchor_controller.dart';
 import '../table/forum_body_table_viewport.dart';
+import '../table/forum_body_table_preparation.dart';
 
 part 'forum_body_flow_image_reveal.dart';
 

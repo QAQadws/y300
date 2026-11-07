@@ -155,28 +155,49 @@ Iterable<_FlowImageLocation?> _imageLocations(
     yield null;
     if (!path.startsWith('${frame.path}/')) continue;
     final table = session.tableLayoutForPage(slice.index, path: frame.path)!;
-    for (final area in table.captions.followedBy(table.cells)) {
-      yield null;
-      if (!path.startsWith('${area.element.path}/')) continue;
-      for (final page in area.snapshot) {
+    for (final bounds in _tableImageBounds(table, path)) {
+      if (bounds == null) {
         yield null;
-        for (final fragment in page.fragments) {
-          if (!fragment.imagePaths.contains(path)) {
-            yield null;
-            continue;
-          }
-          final bounds = _imageHintBounds(fragment).shift(
-            area.contentBounds.topLeft + Offset(0, area.pageTop(page.index)),
-          );
-          yield (
-            bounds: bounds.shift(frame.bounds.topLeft),
-            tableTarget: (
-              path: frame.path,
-              offset: bounds.left.clamp(
-                0.0,
-                math.max(0.0, table.size.width - frame.bounds.width),
-              ),
-            ),
+        continue;
+      }
+      yield (
+        bounds: bounds.shift(frame.bounds.topLeft),
+        tableTarget: (
+          path: frame.path,
+          offset: bounds.left.clamp(
+            0.0,
+            math.max(0.0, table.size.width - frame.bounds.width),
+          ),
+        ),
+      );
+    }
+  }
+}
+
+Iterable<Rect?> _tableImageBounds(
+  ForumBodyTableLayout table,
+  String path,
+) sync* {
+  for (final area in table.captions.followedBy(table.cells)) {
+    yield null;
+    if (!path.startsWith('${area.element.path}/')) continue;
+    for (final page in area.snapshot) {
+      yield null;
+      final origin =
+          area.contentBounds.topLeft + Offset(0, area.pageTop(page.index));
+      for (final fragment in page.fragments) {
+        yield fragment.imagePaths.contains(path)
+            ? _imageHintBounds(fragment).shift(origin)
+            : null;
+      }
+      for (final frame in page.tableFrames) {
+        yield null;
+        if (!path.startsWith('${frame.path}/')) continue;
+        final nested = area.tableLayoutForPage(page.index, path: frame.path)!;
+        final offset = area.flowTableOffset(page.index, frame.path) ?? 0;
+        for (final bounds in _tableImageBounds(nested, path)) {
+          yield bounds?.shift(
+            origin + frame.bounds.topLeft - Offset(offset, 0),
           );
         }
       }

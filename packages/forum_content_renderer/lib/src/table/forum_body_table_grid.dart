@@ -8,12 +8,14 @@ final class ForumBodyTableLimits {
     this.maxColumns = 2048,
     this.maxCells = 8192,
     this.maxSlotChecks = 262144,
+    this.maxNesting = 8,
   }) : assert(maxRows > 0),
        assert(maxColumns > 0),
        assert(maxCells > 0),
-       assert(maxSlotChecks > 0);
+       assert(maxSlotChecks > 0),
+       assert(maxNesting > 0);
 
-  final int maxRows, maxColumns, maxCells, maxSlotChecks;
+  final int maxRows, maxColumns, maxCells, maxSlotChecks, maxNesting;
 }
 
 enum ForumBodyTableFailure {
@@ -24,6 +26,7 @@ enum ForumBodyTableFailure {
   overlap,
   invalidGeometry,
   extentLimit,
+  nestingLimit,
 }
 
 final class ForumBodyTableException implements Exception {
@@ -71,6 +74,16 @@ final class ForumBodyTableGrid {
     if (table.kind != ForumBodyElementKind.table ||
         !identical(document.nodeAtPath(table.path), table)) {
       throw ArgumentError('Expected a table from the supplied document');
+    }
+    final nesting = document
+        .ancestryOf(table)!
+        .where((node) => node.kind == ForumBodyElementKind.table)
+        .length;
+    if (nesting > limits.maxNesting) {
+      throw ForumBodyTableException(
+        ForumBodyTableFailure.nestingLimit,
+        table.path,
+      );
     }
     return _TableGridBuilder(limits).build(document.identity, table);
   }

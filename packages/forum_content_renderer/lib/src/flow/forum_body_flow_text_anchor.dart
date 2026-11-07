@@ -101,6 +101,7 @@ final class ForumBodyFlowTextAnchor implements ForumBodyFlowSourceAnchor {
           snapshot: window.snapshot,
           page: slice.index,
           origin: Offset(0, slice.top),
+          clip: window.bounds,
           fragments: slice.fragments,
           areaPath: null,
         ),
@@ -120,6 +121,7 @@ final class ForumBodyFlowTextAnchor implements ForumBodyFlowSourceAnchor {
           snapshot: slice.area.snapshot,
           page: slice.page,
           origin: slice.bounds.topLeft,
+          clip: slice.clip,
           fragments: slice.fragments,
           areaPath: slice.area.element.path,
         ),
@@ -142,6 +144,7 @@ final class ForumBodyFlowTextAnchor implements ForumBodyFlowSourceAnchor {
         ForumBodyTextPageSnapshot snapshot,
         int page,
         Offset origin,
+        Rect clip,
         List<ForumBodyPreparedTextFragment> fragments,
         String? areaPath,
       })
@@ -152,7 +155,7 @@ final class ForumBodyFlowTextAnchor implements ForumBodyFlowSourceAnchor {
     var attempts = 0;
     for (final slice in pages) {
       final snapshot = slice.snapshot;
-      final clip = visible.shift(-slice.origin);
+      final clip = visible.intersect(slice.clip).shift(-slice.origin);
       for (final (index, fragment) in snapshot[slice.page].fragments.indexed) {
         final path = fragment.path;
         final delivery = slice.fragments[index];
