@@ -133,6 +133,12 @@ dependencies:
     path: ../..
 dev_dependencies:
   flutter_lints: ^6.0.0
+  # Comparison executables import tool/legacy; y300's own dev dependencies
+  # are intentionally not transitive to this isolated profile application.
+  forum_html_comparison:
+    path: ../../packages/forum_html_comparison
+  html_pagination_core:
+    path: ../../packages/html_pagination_core
 flutter:
   uses-material-design: true
 '@
