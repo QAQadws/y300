@@ -10,6 +10,9 @@ final class ThreadBodyPresentationStore {
   ForumNativeBodyCache? _nativeCache;
   ForumNativeBodyCache get nativeCache => _nativeCache ??= ForumNativeBodyCache(
     maxDocumentEstimatedBytes: (lowMemory ? 2 : 4) << 20,
+    // Short paragraphs can exhaust a small entry cap far below the byte cap.
+    // Keep the byte budget authoritative for the page's useful working set.
+    maxParagraphEntries: lowMemory ? 1024 : 2048,
     maxParagraphEstimatedBytes: (lowMemory ? 12 : 24) << 20,
   );
   final _bodies = <String, ThreadBodyPresentation>{};
