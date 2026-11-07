@@ -343,7 +343,11 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
         if (host == null) break;
         if (index != 0 &&
             (index % 48 == 0 || clock.elapsedMicroseconds >= 3000)) {
-          await WidgetsBinding.instance.endOfFrame;
+          final binding = WidgetsBinding.instance;
+          // Reflow starts after a frame; endOfFrame alone does not schedule
+          // the next frame when called from that phase.
+          binding.ensureVisualUpdate();
+          await binding.endOfFrame;
           if (!_current(run)) return;
           clock.reset();
         }

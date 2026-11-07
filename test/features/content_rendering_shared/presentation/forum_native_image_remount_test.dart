@@ -133,6 +133,78 @@ void main() {
     });
   }
 
+  for (final retire in [false, true]) {
+    testWidgets(
+      retire
+          ? 'post-frame image preparation stops when the body is retired'
+          : 'post-frame image preparation requests its next frame',
+      (tester) async {
+        final prepared = _prepare(
+          '<p><img src="https://example.test/first.png"></p>'
+          '<p><img src="https://example.test/second.png"></p>',
+        );
+        final host = _Images(prepared);
+        final presentation = ForumHtmlBodyPresentation();
+        addTearDown(presentation.dispose);
+        addTearDown(() async {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump();
+        });
+        await tester.pumpWidget(_scene(prepared, host, presentation));
+        await _ready(tester, host);
+        await tester.pumpAndSettle();
+        final previous = _flow(tester)!.session;
+        final height = _height(tester);
+        final resolved = host.resolveCount;
+        expect(tester.binding.hasScheduledFrame, isFalse);
+        host.beforeResolve = () {
+          // Exhaust the setup slice before its second image. The assertion
+          // below must run before pumpAndSettle supplies a frame on its own.
+          final clock = Stopwatch()..start();
+          while (clock.elapsedMicroseconds < 5000) {}
+        };
+        host.callbacks.last(const Size(200, 100));
+        for (var i = 0; i < 20 && host.resolveCount == resolved; i++) {
+          await tester.idle();
+          if (!tester.binding.hasScheduledFrame) break;
+          await tester.pump();
+        }
+        expect(host.resolveCount, greaterThan(resolved));
+        expect(_flow(tester)?.isCurrentLayout, isFalse);
+        if (retire) {
+          final waiting = host.resolveCount;
+          expect(
+            tester.binding.hasScheduledFrame,
+            isTrue,
+            reason: 'Preparation started after a frame must request the frame it awaits.',
+          );
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump();
+          expect(host.resolveCount, waiting);
+        } else {
+          // Pump only frames requested by the application. An unconditional
+          // pump would wake the stalled preparation and hide the regression.
+          for (
+            var i = 0;
+            i < 40 && _flow(tester)?.isCurrentLayout != true;
+            i++
+          ) {
+            await tester.idle();
+            if (!tester.binding.hasScheduledFrame) break;
+            await tester.pump();
+          }
+          expect(_flow(tester)?.isCurrentLayout, isTrue);
+          expect(_flow(tester)?.prefix.isComplete, isTrue);
+          expect(_height(tester), isNot(closeTo(height, .01)));
+          expect(_flow(tester)!.session, isNot(same(previous)));
+          await tester.pumpWidget(const SizedBox.shrink());
+        }
+        expect(previous.isClosed, isTrue);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets(
     'fractional nested image heights preserve the exact measured surface size',
     (tester) async {
@@ -399,19 +471,26 @@ final class _Images implements ForumHtmlImageHost {
   final double initialRatio;
   final jobs = <Completer<({Size size, ForumHtmlImageLayout layout})?>>[];
   final callbacks = <ValueChanged<Size>>[];
+  VoidCallback? beforeResolve;
+  var resolveCount = 0;
   @override
   ForumHtmlDisplayImage? resolveImage({
     required Uri url,
     required int? imageIndex,
     required bool isSticker,
     Size? htmlSize,
-  }) => _Image(
-    url.toString(),
-    prepared.sequence.entryAt(imageIndex!)!.cacheKey,
-    binding,
-    htmlSize,
-    initialRatio,
-  );
+  }) {
+    resolveCount++;
+    beforeResolve?.call();
+    return _Image(
+      url.toString(),
+      prepared.sequence.entryAt(imageIndex!)!.cacheKey,
+      binding,
+      htmlSize,
+      initialRatio,
+    );
+  }
+
   @override
   Future<({Size size, ForumHtmlImageLayout layout})?> loadDimensions(
     ForumHtmlDisplayImage image,
