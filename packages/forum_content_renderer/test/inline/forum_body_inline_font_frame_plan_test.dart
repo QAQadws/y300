@@ -119,7 +119,7 @@ void main() {
         expect(cache.pictureBuildCount, 0);
         expect(plan.source, same(fixture.input));
         final natural = plan.allocation.input.natural;
-        expect(natural.text.units, isEmpty);
+        expect(natural.geometry.content, same(natural.page.content));
         expect(plan.lines.length, natural.geometry.lines.length);
         expect(
           plan.height,
@@ -268,65 +268,73 @@ void main() {
     expect(cache.activeLeases, 0);
   });
 
-  test(
-    'public flow entrance retains one actual source and prepares no paint',
-    () {
-      final cache = _cache();
-      final document = const ForumBodyParser().parse(
-        html: '<p>left<ruby>base<rt>note</rt></ruby>right</p>',
-        sourceId: 'public-font-frames',
-        conversionIdentity: 'none',
-      );
-      final flow = ForumBodyTextFlowCursor(
-        document: document,
-        reader: ForumBodyReaderStyle(
-          textStyle: const TextStyle(
-            fontFamily: 'Ahem',
-            fontSize: 20,
-            height: .5,
+  for (final narrow in [false, true]) {
+    test(
+      'public flow entrance retains one actual source without paint, narrow=$narrow',
+      () {
+        final cache = _cache();
+        final document = const ForumBodyParser().parse(
+          html: narrow
+              ? '<p>ABC<sup>2</sup>DE <ruby>B<rt>b</rt></ruby></p>'
+              : '<p>left<ruby>base<rt>note</rt></ruby>right</p>',
+          sourceId: 'public-font-frames',
+          conversionIdentity: 'none',
+        );
+        final flow = ForumBodyTextFlowCursor(
+          document: document,
+          reader: ForumBodyReaderStyle(
+            textStyle: const TextStyle(
+              fontFamily: 'Ahem',
+              fontSize: 20,
+              height: .5,
+            ),
+            fontRevision: 'public-font-frames',
+            linkColor: const Color(0xff0000ff),
           ),
-          fontRevision: 'public-font-frames',
-          linkColor: const Color(0xff0000ff),
-        ),
-      );
-      late ForumBodyInlineFlowContent source;
-      try {
-        while (!flow.isComplete) {
-          flow.advance(maxEvents: 1);
-          if (flow.current case ForumBodyTextFlowInline(:final content)) {
-            source = content;
-            break;
+        );
+        late ForumBodyInlineFlowContent source;
+        try {
+          while (!flow.isComplete) {
+            flow.advance(maxEvents: 1);
+            if (flow.current case ForumBodyTextFlowInline(:final content)) {
+              source = content;
+              break;
+            }
           }
+        } finally {
+          flow.close();
         }
-      } finally {
-        flow.close();
-      }
-      final work = ForumBodyInlineFontFramePreparation.fromFlow(
-        input: source,
-        width: 300,
-        cache: cache,
-        textScaler: TextScaler.noScaling,
-        ensureOwner: () {},
-      );
-      addTearDown(work.close);
-      _finish(work, cache);
-      final measured = work.takeMeasurement();
-      addTearDown(measured.close);
-      expect(
-        measured.plan.source.content.projection.display.text,
-        'leftbasenoteright',
-      );
-      expect(measured.plan.source.content.identity, source.identity);
-      expect(
-        measured.natural.content.projection,
-        same(measured.plan.source.content.projection),
-      );
-      expect(measured.plan.allocation.children, hasLength(1));
-      expect(cache.pictureBuildCount, 0);
-      measured.close();
-      expect(cache.activeLeases, 0);
-    },
-  );
+        final work = ForumBodyInlineFontFramePreparation.fromFlow(
+          input: source,
+          width: narrow ? 65 : 300,
+          cache: cache,
+          textScaler: TextScaler.noScaling,
+          ensureOwner: () {},
+        );
+        addTearDown(work.close);
+        _finish(work, cache);
+        final measured = work.takeMeasurement();
+        addTearDown(measured.close);
+        expect(
+          measured.plan.source.content.projection.display.text,
+          narrow ? 'ABC2DE Bb' : 'leftbasenoteright',
+        );
+        expect(measured.plan.source.content.identity, source.identity);
+        expect(measured.natural.content, same(measured.plan.source.content));
+        expect(measured.plan.allocation.children, hasLength(narrow ? 2 : 1));
+        if (narrow) {
+          expect(
+            measured.plan.allocation.input.natural.page.rubyAtoms
+                .whereType<ForumBodyTextBaselineAtomPlan>(),
+            hasLength(1),
+          );
+        }
+        expect(cache.pictureBuildCount, 0);
+        measured.close();
+        expect(cache.activeLeases, 0);
+      },
+    );
+  }
 
   test('retiring owner before transfer releases every measured resource', () {
     final cache = _cache();

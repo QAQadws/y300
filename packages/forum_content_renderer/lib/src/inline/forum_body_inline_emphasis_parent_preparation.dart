@@ -8,7 +8,7 @@ import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_geometry.dart';
 import 'forum_body_emphasis_line_layout.dart';
 import 'forum_body_emphasis_text_geometry.dart';
-import 'forum_body_emphasis_text_input.dart';
+import 'forum_body_inline_font_geometry.dart';
 import 'forum_body_inline_paragraph_request.dart';
 import 'forum_body_inline_plan_input.dart';
 import 'forum_body_inline_plan_preparation.dart';
@@ -24,27 +24,19 @@ final class ForumBodyInlineEmphasisParentMetrics {
     this.requestWidth,
   );
   final ForumBodyInlinePageContent page;
-  final ForumBodyInlineEmphasisTextGeometry geometry;
+  final ForumBodyInlineFontGeometry geometry;
   final TextScaler textScaler;
 
   /// Native request constraint; intrinsic output width may be smaller.
   final double requestWidth;
   Map<double, double> get effectiveScales =>
       (textScaler as _CapturedInlineScaler).values;
-  ForumBodyInlineEmphasisTextInput get text => geometry.input;
-  ForumBodyInlineParagraphRequest get parentRequest =>
-      ForumBodyInlineParagraphRequest(
-        content: text.glyphInput.glyphs,
-        dimensions: page.dimensions,
-        layoutMode: page.layoutMode,
-      );
+  ForumBodyInlineParagraphRequest get parentRequest => page.parentRequest;
 }
 
 enum _ParentPhase {
   source,
-  text,
   inputFonts,
-  parentFonts,
   initial,
   geometry,
   ready,
@@ -61,8 +53,6 @@ final class ForumBodyInlineEmphasisParentPreparation {
     required TextScaler textScaler,
     required void Function() ensureOwner,
     Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
-    int maxUnits = 32768,
-    int maxBoxes = 32768,
     int maxGlyphQueries = 16384,
     int maxFontSizes = 2048,
   }) : this._(
@@ -72,10 +62,7 @@ final class ForumBodyInlineEmphasisParentPreparation {
          cache,
          textScaler,
          ensureOwner,
-         null,
          additionalOwnedLeases,
-         maxUnits,
-         maxBoxes,
          maxGlyphQueries,
          maxFontSizes,
        );
@@ -86,10 +73,7 @@ final class ForumBodyInlineEmphasisParentPreparation {
     required ForumBodyParagraphCache cache,
     required TextScaler textScaler,
     required void Function() ensureOwner,
-    void Function(ForumBodyInlinePlanInput)? validateInput,
     Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
-    int maxUnits = 32768,
-    int maxBoxes = 32768,
     int maxGlyphQueries = 16384,
     int maxFontSizes = 2048,
   }) : this._(
@@ -99,10 +83,7 @@ final class ForumBodyInlineEmphasisParentPreparation {
          cache,
          textScaler,
          ensureOwner,
-         validateInput,
          additionalOwnedLeases,
-         maxUnits,
-         maxBoxes,
          maxGlyphQueries,
          maxFontSizes,
        );
@@ -114,17 +95,11 @@ final class ForumBodyInlineEmphasisParentPreparation {
     this._cache,
     this._callerScaler,
     this._ensureOwner,
-    this._validateInput,
     this._additionalOwned,
-    this.maxUnits,
-    this.maxBoxes,
     this.maxGlyphQueries,
     this.maxFontSizes,
   ) {
-    if (maxUnits < 0 ||
-        maxBoxes < 0 ||
-        maxGlyphQueries < 0 ||
-        maxFontSizes <= 0) {
+    if (maxGlyphQueries < 0 || maxFontSizes <= 0) {
       throw ArgumentError('Invalid mixed parent measurement budget');
     }
     try {
@@ -138,7 +113,7 @@ final class ForumBodyInlineEmphasisParentPreparation {
         _flow = flow;
         _phase = _ParentPhase.source;
       } else {
-        _beginText();
+        _samples = _input!.nativeFontSizes.iterator;
       }
     } catch (_) {
       close();
@@ -147,25 +122,22 @@ final class ForumBodyInlineEmphasisParentPreparation {
   }
 
   final double width;
-  final int maxUnits, maxBoxes, maxGlyphQueries, maxFontSizes;
+  final int maxGlyphQueries, maxFontSizes;
   ForumBodyInlinePlanInput? _input;
   ForumBodyParagraphCache? _cache;
   TextScaler? _callerScaler;
   void Function()? _ensureOwner;
-  void Function(ForumBodyInlinePlanInput)? _validateInput;
   Iterable<ForumBodyNativeParagraphLease> Function()? _additionalOwned;
   ForumBodyInlineFlowContent? _flow;
-  ForumBodyInlineEmphasisTextPreparation? _textWork;
-  ForumBodyInlineEmphasisTextInput? _text;
   Iterator<double>? _samples;
   Map<double, double> _scales = {};
   _CapturedInlineScaler? _scaler;
   ForumBodyInlinePlanPreparation? _initialWork;
   ForumBodyInlinePageContent? _initialPage;
   ForumBodyInlineParagraphLease? _natural;
-  ForumBodyInlineEmphasisGeometryPreparation? _geometryWork;
+  ForumBodyInlineFontGeometryPreparation? _geometryWork;
   ForumBodyInlineEmphasisParentMetrics? _result;
-  var _phase = _ParentPhase.text;
+  var _phase = _ParentPhase.inputFonts;
   bool _operating = false, _cacheMiss = false;
   int _blockedAt = -1;
   bool get isReady => _phase == _ParentPhase.ready;
@@ -208,44 +180,20 @@ final class ForumBodyInlineEmphasisParentPreparation {
         _guard();
         switch (_phase) {
           case _ParentPhase.source:
-            final input = ForumBodyInlinePlanInput(_flow!, width);
-            used++;
+            _input = ForumBodyInlinePlanInput(_flow!, width);
             _flow = null;
-            _validateInput?.call(input);
-            _guard();
-            _validateInput = null;
-            _input = input;
-            _beginText();
-            continue;
-          case _ParentPhase.text:
-            final work = _textWork!;
-            used += work.advance(maxParts: maxParts - used);
-            _guard();
-            if (work.isReady) {
-              _text = work.takeInput();
-              _textWork = null;
-              if (_text!.units.isNotEmpty) {
-                throw ArgumentError('Inline font frames require plain text');
-              }
-              _samples = _input!.nativeFontSizes.iterator;
-              _phase = _ParentPhase.inputFonts;
-            }
-            continue;
+            _samples = _input!.nativeFontSizes.iterator;
+            _phase = _ParentPhase.inputFonts;
           case _ParentPhase.inputFonts:
-          case _ParentPhase.parentFonts:
             if (_samples!.moveNext()) {
               _capture(_samples!.current);
-            } else if (_phase == _ParentPhase.inputFonts) {
-              _samples = _text!.nativeFontSizes.iterator;
-              _phase = _ParentPhase.parentFonts;
             } else {
               _samples = null;
               _scaler = _CapturedInlineScaler(UnmodifiableMapView(_scales));
               _scales = {};
               _callerScaler = null;
-              _initialWork = ForumBodyInlinePlanPreparation.emphasisParent(
+              _initialWork = ForumBodyInlinePlanPreparation(
                 input: _input!,
-                glyphInput: _text!.glyphInput,
                 cache: cache,
                 textScaler: _scaler!,
                 ensureOwner: _guard,
@@ -265,7 +213,8 @@ final class ForumBodyInlineEmphasisParentPreparation {
             if (s.waitingForLayoutBudget) return wait();
             if (_cacheMiss) return step();
             if (work.isReady) {
-              final value = work.takeEmphasisParent();
+              final source = work.readySource;
+              final value = work.take();
               try {
                 _guard();
               } catch (_) {
@@ -273,14 +222,13 @@ final class ForumBodyInlineEmphasisParentPreparation {
                 rethrow;
               }
               _natural = value.lease;
-              _initialPage = value.plan;
+              _initialPage = value.content;
               _initialWork = null;
-              _input = null; // The mutable band input is never published.
-              _geometryWork = ForumBodyInlineEmphasisGeometryPreparation(
-                input: _text!,
+              _input = source;
+              _geometryWork = ForumBodyInlineFontGeometryPreparation(
+                content: value.content.content,
                 parent: _natural!,
                 ensureOwner: _guard,
-                maxBoxes: maxBoxes,
                 maxGlyphQueries: maxGlyphQueries,
               );
               _phase = _ParentPhase.geometry;
@@ -294,7 +242,7 @@ final class ForumBodyInlineEmphasisParentPreparation {
               final geometry = work.takeGeometry();
               _geometryWork = null;
               final page = _initialPage!;
-              if (!identical(page.content, geometry.input.content)) {
+              if (!identical(page.content, geometry.content)) {
                 throw const ForumBodyEmphasisGeometryException(
                   ForumBodyEmphasisGeometryFailure.source,
                 );
@@ -326,6 +274,7 @@ final class ForumBodyInlineEmphasisParentPreparation {
   }
 
   ({
+    ForumBodyInlinePlanInput source,
     ForumBodyInlineEmphasisParentMetrics metrics,
     ForumBodyInlineParagraphLease parent,
   })
@@ -335,7 +284,7 @@ final class ForumBodyInlineEmphasisParentPreparation {
     try {
       _guard();
       if (!isReady) throw StateError('Mixed parent measurement is incomplete');
-      final result = (metrics: _result!, parent: _natural!);
+      final result = (source: _input!, metrics: _result!, parent: _natural!);
       _natural = null;
       _phase = _ParentPhase.transferred;
       _drop();
@@ -346,15 +295,6 @@ final class ForumBodyInlineEmphasisParentPreparation {
     } finally {
       _operating = false;
     }
-  }
-
-  void _beginText() {
-    _textWork = ForumBodyInlineEmphasisTextPreparation(
-      content: _input!.content,
-      ensureOwner: _guard,
-      maxUnits: maxUnits,
-    );
-    _phase = _ParentPhase.text;
   }
 
   void _capture(double size) {
@@ -403,21 +343,17 @@ final class ForumBodyInlineEmphasisParentPreparation {
 
   void _drop() {
     _flow = null;
-    _textWork?.close();
-    _textWork = null;
     _initialWork?.close();
     _initialWork = null;
     _geometryWork?.close();
     _geometryWork = null;
     _input = null;
     _initialPage = null;
-    _text = null;
     _samples = null;
     _scales = {};
     _scaler = null;
     _callerScaler = null;
     _additionalOwned = null;
-    _validateInput = null;
     _ensureOwner = null;
     _cache = null;
     _result = null;

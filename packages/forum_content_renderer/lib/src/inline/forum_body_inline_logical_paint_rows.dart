@@ -5,7 +5,7 @@ import 'package:flutter/painting.dart';
 import '../paragraph/forum_body_native_paint_clearance.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_row.dart';
-import 'forum_body_emphasis_text_geometry.dart';
+import 'forum_body_inline_font_geometry.dart';
 
 /// A physical background/decoration strip, including native placeholder paint.
 /// It creates no text window, font measurement or child/source coverage claim.
@@ -22,7 +22,7 @@ final class ForumBodyInlineLogicalPaintRows {
     this.hasLogicalPaint,
   ) : rows = UnmodifiableListView(rows);
   static const revision = 1;
-  final ForumBodyInlineEmphasisTextGeometry geometry;
+  final ForumBodyInlineFontGeometry geometry;
   final List<ForumBodyInlineLogicalPaintRow> rows;
 
   /// Source styles require logical layers, even when their ink is transparent.
@@ -36,7 +36,7 @@ final class ForumBodyInlineLogicalPaintRows {
 final class ForumBodyInlineLogicalPaintRowPreparation {
   ForumBodyInlineLogicalPaintRowPreparation({
     required ForumBodyInlineParagraphLease parent,
-    required ForumBodyInlineEmphasisTextGeometry geometry,
+    required ForumBodyInlineFontGeometry geometry,
     required void Function() ensureOwner,
     this.maxLines = 4096,
     this.maxAtoms = 512,
@@ -48,7 +48,7 @@ final class ForumBodyInlineLogicalPaintRowPreparation {
     }
     try {
       _guard();
-      if (!identical(parent.content, geometry.input.glyphInput.glyphs) ||
+      if (!identical(parent.content, geometry.content) ||
           parent.nativeInputIdentity != geometry.nativeInputIdentity ||
           !identical(parent.layout.lines, geometry.lines) ||
           parent.layout.rowIsolationPitch == null) {
@@ -67,7 +67,7 @@ final class ForumBodyInlineLogicalPaintRowPreparation {
 
   final int maxLines, maxAtoms;
   ForumBodyInlineParagraphLease? _parent;
-  ForumBodyInlineEmphasisTextGeometry? _geometry;
+  ForumBodyInlineFontGeometry? _geometry;
   void Function()? _ensureOwner;
   ForumBodyNativePaintClearance? _clearance;
   List<Rect?> _bounds = [];

@@ -21,8 +21,7 @@ final class ForumBodyInlineFontFramePreparation {
     required TextScaler textScaler,
     required void Function() ensureOwner,
     Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
-  }) : _input = input,
-       _cache = cache,
+  }) : _cache = cache,
        _ensureOwner = ensureOwner,
        _additionalOwned = additionalOwnedLeases {
     try {
@@ -66,10 +65,6 @@ final class ForumBodyInlineFontFramePreparation {
         cache: cache,
         textScaler: textScaler,
         ensureOwner: _guard,
-        validateInput: (source) {
-          _guard();
-          _input = source;
-        },
         additionalOwnedLeases: _callerOwned,
       );
     } catch (_) {
@@ -152,6 +147,7 @@ final class ForumBodyInlineFontFramePreparation {
             if (!work.isReady) break;
             final ready = work.takeMeasurement();
             _parentWork = null;
+            _input = ready.source;
             _parentMetrics = ready.metrics;
             _natural = ready.parent;
             _isolationWork = ForumBodyInlineEmphasisIsolationPreparation(

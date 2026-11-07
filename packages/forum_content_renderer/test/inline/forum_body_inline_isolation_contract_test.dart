@@ -291,8 +291,8 @@ void main() {
             addTearDown(ready.lease.release);
             final isolated =
                 ForumBodyInlineParagraphRequest(
-                  content: ready.glyphInput.glyphs,
-                  dimensions: ready.plan.dimensions,
+                  content: ready.content.content,
+                  dimensions: ready.content.dimensions,
                   rowIsolationPitch: 256,
                 ).acquire(
                   cache,
@@ -308,9 +308,12 @@ void main() {
               cache.activeLeases,
             );
             final ref = _reference(ready.lease, isolated).value;
-            expect(ref.content, same(ready.glyphInput.glyphs));
-            expect(ref.dimensions, ready.plan.dimensions);
-            expect(ref.atomLineIndices, hasLength(ready.plan.rubyAtoms.length));
+            expect(ref.content, same(ready.content.content));
+            expect(ref.dimensions, ready.content.dimensions);
+            expect(
+              ref.atomLineIndices,
+              hasLength(ready.content.rubyAtoms.length),
+            );
             expect((
               cache.layoutBuildCount,
               cache.pictureBuildCount,

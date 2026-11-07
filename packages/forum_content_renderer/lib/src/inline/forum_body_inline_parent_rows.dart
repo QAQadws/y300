@@ -6,7 +6,7 @@ import 'package:flutter/painting.dart';
 import '../paragraph/forum_body_native_paint_clearance.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_row.dart';
-import 'forum_body_emphasis_text_geometry.dart';
+import 'forum_body_inline_font_geometry.dart';
 
 /// Paint-only physical strip. It creates no source window or child geometry;
 /// a complete source group may contain several such physical rows.
@@ -30,7 +30,7 @@ final class ForumBodyInlineParentRows {
     this.fontClearance,
   ) : rows = UnmodifiableListView(rows);
   static const revision = 1;
-  final ForumBodyInlineEmphasisTextGeometry geometry;
+  final ForumBodyInlineFontGeometry geometry;
   final List<ForumBodyInlineParentRowSelector> rows;
   final double fontClearance;
 }
@@ -41,7 +41,7 @@ final class ForumBodyInlineParentRows {
 final class ForumBodyInlineParentRowPreparation {
   ForumBodyInlineParentRowPreparation({
     required ForumBodyInlineParagraphLease parent,
-    required ForumBodyInlineEmphasisTextGeometry geometry,
+    required ForumBodyInlineFontGeometry geometry,
     required void Function() ensureOwner,
     this.maxLines = 4096,
   }) : _parent = parent,
@@ -62,7 +62,7 @@ final class ForumBodyInlineParentRowPreparation {
   }
   final int maxLines;
   ForumBodyInlineParagraphLease? _parent;
-  ForumBodyInlineEmphasisTextGeometry? _geometry;
+  ForumBodyInlineFontGeometry? _geometry;
   void Function()? _ensureOwner;
   List<int>? _painted = [];
   List<Rect>? _envelopes = [];
@@ -278,9 +278,9 @@ final class ForumBodyInlineParentRowView {
 
 void _checkSource(
   ForumBodyInlineParagraphLease parent,
-  ForumBodyInlineEmphasisTextGeometry geometry,
+  ForumBodyInlineFontGeometry geometry,
 ) {
-  if (!identical(parent.content, geometry.input.glyphInput.glyphs) ||
+  if (!identical(parent.content, geometry.content) ||
       parent.nativeInputIdentity != geometry.nativeInputIdentity ||
       !identical(parent.layout.lines, geometry.lines) ||
       parent.layout.rowIsolationPitch == null) {

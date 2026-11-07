@@ -122,7 +122,7 @@ final class ForumBodyInlinePaintRowView {
     ensureOwner();
     final rows = allocation.input.rows, geometry = rows.geometry;
     if (!parent.isActive ||
-        !identical(parent.content, geometry.input.glyphInput.glyphs) ||
+        !identical(parent.content, geometry.content) ||
         parent.nativeInputIdentity != geometry.nativeInputIdentity ||
         !identical(parent.layout.lines, geometry.lines) ||
         parent.layout.rowIsolationPitch == null ||

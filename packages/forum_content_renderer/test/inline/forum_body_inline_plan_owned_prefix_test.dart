@@ -19,41 +19,26 @@ ForumBodyParagraphCache _cache({int entries = 1}) {
   return cache;
 }
 
-MixedEmphasisParentFixture _fixture(String child, {bool emphasis = false}) =>
-    MixedEmphasisParentFixture(
-      child,
-      parentStyle:
-          'text-emphasis:${emphasis ? 'circle' : 'none'};line-height:.8',
-      prefix: 'P',
-      suffix: 'Q',
-    );
+MixedEmphasisParentFixture _fixture(String child) => MixedEmphasisParentFixture(
+  child,
+  parentStyle: 'text-emphasis:circle;line-height:.8',
+);
 ForumBodyInlinePlanPreparation _open(
   MixedEmphasisParentFixture f,
   ForumBodyParagraphCache cache, {
-  bool emphasis = false,
   void Function()? guard,
   Iterable<ForumBodyNativeParagraphLease> Function()? owned,
-}) => emphasis
-    ? ForumBodyInlinePlanPreparation.emphasisParent(
-        input: f.input,
-        glyphInput: f.text.glyphInput,
-        cache: cache,
-        textScaler: TextScaler.noScaling,
-        ensureOwner: guard ?? () {},
-        additionalOwnedLeases: owned,
-      )
-    : ForumBodyInlinePlanPreparation(
-        input: f.input,
-        cache: cache,
-        textScaler: TextScaler.noScaling,
-        ensureOwner: guard ?? () {},
-        additionalOwnedLeases: owned,
-      );
+}) => ForumBodyInlinePlanPreparation(
+  input: f.input,
+  cache: cache,
+  textScaler: TextScaler.noScaling,
+  ensureOwner: guard ?? () {},
+  additionalOwnedLeases: owned,
+);
 ({int calls, _Result value}) _finish(
   ForumBodyInlinePlanPreparation job,
-  ForumBodyParagraphCache cache, {
-  bool emphasis = false,
-}) {
+  ForumBodyParagraphCache cache,
+) {
   var calls = 0;
   try {
     while (!job.isReady) {
@@ -65,10 +50,6 @@ ForumBodyInlinePlanPreparation _open(
       expect(s.partsPrepared, inInclusiveRange(0, 1));
       expect(cache.layoutBuildCount - before.$1, inInclusiveRange(0, 1));
       expect(cache.pictureBuildCount, before.$2);
-    }
-    if (emphasis) {
-      final r = job.takeEmphasisParent();
-      return (calls: calls, value: (page: r.plan, parent: r.lease));
     }
     final r = job.take();
     return (calls: calls, value: (page: r.content, parent: r.lease));
@@ -159,148 +140,129 @@ void main() {
       'packages/forum_content_renderer/ForumBodyInlineSpace',
     )..addFont(rootBundle.load('assets/fonts/inline_space.ttf'))).load();
   });
-  for (final emphasis in [false, true]) {
-    for (final (index, child) in mixedEmphasisChildren.indexed) {
-      test(
-        'initial nested plan rejects owned prefix pressure $index/$emphasis',
-        () {
-          final cache = _cache(),
-              f = _fixture(child, emphasis: emphasis),
-              pin = _pin(cache);
-          var prefixCalls = 0;
-          final job = _open(
-            f,
-            cache,
-            emphasis: emphasis,
-            owned: () {
-              prefixCalls++;
-              return [pin];
-            },
-          );
-          final before = (
-            cache.layoutBuildCount,
-            cache.pictureBuildCount,
-            cache.activeLeases,
-          );
-          _expectOwnedFailure(job);
-          expect(prefixCalls, greaterThan(0));
-          expect((
-            cache.layoutBuildCount,
-            cache.pictureBuildCount,
-            cache.activeLeases,
-          ), before);
-          expect(pin.isActive, isTrue);
-          expect(job.nativeLeases, isEmpty);
+  for (final (index, child) in mixedEmphasisChildren.indexed) {
+    test('initial nested plan rejects owned prefix pressure $index', () {
+      final cache = _cache(), f = _fixture(child), pin = _pin(cache);
+      var prefixCalls = 0;
+      final job = _open(
+        f,
+        cache,
+        owned: () {
+          prefixCalls++;
+          return [pin];
         },
       );
-      test(
-        'external pin blocks without rescanning and resumes same plan $index/$emphasis',
-        () {
-          final cache = _cache(entries: 2),
-              f = _fixture(child, emphasis: emphasis),
-              pin = _pin(cache),
-              second = _pin(cache, 'second');
-          var prefixCalls = 0;
-          final job = _open(
-            f,
-            cache,
-            emphasis: emphasis,
-            owned: () {
-              prefixCalls++;
-              return const [];
-            },
-          );
-          addTearDown(job.close);
-          for (var n = 0; ; n++) {
-            expect(n, lessThan(50000));
-            if (job.advance(maxParts: 1).waitingForLayoutBudget) break;
-          }
-          final before = (
-            cache.layoutBuildCount,
-            cache.pictureBuildCount,
-            prefixCalls,
-          );
-          for (var n = 0; n < 3; n++) {
-            final s = job.advance(maxParts: 32);
-            expect(s.partsPrepared, 0);
-            expect(s.waitingForLayoutBudget, isTrue);
-          }
-          expect((
-            cache.layoutBuildCount,
-            cache.pictureBuildCount,
-            prefixCalls,
-          ), before);
-          pin.release();
-          second.release();
-          final value = _finish(job, cache, emphasis: emphasis).value;
-          try {
-            expect(value.page.content, same(f.input.content));
-            expect(cache.activeLeases, 1);
-          } finally {
-            value.parent.release();
-          }
-        },
+      final before = (
+        cache.layoutBuildCount,
+        cache.pictureBuildCount,
+        cache.activeLeases,
       );
-      test(
-        'pin release while capturing prefix retries without stale intrinsic failure $index/$emphasis',
-        () {
-          final cache = _cache(entries: 2),
-              f = _fixture(child, emphasis: emphasis),
-              pin = _pin(cache),
-              second = _pin(cache, 'second');
-          var released = false;
-          final job = _open(
-            f,
-            cache,
-            emphasis: emphasis,
-            owned: () {
-              if (!released) {
-                released = true;
-                pin.release();
-                second.release();
-              }
-              return const [];
-            },
-          );
-          final value = _finish(job, cache, emphasis: emphasis).value;
-          try {
-            expect(released, isTrue);
-            expect(value.page.content, same(f.input.content));
-            expect(cache.activeLeases, 1);
-          } finally {
-            value.parent.release();
-          }
-        },
-      );
-    }
+      _expectOwnedFailure(job);
+      expect(prefixCalls, greaterThan(0));
+      expect((
+        cache.layoutBuildCount,
+        cache.pictureBuildCount,
+        cache.activeLeases,
+      ), before);
+      expect(pin.isActive, isTrue);
+      expect(job.nativeLeases, isEmpty);
+    });
+    test(
+      'external pin blocks without rescanning and resumes same plan $index',
+      () {
+        final cache = _cache(entries: 2),
+            f = _fixture(child),
+            pin = _pin(cache),
+            second = _pin(cache, 'second');
+        var prefixCalls = 0;
+        final job = _open(
+          f,
+          cache,
+          owned: () {
+            prefixCalls++;
+            return const [];
+          },
+        );
+        addTearDown(job.close);
+        for (var n = 0; ; n++) {
+          expect(n, lessThan(50000));
+          if (job.advance(maxParts: 1).waitingForLayoutBudget) break;
+        }
+        final before = (
+          cache.layoutBuildCount,
+          cache.pictureBuildCount,
+          prefixCalls,
+        );
+        for (var n = 0; n < 3; n++) {
+          final s = job.advance(maxParts: 32);
+          expect(s.partsPrepared, 0);
+          expect(s.waitingForLayoutBudget, isTrue);
+        }
+        expect((
+          cache.layoutBuildCount,
+          cache.pictureBuildCount,
+          prefixCalls,
+        ), before);
+        pin.release();
+        second.release();
+        final value = _finish(job, cache).value;
+        try {
+          expect(value.page.content, same(f.input.content));
+          expect(cache.activeLeases, 1);
+        } finally {
+          value.parent.release();
+        }
+      },
+    );
+    test(
+      'pin release while capturing prefix retries without stale intrinsic failure $index',
+      () {
+        final cache = _cache(entries: 2),
+            f = _fixture(child),
+            pin = _pin(cache),
+            second = _pin(cache, 'second');
+        var released = false;
+        final job = _open(
+          f,
+          cache,
+          owned: () {
+            if (!released) {
+              released = true;
+              pin.release();
+              second.release();
+            }
+            return const [];
+          },
+        );
+        final value = _finish(job, cache).value;
+        try {
+          expect(released, isTrue);
+          expect(value.page.content, same(f.input.content));
+          expect(cache.activeLeases, 1);
+        } finally {
+          value.parent.release();
+        }
+      },
+    );
   }
   for (final index in [0, 1, 4, 5]) {
     test(
       'owned prefix remains visible at every later native-free boundary $index',
       () {
         final baselineCache = _cache(entries: 2),
-            baselineFixture = _fixture(
-              mixedEmphasisChildren[index],
-              emphasis: true,
-            );
+            baselineFixture = _fixture(mixedEmphasisChildren[index]);
         final baseline = _finish(
-          _open(
-            baselineFixture,
-            baselineCache,
-            emphasis: true,
-            owned: () => const [],
-          ),
+          _open(baselineFixture, baselineCache, owned: () => const []),
           baselineCache,
-          emphasis: true,
         );
         baseline.value.parent.release();
         baselineCache.close();
         var injected = 0;
         for (var boundary = 0; boundary < baseline.calls; boundary++) {
           final cache = _cache(entries: 2),
-              f = _fixture(mixedEmphasisChildren[index], emphasis: true);
+              f = _fixture(mixedEmphasisChildren[index]);
           final pins = <ForumBodyNativeParagraphLease>[];
-          final job = _open(f, cache, emphasis: true, owned: () => pins);
+          final job = _open(f, cache, owned: () => pins);
           try {
             for (var n = 0; n < boundary && !job.isReady; n++) {
               final s = job.advance(maxParts: 1);

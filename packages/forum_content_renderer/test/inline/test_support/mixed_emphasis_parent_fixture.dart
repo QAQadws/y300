@@ -85,8 +85,7 @@ MixedEmphasisAllocatedSource measureMixedEmphasisAllocatedSource(
 }
 
 typedef MixedEmphasisParentMeasurement = ({
-  ForumBodyInlinePageContent plan,
-  ForumBodyInlineEmphasisGlyphInput glyphInput,
+  ForumBodyInlinePageContent content,
   ForumBodyInlineParagraphLease lease,
 });
 
@@ -148,29 +147,15 @@ final class MixedEmphasisParentFixture {
             ),
       width,
     );
-    final text = ForumBodyInlineEmphasisTextPreparation(
-      content: input.content,
-      ensureOwner: () {},
-    );
-    try {
-      while (!text.isReady) {
-        text.advance(maxParts: 1);
-      }
-      this.text = text.takeInput();
-    } finally {
-      text.close();
-    }
   }
   final double width;
   late final ForumBodyInlinePlanInput input;
-  late final ForumBodyInlineEmphasisTextInput text;
   ForumBodyInlinePlanPreparation open(
     ForumBodyParagraphCache cache, {
     TextScaler scaler = TextScaler.noScaling,
     void Function()? guard,
-  }) => ForumBodyInlinePlanPreparation.emphasisParent(
+  }) => ForumBodyInlinePlanPreparation(
     input: input,
-    glyphInput: text.glyphInput,
     cache: cache,
     textScaler: scaler,
     ensureOwner: guard ?? () {},
@@ -195,9 +180,8 @@ final class MixedEmphasisParentFixture {
         expect(cache.pictureBuildCount, before.$2);
         parts += s.partsPrepared;
       }
-      expect(job.take, throwsStateError);
       expect(job.isReady, isTrue);
-      return (value: job.takeEmphasisParent(), parts: parts);
+      return (value: job.take(), parts: parts);
     } finally {
       job.close();
     }

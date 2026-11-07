@@ -9,8 +9,6 @@ import '../paragraph/forum_body_text_layout.dart';
 import 'forum_body_emphasis_row_input.dart';
 import 'forum_body_emphasis_text_input.dart';
 
-part 'forum_body_inline_emphasis_text_geometry.dart';
-
 enum ForumBodyEmphasisGeometryFailure { source, line, boxes, limit }
 
 final class ForumBodyEmphasisGeometryException implements Exception {

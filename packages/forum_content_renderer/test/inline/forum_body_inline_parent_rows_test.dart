@@ -17,12 +17,12 @@ ForumBodyParagraphCache _cache() {
   return cache;
 }
 
-ForumBodyInlineEmphasisTextGeometry _geometry(
-  ForumBodyInlineEmphasisTextInput input,
+ForumBodyInlineFontGeometry _geometry(
+  ForumBodyInlineSpanContent input,
   ForumBodyInlineParagraphLease parent,
 ) {
-  final work = ForumBodyInlineEmphasisGeometryPreparation(
-    input: input,
+  final work = ForumBodyInlineFontGeometryPreparation(
+    content: input,
     parent: parent,
     ensureOwner: () {},
   );
@@ -55,7 +55,7 @@ ForumBodyInlineEmphasisTextGeometry _geometry(
   }
 }
 
-({ForumBodyInlineParagraphLease parent, ForumBodyInlineEmphasisTextInput input})
+({ForumBodyInlineParagraphLease parent, ForumBodyInlineSpanContent input})
 _parent(
   ForumBodyParagraphCache cache, {
   double pitch = 256,
@@ -79,21 +79,8 @@ _parent(
       linkColor: const Color(0xff0000ff),
     ),
   ).content;
-  final text = ForumBodyInlineEmphasisTextPreparation(
-    content: content,
-    ensureOwner: () {},
-  );
-  late ForumBodyInlineEmphasisTextInput input;
-  try {
-    while (!text.isReady) {
-      text.advance(maxParts: 1);
-    }
-    input = text.takeInput();
-  } finally {
-    text.close();
-  }
   final parent = cache.acquireInline(
-    content: input.glyphInput.glyphs,
+    content: content,
     width: width,
     dimensions:
         dimensions ??
@@ -108,7 +95,7 @@ _parent(
     rowIsolationPitch: pitch,
   );
   addTearDown(parent.release);
-  return (parent: parent, input: input);
+  return (parent: parent, input: content);
 }
 
 Future<Uint8List> _raster(
@@ -163,14 +150,14 @@ void main() {
                     .value;
                 addTearDown(actual.lease.release);
                 final parent = cache.acquireInline(
-                  content: actual.glyphInput.glyphs,
+                  content: actual.content.content,
                   width: width,
-                  dimensions: actual.plan.dimensions,
+                  dimensions: actual.content.dimensions,
                   textScaler: scaler,
                   rowIsolationPitch: pitch,
                 );
                 addTearDown(parent.release);
-                final geometry = _geometry(fixture.text, parent);
+                final geometry = _geometry(actual.content.content, parent);
                 final before = (
                   cache.layoutBuildCount,
                   cache.pictureBuildCount,
@@ -470,7 +457,7 @@ void main() {
       );
       expect(
         parent.content.projection.display.text,
-        actual.input.content.projection.display.text,
+        actual.input.projection.display.text,
       );
       expect(
         () => parent.layout.fragment(0, parent.layout.lineCount),

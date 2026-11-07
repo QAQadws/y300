@@ -22,15 +22,14 @@ export 'src/inline/forum_body_inline_span_content.dart'
     show
         ForumBodyInlineSpanContent,
         ForumBodyInlinePaintInput,
-        ForumBodyInlineContext,
-        ForumBodyInlineEmphasisGlyphInput,
-        ForumBodyInlineEmphasisGlyphPreparation;
+        ForumBodyInlineContext;
 export 'src/inline/forum_body_inline_paragraph_layout.dart';
 export 'src/inline/forum_body_inline_image_input.dart';
 export 'src/inline/forum_body_inline_emphasis_parent_preparation.dart';
 export 'src/inline/forum_body_inline_emphasis_isolation_preparation.dart';
 export 'src/inline/forum_body_inline_emphasis_row_allocation.dart';
 export 'src/inline/forum_body_inline_row_reference.dart';
+export 'src/inline/forum_body_inline_font_geometry.dart';
 export 'src/inline/forum_body_inline_parent_rows.dart';
 export 'src/inline/forum_body_inline_logical_paint_rows.dart';
 export 'src/inline/forum_body_inline_emphasis_paint_reference.dart';

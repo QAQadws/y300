@@ -180,8 +180,8 @@ final class ForumBodyInlineEmphasisChildPreparation {
           page = metrics.page;
       if (natural.nativeInputIdentity != input.reference.naturalInputIdentity ||
           !identical(natural.layout.lines, input.reference.naturalLines) ||
-          !identical(natural.content, metrics.text.glyphInput.glyphs) ||
-          !identical(page.content, metrics.text.glyphInput.original) ||
+          !identical(natural.content, metrics.geometry.content) ||
+          !identical(page.content, metrics.geometry.content) ||
           natural.layout.rowIsolationPitch != null) {
         _identity();
       }
@@ -189,15 +189,7 @@ final class ForumBodyInlineEmphasisChildPreparation {
       _window = natural.layout.fragment(startLine, this.endLine);
       _top = allocation.rows[startLine].line.top;
       _height = allocation.rows[this.endLine - 1].line.bottom - _top;
-      _page = ForumBodyInlinePageContent.atoms(
-        content: natural.content,
-        dimensions: page.dimensions,
-        rubyAtoms: page.rubyAtoms,
-        trimmedAtomIndices: page.trimmedAtomIndices,
-        containerBackgrounds: page.containerBackgrounds,
-        rootFonts: page.rootFonts,
-        layoutMode: page.layoutMode,
-      );
+      _page = page;
       _scales = metrics.effectiveScales.entries.iterator;
       _atoms = _window!.atomIndices.iterator;
       _guard();

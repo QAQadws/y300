@@ -403,7 +403,7 @@ final class ForumBodyInlineEmphasisAllocatedParentView {
     final input = allocation.input;
     if (!identical(parent.layout.lines, input.reference.isolatedLines) ||
         parent.nativeInputIdentity != input.reference.isolatedInputIdentity ||
-        !identical(parent.content, input.natural.text.glyphInput.glyphs) ||
+        !identical(parent.content, input.natural.geometry.content) ||
         allocation.requiresParentPaintPhases) {
       _source();
     }

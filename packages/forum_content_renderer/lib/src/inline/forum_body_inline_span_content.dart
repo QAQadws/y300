@@ -14,7 +14,6 @@ import '../style/forum_body_style_options.dart';
 import 'forum_body_native_space_span.dart';
 import 'forum_body_inline_image_input.dart';
 
-part 'forum_body_inline_emphasis_glyph_input.dart';
 part 'forum_body_inline_parent_cursor.dart';
 part 'forum_body_inline_paint_input.dart';
 

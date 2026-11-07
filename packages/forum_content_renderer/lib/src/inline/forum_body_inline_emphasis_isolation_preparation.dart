@@ -8,6 +8,7 @@ import '../paragraph/forum_body_paragraph_row.dart';
 import 'forum_body_emphasis_line_layout.dart';
 import 'forum_body_emphasis_text_geometry.dart';
 import 'forum_body_inline_emphasis_parent_preparation.dart';
+import 'forum_body_inline_font_geometry.dart';
 import 'forum_body_inline_paragraph_request.dart';
 import 'forum_body_inline_logical_paint_rows.dart';
 import 'forum_body_inline_parent_rows.dart';
@@ -29,7 +30,7 @@ final class ForumBodyInlineEmphasisIsolationMetrics {
   final ForumBodyInlineRowReference reference;
   final ForumBodyInlineParentRows rows;
   final ForumBodyInlineLogicalPaintRows logicalRows;
-  ForumBodyInlineEmphasisTextGeometry get geometry => rows.geometry;
+  ForumBodyInlineFontGeometry get geometry => rows.geometry;
 }
 
 enum _IsolationPhase {
@@ -41,7 +42,6 @@ enum _IsolationPhase {
   reference,
   geometry,
   verifyFonts,
-  verifyTargets,
   verifyAtoms,
   rows,
   logicalRows,
@@ -63,7 +63,6 @@ final class ForumBodyInlineEmphasisIsolationPreparation {
     double rowIsolationPitch = 256,
     this.maxLines = 4096,
     this.maxAtoms = 512,
-    this.maxBoxes = 32768,
     this.maxGlyphQueries = 16384,
     this.maxOwnedLeases = 32768,
     Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
@@ -78,7 +77,6 @@ final class ForumBodyInlineEmphasisIsolationPreparation {
         rowIsolationPitch > 16384 ||
         maxLines <= 0 ||
         maxAtoms < 0 ||
-        maxBoxes < 0 ||
         maxGlyphQueries < 0 ||
         maxOwnedLeases <= 0) {
       throw ArgumentError('Invalid mixed parent isolation budget');
@@ -86,7 +84,7 @@ final class ForumBodyInlineEmphasisIsolationPreparation {
     try {
       _guard();
       final geometry = metrics.geometry;
-      if (!identical(natural.content, metrics.text.glyphInput.glyphs) ||
+      if (!identical(natural.content, geometry.content) ||
           natural.nativeInputIdentity != geometry.nativeInputIdentity ||
           !identical(natural.layout.lines, geometry.lines) ||
           natural.layout.rowIsolationPitch != null) {
@@ -105,7 +103,7 @@ final class ForumBodyInlineEmphasisIsolationPreparation {
     }
   }
 
-  final int maxLines, maxAtoms, maxBoxes, maxGlyphQueries, maxOwnedLeases;
+  final int maxLines, maxAtoms, maxGlyphQueries, maxOwnedLeases;
   ForumBodyInlineEmphasisParentMetrics? _metrics;
   ForumBodyInlineParagraphLease? _natural, _pending;
   ForumBodyParagraphCache? _cache;
@@ -118,15 +116,15 @@ final class ForumBodyInlineEmphasisIsolationPreparation {
   ForumBodyParagraphBudgetException? _rejection;
   ForumBodyInlineRowReferencePreparation? _referenceWork;
   ForumBodyInlineRowReference? _reference;
-  ForumBodyInlineEmphasisGeometryPreparation? _geometryWork;
-  ForumBodyInlineEmphasisTextGeometry? _geometry;
+  ForumBodyInlineFontGeometryPreparation? _geometryWork;
+  ForumBodyInlineFontGeometry? _geometry;
   ForumBodyInlineParentRowPreparation? _rowWork;
   ForumBodyInlineLogicalPaintRowPreparation? _logicalWork;
   ForumBodyInlineParentRows? _rows;
   ForumBodyInlineEmphasisIsolationMetrics? _result;
   var _phase = _IsolationPhase.beginPrefix;
   double _pitch;
-  int _blockedAt = -1, _rejectedAt = -1, _font = 0, _target = 0, _atom = 0;
+  int _blockedAt = -1, _rejectedAt = -1, _font = 0, _atom = 0;
   bool _operating = false, _cacheMiss = false;
   bool get isReady => _phase == _IsolationPhase.ready;
   bool get cacheMiss => _cacheMiss;
@@ -267,11 +265,10 @@ final class ForumBodyInlineEmphasisIsolationPreparation {
               if (work.isReady) {
                 _reference = work.takeReference();
                 _referenceWork = null;
-                _geometryWork = ForumBodyInlineEmphasisGeometryPreparation(
-                  input: _metrics!.text,
+                _geometryWork = ForumBodyInlineFontGeometryPreparation(
+                  content: _metrics!.geometry.content,
                   parent: _pending!,
                   ensureOwner: _guard,
-                  maxBoxes: maxBoxes,
                   maxGlyphQueries: maxGlyphQueries,
                 );
                 _phase = _IsolationPhase.geometry;
@@ -286,7 +283,6 @@ final class ForumBodyInlineEmphasisIsolationPreparation {
                 _geometryWork = null;
                 final old = _metrics!.geometry;
                 if (_geometry!.lineCount != old.lineCount ||
-                    _geometry!.targets.length != old.targets.length ||
                     _geometry!.atomLineIndices.length !=
                         old.atomLineIndices.length) {
                   _sourceFailure();
@@ -304,25 +300,6 @@ final class ForumBodyInlineEmphasisIsolationPreparation {
                 } else {
                   _verifyFont(a, b, row);
                 }
-              } else {
-                _phase = _IsolationPhase.verifyTargets;
-              }
-            case _IsolationPhase.verifyTargets:
-              if (_target < _geometry!.targets.length) {
-                final i = _target++,
-                    a = _metrics!.geometry.targets[i],
-                    b = _geometry!.targets[i];
-                if (!identical(a.unit, b.unit) ||
-                    a.lineIndex != b.lineIndex ||
-                    a.sourceStartLine != b.sourceStartLine ||
-                    a.sourceEndLine != b.sourceEndLine) {
-                  _sourceFailure();
-                }
-                _verifyFont(
-                  a.governingFontBounds,
-                  b.governingFontBounds,
-                  a.lineIndex,
-                );
               } else {
                 _phase = _IsolationPhase.verifyAtoms;
               }
@@ -443,7 +420,7 @@ final class ForumBodyInlineEmphasisIsolationPreparation {
     previous.release();
     _guard();
     _request = null;
-    _font = _target = _atom = 0;
+    _font = _atom = 0;
     _pitch = next;
     _phase = _IsolationPhase.beginPrefix;
     _guard();

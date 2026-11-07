@@ -331,18 +331,11 @@ void main() {
       phase.release();
     }
   });
-  test('paint-only values cannot derive glyphs or bind readable source', () {
+  test('paint-only values cannot qualify font geometry or readable source', () {
     final cache = _cache(), source = _source(cache);
     final input = ForumBodyInlinePaintInput(source.parent.content);
     for (final content in _layers(input)) {
       expect(() => ForumBodyInlinePaintInput(content), throwsArgumentError);
-      expect(
-        () => ForumBodyInlineEmphasisGlyphPreparation(
-          content: content,
-          ensureOwner: () {},
-        ),
-        throwsA(isA<ForumBodyParagraphInputException>()),
-      );
       expect(
         () => content.prepareContextIndex(maxContexts: 1),
         throwsStateError,
@@ -356,6 +349,14 @@ void main() {
         layoutMode: source.metrics.natural.page.layoutMode,
       );
       try {
+        expect(
+          () => ForumBodyInlineFontGeometryPreparation(
+            content: content,
+            parent: phase,
+            ensureOwner: () {},
+          ),
+          throwsA(isA<ForumBodyEmphasisGeometryException>()),
+        );
         expect(
           () => phase.layout.fragment(0, phase.layout.lineCount),
           throwsA(isA<ForumBodyParagraphLayoutException>()),
