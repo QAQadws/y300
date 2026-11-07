@@ -3,7 +3,6 @@ import 'package:flutter/painting.dart';
 import 'forum_body_length.dart';
 import 'forum_body_box_style.dart';
 import 'forum_body_ruby_position.dart';
-import 'forum_body_text_emphasis.dart';
 import 'forum_body_quote_decoration.dart';
 import 'forum_body_list_style.dart';
 import 'forum_body_baseline_shift.dart';
@@ -11,7 +10,6 @@ import '../html_rendering/theme/forum_html_theme_context.dart';
 import '../document/forum_body_document.dart';
 
 export 'forum_body_ruby_position.dart';
-export 'forum_body_text_emphasis.dart';
 export 'forum_body_quote_decoration.dart';
 export 'forum_body_list_style.dart';
 export 'forum_body_baseline_shift.dart';
@@ -147,7 +145,6 @@ final class ForumBodyResolvedStyle {
     required this.textDirection,
     this.whiteSpace = ForumBodyWhiteSpace.normal,
     this.rubyPosition = ForumBodyRubyPosition.alternate,
-    this.textEmphasis = const ForumBodyTextEmphasis(),
     this.baselineAlignment = ForumBodyBaselineAlignment.baseline,
     this.baselineShift = const ForumBodyBaselineShift.none(),
     this.indent = ForumBodyLength.zero,
@@ -179,7 +176,6 @@ final class ForumBodyResolvedStyle {
   final TextDirection textDirection;
   final ForumBodyWhiteSpace whiteSpace;
   final ForumBodyRubyPosition rubyPosition;
-  final ForumBodyTextEmphasis textEmphasis;
   final ForumBodyBaselineAlignment baselineAlignment;
   final ForumBodyBaselineShift baselineShift;
   final ForumBodyLength indent;
@@ -209,20 +205,15 @@ final class ForumBodyResolvedStyle {
   final bool insideQuoteContainer;
   final ForumBodyListStyle listStyle;
 
-  ForumBodyResolvedStyle withTextEmphasis(ForumBodyTextEmphasis value) =>
-      _copy(textStyle, value);
-
-  ForumBodyResolvedStyle withTextStyle(TextStyle value) =>
-      _copy(value, textEmphasis);
+  ForumBodyResolvedStyle withTextStyle(TextStyle value) => _copy(value);
 
   ForumBodyResolvedStyle withReaderIndent(ForumBodyLength value) =>
-      _copy(textStyle, textEmphasis, readerIndent: value);
+      _copy(textStyle, readerIndent: value);
 
   ForumBodyResolvedStyle _copy(
-    TextStyle nextText,
-    ForumBodyTextEmphasis value, {
+    TextStyle nextText, {
     ForumBodyLength? readerIndent,
-  }) => readerIndent == null && value == textEmphasis && nextText == textStyle
+  }) => readerIndent == null && nextText == textStyle
       ? this
       : ForumBodyResolvedStyle(
           textStyle: nextText,
@@ -231,7 +222,6 @@ final class ForumBodyResolvedStyle {
           textDirection: textDirection,
           whiteSpace: whiteSpace,
           rubyPosition: rubyPosition,
-          textEmphasis: value,
           baselineAlignment: baselineAlignment,
           baselineShift: baselineShift,
           indent: readerIndent ?? indent,

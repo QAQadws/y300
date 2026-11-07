@@ -40,7 +40,7 @@ final class ForumBodyTextPictureInput {
     final key = nativeInputIdentity._key;
     if (key is! _LayoutKey &&
         key is! _InlineLayoutKey &&
-        key is! _EmphasisMarkKey &&
+        key is! _DecorationTextKey &&
         key is! ForumBodyTextPictureInput &&
         key is! ForumBodyTextBandCacheKey) {
       throw ArgumentError(
@@ -445,7 +445,7 @@ void _validateTextPictureCommand(ForumBodyTextPictureCommand command) {
       throw ArgumentError('Invalid native band picture selector');
     }
   } else if ((key is! _LayoutKey &&
-          key is! _EmphasisMarkKey &&
+          key is! _DecorationTextKey &&
           key is! ForumBodyTextPictureInput) ||
       command.bandChildIndex != null) {
     throw ArgumentError('Text picture requires an actual text input');

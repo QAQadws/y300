@@ -3,7 +3,7 @@ import 'package:flutter/painting.dart';
 import '../block/forum_body_block_flow_cursor.dart';
 import '../decoration/forum_body_decoration_text_request.dart';
 import '../document/forum_body_document.dart';
-import '../inline/forum_body_emphasis_mark.dart';
+import '../decoration/forum_body_decoration_text.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_native_request.dart';
 import '../style/forum_body_style_options.dart';

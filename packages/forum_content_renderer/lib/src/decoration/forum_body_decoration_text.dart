@@ -6,10 +6,9 @@ import '../paragraph/forum_body_paragraph_geometry.dart';
 import '../style/forum_body_style_options.dart';
 
 /// Source-free single-line font input; no DOM/display projection or caret.
-/// Role-specific constructors keep their own validation, sharing native fonts.
-sealed class ForumBodyDecorationTextInput {
+final class ForumBodyDecorationTextInput {
   ForumBodyDecorationTextInput._({
-    required this.mark,
+    required this.text,
     required this.textStyle,
     required this.textDirection,
     required this.fontRevision,
@@ -17,8 +16,6 @@ sealed class ForumBodyDecorationTextInput {
   });
 
   /// Full-size, bounded decoration text, for example a list's `12.` label.
-  /// No DOM/display projection survives validation. This does not enable or
-  /// alter emphasis parsing, its half-size factory, or ruby format admission.
   factory ForumBodyDecorationTextInput.label({
     required String text,
     required ForumBodyResolvedStyle style,
@@ -59,8 +56,8 @@ sealed class ForumBodyDecorationTextInput {
       ),
     ]);
     if (validation.text != text) throw ArgumentError('Invalid decoration text');
-    return _DecorationLabelInput._(
-      mark: text,
+    return ForumBodyDecorationTextInput._(
+      text: text,
       fontRevision: fontRevision,
       styleRevision: styleRevision,
       textDirection: style.textDirection,
@@ -97,14 +94,14 @@ sealed class ForumBodyDecorationTextInput {
     );
   }
   static const revision = 1;
-  final String mark;
+  final String text;
   final TextStyle textStyle;
   final TextDirection textDirection;
   final String fontRevision;
   final int styleRevision;
   late final estimatedInputBytes =
       4096 +
-      mark.length * 96 +
+      text.length * 96 +
       256 +
       fontRevision.length * 2 +
       (textStyle.fontFamily?.length ?? 0) * 2 +
@@ -118,7 +115,7 @@ sealed class ForumBodyDecorationTextInput {
       (textStyle.shadows?.length ?? 0) * 48;
   late final int _hash = Object.hash(
     revision,
-    mark,
+    text,
     textStyle,
     textDirection,
     fontRevision,
@@ -130,131 +127,18 @@ sealed class ForumBodyDecorationTextInput {
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is ForumBodyDecorationTextInput &&
-          mark == other.mark &&
+          text == other.text &&
           textStyle == other.textStyle &&
           textDirection == other.textDirection &&
           fontRevision == other.fontRevision &&
           styleRevision == other.styleRevision;
 }
 
-final class _DecorationLabelInput extends ForumBodyDecorationTextInput {
-  _DecorationLabelInput._({
-    required super.mark,
-    required super.textStyle,
-    required super.textDirection,
-    required super.fontRevision,
-    required super.styleRevision,
-  }) : super._();
-}
-
-/// One emphasis grapheme at its resolved half-size, never a list-label input.
-final class ForumBodyEmphasisMarkInput extends ForumBodyDecorationTextInput {
-  ForumBodyEmphasisMarkInput._({
-    required super.mark,
-    required super.textStyle,
-    required super.textDirection,
-    required super.fontRevision,
-    required super.styleRevision,
-  }) : super._();
-  factory ForumBodyEmphasisMarkInput({
-    required ForumBodyResolvedStyle style,
-    required String fontRevision,
-    required int styleRevision,
-  }) {
-    final mark = style.textEmphasis.mark;
-    if (!style.textEmphasis.isEnabled ||
-        mark == null ||
-        mark.isEmpty ||
-        mark.length > 512) {
-      throw ArgumentError('Emphasis requires one bounded mark');
-    }
-    // Use the shared core only to validate the string, then drop the temporary
-    // index. Its numeric zero must never become this decoration's source.
-    final validation = HtmlDisplayTextProjection.build([
-      HtmlDisplayTextRun(
-        text: mark,
-        sourceRuneStart: 0,
-        whiteSpace: HtmlDisplayWhiteSpace.pre,
-      ),
-    ]);
-    if (validation.text != mark ||
-        validation
-                .graphemeRanges(startUtf16: 0, endUtf16: mark.length)
-                .length !=
-            1 ||
-        mark.runes.any(forumBodyIsDisplayLineBreak)) {
-      throw ArgumentError('Emphasis mark must be one intrinsic character');
-    }
-    final source = style.textStyle;
-    final markSize = resolveFontSize(source);
-    final settings =
-        (source.fontFeatures?.length ?? 0) +
-        (source.fontVariations?.length ?? 0) +
-        (source.fontFamilyFallback?.length ?? 0) +
-        (source.shadows?.length ?? 0);
-    if (settings > 512) throw ArgumentError('Excess emphasis font settings');
-    // Only font settings and text shadows propagate. Body backgrounds, line
-    // decorations, line-height and letter/word spacing are not marker glyphs.
-    // Sample the real TextScaler at HALF the font size later, never halve an
-    // already scaled body value (which is wrong for nonlinear scaling).
-    return ForumBodyEmphasisMarkInput._(
-      mark: mark,
-      fontRevision: fontRevision,
-      styleRevision: styleRevision,
-      textDirection: style.textDirection,
-      textStyle: TextStyle(
-        inherit: false,
-        color: style.visibilityHidden
-            ? const Color(0x00000000)
-            : style.textEmphasis.color ??
-                  source.foreground?.color ??
-                  source.color ??
-                  const Color(0xff000000),
-        fontFamily: source.fontFamily,
-        fontFamilyFallback: source.fontFamilyFallback == null
-            ? null
-            : List.unmodifiable(source.fontFamilyFallback!),
-        fontSize: markSize,
-        fontWeight: source.fontWeight,
-        fontStyle: source.fontStyle,
-        locale: source.locale,
-        height: kTextHeightNone,
-        fontFeatures: List.unmodifiable([
-          for (final feature in source.fontFeatures ?? const <FontFeature>[])
-            if (feature.feature != 'ruby') feature,
-          const FontFeature.enable('ruby'),
-        ]),
-        fontVariations: source.fontVariations == null
-            ? null
-            : List.unmodifiable(source.fontVariations!),
-        shadows: style.visibilityHidden
-            ? const []
-            : source.shadows == null
-            ? null
-            : List.unmodifiable(source.shadows!),
-        decoration: TextDecoration.none,
-      ),
-    );
-  }
-
-  /// The marker's unscaled font input. A nonlinear TextScaler must sample this
-  /// size independently of the source font; it cannot halve a scaled result.
-  static double resolveFontSize(TextStyle source) {
-    final size = source.fontSize;
-    if (size == null || !size.isFinite || size * .5 <= 0) {
-      throw ArgumentError('Emphasis requires a resolved font size');
-    }
-    return size * .5;
-  }
-
-  static const revision = ForumBodyDecorationTextInput.revision;
-}
-
 /// Native font metrics/paint only; this resource cannot masquerade as a text
 /// lease or answer source hits and selection requests. Owned by the same cache.
-final class ForumBodyEmphasisMarkLayout
+final class ForumBodyDecorationTextLayout
     implements ForumBodyNativeParagraphLayout {
-  ForumBodyEmphasisMarkLayout._(
+  ForumBodyDecorationTextLayout._(
     this._painter,
     this.width,
     this.height,
@@ -275,7 +159,7 @@ final class ForumBodyEmphasisMarkLayout
     return scaled;
   }
 
-  factory ForumBodyEmphasisMarkLayout.create({
+  factory ForumBodyDecorationTextLayout.create({
     required ForumBodyDecorationTextInput input,
     required double scaledFontSize,
   }) {
@@ -287,10 +171,10 @@ final class ForumBodyEmphasisMarkLayout
       );
     }
     final painter = TextPainter(
-      text: TextSpan(text: input.mark, style: input.textStyle),
+      text: TextSpan(text: input.text, style: input.textStyle),
       textDirection: input.textDirection,
       locale: input.textStyle.locale,
-      textScaler: _MarkScaler(input.textStyle.fontSize!, scaledFontSize),
+      textScaler: _DecorationScaler(input.textStyle.fontSize!, scaledFontSize),
     );
     try {
       painter.layout(maxWidth: double.infinity);
@@ -307,11 +191,11 @@ final class ForumBodyEmphasisMarkLayout
       }
       var bounds = Rect.fromLTWH(0, 0, painter.width, painter.height);
       for (final box in painter.getBoxesForSelection(
-        TextSelection(baseOffset: 0, extentOffset: input.mark.length),
+        TextSelection(baseOffset: 0, extentOffset: input.text.length),
       )) {
         bounds = bounds.expandToInclude(box.toRect());
       }
-      return ForumBodyEmphasisMarkLayout._(
+      return ForumBodyDecorationTextLayout._(
         painter,
         painter.width,
         painter.height,
@@ -328,7 +212,7 @@ final class ForumBodyEmphasisMarkLayout
   final double height;
   final double alphabeticBaseline;
 
-  /// Native row plus complete marker font selection, not measured glyph ink.
+  /// Native row plus complete label font selection.
   final Rect fontBounds;
   @override
   int get lineCount => 1;
@@ -336,7 +220,7 @@ final class ForumBodyEmphasisMarkLayout
   bool get isDisposed => _disposed;
   bool _disposed = false;
   void paint(Canvas canvas, Offset offset) {
-    if (_disposed) throw StateError('Emphasis mark is disposed');
+    if (_disposed) throw StateError('Decoration text is disposed');
     if (!offset.dx.isFinite || !offset.dy.isFinite) {
       throw ArgumentError.value(offset);
     }
@@ -351,13 +235,13 @@ final class ForumBodyEmphasisMarkLayout
   }
 }
 
-final class _MarkScaler extends TextScaler {
-  const _MarkScaler(this.size, this.scaled);
+final class _DecorationScaler extends TextScaler {
+  const _DecorationScaler(this.size, this.scaled);
   final double size, scaled;
   @override
   double scale(double fontSize) => fontSize == size
       ? scaled
-      : throw StateError('Emphasis native font size was not captured');
+      : throw StateError('Decoration font size was not captured');
   @override
   double get textScaleFactor => scaled / size;
 }

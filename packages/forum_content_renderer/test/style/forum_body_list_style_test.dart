@@ -284,7 +284,7 @@ void main() {
       ),
     );
     expect(
-      item.withTextEmphasis(const ForumBodyTextEmphasis()).listStyle,
+      item.withTextStyle(item.textStyle.copyWith(fontSize: 24)).listStyle,
       item.listStyle,
     );
   });

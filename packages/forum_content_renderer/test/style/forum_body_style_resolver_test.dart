@@ -277,7 +277,7 @@ void main() {
       expect(sup.textStyle.fontSize, 20);
       expect(identical(code.baselineShift, sup.baselineShift), isTrue);
       expect(
-        sup.withTextEmphasis(const ForumBodyTextEmphasis()).baselineShift,
+        sup.withTextStyle(sup.textStyle.copyWith(fontSize: 24)).baselineShift,
         same(sup.baselineShift),
       );
       expect(code.baselineShift.resolve(TextScaler.noScaling), 8);

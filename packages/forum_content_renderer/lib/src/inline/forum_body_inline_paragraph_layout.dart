@@ -459,11 +459,6 @@ final class ForumBodyInlineParagraphLayout
       content.style,
       ...content.parentRuns.map((run) => run.style),
     ]) {
-      if (style.textEmphasis.isEnabled) {
-        throw const ForumBodyParagraphLayoutException(
-          ForumBodyParagraphLayoutFailure.emphasis,
-        );
-      }
       if (style.textDirection != content.style.textDirection) {
         throw const ForumBodyParagraphLayoutException(
           ForumBodyParagraphLayoutFailure.direction,

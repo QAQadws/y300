@@ -130,10 +130,9 @@ export 'src/inline/forum_body_text_baseline_preparation.dart';
 export 'src/paragraph/forum_body_text_request.dart';
 export 'src/paragraph/forum_body_native_request.dart';
 export 'src/inline/forum_body_inline_paragraph_request.dart';
-export 'src/inline/forum_body_emphasis_mark.dart'
-    show ForumBodyEmphasisMarkInput, ForumBodyDecorationTextInput;
+export 'src/decoration/forum_body_decoration_text.dart'
+    show ForumBodyDecorationTextInput;
 export 'src/decoration/forum_body_decoration_text_request.dart';
-export 'src/inline/forum_body_emphasis_mark_request.dart';
 export 'src/inline/forum_body_inline_font_frame_plan.dart';
 export 'src/inline/forum_body_paragraph_frame.dart';
 export 'src/inline/forum_body_emphasis_row_allocation.dart';

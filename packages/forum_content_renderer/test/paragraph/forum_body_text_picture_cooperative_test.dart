@@ -43,7 +43,7 @@ ForumBodyTextPicturePreparation _open(
   TextPictureFixture f, {
   ForumBodyTextPictureInput? input,
   Iterable<ForumBodyTextLease>? text,
-  Iterable<ForumBodyEmphasisMarkLease> marks = const [],
+  Iterable<ForumBodyDecorationTextLease> marks = const [],
   Iterable<ForumBodyParagraphRowView> rows = const [],
   void Function()? owner,
   Iterable<ForumBodyNativeParagraphLease> Function()? prefix,
@@ -224,16 +224,13 @@ void main() {
   for (final band in [false, true]) {
     for (final dpr in [1, 3]) {
       test(
-        'cooperative native pixels match direct glyph/marker drawing band=$band DPR$dpr',
+        'cooperative native pixels match direct text and label drawing band=$band DPR$dpr',
         () async {
           final f = TextPictureFixture(band: band);
-          final mark = f.cache.acquireEmphasisMark(
-            input: ForumBodyEmphasisMarkInput(
-              style: f.text[0].content.style.withTextEmphasis(
-                const ForumBodyTextEmphasis(
-                  shape: ForumBodyEmphasisShape.circle,
-                ),
-              ),
+          final mark = f.cache.acquireDecorationText(
+            input: ForumBodyDecorationTextInput.label(
+              text: '2.',
+              style: f.text[0].content.style,
               fontRevision: f.text[0].content.fontRevision,
               styleRevision: f.text[0].content.styleRevision,
             ),
@@ -242,7 +239,7 @@ void main() {
           final input = ForumBodyTextPictureInput(
             commands: [
               ...f.input.commands,
-              ForumBodyTextPictureCommand.fromEmphasisMark(
+              ForumBodyTextPictureCommand.fromDecorationText(
                 mark,
                 const Offset(50.3, 6.7),
                 fitScale: .63,

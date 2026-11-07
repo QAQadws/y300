@@ -127,9 +127,7 @@ void main() {
       expect(style.decoration, TextDecoration.none);
       expect(style.backgroundColor, isNull);
       expect(style.background, isNull);
-      expect(input.mark, '12.');
-      expect(input, isNot(isA<ForumBodyEmphasisMarkInput>()));
-      expect(_style().textEmphasis.isEnabled, isFalse);
+      expect(input.text, '12.');
     },
   );
 
@@ -235,7 +233,6 @@ void main() {
       expect(scaler.calls.every((size) => size == 20), isTrue);
       expect(lease.layout.width, 108);
       expect(lease, isNot(isA<ForumBodyTextLease>()));
-      expect(lease, isNot(isA<ForumBodyEmphasisMarkLease>()));
       probe.includeLease(lease);
       expect(probe.snapshotNativeIdentities(), {lease.nativeInputIdentity});
       final warm = _acquire(
@@ -367,6 +364,22 @@ void main() {
       expect(cache.estimatedRetainedBytes, 0);
     },
   );
+
+  test('probe retired during label scaling cannot admit an input', () {
+    final cache = _cache();
+    final probe = cache.createBudgetProbe();
+    final scaler = _Scaler((size) {
+      probe.close();
+      return size;
+    });
+    expect(
+      () =>
+          probe.includeDecorationText(input: _input('1.'), textScaler: scaler),
+      throwsStateError,
+    );
+    expect(cache.layoutBuildCount, 0);
+    expect(cache.entryCount, 0);
+  });
 
   test('cancelled label picture preparation releases private font aliases', () {
     final cache = _cache();

@@ -134,15 +134,6 @@ final class ForumBodyTextPictureCommand {
         ? text.childIndex
         : null,
   );
-  factory ForumBodyTextPictureCommand.fromEmphasisMark(
-    ForumBodyEmphasisMarkLease mark,
-    Offset offset, {
-    double fitScale = 1,
-  }) => ForumBodyTextPictureCommand.fromDecorationText(
-    mark,
-    offset,
-    fitScale: fitScale,
-  );
 
   factory ForumBodyTextPictureCommand.fromDecorationText(
     ForumBodyDecorationTextLease mark,
@@ -746,7 +737,7 @@ final class ForumBodyTextPicturePreparation {
 
 int _textPictureInputBytes(_NativeInputIdentity input) {
   final key = input._key;
-  if (key is _EmphasisMarkKey) return key.input.estimatedInputBytes + 16;
+  if (key is _DecorationTextKey) return key.input.estimatedInputBytes + 16;
   if (key is ForumBodyTextPictureInput) return key.estimatedInputBytes + 16;
   // Both admitted key kinds come from ParagraphContent's flat native spans.
   // Count those retained children without rescanning source text or run trees.

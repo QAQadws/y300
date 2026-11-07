@@ -21,7 +21,7 @@ final class _Fixture {
     );
     final doc = const ForumBodyParser().parse(
       html: '<p>ffi é <span>العربية</span> 👩‍👩‍👧‍👦 中</p>',
-      sourceId: 'mixed-emphasis-scene',
+      sourceId: 'mixed-decoration-scene',
       conversionIdentity: 'none',
     );
     final styles = const ForumBodyStyleResolver().resolve(
@@ -48,35 +48,32 @@ final class _Fixture {
       width: width,
       textScaler: textScaler,
     );
-    ForumBodyEmphasisMarkLease mark(Color color) => cache.acquireEmphasisMark(
-      input: ForumBodyEmphasisMarkInput(
-        style: ForumBodyResolvedStyle(
-          textStyle: content.style.textStyle,
-          role: ForumBodyTextRole.body,
-          textAlign: TextAlign.start,
-          textDirection: direction,
-          textEmphasis: ForumBodyTextEmphasis(
-            shape: ForumBodyEmphasisShape.custom,
-            customMark: 'X',
-            color: color,
+    ForumBodyDecorationTextLease label(Color color) =>
+        cache.acquireDecorationText(
+          input: ForumBodyDecorationTextInput.label(
+            text: 'X',
+            style: content.style.withTextStyle(
+              content.style.textStyle.copyWith(fontSize: 10, color: color),
+            ),
+            fontRevision: 'ahem',
+            styleRevision: styles.resolverRevision,
           ),
-        ),
-        fontRevision: 'ahem',
-        styleRevision: styles.resolverRevision,
-      ),
-      textScaler: textScaler,
-    );
-    blue = mark(_blue);
-    red = mark(_red);
+          textScaler: textScaler,
+        );
+    blue = label(_blue);
+    red = label(_red);
     input = ForumBodyTextPictureInput(
       commands: [
         ForumBodyTextPictureCommand.fromText(base, const Offset(5, 35)),
-        ForumBodyTextPictureCommand.fromEmphasisMark(
+        ForumBodyTextPictureCommand.fromDecorationText(
           blue,
           const Offset(25, 10),
         ),
-        ForumBodyTextPictureCommand.fromEmphasisMark(red, const Offset(90, 80)),
-        ForumBodyTextPictureCommand.fromEmphasisMark(
+        ForumBodyTextPictureCommand.fromDecorationText(
+          red,
+          const Offset(90, 80),
+        ),
+        ForumBodyTextPictureCommand.fromDecorationText(
           blue,
           const Offset(60, 10),
         ),
@@ -93,7 +90,7 @@ final class _Fixture {
   late final ForumBodyParagraphCache cache;
   late final ForumBodyParagraphContent content;
   late final ForumBodyParagraphLease base;
-  late final ForumBodyEmphasisMarkLease blue, red;
+  late final ForumBodyDecorationTextLease blue, red;
   late final ForumBodyTextPictureInput input;
   ForumBodyTextPicturePreparation open() => ForumBodyTextPicturePreparation(
     cache: cache,
@@ -152,7 +149,7 @@ void main() {
   for (final direction in TextDirection.values) {
     for (final dpr in [1, 3]) {
       for (final scaler in [TextScaler.noScaling, const _Nonlinear()]) {
-        test('fitted base and marks $direction DPR$dpr $scaler', () async {
+        test('fitted base and labels $direction DPR$dpr $scaler', () async {
           final f = _Fixture(
             direction: direction,
             mode: ForumBodyParagraphLayoutMode.fitSingleLine,
@@ -164,7 +161,7 @@ void main() {
             textDirection: direction,
             textScaler: scaler,
           )..layout(maxWidth: double.infinity);
-          final marker = TextPainter(
+          final label = TextPainter(
             text: TextSpan(
               text: 'X',
               style: const TextStyle(
@@ -174,7 +171,6 @@ void main() {
                 color: _blue,
                 height: kTextHeightNone,
                 decoration: TextDecoration.none,
-                fontFeatures: [FontFeature.enable('ruby')],
               ),
             ),
             textDirection: direction,
@@ -182,20 +178,20 @@ void main() {
           )..layout(maxWidth: double.infinity);
           addTearDown(() {
             native.dispose();
-            marker.dispose();
+            label.dispose();
           });
           final fitScale = 80 / native.width;
           expect(f.base.layout.paintScale, fitScale);
           final input = ForumBodyTextPictureInput(
             commands: [
               ForumBodyTextPictureCommand.fromText(f.base, const Offset(5, 35)),
-              ForumBodyTextPictureCommand.fromEmphasisMark(
+              ForumBodyTextPictureCommand.fromDecorationText(
                 f.blue,
                 const Offset(25, 10),
                 fitScale: f.base.layout.paintScale,
               ),
               // A following unscaled command detects leaked canvas transforms.
-              ForumBodyTextPictureCommand.fromEmphasisMark(
+              ForumBodyTextPictureCommand.fromDecorationText(
                 f.blue,
                 const Offset(120, 35),
               ),
@@ -231,8 +227,8 @@ void main() {
             }
 
             fitted(native, const Offset(5, 35), fitScale);
-            fitted(marker, const Offset(25, 10), fitScale);
-            marker.paint(c, const Offset(120, 35));
+            fitted(label, const Offset(25, 10), fitScale);
+            label.paint(c, const Offset(120, 35));
             fitted(native, const Offset(25, 70), fitScale * .5);
           }, dpr);
           expect(actual, expected);
@@ -264,7 +260,7 @@ void main() {
       expect(
         () => ForumBodyTextPictureInput(
           commands: [
-            ForumBodyTextPictureCommand.fromEmphasisMark(
+            ForumBodyTextPictureCommand.fromDecorationText(
               f.blue,
               Offset.zero,
               fitScale: scale,
@@ -280,14 +276,14 @@ void main() {
   for (final direction in TextDirection.values) {
     for (final dpr in [1, 3]) {
       test(
-        'mixed native text/mark scene $direction DPR$dpr survives glyph eviction',
+        'mixed native text and label scene $direction DPR$dpr survives glyph eviction',
         () async {
           final f = _Fixture(direction: direction);
           final native = TextPainter(
             text: f.content.textSpan,
             textDirection: direction,
           )..layout(maxWidth: double.infinity);
-          TextPainter marker(Color color) => TextPainter(
+          TextPainter label(Color color) => TextPainter(
             text: TextSpan(
               text: 'X',
               style: TextStyle(
@@ -297,12 +293,11 @@ void main() {
                 color: color,
                 height: kTextHeightNone,
                 decoration: TextDecoration.none,
-                fontFeatures: const [FontFeature.enable('ruby')],
               ),
             ),
             textDirection: direction,
           )..layout(maxWidth: double.infinity);
-          final blue = marker(_blue), red = marker(_red);
+          final blue = label(_blue), red = label(_red);
           addTearDown(() {
             native.dispose();
             blue.dispose();
@@ -349,18 +344,18 @@ void main() {
     }
   }
   test(
-    'mark metadata is charged once per native resource, not per command',
+    'label metadata is charged once per native resource, not per command',
     () {
       final f = _Fixture();
       final once = ForumBodyTextPictureInput(
         commands: [
-          ForumBodyTextPictureCommand.fromEmphasisMark(f.blue, Offset.zero),
+          ForumBodyTextPictureCommand.fromDecorationText(f.blue, Offset.zero),
         ],
       );
       final twice = ForumBodyTextPictureInput(
         commands: [
           ...once.commands,
-          ForumBodyTextPictureCommand.fromEmphasisMark(
+          ForumBodyTextPictureCommand.fromDecorationText(
             f.blue,
             const Offset(20, 0),
           ),
@@ -400,7 +395,7 @@ void main() {
     () {
       final f = _Fixture(), other = _Fixture();
       expect(f.blue.nativeInputIdentity, other.blue.nativeInputIdentity);
-      for (final marks in <List<ForumBodyEmphasisMarkLease>>[
+      for (final marks in <List<ForumBodyDecorationTextLease>>[
         [],
         [f.blue],
         [other.blue, f.red],

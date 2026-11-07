@@ -14,7 +14,6 @@ enum ForumBodyParagraphLayoutFailure {
   noWrap,
   singleLine,
   coverage,
-  emphasis,
   isolation,
 }
 
