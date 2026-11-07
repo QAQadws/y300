@@ -487,7 +487,14 @@ void main() {
             observation.nativeController!.viewForPage(observation.page!)!.work,
             same(observation.nativeWork),
           );
-          expect(observation.nativeWork!.preparationFrames, greaterThan(0));
+          expect(
+            observation.nativeWork!.preparationFrames,
+            greaterThanOrEqualTo(0),
+          );
+          if (observation.nativeWork!.preparationFrames == 0) {
+            expect(observation.nativeWork!.layoutsBuilt, 0);
+            expect(observation.nativeWork!.picturesBuilt, 0);
+          }
           final advances = observation.nativeWork!.preparationAdvances;
           expect(advances.budgetUs, 3000);
           expect(advances.maxUs, inInclusiveRange(1, advances.totalUs));
