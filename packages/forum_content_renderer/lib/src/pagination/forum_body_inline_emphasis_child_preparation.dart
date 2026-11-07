@@ -246,10 +246,7 @@ final class ForumBodyInlineEmphasisChildPreparation {
     yield* nativeLeases;
   }
 
-  ForumBodyEmphasisLineStep advance({
-    int maxParts = 32,
-    bool cachedOnly = false,
-  }) {
+  ForumBodyFontFrameStep advance({int maxParts = 32, bool cachedOnly = false}) {
     if (maxParts <= 0) throw ArgumentError.value(maxParts);
     if (_operating) {
       throw StateError('Allocated child preparation is reentrant');
@@ -259,7 +256,7 @@ final class ForumBodyInlineEmphasisChildPreparation {
         builds = cache?.layoutBuildCount ?? 0,
         pictures = cache?.pictureBuildCount ?? 0;
     var used = 0;
-    ForumBodyEmphasisLineStep step([bool wait = false]) => (
+    ForumBodyFontFrameStep step([bool wait = false]) => (
       partsPrepared: used,
       nativeLayoutsBuilt: cache!.layoutBuildCount - builds,
       picturesRecorded: cache.pictureBuildCount - pictures,

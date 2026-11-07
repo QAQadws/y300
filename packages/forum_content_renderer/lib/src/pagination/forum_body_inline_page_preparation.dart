@@ -17,8 +17,7 @@ import '../inline/forum_body_ruby_group_preparation.dart';
 import '../inline/forum_body_ruby_segment_layout.dart';
 import '../inline/forum_body_ruby_segment_preparation.dart';
 import '../inline/forum_body_ruby_soft_space_layout.dart';
-import '../inline/forum_body_emphasis_line_layout.dart'
-    show ForumBodyEmphasisLineStep;
+import '../inline/forum_body_paragraph_frame.dart' show ForumBodyFontFrameStep;
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_layout.dart';
 import '../paragraph/forum_body_native_budget_input.dart';

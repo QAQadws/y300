@@ -1,5 +1,3 @@
-import 'dart:collection';
-
 import 'package:flutter/painting.dart';
 import 'package:html_pagination_core/html_pagination_core.dart';
 
@@ -16,7 +14,6 @@ import 'forum_body_horizontal_text_frame.dart';
 export '../style/forum_body_native_text_paint.dart'
     show ForumBodyParagraphPaintLayer;
 
-part 'forum_body_emphasis_glyph_input.dart';
 part 'forum_body_paragraph_paint_input.dart';
 
 enum ForumBodyParagraphInputFailure {
@@ -63,25 +60,6 @@ final class ForumBodyParagraphContent {
     this.paintLayer = ForumBodyParagraphPaintLayer.all,
   }) : runs = List.unmodifiable(runs),
        issues = List.unmodifiable(issues);
-
-  // Only the retired emphasis writer may transfer this list. Projection and
-  // diagnostics already belong to immutable original content; no source scan
-  // or full-list copy is hidden in the final cooperative work unit.
-  ForumBodyParagraphContent._emphasisGlyphs(
-    ForumBodyParagraphContent original,
-    this.style,
-    List<ForumBodyParagraphRun> runs,
-  ) : identity = original.identity,
-      path = original.path,
-      fontRevision = original.fontRevision,
-      styleRevision = original.styleRevision,
-      layoutMode = original.layoutMode,
-      projection = original.projection,
-      runs = UnmodifiableListView(runs),
-      issues = original.issues,
-      isSourceFree = original.isSourceFree,
-      appliesFirstLineIndent = original.appliesFirstLineIndent,
-      paintLayer = original.paintLayer;
 
   // Only the projection and explicit first-line ownership change. Both source
   // tables already belong to immutable content; a bounded row preparation must

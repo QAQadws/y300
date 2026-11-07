@@ -355,7 +355,7 @@ void main() {
             parent: phase,
             ensureOwner: () {},
           ),
-          throwsA(isA<ForumBodyEmphasisGeometryException>()),
+          throwsA(isA<ForumBodyInlineFontGeometryException>()),
         );
         expect(
           () => phase.layout.fragment(0, phase.layout.lineCount),

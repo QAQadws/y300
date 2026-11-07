@@ -1,4 +1,4 @@
-part of 'forum_body_emphasis_line_layout.dart';
+part of 'forum_body_paragraph_frame.dart';
 
 enum _FragmentPhase {
   scales,
@@ -39,7 +39,7 @@ final class ForumBodyEmphasisFragmentPreparation {
        _additionalOwned = additionalOwnedLeases {
     try {
       _guard();
-      if (width != input.width) ForumBodyEmphasisLinePreparation._mismatch();
+      if (width != input.width) _allocatedSourceMismatch();
       _scales = input.paragraph.effectiveScales.entries.iterator;
       _slots = input.nativeFootprint.iterator;
       _group = input.selection.startGroup;
@@ -100,10 +100,7 @@ final class ForumBodyEmphasisFragmentPreparation {
     yield* _owned;
   }
 
-  ForumBodyEmphasisLineStep advance({
-    int maxParts = 32,
-    bool cachedOnly = false,
-  }) {
+  ForumBodyFontFrameStep advance({int maxParts = 32, bool cachedOnly = false}) {
     if (maxParts <= 0) throw ArgumentError.value(maxParts);
     if (_operating) {
       throw StateError('Emphasis fragment preparation is reentrant');
@@ -113,7 +110,7 @@ final class ForumBodyEmphasisFragmentPreparation {
     final cache = _cache,
         builds = cache?.layoutBuildCount ?? 0,
         recordings = cache?.pictureBuildCount ?? 0;
-    ForumBodyEmphasisLineStep step([bool waiting = false]) => (
+    ForumBodyFontFrameStep step([bool waiting = false]) => (
       partsPrepared: used,
       nativeLayoutsBuilt: (cache?.layoutBuildCount ?? builds) - builds,
       picturesRecorded: (cache?.pictureBuildCount ?? recordings) - recordings,
@@ -138,7 +135,7 @@ final class ForumBodyEmphasisFragmentPreparation {
                   !actual.isFinite ||
                   actual <= 0 ||
                   actual > 4096) {
-                ForumBodyEmphasisLinePreparation._mismatch();
+                _allocatedSourceMismatch();
               }
             } else {
               _scales = null;
@@ -217,7 +214,7 @@ final class ForumBodyEmphasisFragmentPreparation {
                 if (!identical(parent.content, paragraph.content) ||
                     parent.nativeInputIdentity !=
                         paragraph.reference.isolatedInputIdentity) {
-                  ForumBodyEmphasisLinePreparation._mismatch();
+                  _allocatedSourceMismatch();
                 }
                 _verifyAllocatedParent(allocation, parent, parent);
                 _phase = _FragmentPhase.acquirePhase;
@@ -279,7 +276,7 @@ final class ForumBodyEmphasisFragmentPreparation {
               _index = 0;
               if (_actualScene!.commands.length !=
                   group.sceneInput.pictureInput.commands.length) {
-                ForumBodyEmphasisLinePreparation._mismatch();
+                _allocatedSourceMismatch();
               }
               _phase = _FragmentPhase.compareScene;
             }
@@ -287,7 +284,7 @@ final class ForumBodyEmphasisFragmentPreparation {
             final expected = paragraph.groups[_group].sceneInput.pictureInput;
             if (_index < expected.commands.length) {
               if (_actualScene!.commands[_index] != expected.commands[_index]) {
-                ForumBodyEmphasisLinePreparation._mismatch();
+                _allocatedSourceMismatch();
               }
               _index++;
             } else {

@@ -1,4 +1,4 @@
-part of 'forum_body_emphasis_line_layout.dart';
+part of 'forum_body_paragraph_frame.dart';
 
 /// Measured drawing input only. It can enter page admission without preparing
 /// a picture, but never authorizes source use or skips current visible binding.
@@ -40,7 +40,7 @@ final class ForumBodyEmphasisAllocatedSceneInputPreparation {
           !identical(source.content, allocation.reference.content) ||
           source.nativeInputIdentity !=
               allocation.reference.isolatedInputIdentity) {
-        ForumBodyEmphasisLinePreparation._mismatch();
+        _allocatedSourceMismatch();
       }
       _phases = List.unmodifiable(phases);
       final expected = [
@@ -63,7 +63,7 @@ final class ForumBodyEmphasisAllocatedSceneInputPreparation {
             !identical(frames.lines, parent.layout.lines) ||
             frames.nativeAlphabeticBaseline !=
                 allocation.isolatedAlphabeticBaseline) {
-          ForumBodyEmphasisLinePreparation._mismatch();
+          _allocatedSourceMismatch();
         }
         _verifyAllocatedParent(allocation, source, parent);
         _guard();
@@ -112,7 +112,7 @@ final class ForumBodyEmphasisAllocatedSceneInputPreparation {
                   metrics.startUtf16 != expected.startUtf16 ||
                   metrics.endUtf16 != expected.endUtf16 ||
                   metrics.fontBounds != expected.fontBounds) {
-                ForumBodyEmphasisLinePreparation._mismatch();
+                _allocatedSourceMismatch();
               }
               final group = ForumBodyParagraphRowView.bind(
                 parent: current.parent,
@@ -133,7 +133,7 @@ final class ForumBodyEmphasisAllocatedSceneInputPreparation {
               _strips.add(_physicalJob!.takeSelectors());
               _physicalJob = null;
               if (_strips.last.length != allocation.rows.length) {
-                ForumBodyEmphasisLinePreparation._mismatch();
+                _allocatedSourceMismatch();
               }
               _verify = 0;
               _phase = _SceneInputPhase.verify;
@@ -149,7 +149,7 @@ final class ForumBodyEmphasisAllocatedSceneInputPreparation {
                     _phases[_layer].frames.lines[actual.lineIndex],
                     allocation.reference.isolatedLines[actual.lineIndex],
                   )) {
-                ForumBodyEmphasisLinePreparation._mismatch();
+                _allocatedSourceMismatch();
               }
             } else if (++_layer < 3) {
               _phase = _SceneInputPhase.group;
@@ -333,6 +333,6 @@ void _verifyAllocatedParent(
           expected.firstLineIndent.requestedAdvance ||
       layout.firstLineIndent.appliedAdvance !=
           expected.firstLineIndent.appliedAdvance) {
-    ForumBodyEmphasisLinePreparation._mismatch();
+    _allocatedSourceMismatch();
   }
 }

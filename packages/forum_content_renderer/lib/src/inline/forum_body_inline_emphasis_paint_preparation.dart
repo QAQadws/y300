@@ -4,7 +4,7 @@ import 'package:flutter/painting.dart';
 
 import '../paragraph/forum_body_paragraph_cache.dart';
 import 'forum_body_emphasis_allocation_geometry.dart';
-import 'forum_body_emphasis_line_layout.dart';
+import 'forum_body_paragraph_frame.dart';
 import 'forum_body_inline_emphasis_paint_reference.dart';
 import 'forum_body_inline_emphasis_paint_view.dart';
 import 'forum_body_inline_emphasis_row_allocation.dart';
@@ -150,10 +150,7 @@ final class ForumBodyInlineEmphasisPaintPreparation {
     yield* _parents;
   }
 
-  ForumBodyEmphasisLineStep advance({
-    int maxParts = 32,
-    bool cachedOnly = false,
-  }) {
+  ForumBodyFontFrameStep advance({int maxParts = 32, bool cachedOnly = false}) {
     if (maxParts <= 0) throw ArgumentError.value(maxParts);
     if (_operating) throw StateError('Mixed phase acquisition is reentrant');
     _operating = true;
@@ -161,7 +158,7 @@ final class ForumBodyInlineEmphasisPaintPreparation {
         builds = cache?.layoutBuildCount ?? 0,
         pictures = cache?.pictureBuildCount ?? 0;
     var used = 0;
-    ForumBodyEmphasisLineStep step([bool waiting = false]) => (
+    ForumBodyFontFrameStep step([bool waiting = false]) => (
       partsPrepared: used,
       nativeLayoutsBuilt: cache!.layoutBuildCount - builds,
       picturesRecorded: cache.pictureBuildCount - pictures,

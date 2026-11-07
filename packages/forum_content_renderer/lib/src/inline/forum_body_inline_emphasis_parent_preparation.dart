@@ -6,8 +6,7 @@ import '../flow/forum_body_inline_flow_content.dart';
 import '../pagination/forum_body_text_page_content.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_geometry.dart';
-import 'forum_body_emphasis_line_layout.dart';
-import 'forum_body_emphasis_text_geometry.dart';
+import 'forum_body_paragraph_frame.dart';
 import 'forum_body_inline_font_geometry.dart';
 import 'forum_body_inline_paragraph_request.dart';
 import 'forum_body_inline_plan_input.dart';
@@ -147,16 +146,13 @@ final class ForumBodyInlineEmphasisParentPreparation {
     if (_initialWork != null) ..._initialWork!.nativeLeases,
   ];
 
-  ForumBodyEmphasisLineStep advance({
-    int maxParts = 32,
-    bool cachedOnly = false,
-  }) {
+  ForumBodyFontFrameStep advance({int maxParts = 32, bool cachedOnly = false}) {
     if (maxParts <= 0) throw ArgumentError.value(maxParts);
     if (_operating) throw StateError('Mixed parent measurement is reentrant');
     _operating = true;
     var used = 0;
     final cache = _cache, before = cache?.layoutBuildCount ?? 0;
-    ForumBodyEmphasisLineStep step([bool waiting = false]) {
+    ForumBodyFontFrameStep step([bool waiting = false]) {
       return (
         partsPrepared: used,
         nativeLayoutsBuilt: cache!.layoutBuildCount - before,
@@ -171,7 +167,7 @@ final class ForumBodyInlineEmphasisParentPreparation {
       if (_blockedAt == cache!.budgetRevision) return step(true);
       _blockedAt = -1;
       final revision = cache.budgetRevision;
-      ForumBodyEmphasisLineStep wait() {
+      ForumBodyFontFrameStep wait() {
         if (revision == cache.budgetRevision) _blockedAt = revision;
         return step(true);
       }
@@ -243,8 +239,8 @@ final class ForumBodyInlineEmphasisParentPreparation {
               _geometryWork = null;
               final page = _initialPage!;
               if (!identical(page.content, geometry.content)) {
-                throw const ForumBodyEmphasisGeometryException(
-                  ForumBodyEmphasisGeometryFailure.source,
+                throw const ForumBodyInlineFontGeometryException(
+                  ForumBodyInlineFontGeometryFailure.source,
                 );
               }
               _result = ForumBodyInlineEmphasisParentMetrics._(
@@ -301,8 +297,8 @@ final class ForumBodyInlineEmphasisParentPreparation {
     if (!size.isFinite || size <= 0) _invalidScale();
     if (_scales.containsKey(size)) return;
     if (_scales.length >= maxFontSizes) {
-      throw const ForumBodyEmphasisGeometryException(
-        ForumBodyEmphasisGeometryFailure.limit,
+      throw const ForumBodyInlineFontGeometryException(
+        ForumBodyInlineFontGeometryFailure.limit,
       );
     }
     final scaled = _callerScaler!.scale(size);

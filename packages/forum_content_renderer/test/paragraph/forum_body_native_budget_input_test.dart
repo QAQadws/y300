@@ -11,10 +11,13 @@ ForumBodyParagraphCache _cache({int entries = 16, int bytes = 1 << 24}) {
   return cache;
 }
 
-ForumBodyEmphasisLineMetrics _measure(
-  ForumBodyParagraphCache cache, {
-  String body = 'ABC',
-}) {
+({
+  ForumBodyParagraphContent content,
+  ForumBodyTextPictureInput pictureInput,
+  List<ForumBodyNativeRequestSlot> nativeFootprint,
+  List<ForumBodyNativeBudgetSlot> nativeBudgetFootprint,
+})
+_measure(ForumBodyParagraphCache cache, {String body = 'ABC'}) {
   final document = const ForumBodyParser().parse(
     html: '<p>$body</p>',
     sourceId: 'mixed-budget',
@@ -28,45 +31,58 @@ ForumBodyEmphasisLineMetrics _measure(
       linkColor: const Color(0xff0000ff),
     ),
   );
-  // Exercise a typed mixed font/scene manifest independently of author CSS.
-  const mark = ForumBodyTextEmphasis(
-    shape: ForumBodyEmphasisShape.custom,
-    customMark: 'X',
-    color: Color(0xffff0000),
-  );
   final content = const ForumBodyParagraphContentBuilder().build(
     document: document,
     path: '0',
-    layoutMode: ForumBodyParagraphLayoutMode.fitSingleLine,
-    styles: ForumBodyStyleResult(
-      identity: styles.identity,
-      fontRevision: styles.fontRevision,
-      root: styles.root,
-      resolverRevision: styles.resolverRevision,
-      issues: styles.issues,
-      byPath: styles.byPath.map(
-        (path, style) => MapEntry(path, style.withTextEmphasis(mark)),
+    styles: styles,
+  );
+  final label = ForumBodyDecorationTextInput.label(
+    text: '1.',
+    style: content.style,
+    fontRevision: content.fontRevision,
+    styleRevision: content.styleRevision,
+  );
+  final textLease = cache.acquire(content: content, width: 80);
+  final labelLease = cache.acquireDecorationText(input: label);
+  try {
+    final picture = ForumBodyTextPictureInput(
+      commands: [
+        ForumBodyTextPictureCommand.fromText(textLease, Offset.zero),
+        ForumBodyTextPictureCommand.fromDecorationText(
+          labelLease,
+          const Offset(0, 20),
+        ),
+      ],
+    );
+    final fonts = <ForumBodyNativeRequestSlot>[
+      (
+        request: ForumBodyTextRequest.paragraph(content),
+        width: 80,
+        minimumLineCount: 1,
       ),
-    ),
-  );
-  final source = ForumBodyEmphasisTextPreparation(content: content);
-  while (!source.isReady) {
-    source.advance(maxParts: 1);
+      (
+        request: ForumBodyDecorationTextRequest(label),
+        width: 80,
+        minimumLineCount: 1,
+      ),
+    ];
+    return (
+      content: content,
+      pictureInput: picture,
+      nativeFootprint: fonts,
+      nativeBudgetFootprint: [
+        ...fonts,
+        (
+          request: ForumBodyTextPictureBudgetInput(picture),
+          width: 80,
+          minimumLineCount: 0,
+        ),
+      ],
+    );
+  } finally {
+    labelLease.release();
+    textLease.release();
   }
-  final job = ForumBodyEmphasisLineMetricsPreparation(
-    input: source.takeInput(),
-    cache: cache,
-    ensureOwner: () {},
-    width: 80,
-  );
-  addTearDown(job.close);
-  while (!job.isReady) {
-    final step = job.advance(maxParts: 1);
-    expect(step.nativeLayoutsBuilt, lessThanOrEqualTo(1));
-    expect(step.picturesRecorded, 0);
-    expect(step.waitingForLayoutBudget, isFalse);
-  }
-  return job.takeMetrics();
 }
 
 void _include(
@@ -216,21 +232,9 @@ void main() {
     for (final slot in metrics.nativeBudgetFootprint) {
       _include(probe, slot);
     }
-    final before = (cache.layoutBuildCount, cache.pictureBuildCount),
-        job = ForumBodyEmphasisLinePreparation.fromMetrics(
-          input: metrics.input,
-          metrics: metrics,
-          cache: cache,
-          ensureOwner: () {},
-          width: 80,
-          expectedTextScaler: TextScaler.noScaling,
-        );
-    addTearDown(job.close);
-    for (var n = 0; !job.cacheMiss; n++) {
-      if (n > 1000) fail('Expected actual source qualification to miss');
-      job.advance(maxParts: 1, cachedOnly: true);
-    }
-    expect(job.isReady, isFalse);
+    final before = (cache.layoutBuildCount, cache.pictureBuildCount);
+    expect(cache.tryAcquireCached(content: metrics.content, width: 80), isNull);
+    expect(cache.tryAcquireTextPicture(metrics.pictureInput), isNull);
     expect((cache.layoutBuildCount, cache.pictureBuildCount), before);
     expect(cache.activeLeases, 0);
     cache.close();

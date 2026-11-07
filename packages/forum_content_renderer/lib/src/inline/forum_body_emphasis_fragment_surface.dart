@@ -5,8 +5,7 @@ import 'package:html_pagination_core/html_pagination_core.dart';
 import '../paragraph/forum_body_text_surface_box.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../style/forum_body_style_options.dart';
-import 'forum_body_emphasis_line_layout.dart'
-    show ForumBodyEmphasisFragmentLayout;
+import 'forum_body_paragraph_frame.dart' show ForumBodyEmphasisFragmentLayout;
 
 /// Owns one fully prepared source/scene view. Visible paint only replays it;
 /// each concurrent mount needs its own two handles, even for a shared picture.

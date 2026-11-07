@@ -289,63 +289,6 @@ void main() {
       },
     );
   }
-  test(
-    'line marker measurement ignores a rejection retired by its prefix callback',
-    () {
-      final cache = _cache(entries: 2),
-          first = _pin(cache),
-          second = _pin(cache, 'second');
-      final doc = const ForumBodyParser().parse(
-        html: '<p style="text-emphasis:circle">A</p>',
-        sourceId: 'line-prefix-release',
-        conversionIdentity: 'none',
-      );
-      final content = const ForumBodyParagraphContentBuilder().build(
-        document: doc,
-        styles: const ForumBodyStyleResolver().resolve(
-          doc,
-          ForumBodyReaderStyle(
-            textStyle: const TextStyle(fontFamily: 'Ahem', fontSize: 20),
-            fontRevision: 'line-prefix-release',
-            linkColor: const Color(0xff0000ff),
-          ),
-        ),
-        path: '0',
-        layoutMode: ForumBodyParagraphLayoutMode.intrinsicSingleLine,
-      );
-      final text = ForumBodyEmphasisTextPreparation(content: content);
-      while (!text.isReady) {
-        text.advance(maxParts: 1);
-      }
-      final input = text.takeInput();
-      var callbacks = 0;
-      final work = ForumBodyEmphasisLineMetricsPreparation(
-        input: input,
-        cache: cache,
-        ensureOwner: () {},
-        additionalOwnedLeases: () {
-          if (++callbacks == 2) {
-            first.release();
-            second.release();
-          }
-          return const [];
-        },
-      );
-      try {
-        for (var n = 0; !work.isReady; n++) {
-          expect(n, lessThan(50000));
-          final s = work.advance(maxParts: 1);
-          expect(s.waitingForLayoutBudget, isFalse);
-          expect(work.cacheMiss, isFalse);
-        }
-        expect(work.takeMetrics().input, same(input));
-        expect(callbacks, greaterThanOrEqualTo(2));
-        expect(cache.activeLeases, 0);
-      } finally {
-        work.close();
-      }
-    },
-  );
   test('flow constructor passes caller prefix through source preparation', () {
     final cache = _cache(), pin = _pin(cache);
     var validated = 0;

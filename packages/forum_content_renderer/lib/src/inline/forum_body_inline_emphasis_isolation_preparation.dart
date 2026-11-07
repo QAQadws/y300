@@ -5,8 +5,8 @@ import 'package:flutter/painting.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_geometry.dart';
 import '../paragraph/forum_body_paragraph_row.dart';
-import 'forum_body_emphasis_line_layout.dart';
-import 'forum_body_emphasis_text_geometry.dart';
+import 'forum_body_emphasis_allocation_geometry.dart';
+import 'forum_body_paragraph_frame.dart';
 import 'forum_body_inline_emphasis_parent_preparation.dart';
 import 'forum_body_inline_font_geometry.dart';
 import 'forum_body_inline_paragraph_request.dart';
@@ -92,8 +92,8 @@ final class ForumBodyInlineEmphasisIsolationPreparation {
       }
       if (geometry.lineCount > maxLines ||
           natural.layout.atomBoxes.length > maxAtoms) {
-        throw const ForumBodyEmphasisGeometryException(
-          ForumBodyEmphasisGeometryFailure.limit,
+        throw const ForumBodyInlineFontGeometryException(
+          ForumBodyInlineFontGeometryFailure.limit,
         );
       }
       _guard();
@@ -130,16 +130,13 @@ final class ForumBodyInlineEmphasisIsolationPreparation {
   bool get cacheMiss => _cacheMiss;
   Iterable<ForumBodyNativeParagraphLease> get nativeLeases => [?_pending];
 
-  ForumBodyEmphasisLineStep advance({
-    int maxParts = 32,
-    bool cachedOnly = false,
-  }) {
+  ForumBodyFontFrameStep advance({int maxParts = 32, bool cachedOnly = false}) {
     if (maxParts <= 0) throw ArgumentError.value(maxParts);
     if (_operating) throw StateError('Mixed parent isolation is reentrant');
     _operating = true;
     var used = 0;
     final cache = _cache, before = cache?.layoutBuildCount ?? 0;
-    ForumBodyEmphasisLineStep step([bool waiting = false]) => (
+    ForumBodyFontFrameStep step([bool waiting = false]) => (
       partsPrepared: used,
       nativeLayoutsBuilt: cache!.layoutBuildCount - before,
       picturesRecorded: 0,
@@ -177,8 +174,8 @@ final class ForumBodyInlineEmphasisIsolationPreparation {
               _guard();
               if (more) {
                 if (_owned.length >= maxOwnedLeases) {
-                  throw const ForumBodyEmphasisGeometryException(
-                    ForumBodyEmphasisGeometryFailure.limit,
+                  throw const ForumBodyInlineFontGeometryException(
+                    ForumBodyInlineFontGeometryFailure.limit,
                   );
                 }
                 final lease = iterator.current;
@@ -394,8 +391,8 @@ final class ForumBodyInlineEmphasisIsolationPreparation {
       originalBaseline: ref.naturalLines[row].baseline,
       actualBaseline: ref.isolatedLines[row].baseline,
     )) {
-      throw const ForumBodyEmphasisLineException(
-        ForumBodyEmphasisLineFailure.geometry,
+      throw const ForumBodyEmphasisAllocationException(
+        ForumBodyEmphasisAllocationFailure.geometry,
       );
     }
   }
@@ -449,9 +446,10 @@ final class ForumBodyInlineEmphasisIsolationPreparation {
     }
   }
 
-  static Never _sourceFailure() => throw const ForumBodyEmphasisLineException(
-    ForumBodyEmphasisLineFailure.source,
-  );
+  static Never _sourceFailure() =>
+      throw const ForumBodyEmphasisAllocationException(
+        ForumBodyEmphasisAllocationFailure.source,
+      );
   void _guard() {
     if (_phase == _IsolationPhase.closed ||
         _phase == _IsolationPhase.transferred) {

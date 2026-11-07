@@ -12,7 +12,7 @@ import '../paragraph/forum_body_paragraph_row.dart';
 import '../paragraph/forum_body_paragraph_row_reference.dart';
 import '../paragraph/forum_body_text_request.dart';
 import '../paragraph/forum_body_text_request_preparation.dart';
-import 'forum_body_emphasis_line_layout.dart';
+import 'forum_body_paragraph_frame.dart';
 import 'forum_body_emphasis_row_allocation.dart';
 
 part 'forum_body_emphasis_paragraph_preparation.dart';

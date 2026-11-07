@@ -1,6 +1,6 @@
 import 'package:flutter/painting.dart';
 
-import '../inline/forum_body_emphasis_line_layout.dart';
+import '../inline/forum_body_paragraph_frame.dart';
 import '../inline/forum_body_emphasis_paragraph_metrics.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import 'forum_body_text_page_composer.dart';

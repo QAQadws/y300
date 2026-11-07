@@ -372,7 +372,6 @@ List<int> _nativeRevisions() => [
   ForumBodyTextPageSession.inlineFontFrameRevision,
   ForumBodyEmphasisParagraphMetrics.revision,
   ForumBodyEmphasisRowAllocation.revision,
-  ForumBodyEmphasisLineMetrics.revision,
   ForumBodyEmphasisFragmentInput.revision,
   ForumBodyEmphasisFragmentLayout.revision,
   ForumBodyTextPictureInput.revision,

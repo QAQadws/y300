@@ -1,4 +1,4 @@
-part of 'forum_body_emphasis_line_layout.dart';
+part of 'forum_body_paragraph_frame.dart';
 
 /// One current source binding and ONE prepared scene for complete paragraph
 /// groups. All display/source offsets stay in the original whole paragraph.

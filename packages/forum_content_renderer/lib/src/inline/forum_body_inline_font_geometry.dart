@@ -5,8 +5,16 @@ import 'package:flutter/painting.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';
 import '../paragraph/forum_body_paragraph_geometry.dart';
 import '../style/forum_body_native_text_paint.dart';
-import 'forum_body_emphasis_text_geometry.dart';
 import 'forum_body_inline_span_content.dart';
+
+enum ForumBodyInlineFontGeometryFailure { source, line, boxes, limit }
+
+final class ForumBodyInlineFontGeometryException implements Exception {
+  const ForumBodyInlineFontGeometryException(this.failure);
+  final ForumBodyInlineFontGeometryFailure failure;
+  @override
+  String toString() => 'ForumBodyInlineFontGeometryException(${failure.name})';
+}
 
 /// Actual parent glyph frames and slot rows from a single native layout.
 final class ForumBodyInlineFontGeometry {
@@ -48,8 +56,8 @@ final class ForumBodyInlineFontGeometryPreparation {
       _guard();
       if (!identical(parent.content, content) ||
           content.paintLayer != ForumBodyParagraphPaintLayer.all) {
-        throw const ForumBodyEmphasisGeometryException(
-          ForumBodyEmphasisGeometryFailure.source,
+        throw const ForumBodyInlineFontGeometryException(
+          ForumBodyInlineFontGeometryFailure.source,
         );
       }
       _lineCount = parent.layout.lineCount;
@@ -105,8 +113,8 @@ final class ForumBodyInlineFontGeometryPreparation {
     }
     if (_engine == projection.engineText.length) {
       if (_atom != projection.atoms.length) {
-        throw const ForumBodyEmphasisGeometryException(
-          ForumBodyEmphasisGeometryFailure.source,
+        throw const ForumBodyInlineFontGeometryException(
+          ForumBodyInlineFontGeometryFailure.source,
         );
       }
       _result = ForumBodyInlineFontGeometry._(
@@ -128,8 +136,8 @@ final class ForumBodyInlineFontGeometryPreparation {
         return;
       }
       if (_engine < row.engineCoverageStartUtf16) {
-        throw const ForumBodyEmphasisGeometryException(
-          ForumBodyEmphasisGeometryFailure.line,
+        throw const ForumBodyInlineFontGeometryException(
+          ForumBodyInlineFontGeometryFailure.line,
         );
       }
       _atomLines!.add(_atomLine);
@@ -137,8 +145,8 @@ final class ForumBodyInlineFontGeometryPreparation {
       return;
     }
     if (_glyphQueries >= maxGlyphQueries) {
-      throw const ForumBodyEmphasisGeometryException(
-        ForumBodyEmphasisGeometryFailure.limit,
+      throw const ForumBodyInlineFontGeometryException(
+        ForumBodyInlineFontGeometryFailure.limit,
       );
     }
     _glyphQueries++;
@@ -147,8 +155,8 @@ final class ForumBodyInlineFontGeometryPreparation {
     if (glyph != null) {
       final rect = glyph.fontBounds;
       if (!rect.isFinite || rect.width < 0 || rect.height < 0) {
-        throw const ForumBodyEmphasisGeometryException(
-          ForumBodyEmphasisGeometryFailure.boxes,
+        throw const ForumBodyInlineFontGeometryException(
+          ForumBodyInlineFontGeometryFailure.boxes,
         );
       }
       final index = glyph.lineIndex;
@@ -168,8 +176,8 @@ final class ForumBodyInlineFontGeometryPreparation {
 
   ForumBodyParagraphLine _row(int index) {
     if (index < 0 || index >= _lineCount) {
-      throw const ForumBodyEmphasisGeometryException(
-        ForumBodyEmphasisGeometryFailure.line,
+      throw const ForumBodyInlineFontGeometryException(
+        ForumBodyInlineFontGeometryFailure.line,
       );
     }
     return _parent!.layout.lines[index];

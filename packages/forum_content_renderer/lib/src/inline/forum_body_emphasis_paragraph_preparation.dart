@@ -133,10 +133,7 @@ final class ForumBodyEmphasisParagraphPreparation {
     yield* _paintParents.where((parent) => parent.isActive);
   }
 
-  ForumBodyEmphasisLineStep advance({
-    int maxParts = 32,
-    bool cachedOnly = false,
-  }) {
+  ForumBodyFontFrameStep advance({int maxParts = 32, bool cachedOnly = false}) {
     if (maxParts <= 0) throw ArgumentError.value(maxParts);
     if (_operating) {
       throw StateError('Emphasis paragraph preparation is reentrant');
@@ -146,7 +143,7 @@ final class ForumBodyEmphasisParagraphPreparation {
         builds = cache?.layoutBuildCount ?? 0,
         pictures = cache?.pictureBuildCount ?? 0;
     var used = 0;
-    ForumBodyEmphasisLineStep step([bool waiting = false]) => (
+    ForumBodyFontFrameStep step([bool waiting = false]) => (
       partsPrepared: used,
       nativeLayoutsBuilt: (cache?.layoutBuildCount ?? builds) - builds,
       picturesRecorded: (cache?.pictureBuildCount ?? pictures) - pictures,

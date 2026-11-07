@@ -1,4 +1,4 @@
-part of 'forum_body_emphasis_line_layout.dart';
+part of 'forum_body_paragraph_frame.dart';
 
 void _finiteAllocatedOffset(Offset offset) {
   if (!offset.dx.isFinite || !offset.dy.isFinite) {
@@ -55,9 +55,7 @@ TextBox _allocatedBox(
   if (rect.top < clip.clipTop ||
       rect.bottom > clip.clipBottom ||
       (rect.isEmpty && low + 1 < rows.length && rect.top == clip.clipBottom)) {
-    throw const ForumBodyEmphasisLineException(
-      ForumBodyEmphasisLineFailure.metrics,
-    );
+    _allocatedSourceMismatch();
   }
   final placed = rect.shift(row.logicalOffset);
   return TextBox.fromLTRBD(
