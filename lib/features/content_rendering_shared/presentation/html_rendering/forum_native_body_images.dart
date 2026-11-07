@@ -4,11 +4,18 @@ import 'package:flutter/painting.dart';
 import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
+/// Learned geometry remains qualified by its actual display binding.
+typedef ForumNativeBodyImageLayoutHint = ({
+  Object displayIdentity,
+  ForumHtmlImageLayout layout,
+});
+
 /// Frozen resources for the prepared body that supplies the viewer list.
 final class ForumNativeBodyImages {
-  ForumNativeBodyImages(this.document);
+  ForumNativeBodyImages(this.document, {this.presentation});
 
   final ForumBodyDocument document;
+  final ForumHtmlBodyPresentation? presentation;
   final _sources = <String, ForumBodyInlineImageSource>{};
   final _layouts = <String, ForumHtmlImageLayout>{};
   final _pathsByIndex = <int, String>{};
@@ -32,7 +39,7 @@ final class ForumNativeBodyImages {
     required ForumBodyElement element,
     required ForumHtmlReadableImageSequence sequence,
     required ForumHtmlImageHost host,
-    required ForumHtmlImageLayout? learnedLayout,
+    required ForumNativeBodyImageLayoutHint? learnedLayout,
   }) {
     final reference = element.resource!;
     final raw = reference.rawSource;
@@ -87,7 +94,14 @@ final class ForumNativeBodyImages {
       image: display,
       entry: entry,
     );
-    _layouts[element.path] = learnedLayout ?? display.initialLayout;
+    _layouts[element.path] = learnedLayout?.displayIdentity == display.identity
+        ? learnedLayout!.layout
+        : presentation?.imageLayoutFor((
+                document.identity,
+                element.path,
+                display.identity,
+              )) ??
+              display.initialLayout;
     if (index != null) _pathsByIndex[index] = element.path;
   }
 
@@ -164,4 +178,24 @@ final class ForumNativeBodyImages {
 
   ForumHtmlImageLayout? layoutFor(ForumBodyElement element) =>
       _layouts[element.path];
+
+  ForumNativeBodyImageLayoutHint? layoutHintFor(ForumBodyElement element) {
+    final source = _source(document.identity, element);
+    return source == null
+        ? null
+        : (
+            displayIdentity: source.image.identity,
+            layout: _layouts[element.path]!,
+          );
+  }
+
+  void rememberLayout(ForumBodyElement element, ForumHtmlImageLayout layout) {
+    final source = _source(document.identity, element);
+    if (source == null) return;
+    presentation?.recordImageLayout((
+      document.identity,
+      element.path,
+      source.image.identity,
+    ), layout);
+  }
 }

@@ -3,6 +3,34 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
 void main() {
+  test(
+    'confirmed image layout memory is bounded and ignores invalid or retired writes',
+    () {
+      final presentation = ForumHtmlBodyPresentation();
+      const layout = ForumHtmlImageLayout(aspectRatio: 2);
+      for (var i = 0; i < 128; i++) {
+        presentation.recordImageLayout(i, layout);
+      }
+      expect(presentation.imageLayoutFor(0), layout);
+      presentation.recordImageLayout(128, layout);
+      expect(presentation.imageLayoutFor(1), isNull);
+      expect(presentation.imageLayoutFor(0), layout);
+      for (final invalid in [
+        const ForumHtmlImageLayout(isFallback: true, aspectRatio: 1),
+        const ForumHtmlImageLayout(aspectRatio: double.nan),
+        const ForumHtmlImageLayout(aspectRatio: 0),
+        const ForumHtmlImageLayout(displaySize: Size(-1, 2), aspectRatio: 2),
+      ]) {
+        presentation.recordImageLayout(0, invalid);
+      }
+      expect(presentation.imageLayoutFor(0), layout);
+      presentation.dispose();
+      expect(presentation.imageLayoutFor(0), isNull);
+      presentation.recordImageLayout('late', layout);
+      expect(presentation.imageLayoutFor('late'), isNull);
+    },
+  );
+
   testWidgets('retained height follows the current published layout', (
     tester,
   ) async {

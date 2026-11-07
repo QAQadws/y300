@@ -246,6 +246,7 @@ class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
       fontRevision: fontBinding?.cacheKey ?? '',
       imageHost: _resolveImageHost(document, ownerId),
       imageAnchorController: widget.imageAnchorController,
+      bodyPresentation: widget.bodyPresentation,
       expansion: _expansion,
       onLayoutPhase: (phase) {
         if (current() && identical(_expansion, expansion)) _layoutPhase = phase;

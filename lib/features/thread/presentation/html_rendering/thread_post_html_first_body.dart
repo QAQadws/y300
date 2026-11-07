@@ -516,6 +516,8 @@ class _ThreadPostHtmlFirstBodyState
                 fontRevision: fontIdentity.toString(),
                 imageHost: _readingImageHost,
                 imageAnchorController: widget.imageAnchorController,
+                bodyPresentation:
+                    bodyLayout?.rendering ?? widget.bodyPresentation,
                 expansion: expansion ?? _readingExpansion,
                 callbacks: callbacks,
                 onOpenImage: _handleTapImage,

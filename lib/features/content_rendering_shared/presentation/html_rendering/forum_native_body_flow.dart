@@ -41,6 +41,7 @@ final class ForumNativeBodyFlow extends StatefulWidget {
     this.onLayoutPhase,
     required this.errorBuilder,
     this.imageAnchorController,
+    this.bodyPresentation,
     this.contentLayout = ForumHtmlContentLayout.document,
   });
 
@@ -66,6 +67,7 @@ final class ForumNativeBodyFlow extends StatefulWidget {
   final ValueChanged<ForumHtmlBodyLayoutPhase>? onLayoutPhase;
   final WidgetBuilder errorBuilder;
   final ForumHtmlImageAnchorController? imageAnchorController;
+  final ForumHtmlBodyPresentation? bodyPresentation;
   final ForumHtmlContentLayout contentLayout;
 
   @override
@@ -88,7 +90,7 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
     maxEstimatedBytes: 8 << 20,
   );
   final _preparation = ForumBodyPreparationController();
-  final _resolvedImages = <String, ForumHtmlImageLayout>{};
+  final _resolvedImages = <String, ForumNativeBodyImageLayoutHint>{};
   final _changedImages = <String, _ImageChange>{};
   ForumBodyDocument? _document;
   _FlowRun? _pending, _shown;
@@ -112,7 +114,10 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
         !identical(oldWidget.prepared, widget.prepared)) {
       widget.imageAnchorController?.bindSequence(widget.prepared.sequence);
     }
-    if (identical(oldWidget.prepared, widget.prepared)) return;
+    if (identical(oldWidget.prepared, widget.prepared) &&
+        identical(oldWidget.bodyPresentation, widget.bodyPresentation)) {
+      return;
+    }
     _preparation.reset();
     _document = null;
     _resolvedImages.clear();
@@ -314,12 +319,17 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
         document,
         expansionOverrides: config.expansion,
       );
-      final learned = Map<String, ForumHtmlImageLayout>.of(_resolvedImages);
+      final learned = Map<String, ForumNativeBodyImageLayoutHint>.of(
+        _resolvedImages,
+      );
       final previousImages = _shown?.host == config.imageHost
           ? _shown?.images
           : null;
       final host = config.imageHost;
-      final images = ForumNativeBodyImages(document);
+      final images = ForumNativeBodyImages(
+        document,
+        presentation: config.bodyPresentation,
+      );
       final reader = ForumBodyReaderStyle(
         textStyle: style,
         fontRevision: config.fontRevision,
@@ -352,7 +362,7 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
           // Host estimates can learn from other images in the thread. Keep
           // already laid-out occurrences stable until their own size arrives.
           learnedLayout:
-              learned[element.path] ?? previousImages?.layoutFor(element),
+              learned[element.path] ?? previousImages?.layoutHintFor(element),
         );
       }
       run.images = images;
@@ -530,10 +540,7 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
         if ((input.entry.htmlWidth != null && input.entry.htmlHeight != null) ||
             ratio == null ||
             !ratio.isFinite ||
-            ratio <= 0 ||
-            ratio ==
-                (_resolvedImages[input.element.path]?.aspectRatio ??
-                    input.aspectRatio)) {
+            ratio <= 0) {
           return;
         }
         _imageResolved(
@@ -596,13 +603,22 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
     _ImageChange change,
   ) {
     if (!_current(run) || _error != null) return;
-    final original =
-        _resolvedImages[element.path] ?? run.images!.layoutFor(element);
-    if (layout.displaySize == original?.displaySize &&
-        layout.aspectRatio == original?.aspectRatio) {
+    final binding = run.images?.layoutHintFor(element);
+    if (binding == null) return;
+    final learned = _resolvedImages[element.path];
+    final original = learned?.displayIdentity == binding.displayIdentity
+        ? learned!.layout
+        : binding.layout;
+    // A confirmed size can match today's fallback without needing a reflow.
+    run.images!.rememberLayout(element, layout);
+    if (layout.displaySize == original.displaySize &&
+        layout.aspectRatio == original.aspectRatio) {
       return;
     }
-    _resolvedImages[element.path] = layout;
+    _resolvedImages[element.path] = (
+      displayIdentity: binding.displayIdentity,
+      layout: layout,
+    );
     _changedImages[element.path] = change;
     if (run.reflowScheduled) return;
     run.reflowScheduled = true;

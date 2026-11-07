@@ -1,16 +1,51 @@
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
+import '../contracts/forum_html_display_image.dart';
+
 /// Small session-owned values, never a retained HTML/widget tree. Each body
 /// (including nested folds) keeps only its latest completed layout.
 class ForumHtmlBodyPresentation {
   final collapseExpansion = <String, bool>{};
   final _layouts = <String, ({Object revision, double height})>{};
   final _inlineImageSizes = <Object, Size>{};
+  final _imageLayouts = <Object, ForumHtmlImageLayout>{};
   static const _maxInlineImageSizes = 128;
+  static const _maxImageLayouts = 128;
   bool _active = true;
 
   bool get isActive => _active;
+
+  /// Pure resource geometry, qualified by the caller's document occurrence and
+  /// immutable display binding. No image, Host or renderer lease is retained.
+  ForumHtmlImageLayout? imageLayoutFor(Object identity) {
+    if (!_active) return null;
+    final layout = _imageLayouts.remove(identity);
+    if (layout != null) _imageLayouts[identity] = layout;
+    return layout;
+  }
+
+  void recordImageLayout(Object identity, ForumHtmlImageLayout layout) {
+    final size = layout.displaySize;
+    final ratio = layout.aspectRatio ?? size?.aspectRatio;
+    if (!_active ||
+        layout.isFallback ||
+        ratio == null ||
+        !ratio.isFinite ||
+        ratio <= 0 ||
+        (size != null &&
+            (!size.width.isFinite ||
+                !size.height.isFinite ||
+                size.width <= 0 ||
+                size.height <= 0))) {
+      return;
+    }
+    _imageLayouts.remove(identity);
+    _imageLayouts[identity] = layout;
+    while (_imageLayouts.length > _maxImageLayouts) {
+      _imageLayouts.remove(_imageLayouts.keys.first);
+    }
+  }
 
   /// Natural sizes survive virtualized body remounts, without retaining pixels,
   /// widgets or cache services. Each owner disposes this bounded layout memory.
@@ -57,6 +92,7 @@ class ForumHtmlBodyPresentation {
     _active = false;
     _layouts.clear();
     _inlineImageSizes.clear();
+    _imageLayouts.clear();
     collapseExpansion.clear();
   }
 }
