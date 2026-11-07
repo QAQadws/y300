@@ -3,6 +3,15 @@ import 'package:y300/features/reader_shared/domain/continuous_image/continuous_i
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_image_layout_hint.dart';
 
+const _sourceIndexKey = 'indexInPost';
+
+extension ThreadImageReaderSourceIndex on ContinuousImageItem {
+  int get indexInPost => switch (extra[_sourceIndexKey]) {
+    final int sourceIndex => sourceIndex,
+    _ => index,
+  };
+}
+
 class ThreadImageReaderContinuousImageAdapter {
   const ThreadImageReaderContinuousImageAdapter();
 
@@ -11,21 +20,24 @@ class ThreadImageReaderContinuousImageAdapter {
     double fallbackAspectRatio = 0.7,
   }) {
     final ownerId = _ownerIdFor(request);
-    return request.group.entries
-        .map(
-          (entry) => mapEntry(
+    return request.group.entries.indexed
+        .map((indexed) {
+          final (index, entry) = indexed;
+          return _mapEntry(
             ownerId: ownerId,
             entry: entry,
+            galleryIndex: index,
             referer: request.referer,
             fallbackAspectRatio: fallbackAspectRatio,
-          ),
-        )
+          );
+        })
         .toList(growable: false);
   }
 
-  ContinuousImageItem mapEntry({
+  ContinuousImageItem _mapEntry({
     required String ownerId,
     required ThreadPostImageEntry entry,
+    required int galleryIndex,
     required String referer,
     required double fallbackAspectRatio,
   }) {
@@ -35,7 +47,9 @@ class ThreadImageReaderContinuousImageAdapter {
       id: '$ownerId:${entry.indexInPost}:${entry.cacheKey}',
       url: entry.url,
       cacheKey: entry.cacheKey,
-      index: entry.indexInPost,
+      // Scrolling and seeking use the dense gallery position. Source identity
+      // survives filtering for cache work, export and return to the body.
+      index: galleryIndex,
       sourceKind: ContinuousImageSourceKind.threadImageReader,
       referer: Uri.tryParse(referer),
       knownWidth: dimensions?.width,
@@ -43,6 +57,7 @@ class ThreadImageReaderContinuousImageAdapter {
       knownDimensionSource: dimensions?.source,
       fallbackAspectRatio: fallbackAspectRatio,
       extra: <String, Object?>{
+        _sourceIndexKey: entry.indexInPost,
         'rawUrl': entry.rawUrl,
         if (entry.aid != null) 'aid': entry.aid,
       },

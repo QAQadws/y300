@@ -36,7 +36,7 @@ void main() {
       expect(request.initialEntry!.indexInPost, 7);
       expect(request.group.entries.map((e) => e.indexInPost), [2, 7]);
       expect(request.group.entries.last.aid, '123');
-      expect(request.continuousImages.map((e) => e.index), [2, 7]);
+      expect(request.continuousImages.map((e) => e.index), [0, 1]);
       expect(request.continuousImages.map((e) => e.id).toSet(), hasLength(2));
       expect(
         request.continuousImages.every(

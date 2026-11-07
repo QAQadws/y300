@@ -68,11 +68,20 @@ class ForumHtmlReadableImageSequence {
   final String sourceId;
   final List<ForumHtmlReadableImageEntry> entries;
 
+  /// Looks up a position in this list. Filtered galleries can have gaps in
+  /// their original source indices.
   ForumHtmlReadableImageEntry? entryAt(int index) {
     if (index < 0 || index >= entries.length) {
       return null;
     }
     return entries[index];
+  }
+
+  /// Finds the gallery position of an original prepared image occurrence.
+  int positionOfSourceIndex(int index) {
+    if (index < 0) return -1;
+    if (entryAt(index)?.index == index) return index;
+    return entries.indexWhere((entry) => entry.index == index);
   }
 }
 

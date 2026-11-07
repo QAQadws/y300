@@ -27,7 +27,7 @@ void main() {
             ThreadPostImageEntry(
               url: 'https://bbs.yamibo.com/data/attachment/forum/page-2.jpg',
               rawUrl: 'data/attachment/forum/page-2.jpg',
-              indexInPost: 1,
+              indexInPost: 2,
               cacheKey: 'cache-1',
             ),
           ],
@@ -56,7 +56,9 @@ void main() {
       expect(items.first.extra['rawUrl'], 'data/attachment/forum/page-1.jpg');
       expect(items.first.extra['aid'], 'aid-1');
 
-      expect(items.last.id, 'thread:100:post:p1:1:cache-1');
+      expect(items.last.id, 'thread:100:post:p1:2:cache-1');
+      expect(items.last.index, 1);
+      expect(items.last.indexInPost, 2);
       expect(items.last.knownDimensions, isNull);
       expect(items.last.fallbackAspectRatio, 0.7);
     });

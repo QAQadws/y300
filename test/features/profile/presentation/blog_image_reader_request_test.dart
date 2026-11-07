@@ -82,6 +82,23 @@ void main() {
     );
   }
 
+  test('matches a sparse gallery by original source index', () {
+    final request = _build(
+      const ForumHtmlImageRequest(url: _url, readableIndex: 3),
+      sourceIndices: [1, 3],
+    )!;
+    expect(request.initialIndex, 1);
+    expect(request.items.map((item) => item.index), [0, 1]);
+    expect(request.requests.map((request) => request.imageIndex), [1, 3]);
+    expect(
+      _build(
+        const ForumHtmlImageRequest(url: _url, readableIndex: 0),
+        sourceIndices: [1, 3],
+      ),
+      isNull,
+    );
+  });
+
   test(
     'URL fallback accepts the actual visible cache key without guessing another source',
     () {
@@ -97,28 +114,30 @@ void main() {
   );
 }
 
-BlogImageReaderRequest? _build(ForumHtmlImageRequest image) =>
-    BlogImageReaderRequest.fromImage(
-      sequence: ForumHtmlReadableImageSequence(
-        sourceId: 'fixture-article',
-        entries: [
-          for (var i = 0; i < 2; i++)
-            ForumHtmlReadableImageEntry(
-              index: i,
-              url: _url,
-              rawSrc: _url,
-              resource: _ImageResource(ImageCacheKeys.threadInline(_url)),
-              htmlWidth: 120,
-              htmlHeight: 80,
-            ),
-        ],
-      ),
-      image: image,
-      cacheOwnerId: 'blog-11',
-      sessionOwnerId: 'session-1',
-      referer: 'https://example.test/',
-      resolver: const DefaultForumImageRequestResolver(),
-    );
+BlogImageReaderRequest? _build(
+  ForumHtmlImageRequest image, {
+  List<int> sourceIndices = const [0, 1],
+}) => BlogImageReaderRequest.fromImage(
+  sequence: ForumHtmlReadableImageSequence(
+    sourceId: 'fixture-article',
+    entries: [
+      for (final index in sourceIndices)
+        ForumHtmlReadableImageEntry(
+          index: index,
+          url: _url,
+          rawSrc: _url,
+          resource: _ImageResource(ImageCacheKeys.threadInline(_url)),
+          htmlWidth: 120,
+          htmlHeight: 80,
+        ),
+    ],
+  ),
+  image: image,
+  cacheOwnerId: 'blog-11',
+  sessionOwnerId: 'session-1',
+  referer: 'https://example.test/',
+  resolver: const DefaultForumImageRequestResolver(),
+);
 
 final class _ImageResource implements ForumHtmlPreparedImageResource {
   const _ImageResource(this.cacheKey);

@@ -497,8 +497,9 @@ class _ThreadPostHtmlFirstBodyState
           widget.onOpenPostLink(url);
           return true;
         },
-        onTapImage: (request) =>
-            _handleTapImage(request, preparedDocument.sequence),
+        onTapImage: widget.nativeBody
+            ? null
+            : (request) => _handleTapImage(preparedDocument.sequence, request),
         onImageLayoutShift: widget.onImageLayoutShift,
       );
       final body = KeyedSubtree(
@@ -517,6 +518,7 @@ class _ThreadPostHtmlFirstBodyState
                 imageAnchorController: widget.imageAnchorController,
                 expansion: expansion ?? _readingExpansion,
                 callbacks: callbacks,
+                onOpenImage: _handleTapImage,
                 clipboardTextWriter: ref.read(clipboardTextWriterProvider),
                 onOpenSelectedLink: widget.onOpenSelectedPostLink,
                 selectEntireBody: widget.selectEntireBody,
@@ -664,8 +666,8 @@ class _ThreadPostHtmlFirstBodyState
   }
 
   void _handleTapImage(
-    ForumHtmlImageRequest request,
     ForumHtmlReadableImageSequence sequence,
+    ForumHtmlImageRequest request,
   ) {
     final sourcePost = widget.sourcePost ?? widget.post;
     final result = widget.imageReaderBridge.buildOpenRequest(

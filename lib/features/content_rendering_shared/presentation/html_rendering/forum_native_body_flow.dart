@@ -31,6 +31,7 @@ final class ForumNativeBodyFlow extends StatefulWidget {
     required this.imageHost,
     required this.expansion,
     required this.callbacks,
+    this.onOpenImage,
     required this.clipboardTextWriter,
     this.onOpenSelectedLink,
     this.selectionEnabled = true,
@@ -51,6 +52,11 @@ final class ForumNativeBodyFlow extends StatefulWidget {
   final ForumHtmlImageHost? imageHost;
   final Map<String, bool> expansion;
   final ForumHtmlRenderCallbacks callbacks;
+  final void Function(
+    ForumHtmlReadableImageSequence gallery,
+    ForumHtmlImageRequest image,
+  )?
+  onOpenImage;
   final ClipboardTextWriter clipboardTextWriter;
   final ForumSelectionLinkOpener? onOpenSelectedLink;
   final bool selectionEnabled;
@@ -177,7 +183,7 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
             ? Map<String, _ImageChange>.of(_changedImages)
             : const <String, _ImageChange>{};
         _changedImages.clear();
-        final run = _pending = _FlowRun(inputs, changes);
+        final run = _pending = _FlowRun(inputs, _foldRevision, changes);
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!_current(run)) return;
           widget.onGeometry?.call(false, false);
@@ -551,8 +557,18 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
   }
 
   void _imageTap(_FlowRun run, ForumHtmlReadableImageEntry entry) {
-    if (!_current(run)) return;
-    widget.callbacks.onTapImage?.call(
+    final open = widget.onOpenImage;
+    final images = run.images;
+    if (open == null ||
+        !_current(run) ||
+        _error != null ||
+        run.foldRevision != _foldRevision ||
+        images == null ||
+        images.pathForIndex(entry.index) == null) {
+      return;
+    }
+    open(
+      images.galleryFor(widget.prepared.sequence),
       ForumHtmlImageRequest(
         url: entry.url,
         readableIndex: entry.index,
@@ -624,7 +640,7 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
 enum _ImageChange { block, source, table }
 
 final class _FlowRun {
-  _FlowRun(this.inputs, Map<String, _ImageChange> changes)
+  _FlowRun(this.inputs, this.foldRevision, Map<String, _ImageChange> changes)
     : blockChanges =
           changes.values.every((change) => change == _ImageChange.block)
           ? changes.keys.toSet()
@@ -635,6 +651,7 @@ final class _FlowRun {
       preserveTable = changes.containsValue(_ImageChange.table);
 
   final Object inputs;
+  final int foldRevision;
   final Set<String> blockChanges;
   final bool preserveSource, preserveTable;
   final boundsKey = GlobalKey();

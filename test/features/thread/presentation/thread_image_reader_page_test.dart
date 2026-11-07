@@ -3,7 +3,9 @@ import 'dart:io' as io;
 
 import 'package:continuous_image_geometry/continuous_image_geometry.dart';
 import 'package:flutter/material.dart';
+
 import '../../../test_support/localized_test_app.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -124,6 +126,37 @@ void main() {
       expect((await route.result)?.indexInPost, currentPage - 1);
     },
   );
+
+  testWidgets('vertical dragging returns the original sparse image index', (
+    tester,
+  ) async {
+    final request = _request(count: 10, sparseSource: true);
+    final route = await _pumpReaderRoute(
+      tester,
+      mode: 'vertical',
+      request: request,
+    );
+    await tester.drag(
+      find.byKey(const Key('thread-image-reader-list')),
+      const Offset(0, -1300),
+    );
+    await _pumpReaderUiTransition(tester);
+    await _openReaderMenu(tester);
+    final currentPage = int.parse(
+      tester
+          .widget<Text>(find.byKey(const Key('shared-reader-top-subtitle')))
+          .data!
+          .split(' / ')
+          .first,
+    );
+    expect(currentPage, inInclusiveRange(2, request.group.entries.length));
+    final entry = request.group.entries[currentPage - 1];
+    await tester.binding.handlePopRoute();
+    await _pumpReaderUiTransition(tester);
+    final result = await route.result;
+    expect(result?.indexInPost, entry.indexInPost);
+    expect(result?.cacheKey, entry.cacheKey);
+  });
 
   testWidgets(
     'system back prepares the body before popping and ignores repeats',
@@ -967,7 +1000,11 @@ void main() {
   });
 }
 
-ThreadImageOpenRequest _request({int initialIndex = 0, int count = 5}) {
+ThreadImageOpenRequest _request({
+  int initialIndex = 0,
+  int count = 5,
+  bool sparseSource = false,
+}) {
   final items = List<ContinuousImageItem>.generate(count, (index) {
     final page = index + 1;
     return ContinuousImageItem(
@@ -982,6 +1019,7 @@ ThreadImageOpenRequest _request({int initialIndex = 0, int count = 5}) {
       knownDimensionSource: ContinuousImageDimensionSource.html,
       fallbackAspectRatio: 0.7,
       spacingAfter: 10,
+      extra: sparseSource ? {'indexInPost': index * 2 + 1} : const {},
     );
   });
   return ThreadImageOpenRequest(
@@ -998,7 +1036,7 @@ ThreadImageOpenRequest _request({int initialIndex = 0, int count = 5}) {
         (index) => ThreadPostImageEntry(
           url: items[index].url,
           rawUrl: items[index].url,
-          indexInPost: index,
+          indexInPost: sparseSource ? index * 2 + 1 : index,
           cacheKey: items[index].cacheKey,
         ),
       ),

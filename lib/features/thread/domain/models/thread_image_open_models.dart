@@ -30,6 +30,8 @@ class ThreadPostImageEntry {
 
   final String url;
   final String rawUrl;
+
+  /// Original occurrence in the body, which can differ from gallery position.
   final int indexInPost;
   final String cacheKey;
   final String? aid;
@@ -52,6 +54,8 @@ class ThreadImageOpenRequest {
   final int postNumber;
   final String referer;
   final ThreadPostImageGroup group;
+
+  /// Position in the gallery's filtered entries.
   final int initialIndex;
   final List<ContinuousImageItem> continuousImages;
 

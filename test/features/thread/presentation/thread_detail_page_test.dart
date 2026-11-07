@@ -438,12 +438,22 @@ void main() {
           await _pumpThreadUiTransition(tester);
           final readerPage = find.byType(ThreadImageReaderPage);
           final reader = tester.widget<ThreadImageReaderPage>(readerPage);
-          expect(reader.request.group.entries, hasLength(3));
+          expect(
+            reader.request.group.entries.map((entry) => entry.indexInPost),
+            [0, 2],
+          );
           expect(reader.request.initialEntry?.indexInPost, 0);
+          final opening = _imageReturnResult(reader, 0);
           await _prepareImageReturn(
             tester,
             reader,
-            _imageReturnResult(reader, 1),
+            ThreadImageReaderExitResult(
+              tid: opening.tid,
+              pid: opening.pid,
+              indexInPost: 1,
+              cacheKey: opening.cacheKey,
+              url: opening.url,
+            ),
           );
           expect(scroll.offset, origin);
 
@@ -452,7 +462,7 @@ void main() {
             skipOffstage: false,
           );
           expect(anchor(2), findsNothing);
-          await _readImageReturnPages(tester, 2);
+          await _readImageReturnPages(tester, 1);
           await tester.binding.handlePopRoute();
           for (
             var frame = 0;
@@ -3631,34 +3641,73 @@ void main() {
       );
     });
 
-    testWidgets('image reader return preserves origin for a closed fold target', (
-      tester,
-    ) async {
-      final repository = _imageReturnRepository(
-        '<img src="https://example.com/visible.jpg">'
-        '<div class="showcollapse_box">'
-        '<div class="showcollapse_title">Hidden pages</div>'
-        '<div class="showcollapse_content"><img src="https://example.com/hidden.jpg"></div>'
-        '</div><p>After the fold</p>',
-      );
-      final reader = await _openImageReturnReader(tester, repository);
-      expect(reader.request.group.entries, hasLength(2));
-      expect(_imageReturnBodyImage(1, skipOffstage: false), findsNothing);
-      final origin = _imageReturnScrollable(tester).position.pixels;
+    testWidgets(
+      'image reader follows the current fold state and source indices',
+      (tester) async {
+        const image =
+            '<img src="https://example.com/same.jpg" width="180" height="40">';
+        final repository = _imageReturnRepository(
+          '$image'
+          '<div class="showcollapse_box">'
+          '<div class="showcollapse_title">Hidden pages</div>'
+          '<div class="showcollapse_content">$image</div>'
+          '</div>$image<p>After the fold</p>',
+        );
+        final readerPage = find.byType(ThreadImageReaderPage);
+        final reader = await _openImageReturnReader(tester, repository);
+        expect(reader.request.group.entries.map((entry) => entry.indexInPost), [
+          0,
+          2,
+        ]);
+        expect(_imageReturnBodyImage(1, skipOffstage: false), findsNothing);
+        await tester.binding.handlePopRoute();
+        await _pumpImageReturnTransition(tester);
 
-      await _prepareImageReturn(tester, reader, _imageReturnResult(reader, 1));
-      expect(
-        _imageReturnScrollable(tester).position.pixels,
-        closeTo(origin, 0.1),
-      );
-      await tester.binding.handlePopRoute();
-      await _pumpImageReturnTransition(tester);
-      expect(
-        _imageReturnScrollable(tester).position.pixels,
-        closeTo(origin, 0.1),
-      );
-      expect(_imageReturnBodyImage(1), findsNothing);
-    });
+        final fold = find.byWidgetPredicate((widget) {
+          final key = widget.key;
+          return key is ValueKey<String> &&
+              key.value.startsWith('forum-native-collapse-toggle-');
+        }).hitTestable();
+        await tester.tap(fold);
+        await _pumpThreadBodyUntil(
+          tester,
+          () => _imageReturnBodyImage(1).evaluate().isNotEmpty,
+        );
+        await _tapVisibleTop(tester, _imageReturnBodyImage(1));
+        await _pumpThreadUiTransition(tester);
+        final expanded = tester
+            .widget<ThreadImageReaderPage>(readerPage)
+            .request;
+        expect(expanded.group.entries.map((entry) => entry.indexInPost), [
+          0,
+          1,
+          2,
+        ]);
+        expect(expanded.initialIndex, 1);
+        expect(expanded.initialEntry?.indexInPost, 1);
+        await tester.binding.handlePopRoute();
+        await _pumpImageReturnTransition(tester);
+
+        await tester.tap(fold);
+        await _pumpThreadBodyUntil(
+          tester,
+          () =>
+              _imageReturnBodyImage(1).evaluate().isEmpty &&
+              _imageReturnBodyImage(2).hitTestable().evaluate().isNotEmpty,
+        );
+        await _tapVisibleTop(tester, _imageReturnBodyImage(2));
+        await _pumpThreadUiTransition(tester);
+        final collapsed = tester
+            .widget<ThreadImageReaderPage>(readerPage)
+            .request;
+        expect(collapsed.group.entries.map((entry) => entry.indexInPost), [
+          0,
+          2,
+        ]);
+        expect(collapsed.initialIndex, 1);
+        expect(collapsed.initialEntry?.indexInPost, 2);
+      },
+    );
 
     testWidgets('image reader return rejects a refreshed source snapshot', (
       tester,

@@ -161,7 +161,6 @@ class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
       );
     }
     if (document == null) return const ForumHtmlPreparationPlaceholder();
-    final sequence = document.sequence;
     final source = (trimmedHtml, sourceId, ownerId, request.preparer);
     if (_nativeSource != source) {
       _nativeSource = source;
@@ -193,12 +192,12 @@ class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
       fontRevision: fontBinding?.cacheKey ?? '',
       imageHost: _resolveImageHost(document, ownerId),
       expansion: _expansion,
+      onOpenImage: widget.onOpenImage == null
+          ? null
+          : (gallery, image) {
+              if (current()) widget.onOpenImage?.call(gallery, image);
+            },
       callbacks: ForumHtmlRenderCallbacks(
-        onTapImage: widget.onOpenImage == null
-            ? null
-            : (image) {
-                if (current()) widget.onOpenImage?.call(sequence, image);
-              },
         onTapUrl: widget.onOpenLink == null
             ? null
             : (url) {

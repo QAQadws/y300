@@ -15,6 +15,19 @@ final class ForumNativeBodyImages {
 
   String? pathForIndex(int index) => _pathsByIndex[index];
 
+  ForumHtmlReadableImageSequence galleryFor(
+    ForumHtmlReadableImageSequence source,
+  ) {
+    if (_pathsByIndex.length == source.entries.length) return source;
+    return ForumHtmlReadableImageSequence(
+      sourceId: source.sourceId,
+      entries: List.unmodifiable([
+        for (final entry in source.entries)
+          if (_pathsByIndex.containsKey(entry.index)) entry,
+      ]),
+    );
+  }
+
   void add({
     required ForumBodyElement element,
     required ForumHtmlReadableImageSequence sequence,

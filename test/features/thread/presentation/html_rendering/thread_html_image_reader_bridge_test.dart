@@ -392,7 +392,7 @@ void main() {
     }
 
     test(
-      'rejects a malformed sequence whose image index is outside its group',
+      'an absent source index cannot select the image at that gallery position',
       () {
         final source = _prepared(
           '<img src="data/attachment/forum/page-1.jpg">',
@@ -416,7 +416,7 @@ void main() {
         expect(result.request, isNull);
         expect(
           result.failureReason,
-          ThreadHtmlImageReaderBridgeFailureReason.invalidInitialIndex,
+          ThreadHtmlImageReaderBridgeFailureReason.unmatchedImage,
         );
       },
     );

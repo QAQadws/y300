@@ -24,12 +24,11 @@ final class BlogImageReaderRequest {
     if (image.isSticker || sequence.entries.isEmpty) return null;
     final selectedUri = _uri(image.url);
     if (selectedUri == null) return null;
-    final selected =
-        image.readableIndex ??
-        sequence.entries.indexWhere((entry) => _uri(entry.url) == selectedUri);
-    if (selected < 0 ||
-        selected >= sequence.entries.length ||
-        _uri(sequence.entries[selected].url) != selectedUri) {
+    final sourceIndex = image.readableIndex;
+    final selected = sourceIndex == null
+        ? sequence.entries.indexWhere((entry) => _uri(entry.url) == selectedUri)
+        : sequence.positionOfSourceIndex(sourceIndex);
+    if (selected < 0 || _uri(sequence.entries[selected].url) != selectedUri) {
       return null;
     }
     final requests = <ImageCacheRequest>[];
@@ -47,7 +46,7 @@ final class BlogImageReaderRequest {
           ownerId: cacheOwnerId,
           ownerType: ImageCacheOwnerType.blog,
           referer: referer,
-          imageIndex: items.length,
+          imageIndex: entry.index,
         ),
       );
       if (request == null) return null;

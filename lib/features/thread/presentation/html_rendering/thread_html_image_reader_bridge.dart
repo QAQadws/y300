@@ -51,23 +51,22 @@ class ThreadHtmlImageReaderBridge {
       );
     }
 
-    final entry = _resolveEntry(sequence: sequence, imageRequest: imageRequest);
-    if (entry == null) {
+    final initialIndex = _resolvePosition(sequence, imageRequest);
+    if (initialIndex < 0) {
       return const ThreadHtmlImageReaderBridgeResult.fallback(
         ThreadHtmlImageReaderBridgeFailureReason.unmatchedImage,
+      );
+    }
+
+    if (sequence.entries[initialIndex].index < 0) {
+      return const ThreadHtmlImageReaderBridgeResult.fallback(
+        ThreadHtmlImageReaderBridgeFailureReason.invalidInitialIndex,
       );
     }
 
     final entries = sequence.entries
         .map(_readerEntryFor)
         .toList(growable: false);
-    final initialIndex = entry.index;
-    if (initialIndex < 0 || initialIndex >= entries.length) {
-      return const ThreadHtmlImageReaderBridgeResult.fallback(
-        ThreadHtmlImageReaderBridgeFailureReason.invalidInitialIndex,
-      );
-    }
-
     final group = ThreadPostImageGroup(
       tid: threadId,
       pid: post.pid,
@@ -96,34 +95,31 @@ class ThreadHtmlImageReaderBridge {
     );
   }
 
-  ForumHtmlReadableImageEntry? _resolveEntry({
-    required ForumHtmlReadableImageSequence sequence,
-    required ForumHtmlImageRequest imageRequest,
-  }) {
+  int _resolvePosition(
+    ForumHtmlReadableImageSequence sequence,
+    ForumHtmlImageRequest imageRequest,
+  ) {
     final readableIndex = imageRequest.readableIndex;
     if (readableIndex != null) {
       // An explicit DOM index identifies repeated URLs; a stale index must not
       // silently open a different image through attachment or URL matching.
-      return sequence.entryAt(readableIndex);
+      return sequence.positionOfSourceIndex(readableIndex);
     }
 
     final attachmentId = imageRequest.attachmentId?.trim();
     if (attachmentId != null && attachmentId.isNotEmpty) {
-      for (final entry in sequence.entries) {
-        if (entry.attachmentId?.trim() == attachmentId) {
-          return entry;
-        }
-      }
+      final position = sequence.entries.indexWhere(
+        (entry) => entry.attachmentId?.trim() == attachmentId,
+      );
+      if (position >= 0) return position;
     }
 
     final requestUrl = _normalizeUrlForMatch(imageRequest.url);
-    for (final entry in sequence.entries) {
-      if (_normalizeUrlForMatch(entry.url) == requestUrl ||
-          _normalizeUrlForMatch(entry.rawSrc) == requestUrl) {
-        return entry;
-      }
-    }
-    return null;
+    return sequence.entries.indexWhere(
+      (entry) =>
+          _normalizeUrlForMatch(entry.url) == requestUrl ||
+          _normalizeUrlForMatch(entry.rawSrc) == requestUrl,
+    );
   }
 
   ThreadPostImageEntry _readerEntryFor(ForumHtmlReadableImageEntry entry) {

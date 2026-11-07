@@ -10,6 +10,8 @@ import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
 import 'package:y300/features/thread/domain/models/thread_image_reader_exit_result.dart';
 
+import 'thread_image_reader_continuous_image_adapter.dart';
+
 /// 帖子图片阅读器的"专属能力"实现。
 ///
 /// 与漫画相比，帖子图片阅读是"通用阅读"的子集：保留模式切换/缩放/滑块/页码/显示
@@ -126,7 +128,8 @@ class ThreadImageReaderCapability extends ReaderCapability {
     }
     final entry = _entries[_currentIndex];
     final item = _items[_currentIndex];
-    if (entry.indexInPost != item.index ||
+    if (item.index != _currentIndex ||
+        entry.indexInPost != item.indexInPost ||
         entry.cacheKey != item.cacheKey ||
         entry.url != item.url) {
       return null;
@@ -208,7 +211,7 @@ class ThreadImageReaderCapability extends ReaderCapability {
   ReaderImageExportMetadata? exportMetadataFor(ContinuousImageItem item) {
     return ReaderImageExportMetadata(
       baseName:
-          'Y300-thread-${request.tid}-post-${request.pid}-${item.index + 1}',
+          'Y300-thread-${request.tid}-post-${request.pid}-${item.indexInPost + 1}',
       albumName: 'Y300',
     );
   }
@@ -221,7 +224,7 @@ class ThreadImageReaderCapability extends ReaderCapability {
       ownerType: ImageCacheOwnerType.thread,
       ownerId: item.ownerId,
       role: ImageCacheRole.threadInline,
-      imageIndex: item.index,
+      imageIndex: item.indexInPost,
       retentionClass: ImageRetentionClass.recentReader,
     );
   }
@@ -238,7 +241,7 @@ class ThreadImageReaderCapability extends ReaderCapability {
       url: uri,
       ownerId: request.ownerId,
       ownerType: ImageCacheOwnerType.thread,
-      imageIndex: item.index,
+      imageIndex: item.indexInPost,
       cacheKey: request.cacheKey,
       retentionClass: ImageRetentionClass.recentReader,
       htmlWidth: item.knownWidth?.toDouble(),
