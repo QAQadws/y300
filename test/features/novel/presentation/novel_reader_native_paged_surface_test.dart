@@ -766,6 +766,12 @@ void main() {
       expect(body, const Rect.fromLTWH(80, 50, 240, 460));
       expect(footer.top, body.bottom);
       expect(body.overlaps(footer), isFalse);
+      final indicator = tester.getRect(
+        find.byKey(const Key('novel-reader-page-indicator-text')),
+      );
+      expect(indicator.right, closeTo(footer.right - 2, .01));
+      expect(indicator.bottom, closeTo(footer.bottom - 2, .01));
+      expect(find.byType(IconButton), findsNothing);
       final snapshot = reader.statuses.last.controller!.snapshot!;
       expect(snapshot.width, body.width);
       expect(snapshot.height, body.height);

@@ -720,24 +720,39 @@ class _NativePagedFooter extends StatelessWidget {
                 ),
               )
             else if (showIndicator && page != null)
-              Flexible(
-                child: Text(
-                  l10n.novelPageIndicator(
-                    page! + 1,
-                    isFinal ? '$count' : l10n.novelPageCountPending,
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: constraints.maxWidth * .45,
+                ),
+                child: Align(
+                  alignment: Alignment.bottomRight,
+                  widthFactor: 1,
+                  child: Padding(
+                    padding: const EdgeInsets.only(
+                      right: NovelReaderPagedIndicatorLayout.rightInset,
+                      bottom: NovelReaderPagedIndicatorLayout.bottomInset,
+                    ),
+                    child: Text(
+                      l10n.novelPageIndicator(
+                        page! + 1,
+                        isFinal ? '$count' : l10n.novelPageCountPending,
+                      ),
+                      key: const Key('novel-reader-page-indicator-text'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style:
+                          (Theme.of(context).textTheme.labelSmall ??
+                                  const TextStyle())
+                              .copyWith(
+                                fontSize:
+                                    NovelReaderPagedIndicatorLayout.fontSize,
+                                height:
+                                    NovelReaderPagedIndicatorLayout.lineHeight,
+                                letterSpacing: 0,
+                                color: palette.muted,
+                              ),
+                    ),
                   ),
-                  key: const Key('novel-reader-page-indicator-text'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style:
-                      (Theme.of(context).textTheme.labelSmall ??
-                              const TextStyle())
-                          .copyWith(
-                            fontSize: NovelReaderPagedIndicatorLayout.fontSize,
-                            height: NovelReaderPagedIndicatorLayout.lineHeight,
-                            letterSpacing: 0,
-                            color: palette.muted,
-                          ),
                 ),
               ),
           ],
