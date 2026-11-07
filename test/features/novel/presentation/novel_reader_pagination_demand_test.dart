@@ -7,7 +7,7 @@ import 'package:y300/features/novel/presentation/services/novel_reader_paginatio
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_pagination_restore_policy.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_reader_pagination_restore_policy.dart';
 
 void main() {
   test(

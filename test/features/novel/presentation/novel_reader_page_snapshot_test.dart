@@ -5,7 +5,7 @@ import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_page_fragment.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_page_snapshot.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_pagination_plan.dart';
+import '../../../../tool/legacy/novel/presentation/models/novel_reader_pagination_plan.dart';
 
 void main() {
   test('append preserves old prefixes, iterators and indexed reads', () {

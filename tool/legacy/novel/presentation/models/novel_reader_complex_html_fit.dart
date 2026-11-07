@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_complex_html_slice.dart';
+import './novel_reader_complex_html_slice.dart';
 
 @immutable
 final class NovelReaderComplexHtmlFitResult {

@@ -665,7 +665,7 @@ packages:
     source: hosted
     version: "0.15.7"
   html_pagination_core:
-    dependency: "direct main"
+    dependency: "direct dev"
     description:
       path: "packages/html_pagination_core"
       relative: true

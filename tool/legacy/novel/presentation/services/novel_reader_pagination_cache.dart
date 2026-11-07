@@ -2,7 +2,7 @@ import 'dart:collection';
 
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_pagination_plan.dart';
+import '../models/novel_reader_pagination_plan.dart';
 
 /// Bounded process-local LRU cache. Pagination fragments are derived data and
 /// are intentionally not written to SQLite or the downloaded content store.

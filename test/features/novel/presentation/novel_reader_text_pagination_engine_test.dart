@@ -8,9 +8,9 @@ import 'package:y300/features/novel/presentation/models/novel_reader_pagination_
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_text_pagination.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_atom_classifier.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_html_text_range_slicer.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_reader_html_text_range_slicer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_text_run_extractor.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_text_pagination_engine.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_reader_text_pagination_engine.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_dom_source_text.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/typography/rich_text_typography.dart';

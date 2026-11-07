@@ -9,7 +9,7 @@ import 'package:y300/features/novel/presentation/services/novel_forum_html_rende
 import 'package:y300/features/novel/presentation/services/novel_html_reader_preferences_adapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_hybrid_pagination_planner.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_reader_hybrid_pagination_planner.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_renderer_validator.dart';
 

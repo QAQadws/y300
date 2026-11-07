@@ -1,11 +1,11 @@
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_pagination_plan.dart';
+import '../models/novel_reader_pagination_plan.dart';
 
-import '../models/novel_reader_pagination_restore_resolution.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_pagination_restore_resolution.dart';
 
-export '../models/novel_reader_pagination_restore_resolution.dart';
+export 'package:y300/features/novel/presentation/models/novel_reader_pagination_restore_resolution.dart';
 
 /// Resolves a persisted location without allowing a stale page index to jump
 /// to the end of a newly reflowed chapter.

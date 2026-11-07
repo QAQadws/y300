@@ -1,9 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_classified_pagination_atom.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_flowable_complex_pagination.dart';
+import './novel_reader_flowable_complex_pagination.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_legacy_markup_normalization.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_pagination_plan.dart';
+import './novel_reader_pagination_plan.dart';
 
 @immutable
 class NovelReaderPaginationDiagnostics {

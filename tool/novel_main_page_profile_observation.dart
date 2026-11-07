@@ -13,7 +13,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_native_page
 import 'package:y300/features/novel/presentation/models/novel_reader_native_page_view.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_owner.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_delayed_loading_boundary.dart';
-import 'package:y300/features/novel/presentation/widgets/novel_reader_html_paged_surface.dart';
+import './legacy/novel/presentation/widgets/novel_reader_html_paged_surface.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_native_flow_host.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_native_paged_surface.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_native_paged_viewport.dart';

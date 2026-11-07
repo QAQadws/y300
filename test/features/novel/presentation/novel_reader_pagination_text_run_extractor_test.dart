@@ -9,7 +9,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_classified_
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_source_anchor_projection.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_boundary_indexer.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_reader_complex_html_boundary_indexer.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_atom_classifier.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_text_run_extractor.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_dom_source_text.dart';

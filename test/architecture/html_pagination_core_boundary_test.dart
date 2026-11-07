@@ -34,13 +34,24 @@ const _runtimeEntries = {
 enum _Scope { app, library, consumer }
 
 void main() {
-  test('App uses one public pagination entry and retires temporary cores', () {
+  test('production retires legacy pagination; development uses public API', () {
     expect(_violations(['lib', 'test'], _Scope.app), isEmpty);
     expect(File(_retiredDomIndex).existsSync(), isFalse);
     expect(
       _temporaryRoots.where((root) => Directory(root).existsSync()),
       isEmpty,
     );
+  });
+
+  test('App keeps legacy pagination in development dependencies', () {
+    final manifest = File('pubspec.yaml').readAsStringSync(encoding: utf8);
+    final split = manifest.indexOf('\ndev_dependencies:');
+    expect(split, greaterThan(0));
+    expect(
+      manifest.substring(0, split),
+      isNot(contains('  html_pagination_core:')),
+    );
+    expect(manifest.substring(split), contains('  html_pagination_core:'));
   });
 
   test('legacy pagination uses one public text foundation and one barrel', () {
@@ -88,11 +99,14 @@ void main() {
       _forbidden('lib/new_adapter.dart', '''
 import '$_entry' if (dart.library.io == 'true') 'package:html_pagination_core/src/private.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_fit_searcher.dart';
+import '../tool/legacy/novel/presentation/services/novel_reader_complex_html_fit_searcher.dart';
 export 'core/temporary/../html_pagination_core/model.dart';
 import '../packages/html_pagination_core/test/fixture.dart';
 ''', _Scope.app),
       {
         '${_lib}src/private.dart',
+        _barrel,
+        'tool/legacy/novel/presentation/services/novel_reader_complex_html_fit_searcher.dart',
         'lib/core/html_pagination_core/model.dart',
         '$_root/test/fixture.dart',
       },
@@ -167,7 +181,7 @@ Iterable<String> _violations(List<String> roots, _Scope scope) sync* {
 
 Set<String> _forbidden(String source, String text, _Scope scope) => {
   for (final uri in dartDependencyDirectiveUris(text))
-    if (!_allowed(uri, _target(source, uri), scope)) _target(source, uri),
+    if (!_allowed(source, uri, _target(source, uri), scope)) _target(source, uri),
 };
 
 String _target(String source, String uri) =>
@@ -177,7 +191,7 @@ String _target(String source, String uri) =>
       )
     : resolveDartDependencyTarget(source, uri);
 
-bool _allowed(String uri, String target, _Scope scope) {
+bool _allowed(String source, String uri, String target, _Scope scope) {
   if (scope == _Scope.library) {
     return _pureSdk.contains(target) ||
         _runtimeEntries.contains(target) ||
@@ -185,10 +199,11 @@ bool _allowed(String uri, String target, _Scope scope) {
   }
   if (uri == 'package:html_pagination_core' ||
       uri.startsWith('package:html_pagination_core/')) {
-    return uri == _entry;
+    return uri == _entry && !source.startsWith('lib/');
   }
   if (scope == _Scope.app) {
     return target != _retiredDomIndex &&
+        !(source.startsWith('lib/') && target.startsWith('tool/')) &&
         !target.startsWith('$_root/') &&
         !_temporaryRoots.any(
           (root) => target == root || target.startsWith('$root/'),

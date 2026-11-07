@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_pagination_plan.dart';
+import './novel_reader_pagination_plan.dart';
 
 /// An immutable snapshot containing only page boundaries that are final.
 ///

@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_pagination_diagnostics.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_pagination_plan.dart';
+import '../../../../tool/legacy/novel/presentation/models/novel_reader_pagination_diagnostics.dart';
+import '../../../../tool/legacy/novel/presentation/models/novel_reader_pagination_plan.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_performance_policy.dart';
 
 void main() {

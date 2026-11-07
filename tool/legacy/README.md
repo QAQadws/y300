@@ -16,3 +16,5 @@ NovelReaderPage(
 `WidgetRef` 仅在同步 build 调用中借用，不保存进缓存、异步任务或显示实例；由同一 App provider 装配既有准备服务，避免额外包装 Widget 或第二套协议/会话。文字基础算法统一使用 `forum_content_renderer/forum_text.dart`，对比实现不复制坐标算法。
 
 对比测试和工具通过相对路径导入此目录，生产 `lib/` 不能导入 `tool/`。性能记录须明确后端、固定来源、字体、布局、缓存状态和实际绘制时间；同一页面的恢复和业务语义仍由 App 回归覆盖。
+
+旧 HTML 分页的 engine/model/cache/coordinator 唯一实现位于 `novel/presentation/`。`html_pagination_core` 是 App 开发依赖，生产 `lib/` 不导入旧包或本目录；只有显式对比入口和对应集成测试消费它们。

@@ -5,8 +5,8 @@ import 'package:y300/features/novel/domain/models/novel_reading_body_geometry.da
 import 'package:y300/features/novel/domain/services/novel_reader_progress_policy.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_page_fragment.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_pagination_plan.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_pagination_restore_policy.dart';
+import '../../../../../tool/legacy/novel/presentation/models/novel_reader_pagination_plan.dart';
+import '../../../../../tool/legacy/novel/presentation/services/novel_reader_pagination_restore_policy.dart';
 
 void main() {
   const policy = NovelReaderProgressPolicy();

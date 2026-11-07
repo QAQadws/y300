@@ -5,7 +5,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_classified_
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_complex_block_inspectors.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_hybrid_pagination_planner.dart';
+import '../../../../tool/legacy/novel/presentation/services/novel_reader_hybrid_pagination_planner.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_renderer_validator.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';

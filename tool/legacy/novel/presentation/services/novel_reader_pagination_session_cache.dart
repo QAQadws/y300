@@ -1,5 +1,5 @@
-import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_boundary_cache.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cache.dart';
+import './novel_reader_complex_html_boundary_cache.dart';
+import './novel_reader_pagination_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
 

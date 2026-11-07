@@ -14,10 +14,10 @@ import 'package:y300/features/novel/domain/services/novel_reader_progress_policy
 import 'package:y300/features/novel/presentation/models/novel_reader_page_fragment.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_anchor_navigation_request.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_chapter_turn.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_pagination_diagnostics.dart';
+import '../models/novel_reader_pagination_diagnostics.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_pagination_plan.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_pagination_progress.dart';
+import '../models/novel_reader_pagination_plan.dart';
+import '../models/novel_reader_pagination_progress.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_prepared_chapter.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_paged_indicator_layout.dart';
@@ -25,16 +25,16 @@ import 'package:y300/features/novel/presentation/services/novel_html_chapter_ren
 import 'package:y300/features/novel/presentation/services/novel_html_image_reader_bridge.dart';
 import 'package:y300/features/novel/presentation/services/novel_html_reader_preferences_adapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_display_resolvers.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_complex_html_boundary_cache.dart';
+import '../services/novel_reader_complex_html_boundary_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_html_preparation_service.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_hybrid_pagination_planner.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cache.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_pagination_coordinator.dart';
+import '../services/novel_reader_hybrid_pagination_planner.dart';
+import '../services/novel_reader_pagination_cache.dart';
+import '../services/novel_reader_pagination_coordinator.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_demand.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_performance_policy.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_pagination_restore_policy.dart';
+import '../services/novel_reader_pagination_restore_policy.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_render_environment.dart';
 import 'package:y300/features/novel/presentation/services/novel_reading_image_host.dart';
 import 'package:y300/features/novel/presentation/novel_text_resolver.dart';
@@ -45,9 +45,9 @@ import 'package:y300/features/thread/domain/models/thread_image_open_models.dart
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
-import '../controllers/novel_reader_paged_navigation_controller.dart';
+import 'package:y300/features/novel/presentation/controllers/novel_reader_paged_navigation_controller.dart';
 
-export '../controllers/novel_reader_paged_navigation_controller.dart';
+export 'package:y300/features/novel/presentation/controllers/novel_reader_paged_navigation_controller.dart';
 
 typedef NovelReaderPaginationCoordinatorBuilder =
     NovelReaderPaginationCoordinator Function({

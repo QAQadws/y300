@@ -5,7 +5,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_classified_
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_atom.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_text_run.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_text_pagination.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_html_text_range_slicer.dart';
+import './novel_reader_html_text_range_slicer.dart';
 
 abstract interface class NovelReaderTextPaginationEngine {
   NovelReaderTextPaginationResult paginate({

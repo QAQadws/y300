@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_comparison_surface.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_conversion_position.dart';
-import 'package:y300/features/novel/presentation/services/novel_reader_pagination_session_cache.dart';
-import 'package:y300/features/novel/presentation/widgets/novel_reader_html_paged_surface.dart';
+import './presentation/services/novel_reader_pagination_session_cache.dart';
+import './presentation/widgets/novel_reader_html_paged_surface.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_html_document_view.dart';
 
 NovelReaderComparisonSurface createLegacyNovelReaderSurface() =>
