@@ -2,8 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
-import 'package:html_pagination_core/html_pagination_core.dart'
-    show HtmlProjectionAffinity;
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/fonts/fonts.dart' show ResolvedFont;
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';

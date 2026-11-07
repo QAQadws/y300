@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/painting.dart';
-import 'package:html_pagination_core/html_pagination_core.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_source_provenance.dart';
 

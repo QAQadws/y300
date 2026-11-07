@@ -1,5 +1,5 @@
-import 'package:html_pagination_core/html_pagination_core.dart';
-import 'package:test/test.dart';
+import 'package:forum_content_renderer/forum_text.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 HtmlDisplayTextProjection _display(String text) =>
     HtmlDisplayTextProjection.build([

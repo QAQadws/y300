@@ -1,5 +1,5 @@
 import 'package:flutter/painting.dart';
-import 'package:html_pagination_core/html_pagination_core.dart';
+import 'package:forum_content_renderer/forum_text.dart';
 
 /// Source-local native text geometry shared by standalone paragraphs and band
 /// children. It exposes no virtual band rows, native painter or owner disposal.

@@ -9,6 +9,7 @@ const _root = 'packages/html_pagination_core';
 const _lib = '$_root/lib/';
 const _entry = 'package:html_pagination_core/html_pagination_core.dart';
 const _barrel = '${_lib}html_pagination_core.dart';
+const _textEntry = 'package:forum_content_renderer/forum_text.dart';
 const _retiredDomIndex =
     'lib/features/novel/presentation/services/novel_reader_html_dom_text_index.dart';
 const _temporaryRoots = {
@@ -27,6 +28,7 @@ const _runtimeEntries = {
   'package:characters/characters.dart',
   'package:html/dom.dart',
   'package:html/parser.dart',
+  _textEntry,
 };
 
 enum _Scope { app, library, consumer }
@@ -41,7 +43,7 @@ void main() {
     );
   });
 
-  test('pagination library stays pure with one explicit public barrel', () {
+  test('legacy pagination uses one public text foundation and one barrel', () {
     expect(_violations(['$_root/lib'], _Scope.library), isEmpty);
     expect(
       _files('$_root/lib')
@@ -55,6 +57,7 @@ void main() {
     expect(shows, everyElement(isNotNull));
     expect(shows, everyElement(isNotEmpty));
     for (final uri in dartDependencyDirectiveUris(source)) {
+      if (uri == _textEntry) continue;
       final target = _target(_barrel, uri);
       expect(target, startsWith('${_lib}src/'));
       expect(File(target).existsSync(), isTrue, reason: target);
@@ -62,7 +65,7 @@ void main() {
   });
 
   test(
-    'manifest keeps only the two pure runtime dependencies and no Flutter',
+    'legacy manifest depends on the single renderer text implementation',
     () {
       expect(
         _manifestViolations(
@@ -73,7 +76,7 @@ void main() {
     },
   );
 
-  test('package tests and example use public API and own pure fixtures', () {
+  test('legacy tests and example use public API and own fixtures', () {
     expect(
       _violations(['$_root/test', '$_root/example'], _Scope.consumer),
       isEmpty,
@@ -119,23 +122,18 @@ import '../../../test/root_fixture.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'dart:io';
 ''', _Scope.consumer),
-      {
-        _barrel,
-        'test/root_fixture.dart',
-        'package:flutter_test/flutter_test.dart',
-        'dart:io',
-      },
+      {_barrel, 'test/root_fixture.dart', 'dart:io'},
     );
     expect(
       _manifestViolations(
-        'dependencies: {characters: any, html: any}\ndev_dependencies:\n  test: any',
+        'dependencies: {forum_content_renderer: any, html: any}\ndev_dependencies:\n  flutter_test:\n    sdk: flutter',
       ),
       isEmpty,
     );
     for (final manifest in [
-      'dependencies: {characters: any, html: any, http: any}',
-      'dependencies:\n  characters: any\n  html: any\n  local:\n    path: ../app',
-      'dependencies: {characters: any, html: any}\ndev_dependencies:\n  flutter_test:\n    sdk: flutter',
+      'dependencies: {forum_content_renderer: any, html: any, http: any}',
+      'dependencies:\n  forum_content_renderer: any\n  html: any\n  local:\n    path: ../app',
+      'dependencies: {characters: any, html: any}',
     ]) {
       expect(_manifestViolations(manifest), isNotEmpty);
     }
@@ -196,11 +194,12 @@ bool _allowed(String uri, String target, _Scope scope) {
           (root) => target == root || target.startsWith('$root/'),
         );
   }
-  // Pure synthetic fixtures need no file I/O; this also prevents runtime reads
+  // Synthetic fixtures need no file I/O; this also prevents runtime reads
   // of App fixtures that an import-only boundary could not detect.
   return _pureSdk.contains(target) ||
       _runtimeEntries.contains(target) ||
       target == 'package:test/test.dart' ||
+      target == 'package:flutter_test/flutter_test.dart' ||
       target.startsWith('$_root/test/') ||
       target.startsWith('$_root/example/');
 }
@@ -214,20 +213,19 @@ List<String> _manifestViolations(String source) {
     if (line.trim().isEmpty) continue;
     final indented = line.startsWith(' ') || line.startsWith('\t');
     if (!indented) runtime = line.startsWith('dependencies:');
-    if (runtime) {
+    if (runtime && (!indented || RegExp(r'^  \S').hasMatch(line))) {
       final entries = indented ? line : line.substring('dependencies:'.length);
       for (final match in RegExp(r'([a-zA-Z_]\w*)\s*:').allMatches(entries)) {
         final name = match.group(1)!;
         dependencies.add(name);
-        if (!{'characters', 'html'}.contains(name)) violations.add(line);
+        if (!{'forum_content_renderer', 'html'}.contains(name)) {
+          violations.add(line);
+        }
       }
     }
-    if (RegExp(r'^\s*flutter:|\bsdk:\s*flutter\b').hasMatch(line)) {
-      violations.add(line);
-    }
   }
-  if (!dependencies.containsAll({'characters', 'html'})) {
-    violations.add('Missing pure runtime dependencies');
+  if (!dependencies.containsAll({'forum_content_renderer', 'html'})) {
+    violations.add('Missing shared text foundation');
   }
   return violations;
 }

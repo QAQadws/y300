@@ -1,6 +1,6 @@
 import 'package:html/dom.dart' as dom;
 
-import 'dom_text_index.dart';
+import 'source_dom_index.dart';
 import 'ports.dart';
 
 /// Read-only source coordinates for one node in a repaired HTML fragment.
@@ -35,7 +35,7 @@ final class HtmlSourceTextMap {
     HtmlFragmentParser fragmentParser = const DefaultHtmlFragmentParser(),
     HtmlProtectedInlinePredicate? protectedInlinePredicate,
   }) {
-    final index = HtmlDomTextIndex.parse(
+    final index = HtmlSourceDomIndex.parse(
       html,
       fragmentParser: fragmentParser,
       protectedInlinePredicate: protectedInlinePredicate ?? _notProtected,

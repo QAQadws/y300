@@ -1,6 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
-import 'package:html_pagination_core/html_pagination_core.dart';
+import 'package:forum_content_renderer/forum_text.dart';
 
 /// Shared lifecycle for prepared native text surfaces. Concrete views supply
 /// geometry/paint/source and own their typed leases; this box never acquires.

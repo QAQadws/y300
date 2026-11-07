@@ -50,7 +50,7 @@ jobs:
         run: dart pub get
       - name: Install pagination package dependencies
         working-directory: packages/html_pagination_core
-        run: dart pub get
+        run: flutter pub get
       - name: Install renderer package dependencies
         working-directory: packages/forum_content_renderer
         run: flutter pub get
@@ -96,10 +96,10 @@ jobs:
         run: dart run example/geometry.dart
       - name: Analyze pagination package
         working-directory: packages/html_pagination_core
-        run: dart analyze --fatal-infos
+        run: flutter analyze --fatal-infos
       - name: Test pagination package
         working-directory: packages/html_pagination_core
-        run: dart test --reporter expanded
+        run: flutter test --reporter expanded
       - name: Run pagination package example
         working-directory: packages/html_pagination_core
         run: dart run example/paginate_html.dart

@@ -1,6 +1,6 @@
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart' show BuildContext, LeafRenderObjectWidget;
-import 'package:html_pagination_core/html_pagination_core.dart';
+import 'package:forum_content_renderer/forum_text.dart';
 
 import '../style/forum_body_style_options.dart';
 import '../style/forum_body_text_background_style.dart';

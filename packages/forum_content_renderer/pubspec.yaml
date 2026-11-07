@@ -13,8 +13,7 @@ dependencies:
   html: ^0.15.6
   csslib: ^1.0.2
   crypto: ^3.0.7
-  html_pagination_core:
-    path: ../html_pagination_core
+  characters: ^1.4.1
   material_color_utilities: ^0.13.0
   yamibo_forum_client:
     path: ../yamibo_forum_client

@@ -25,7 +25,7 @@
 - 小说活跃顺序分页先满足目标与邻页，后台工作只在稳定封页后有界等待 Flutter idle；主动让步不算停滞，需求提升沿同一 session 继续。缺页翻页只保留一个等待意图，真正到页才确认位置；相反操作、拖动、新导航/seek、重试或代次变化退役等待及其自动动画，不能因补页完成自动切章。
 - 小说横向 TextPainter、测量 Overlay 和可见 HTML 共用局部解析的字体/字重、对齐、方向及 renderer 有效缩放输入，变化须失效对应布局缓存；已解析 textStyle 不重复 fontScale，作者 CSS 与真实 renderer 校验保留。当前 fwfh 使用单缩放因子，不把它宣称为完整非线性缩放。
 - 小说复杂分页串行等待 chunk 消费，只在封页并完成稳定发布后确认 committed offset；晚失败只回退未发布 DOM 尾部，不重发整块或改动已读前缀。页快照使用只追加存储的固定只读前缀；plan/measure/boundary/prepared 纯缓存归实际阅读会话，模式切换保留，退出或换 owner 永久关闭并隔离迟到回填，不缓存 Context、Overlay 或测量 session。
-- HTML 文字坐标、DOM 索引/切片、合法/受保护边界与有界 fit 搜索位于纯 Dart 包 `packages/html_pagination_core`，只消费 `html_pagination_core.dart` 公开入口。包内范围区分源码点、字素和 UTF-16；论坛保护判定、语义锚点投影、章节/cache identity、Flutter 测量、实际取消生命周期及 composer/hybrid 编排仍归 App。parse 端口不覆盖切片序列化，禁止借抽包启用随机起点或持久检查点。
+- HTML 文字坐标、来源 DOM 索引、显示/行内/字带投影和工作切片由 `packages/forum_content_renderer` 的 `forum_text.dart` 公开入口唯一实现；基础模块不得导入 Flutter UI、App 或传输。旧 `packages/html_pagination_core` 经该入口复用坐标，保有 DOM 切片/序列化、合法/受保护分页边界及有界 fit；新渲染不得反向依赖旧包。旧包具有 Flutter 传递依赖，使用 Flutter 工具链验证。源码点、字素、UTF-16 和业务语义坐标保持区分；论坛保护、语义锚点、章节/cache identity、实际取消和持久化仍归 App，不启用随机 DOM 起点或持久检查点。
 - 漫画/小说纯标题策略位于 `packages/content_title_core`，生产消费者统一使用 `content_title_core.dart` 公开入口。两组规则独立，subject 映射、HTML 准备、provider、搜索/同步与持久化仍归应用；生产代码不得依赖包的测试 fixture。
 - 图片连续阅读几何位于纯 Dart 包 `packages/continuous_image_geometry`，统一使用 `continuous_image_geometry.dart` 公开入口。应用图片模型实现只读 `ContinuousImageLayoutItem`，URL/缓存与业务 FlowPolicy、sequence position、Flutter 控制器、会话失效及实际 preload 仍归应用；不因提包启用未接入的长图/prefetch planner。
 - HTML 准备流水线与 prepared image 只依赖中立 `ForumHtmlPreparedImageResource` 和同步图片准备端口；资源实现保持不可变纯值，可随小说后台准备传递。缓存 spec/request 与默认 URL 装配归 application Host，不把缓存类型放回 prepared document，也不合并准备、显示和阅读器的既有缓存分类。
@@ -100,4 +100,4 @@ Flutter 系列命令和dart系列指令是无法在Codex沙箱内跑的，
 - 小说 HTML/分页集成样本继续归应用 `test/features/novel/test_support/`；原 `novel_title_fixtures.dart` 只桥接包内标题样本，并保有 HTML wrapper/分页标识，不复制算法语料。
 - `content_title_core` 包内测试不得读取 App 文件或导入 Flutter。App 仅通过上述小说 fixture 桥接复用包内测试数据；新增跨边界测试引用须明确归属并更新对应守护。
 - 图片几何算法与纯参考样本维护在 `packages/continuous_image_geometry/test/`；Host 图片映射、视口 Widget、恢复/seek 与会话回归继续归应用测试，不跨边界引用包内测试 fixture。
-- HTML 分页纯坐标、DOM/Unicode 合成样本及 fit 算法测试维护在 `packages/html_pagination_core/test/`；章节转换、业务锚点、renderer、持久化和阅读时序仍归 App 测试。包内测试只经公开入口、不得读 App 或导入 Flutter；App 不引用该包测试 fixture，不复制纯算法语料。
+- HTML 坐标、投影、来源 DOM/Unicode 合成算法语料唯一维护在 `packages/forum_content_renderer/test/text/`；旧切片、合法分页边界与 fit 算法测试归 `packages/html_pagination_core/test/`。两包测试经各自公开入口，不读取 App 或彼此测试 fixture；App 保留章节转换、业务锚点、renderer、持久化和阅读时序集成。

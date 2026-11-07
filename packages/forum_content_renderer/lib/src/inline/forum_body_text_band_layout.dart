@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/painting.dart';
-import 'package:html_pagination_core/html_pagination_core.dart';
+import 'package:forum_content_renderer/forum_text.dart';
 
 import '../paragraph/forum_body_paragraph_layout.dart';
 import '../paragraph/forum_body_native_paragraph_layout.dart';

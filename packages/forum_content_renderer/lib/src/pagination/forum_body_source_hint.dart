@@ -1,4 +1,4 @@
-import 'package:html_pagination_core/html_pagination_core.dart';
+import 'package:forum_content_renderer/forum_text.dart';
 
 /// Raw source envelope for candidate search only. Hidden gaps can be inside;
 /// neither this envelope nor its endpoints prove visible semantic coverage.

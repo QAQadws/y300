@@ -8,6 +8,7 @@ import 'dart_dependency_directives.dart';
 const _packageRoot = 'packages/forum_content_renderer/';
 const _packageLib = '${_packageRoot}lib/';
 const _packageEntry = '${_packageLib}forum_content_renderer.dart';
+const _textEntry = '${_packageLib}forum_text.dart';
 const _comparisonLib = 'packages/forum_html_comparison/lib/';
 const _comparisonEntry = '${_comparisonLib}forum_html_comparison.dart';
 const _sharedRoot = 'lib/features/content_rendering_shared/';
@@ -68,6 +69,41 @@ const _cacheNeutralDisplayFiles = {
 };
 
 void main() {
+  test('text foundation has no Flutter, Host or legacy pagination imports', () {
+    const textRoot = '${_packageLib}src/text/';
+    for (final file in [
+      File(_textEntry),
+      ...Directory(textRoot).listSync().whereType<File>(),
+    ]) {
+      final source = normalizeDartSourcePath(file.path);
+      for (final uri in dartDependencyDirectiveUris(
+        file.readAsStringSync(encoding: utf8),
+      )) {
+        final target = _target(source, uri);
+        expect(
+          const {
+                'dart:async',
+                'dart:collection',
+                'dart:convert',
+                'dart:core',
+                'dart:math',
+                'dart:typed_data',
+              }.contains(target) ||
+              target == 'package:characters/characters.dart' ||
+              target == 'package:html/dom.dart' ||
+              target == 'package:html/parser.dart' ||
+              target.startsWith(textRoot),
+          isTrue,
+          reason: '$source -> $target',
+        );
+      }
+    }
+    expect(
+      File('${_packageRoot}pubspec.yaml').readAsStringSync(encoding: utf8),
+      isNot(contains('html_pagination_core:')),
+    );
+  });
+
   test(
     'document dependencies use public coordinate and digest entries only',
     () {
@@ -75,31 +111,33 @@ void main() {
       expect(
         _violationTargets(source, '''
 import 'package:crypto/crypto.dart';
-import 'package:html_pagination_core/html_pagination_core.dart';
+import 'package:forum_content_renderer/forum_text.dart';
 '''),
         isEmpty,
       );
       expect(
         _violationTargets(source, '''
 import 'package:html_pagination_core/src/dom_text_index.dart';
+import 'package:html_pagination_core/html_pagination_core.dart';
 import 'package:crypto/src/sha256.dart';
 '''),
         {
           'package:html_pagination_core/src/dom_text_index.dart',
+          'package:html_pagination_core/html_pagination_core.dart',
           'package:crypto/src/sha256.dart',
         },
       );
     },
   );
 
-  test('package exposes one public API and retires helper copies', () {
+  test('package exposes rendering and pure text APIs and retires copies', () {
     expect(
       Directory(_packageLib)
           .listSync()
           .whereType<File>()
           .where((file) => file.path.endsWith('.dart'))
           .map((file) => normalizeDartSourcePath(file.path)),
-      [_packageEntry],
+      unorderedEquals([_packageEntry, _textEntry]),
     );
     for (final path in [
       ..._retiredRenderingEntries,
@@ -114,7 +152,7 @@ import 'package:crypto/src/sha256.dart';
     expect(entry, isNot(contains('forum_html_image_widget_factory.dart')));
     for (final uri in dartDependencyDirectiveUris(entry)) {
       final path = _target(_packageEntry, uri);
-      expect(path, startsWith('${_packageLib}src/'));
+      expect(path == _textEntry || path.startsWith('${_packageLib}src/'), isTrue);
       expect(File(path).existsSync(), isTrue, reason: path);
     }
   });
@@ -154,20 +192,20 @@ import '../../../../test/test_support/localized_test_app.dart';
     );
   });
 
-  test('package unit tests may inspect internals without importing App Host', () {
-    expect(
-      _violationTargets('${_packageRoot}test/new_test.dart', '''
+  test(
+    'package unit tests may inspect internals without importing App Host',
+    () {
+      expect(
+        _violationTargets('${_packageRoot}test/new_test.dart', '''
 import 'package:forum_content_renderer/src/paragraph/internal.dart';
 import '../lib/src/inline/internal.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import '../../../test/test_support/localized_test_app.dart';
 '''),
-      {
-        _publicEntry,
-        'test/test_support/localized_test_app.dart',
-      },
-    );
-  });
+        {_publicEntry, 'test/test_support/localized_test_app.dart'},
+      );
+    },
+  );
 
   test('legacy engine is isolated to the comparison package', () {
     const legacyEngine =
@@ -438,7 +476,7 @@ bool _isForbidden(String source, String target) {
     }
     if (target.startsWith(_packageRoot)) {
       if (library) {
-        return !target.startsWith('${_packageLib}src/');
+        return target != _textEntry && !target.startsWith('${_packageLib}src/');
       }
       // Unit tests belong to this package; examples remain public consumers.
       if (source.startsWith('${_packageRoot}test/') &&
@@ -446,6 +484,7 @@ bool _isForbidden(String source, String target) {
         return false;
       }
       return target != _packageEntry &&
+          target != _textEntry &&
           !target.startsWith('${_packageRoot}test/') &&
           !target.startsWith('${_packageRoot}example/');
     }
@@ -468,12 +507,16 @@ bool _isForbidden(String source, String target) {
         target.startsWith('package:html/') ||
         target.startsWith('package:csslib/') ||
         target == 'package:crypto/crypto.dart' ||
-        target == 'package:html_pagination_core/html_pagination_core.dart' ||
+        target == 'package:characters/characters.dart' ||
         target.startsWith('package:material_color_utilities/') ||
         target ==
             'package:yamibo_forum_client/yamibo_forum_client_contracts.dart');
   }
-  if (target.startsWith(_packageRoot) && target != _packageEntry) return true;
+  if (target.startsWith(_packageRoot) &&
+      target != _packageEntry &&
+      target != _textEntry) {
+    return true;
+  }
   if (target.startsWith(_comparisonLib) &&
       (target != _comparisonEntry ||
           (source.startsWith('lib/') && source != _comparisonAdapter))) {

@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/painting.dart';
-import 'package:html_pagination_core/html_pagination_core.dart';
+import 'package:forum_content_renderer/forum_text.dart';
 
 import '../document/forum_body_document.dart';
 import '../inline/forum_body_text_band_content.dart';

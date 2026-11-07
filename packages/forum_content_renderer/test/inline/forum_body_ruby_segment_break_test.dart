@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:forum_content_renderer/src/inline/forum_body_inline_plan_input.dart';
 import 'package:forum_content_renderer/src/inline/forum_body_ruby_atom_request.dart';
-import 'package:html_pagination_core/html_pagination_core.dart';
 
 final _reader = ForumBodyReaderStyle(
   textStyle: const TextStyle(fontFamily: 'Ahem', fontSize: 20, height: 1),

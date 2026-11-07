@@ -1,4 +1,4 @@
-import 'package:html_pagination_core/html_pagination_core.dart';
+import 'package:forum_content_renderer/forum_text.dart';
 
 import '../document/forum_body_document.dart';
 import '../flow/forum_body_inline_flow_content.dart';

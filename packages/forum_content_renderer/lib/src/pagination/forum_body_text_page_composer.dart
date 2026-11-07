@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'dart:ui' show Color, Offset, Rect, Size, TextDirection;
 
 import 'package:flutter/foundation.dart' show precisionErrorTolerance;
-import 'package:html_pagination_core/html_pagination_core.dart';
+import 'package:forum_content_renderer/forum_text.dart';
 
 import '../contracts/forum_collapse_header_metrics.dart';
 import '../document/forum_body_document.dart';

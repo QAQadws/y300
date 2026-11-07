@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:html_pagination_core/html_pagination_core.dart';
+import 'package:forum_content_renderer/forum_text.dart';
 
 /// Exact display-input provenance, not a persisted novel semantic anchor.
 final class ForumBodyIdentity {

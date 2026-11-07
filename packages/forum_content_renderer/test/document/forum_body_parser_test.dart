@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
-import 'package:html_pagination_core/html_pagination_core.dart';
 
 import '../conformance/forum_body_corpus.dart';
 

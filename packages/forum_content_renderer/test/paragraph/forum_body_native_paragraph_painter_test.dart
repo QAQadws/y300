@@ -4,7 +4,7 @@ import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/src/paragraph/forum_body_native_paragraph_painter.dart';
 import 'package:forum_content_renderer/src/paragraph/forum_body_paragraph_geometry.dart';
-import 'package:html_pagination_core/html_pagination_core.dart';
+import 'package:forum_content_renderer/forum_text.dart';
 
 const _style = TextStyle(
   fontFamily: 'Ahem',

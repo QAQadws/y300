@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/semantics.dart' show OrdinalSortKey;
-import 'package:html_pagination_core/html_pagination_core.dart';
+import 'package:forum_content_renderer/forum_text.dart';
 
 import '../document/forum_body_document.dart';
 import '../paragraph/forum_body_paragraph_cache.dart';

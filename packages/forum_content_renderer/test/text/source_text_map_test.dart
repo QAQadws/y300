@@ -1,7 +1,7 @@
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as parser;
-import 'package:html_pagination_core/html_pagination_core.dart';
-import 'package:test/test.dart';
+import 'package:forum_content_renderer/forum_text.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('source map shares the slicer BR/widget/opaque source convention', () {

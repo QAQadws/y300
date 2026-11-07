@@ -1,3 +1,3 @@
-import 'package:html_pagination_core/html_pagination_core.dart';
+import 'package:forum_content_renderer/forum_text.dart';
 
 typedef NovelReaderWorkSlice = HtmlPaginationWorkSlice;

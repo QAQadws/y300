@@ -1,7 +1,7 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
-import 'package:html_pagination_core/html_pagination_core.dart';
+import 'package:forum_content_renderer/forum_text.dart';
 
 import '../document/forum_body_document.dart';
 import 'forum_body_first_line_indent.dart';

@@ -1,6 +1,8 @@
 /// Shared HTML rendering contracts, policies and widgets.
 library;
 
+export 'forum_text.dart';
+
 export 'src/block/forum_body_block_box.dart';
 export 'src/pagination/forum_body_image_frame.dart';
 export 'src/block/forum_body_block_flow_cursor.dart';

@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:forum_content_renderer/src/paragraph/forum_body_text_request_preparation.dart';
-import 'package:html_pagination_core/html_pagination_core.dart';
 
 ForumBodyParagraphContent _content({
   TextDirection direction = TextDirection.ltr,

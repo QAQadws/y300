@@ -18,7 +18,7 @@ packages:
     source: hosted
     version: "2.1.2"
   characters:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: characters
       sha256: faf38497bda5ead2a8c7615f4f7939df04333478bf32e4173fcb06d428b5716b
@@ -122,13 +122,6 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "0.15.7"
-  html_pagination_core:
-    dependency: "direct main"
-    description:
-      path: "../html_pagination_core"
-      relative: true
-    source: path
-    version: "0.1.0"
   http_parser:
     dependency: transitive
     description:

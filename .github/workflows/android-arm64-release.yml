@@ -52,7 +52,7 @@ jobs:
 
       - name: Install pagination package dependencies
         working-directory: packages/html_pagination_core
-        run: dart pub get
+        run: flutter pub get
 
       - name: Install renderer package dependencies
         working-directory: packages/forum_content_renderer

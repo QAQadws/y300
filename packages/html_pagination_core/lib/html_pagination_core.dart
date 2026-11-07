@@ -1,16 +1,11 @@
-export 'src/ports.dart'
+export 'package:forum_content_renderer/forum_text.dart'
     show
         HtmlFragmentParser,
         DefaultHtmlFragmentParser,
         HtmlProtectedInlinePredicate,
-        HtmlPaginationMeasureCandidate,
-        HtmlPaginationMeasurement,
-        HtmlPaginationMeasure,
         HtmlPaginationCancellation,
-        HtmlPaginationException;
-export 'src/text_coordinates.dart' show HtmlTextCoordinates;
-export 'src/display_text_projection.dart'
-    show
+        HtmlPaginationWorkSlice,
+        HtmlTextCoordinates,
         HtmlDisplayWhiteSpace,
         HtmlProjectionAffinity,
         HtmlDisplayTextRun,
@@ -18,17 +13,22 @@ export 'src/display_text_projection.dart'
         HtmlDisplayTextSegment,
         HtmlProjectedSourcePosition,
         HtmlDisplayTextLimitException,
-        HtmlDisplayTextProjection;
-export 'src/inline_text_projection.dart'
-    show
+        HtmlDisplayTextProjection,
         HtmlInlineTextAtom,
         HtmlInlineTextPosition,
         HtmlInlineTextLimitException,
-        HtmlInlineTextProjection;
-export 'src/source_text_map.dart' show HtmlSourceTextMap, HtmlSourceTextRange;
-export 'src/text_band_projection.dart'
-    show HtmlTextBandProjection, HtmlTextBandChild, HtmlTextBandLimitException;
-export 'src/work_slice.dart' show HtmlPaginationWorkSlice;
+        HtmlInlineTextProjection,
+        HtmlSourceTextMap,
+        HtmlSourceTextRange,
+        HtmlTextBandProjection,
+        HtmlTextBandChild,
+        HtmlTextBandLimitException;
+export 'src/ports.dart'
+    show
+        HtmlPaginationMeasureCandidate,
+        HtmlPaginationMeasurement,
+        HtmlPaginationMeasure,
+        HtmlPaginationException;
 export 'src/complex_slice.dart'
     show
         HtmlComplexBoundaryKind,

@@ -1,5 +1,7 @@
 # forum_content_renderer
 
+文字坐标、来源映射和显示/行内/字带投影由本包的 [统一文字基础](TEXT_COORDINATES.md) 唯一实现。`forum_text.dart` 可供纯数据消费者使用，模块不导入 Flutter UI；新渲染不依赖旧 HTML 分页包。
+
 本地 Flutter HTML 准备与渲染包，负责 prepared document、DOM 规范化、主题与文字样式、正文布局、折叠和图片 viewport 调度。
 
 Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `theme`。图片 `Host` 可选；宿主通过中立的准备、显示、尺寸和预取端口提供图片能力。准备资源与显示资源分别保持身份，迟到回调和取消仍受当前绑定与显示代次约束。
@@ -265,7 +267,7 @@ BlockFlow 只附加既有宽度/缩进和 margin/padding 几何。Session 同步
 `textSpan` 在原子位置使用无 Widget 的 native `PlaceholderSpan`，其 plain text 与
 `projection.engineText` 一致；不把注音作为正文行文字，不生成虚假的来源位置。
 原子内部精确命中和选区必须来自实际子布局，不能用父占位符近似推断。坐标映射和
-严格 engine 窗口使用 `html_pagination_core` 公开入口，不在 Flutter 包复制算法。
+严格 engine 窗口使用本包 `forum_text.dart` 公开入口，不另建坐标算法。
 
 该 span 只供直接 `TextPainter` 使用。调用者按原子顺序设置已经缩放的子几何，必须是
 有限、有界且基线在框内的 alphabetic baseline 占位，不重复应用父级字体缩放。

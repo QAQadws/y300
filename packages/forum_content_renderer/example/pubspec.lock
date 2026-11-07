@@ -129,13 +129,6 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "0.15.7"
-  html_pagination_core:
-    dependency: transitive
-    description:
-      path: "../../html_pagination_core"
-      relative: true
-    source: path
-    version: "0.1.0"
   http_parser:
     dependency: transitive
     description:

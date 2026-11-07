@@ -2,7 +2,7 @@ import 'dart:collection';
 import 'dart:math' as math;
 
 import 'package:flutter/painting.dart';
-import 'package:html_pagination_core/html_pagination_core.dart';
+import 'package:forum_content_renderer/forum_text.dart';
 
 import 'forum_body_paragraph_cache.dart';
 import 'forum_body_paragraph_content.dart';

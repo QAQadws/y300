@@ -1,5 +1,5 @@
 import 'package:flutter/painting.dart';
-import 'package:html_pagination_core/html_pagination_core.dart';
+import 'package:forum_content_renderer/forum_text.dart';
 
 import '../document/forum_body_document.dart';
 import '../flow/forum_body_styled_flow_cursor.dart';

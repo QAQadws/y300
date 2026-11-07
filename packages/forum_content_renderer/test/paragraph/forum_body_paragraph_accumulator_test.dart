@@ -1,7 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
-import 'package:html_pagination_core/html_pagination_core.dart';
 
 final _reader = ForumBodyReaderStyle(
   textStyle: const TextStyle(fontSize: 20, height: 1.5),

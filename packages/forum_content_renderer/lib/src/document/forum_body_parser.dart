@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:html/dom.dart' as dom;
-import 'package:html_pagination_core/html_pagination_core.dart';
+import 'package:forum_content_renderer/forum_text.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 import '../html_rendering/theme/css_inline_style_declarations.dart';

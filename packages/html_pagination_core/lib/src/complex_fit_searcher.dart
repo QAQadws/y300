@@ -4,7 +4,8 @@ import 'complex_fit.dart';
 import 'complex_slice.dart';
 import 'complex_search_budget.dart';
 import 'ports.dart';
-import 'work_slice.dart';
+import 'package:forum_content_renderer/forum_text.dart'
+    show HtmlPaginationWorkSlice;
 
 abstract interface class HtmlComplexFitSearcher {
   /// Returns a verified legal prefix within the search budget, not a globally

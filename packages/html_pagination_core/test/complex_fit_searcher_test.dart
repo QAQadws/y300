@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:test/test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:html_pagination_core/html_pagination_core.dart';
 

@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:html_pagination_core/html_pagination_core.dart';
+import 'package:forum_content_renderer/forum_text.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_exception.dart';
 
 /// Cooperative cancellation for derived pagination work.
