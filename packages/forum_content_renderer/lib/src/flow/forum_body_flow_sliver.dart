@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'forum_body_preload_scope.dart';
+
 import 'package:flutter/foundation.dart' show precisionErrorTolerance;
 import 'package:flutter/rendering.dart'
     show GrowthDirection, RenderBox, RenderProxySliver, SliverConstraints;
@@ -67,6 +69,8 @@ final class ForumBodyFlowSliver extends _ForumBodyFlow {
     super.onTableWindowChanged,
     super.onFloatedTableWindowChanged,
     super.initialTableOffset,
+    super.preloadExtentFactor,
+    super.preloadScope,
   });
 
   /// Applies a measured offset to a table in the current sliver delivery.
@@ -101,7 +105,7 @@ final class ForumBodyFlowSliver extends _ForumBodyFlow {
 }
 
 /// The same flowing body as a lazy list child. Its measured extent belongs to
-/// the outer list, and only physically visible slices acquire paint leases.
+/// the outer list. Optional bounded neighbors keep independent paint leases.
 final class ForumBodyFlowBox extends _ForumBodyFlow {
   const ForumBodyFlowBox({
     super.key,
@@ -114,6 +118,8 @@ final class ForumBodyFlowBox extends _ForumBodyFlow {
     super.onTableWindowChanged,
     super.onFloatedTableWindowChanged,
     super.initialTableOffset,
+    super.preloadExtentFactor,
+    super.preloadScope,
     this.imageAnchorController,
     this.imagePathForIndex,
     this.initialSlice,
@@ -190,10 +196,14 @@ abstract class _ForumBodyFlow extends StatefulWidget {
     this.onTableWindowChanged,
     this.onFloatedTableWindowChanged,
     this.initialTableOffset,
+    this.preloadExtentFactor = 0,
+    this.preloadScope,
   });
 
   final ForumBodyTextPageSession session;
   final ForumBodyTextPageSnapshot prefix;
+  final double preloadExtentFactor;
+  final ForumBodyPreloadScope? preloadScope;
   final ForumBodyFlowSliceBuilder buildSlice;
   final void Function(Object error, StackTrace stackTrace) onFailure;
   final bool isCurrentLayout;
@@ -219,7 +229,10 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
   final _ends = <double>[];
   final _ready = <int, _FlowDelivery>{};
   final _failed = <int>{};
+  final _deferredWarm = <int>{};
   ({int start, int end}) _visible = (start: 0, end: 0);
+  ({int start, int end}) _wanted = (start: 0, end: 0);
+  ({double start, double end})? _viewport;
   ({double start, double end}) _clip = (start: 0, end: 0);
   StreamSubscription<int>? _budget;
   StreamSubscription<void>? _retirement;
@@ -240,6 +253,15 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
   @override
   void initState() {
     super.initState();
+    if (!widget.preloadExtentFactor.isFinite ||
+        widget.preloadExtentFactor < 0 ||
+        widget.preloadExtentFactor > 2) {
+      throw ArgumentError.value(
+        widget.preloadExtentFactor,
+        'preloadExtentFactor',
+      );
+    }
+    widget.preloadScope?.addListener(_schedule);
     _updatePrefix();
     _adoptInitialSlice();
     _listen();
@@ -261,6 +283,19 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
   @override
   void didUpdateWidget(covariant _ForumBodyFlow oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!widget.preloadExtentFactor.isFinite ||
+        widget.preloadExtentFactor < 0 ||
+        widget.preloadExtentFactor > 2) {
+      throw ArgumentError.value(
+        widget.preloadExtentFactor,
+        'preloadExtentFactor',
+      );
+    }
+    if (oldWidget.preloadScope != widget.preloadScope) {
+      oldWidget.preloadScope?.removeListener(_schedule);
+      oldWidget.preloadScope?.setVisibleWork(this, false);
+      widget.preloadScope?.addListener(_schedule);
+    }
     if (widget is ForumBodyFlowBox &&
         (!identical(oldWidget.session, widget.session) ||
             (oldWidget as ForumBodyFlowBox).imageAnchorController !=
@@ -272,7 +307,7 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
       _clear();
       _ends.clear();
       _imageReveal = null;
-      _visible = (start: 0, end: 0);
+      _visible = _wanted = (start: 0, end: 0);
       _listen();
     } else if (oldWidget.prefix.isNotEmpty &&
         (widget.prefix.length < oldWidget.prefix.length ||
@@ -351,6 +386,12 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
       index < _visible.end &&
       _ends[index] > _top(index);
 
+  bool get _mayPreload =>
+      widget.isCurrentLayout && (widget.preloadScope?.mayPreload ?? true);
+  bool _wants(int index) =>
+      _intersects(index) ||
+      (_mayPreload && index >= _wanted.start && index < _wanted.end);
+
   void _advance() {
     final session = widget.session;
     if (session.isClosed || session.isLayoutOwnerRetired) {
@@ -363,7 +404,7 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
       return;
     }
     if (widget is ForumBodyFlowBox) _updateBoxVisible();
-    if (_working case final index? when !_intersects(index)) _stopWork();
+    if (_working case final index? when !_wants(index)) _stopWork();
     final target = _imageReveal?.slice;
     final targetPending =
         target != null &&
@@ -371,22 +412,11 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
         !_ready.containsKey(target) &&
         !_failed.contains(target);
     if (targetPending && _working != null && _working != target) _stopWork();
-    final offscreen = _ready.keys
-        .where((index) => !_intersects(index))
-        .toList();
-    if (offscreen.isNotEmpty) {
-      setState(() {
-        for (final index in offscreen) {
-          final delivery = _ready.remove(index)!;
-          delivery.close();
-          for (final table in delivery.tables) {
-            _reportTableWindow(index, table.frame, null);
-          }
-        }
-      });
-    }
-    _failed.removeWhere((index) => !_intersects(index));
+    final offscreen = _ready.keys.where((index) => !_wants(index)).toList();
+    _discard(offscreen);
+    _failed.removeWhere((index) => !_wants(index));
     int? missing;
+    var pendingTable = false;
     var ready = _visible.start < _visible.end;
     for (var index = _visible.start; index < _visible.end; index++) {
       if (!_intersects(index)) continue;
@@ -398,10 +428,57 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
         (table) => !table.ready && _tableIntersects(index, table.frame),
       )) {
         ready = false;
+        pendingTable = true;
       }
     }
+    widget.preloadScope?.setVisibleWork(
+      this,
+      (missing != null || pendingTable) &&
+          _fits &&
+          widget.isCurrentLayout &&
+          _visible.start < _visible.end,
+    );
+    if (missing != null) {
+      _discard(_ready.keys.where((index) => !_intersects(index)).toList());
+    }
     _reportReady(ready && _fits && widget.isCurrentLayout);
-    final index = _working ?? (targetPending ? target : missing);
+    if (_working case final working?
+        when !_intersects(working) && missing != null) {
+      _stopWork();
+    }
+    int? warm;
+    if (missing == null && _mayPreload) {
+      // Closest slices first on either side. A seek replaces this window rather
+      // than queuing all the skipped source positions.
+      for (
+        var distance = 0;
+        distance < _wanted.end - _wanted.start;
+        distance++
+      ) {
+        final after = _visible.end + distance;
+        final before = _visible.start - distance - 1;
+        for (final candidate in [after, before]) {
+          if (candidate >= _wanted.start &&
+              candidate < _wanted.end &&
+              !_ready.containsKey(candidate) &&
+              !_failed.contains(candidate) &&
+              !_deferredWarm.contains(candidate)) {
+            warm = candidate;
+            break;
+          }
+        }
+        if (warm != null) break;
+      }
+      // A completely offscreen cached list child has an empty visible range.
+      warm ??= [
+        for (var i = _wanted.start; i < _wanted.end; i++)
+          if (!_ready.containsKey(i) &&
+              !_failed.contains(i) &&
+              !_deferredWarm.contains(i))
+            i,
+      ].firstOrNull;
+    }
+    final index = _working ?? (targetPending ? target : missing ?? warm);
     if (!mounted || _waiting || index == null) return;
     _working = index;
     try {
@@ -419,6 +496,11 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
             _deliver(index, _makeDelivery(index, work.takeFragments()));
             break;
           }
+          if (_waiting && !_intersects(index)) {
+            _deferredWarm.add(index);
+            _stopWork();
+            break;
+          }
           if (_waiting ||
               (index != target && progress.layoutsBuilt > 0) ||
               clock.elapsedMicroseconds >= 2000) {
@@ -428,8 +510,12 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
       }
     } catch (error, stackTrace) {
       _stopWork();
-      _failed.add(index);
-      if (!session.isClosed && !session.isLayoutOwnerRetired) {
+      if (!_intersects(index)) {
+        // Optional work never turns resource pressure or an unvisited format
+        // failure into a visible error. Actual entry gets its normal attempt.
+        _deferredWarm.add(index);
+      } else if (!session.isClosed && !session.isLayoutOwnerRetired) {
+        _failed.add(index);
         widget.onFailure(error, stackTrace);
       }
     }
@@ -523,12 +609,27 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
   }
 
   void _clear() {
+    widget.preloadScope?.setVisibleWork(this, false);
     _stopWork();
     for (final delivery in _ready.values) {
       delivery.close();
     }
     _ready.clear();
     _failed.clear();
+    _deferredWarm.clear();
+  }
+
+  void _discard(List<int> indices) {
+    if (indices.isEmpty) return;
+    setState(() {
+      for (final index in indices) {
+        final delivery = _ready.remove(index)!;
+        delivery.close();
+        for (final table in delivery.tables) {
+          _reportTableWindow(index, table.frame, null);
+        }
+      }
+    });
   }
 
   void _updateSliverVisible(SliverConstraints constraints) {
@@ -547,38 +648,57 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
   void _updateBoxVisible() {
     final box = _boxKey?.currentContext?.findRenderObject();
     if (box is RenderBox && box.attached && box.hasSize) {
-      final clip = forumBodyVisibleBoxClip(box, _outerPosition) ?? Rect.zero;
+      final clip = forumBodyBoxViewportBounds(box, _outerPosition) ?? Rect.zero;
       _updateVisible(box.size.width, clip.top, clip.bottom);
     } else {
       _updateVisible(0, 0, 0);
     }
   }
 
-  void _updateVisible(double width, double start, double viewportEnd) {
+  void _updateVisible(double width, double viewportStart, double viewportEnd) {
     final fits = (width - widget.prefix.width).abs() <= precisionErrorTolerance;
     if (_fits != fits) {
       _fits = fits;
       _schedule();
     }
+    final viewport = (start: viewportStart, end: viewportEnd);
+    if (_viewport != viewport) {
+      _viewport = viewport;
+      _deferredWarm.clear();
+      widget.preloadScope?.resume();
+    }
+    final start = math.max(0.0, viewportStart);
     final end = math.min(_extent, viewportEnd);
-    final clip = (start: start, end: end);
+    final clip = start >= end
+        ? (start: 0.0, end: 0.0)
+        : (start: start, end: end);
     if (_clip != clip) {
       _clip = clip;
-      if (_ready.values.any((delivery) => delivery.tables.isNotEmpty)) {
-        _schedule();
-      }
+      _schedule();
     }
-    final next = start >= end
-        ? (start: 0, end: 0)
-        : (
-            start: _firstEnd(start, strictlyAfter: true),
-            end: _firstEnd(end, strictlyAfter: false) + 1,
-          );
-    if (_visible != next) {
+    final next = _range(start, end);
+    final padding =
+        math.max(0.0, viewportEnd - viewportStart) * widget.preloadExtentFactor;
+    final wanted = _range(
+      math.max(0.0, viewportStart - padding),
+      math.min(_extent, viewportEnd + padding),
+    );
+    if (_visible != next || _wanted != wanted) {
       _visible = next;
+      _wanted = wanted;
       _schedule();
     }
   }
+
+  ({int start, int end}) _range(double start, double end) => start >= end
+      ? (start: 0, end: 0)
+      : (
+          start: _firstEnd(start, strictlyAfter: true),
+          end: math.min(
+            widget.prefix.length,
+            _firstEnd(end, strictlyAfter: false) + 1,
+          ),
+        );
 
   int _firstEnd(double offset, {required bool strictlyAfter}) {
     var low = 0, high = _ends.length;
@@ -633,7 +753,13 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
                 left: 0,
                 right: 0,
                 height: widget.prefix[entry.key].usedHeight,
-                child: _slice(context, entry.key, entry.value),
+                child: TickerMode(
+                  enabled: _intersects(entry.key),
+                  child: ExcludeSemantics(
+                    excluding: !_intersects(entry.key),
+                    child: _slice(context, entry.key, entry.value),
+                  ),
+                ),
               ),
           ],
         ),
@@ -774,6 +900,8 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
 
   @override
   void dispose() {
+    widget.preloadScope?.removeListener(_schedule);
+    widget.preloadScope?.setVisibleWork(this, false);
     _detachImageLocator?.call();
     _outerPosition?.removeListener(_schedule);
     _unlisten();

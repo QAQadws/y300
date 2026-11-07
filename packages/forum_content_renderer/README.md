@@ -30,6 +30,8 @@ Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `
 
 分块宿主负责定义当前可见位置、总高度是否准确和实际末尾是否已确认。sliver 的早期 scroll extent 可能是估算，renderer ready 只表示当前 root body 已构建。全文百分比恢复与读完确认不能直接采用可见前缀高度或把估算当完整正文高度。选区、图片返回定位和锚点跳转还需覆盖未挂载目标；`revealImage` 继续只接受实际挂载的图片锚点。
 
+原生 `ForumBodyFlowBox`／`ForumBodyFlowSliver` 可显式传入 `preloadExtentFactor`（默认 0，上限 2），在视口两侧按屏高保留独立的可绘制片段。Box 使用未裁剪的真实视口坐标，因此已挂载但尚在屏外的楼层也能准备；离开窗口取消工作并释放显示句柄。预加载不报告可见 ready，不扩展选择/语义窗口，屏外动图停用 ticker。多个楼层可共用 `ForumBodyPreloadScope`：存在可见待交付工作时，屏外工作让出资源；预算不足只推迟预加载，实际进入时重新正常尝试。内存压力可暂停预加载，下次视口移动恢复。App 帖子页面通过自己的有界原生缓存启用一屏预准备，图片继续使用既有 Host/viewport 预解码路径。
+
 通用 renderer 保持整份 prepared document 的兼容路径；应用在自己的会话、布局和阅读契约下决定安全分块范围。收益验证应同时比较简单段落与复杂单块的首屏、尾部定位、返回滚动、字体/主题变化和内容顺序，不单凭理论段落减少比例启用分块。
 
 ## 转换、交互与图片生命周期

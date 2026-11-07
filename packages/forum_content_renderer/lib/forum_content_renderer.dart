@@ -15,6 +15,7 @@ export 'src/table/forum_body_table_preparation.dart'
     hide ForumBodyTableSelectionChunkSource;
 export 'src/table/forum_body_table_viewport.dart';
 export 'src/flow/forum_body_flow_sliver.dart';
+export 'src/flow/forum_body_preload_scope.dart';
 export 'src/flow/forum_body_flow_image_anchor.dart';
 export 'src/flow/forum_body_flow_text_anchor.dart';
 export 'src/flow/forum_body_styled_flow_cursor.dart';

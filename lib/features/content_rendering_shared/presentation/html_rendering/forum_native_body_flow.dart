@@ -238,6 +238,8 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
               ForumBodyFlowBox(
                 key: run.boundsKey,
                 session: run.session!,
+                preloadExtentFactor: widget.cache == null ? 0 : 1,
+                preloadScope: widget.cache?.preloadScope,
                 prefix: run.prefix!,
                 isCurrentLayout: identical(run, _pending),
                 imageAnchorController: widget.imageAnchorController,

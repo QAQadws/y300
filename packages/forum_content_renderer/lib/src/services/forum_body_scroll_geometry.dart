@@ -21,6 +21,15 @@ RenderAbstractViewport? forumBodyViewportForPosition(
 /// Physical intersection in the mounted box's coordinates. A cached list
 /// child outside the viewport has no visible range even if still attached.
 Rect? forumBodyVisibleBoxClip(RenderBox box, ScrollPosition? position) {
+  final viewport = forumBodyBoxViewportBounds(box, position);
+  if (viewport == null) return null;
+  final clip = viewport.intersect(Offset.zero & box.size);
+  return clip.isFinite && !clip.isEmpty ? clip : Rect.zero;
+}
+
+/// Unclipped viewport coordinates also locate a mounted list child just outside
+/// the screen. Callers explicitly bound any optional preparation around it.
+Rect? forumBodyBoxViewportBounds(RenderBox box, ScrollPosition? position) {
   if (!box.attached || !box.hasSize) return null;
   RenderObject? viewport;
   if (position == null) {
@@ -36,8 +45,7 @@ Rect? forumBodyVisibleBoxClip(RenderBox box, ScrollPosition? position) {
     viewport.getTransformTo(box),
     viewport.paintBounds,
   );
-  final clip = outerClip.intersect(Offset.zero & box.size);
-  return clip.isFinite && !clip.isEmpty ? clip : Rect.zero;
+  return outerClip.isFinite ? outerClip : null;
 }
 
 /// Observes position changes through a retained composited layer.

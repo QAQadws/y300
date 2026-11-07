@@ -20,6 +20,7 @@ final class ForumNativeBodyCache {
 
   final int maxDocuments, maxDocumentEstimatedBytes;
   final ForumBodyParagraphCache paragraphs;
+  final preloadScope = ForumBodyPreloadScope();
   final _documents = <(bool, Object), ({Object value, int bytes})>{};
   var _bytes = 0;
   var _documentHits = 0;
@@ -91,6 +92,7 @@ final class ForumNativeBodyCache {
   /// Memory pressure drops reusable data and unpinned native layouts. Actual
   /// visible/neighbor leases stay valid until their consumers release them.
   void trim() {
+    preloadScope.pause();
     _documents.clear();
     _bytes = 0;
     paragraphs.clearUnpinned();
@@ -101,5 +103,6 @@ final class ForumNativeBodyCache {
     _closed = true;
     trim();
     paragraphs.close();
+    preloadScope.dispose();
   }
 }
