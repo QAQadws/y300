@@ -863,11 +863,15 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
                   entry.value.any((fragment) => !fragment.hasRenderedImages),
               child: ExcludeSemantics(
                 excluding: !_visible.contains(entry.key),
-                child: widget.buildSlice(
-                  context,
-                  entry.key.area,
-                  entry.key.page,
-                  entry.value,
+                // Each retained leaf keeps its recording independently of
+                // table scrolling and newly prepared neighboring cells.
+                child: RepaintBoundary(
+                  child: widget.buildSlice(
+                    context,
+                    entry.key.area,
+                    entry.key.page,
+                    entry.value,
+                  ),
                 ),
               ),
             ),

@@ -762,7 +762,11 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
                       ),
                   child: ExcludeSemantics(
                     excluding: !_intersects(entry.key),
-                    child: _slice(context, entry.key, entry.value),
+                    // Keep the bounded mounted slice's recording while its
+                    // outer scroll viewport moves or a neighbor is delivered.
+                    child: RepaintBoundary(
+                      child: _slice(context, entry.key, entry.value),
+                    ),
                   ),
                 ),
               ),
