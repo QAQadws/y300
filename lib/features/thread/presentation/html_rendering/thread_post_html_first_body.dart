@@ -395,7 +395,10 @@ class _ThreadPostHtmlFirstBodyState
         widget.readingCoordinator?.unregister(this);
         _clearReading();
       }
-      final preparedDocument = _preparation.resolve(request);
+      final preparedDocument = _preparation.resolve(
+        request,
+        cache: _nativeBody ? widget.wholeBodyPresentation?.nativeCache : null,
+      );
       if (preparedDocument == null || !fontReady) {
         _bodyLayoutPhase = ThreadBodyLayoutPhase.preparing;
         _nativeLayoutPhase = ForumHtmlBodyLayoutPhase.preparing;
@@ -513,6 +516,7 @@ class _ThreadPostHtmlFirstBodyState
                     ? null
                     : ObjectKey(widget.bodyPresentation),
                 prepared: preparedDocument,
+                cache: widget.wholeBodyPresentation?.nativeCache,
                 preferences: preferences,
                 theme: widget.theme,
                 textStyle: textStyle,

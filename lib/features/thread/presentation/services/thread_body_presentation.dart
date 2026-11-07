@@ -4,6 +4,14 @@ import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 
 /// The page retains display choices and completed geometry, not mounted bodies.
 final class ThreadBodyPresentationStore {
+  ThreadBodyPresentationStore({this.lowMemory = false});
+
+  final bool lowMemory;
+  ForumNativeBodyCache? _nativeCache;
+  ForumNativeBodyCache get nativeCache => _nativeCache ??= ForumNativeBodyCache(
+    maxDocumentEstimatedBytes: (lowMemory ? 2 : 4) << 20,
+    maxParagraphEstimatedBytes: (lowMemory ? 12 : 24) << 20,
+  );
   final _bodies = <String, ThreadBodyPresentation>{};
 
   int get length => _bodies.length;
@@ -14,7 +22,7 @@ final class ThreadBodyPresentationStore {
       return previous;
     }
     previous?.dispose();
-    return _bodies[pid] = ThreadBodyPresentation._(html);
+    return _bodies[pid] = ThreadBodyPresentation._(html, nativeCache);
   }
 
   void retainWhere(bool Function(String pid, String html) retain) {
@@ -27,18 +35,24 @@ final class ThreadBodyPresentationStore {
 
   void remove(String pid) => _bodies.remove(pid)?.dispose();
 
+  void trimNativeCache() => _nativeCache?.trim();
+
   void clear() {
     for (final body in _bodies.values) {
       body.dispose();
     }
     _bodies.clear();
+    _nativeCache?.close();
+    _nativeCache = null;
   }
 }
 
 /// Existing renderer presentation also retains its latest prepared-HTML layout
 /// revisions. Those pure strings remain page-owned; DOM and Widgets do not.
 final class ThreadBodyPresentation {
-  ThreadBodyPresentation._(this.html);
+  ThreadBodyPresentation._(this.html, this.nativeCache);
+
+  final ForumNativeBodyCache nativeCache;
 
   final String html;
   ForumHtmlBodyPresentation _rendering = ForumHtmlBodyPresentation();

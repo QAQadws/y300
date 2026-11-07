@@ -24,5 +24,6 @@ export 'presentation/html_rendering/forum_html_preparation_placeholder.dart';
 export 'presentation/html_rendering/forum_html_reader_text_style.dart';
 export 'presentation/html_rendering/forum_html_text_style_resolver.dart';
 export 'application/forum_html_comparison_body.dart';
+export 'application/forum_native_body_cache.dart';
 export 'presentation/html_rendering/forum_native_body_flow.dart';
 export 'presentation/widgets/forum_html_reader_settings_sheet.dart';

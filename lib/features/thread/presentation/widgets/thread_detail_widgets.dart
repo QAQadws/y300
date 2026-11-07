@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:y300/app/content_rendering/native_forum_html_render_theme_factory.dart';
 import 'package:y300/core/media/device_memory_profile.dart';
+import 'package:y300/core/network/yamibo_forum_source.dart';
 import 'package:flutter/foundation.dart' show ValueListenable, kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -135,15 +136,18 @@ class ThreadDetailContent extends ConsumerStatefulWidget {
 }
 
 class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
-    with _ThreadDetailEndpointNavigation {
+    with _ThreadDetailEndpointNavigation, WidgetsBindingObserver {
   late final _isLowRamDevice =
       DeviceMemoryProfileStore.current?.isLowRamDevice ?? false;
   _ThreadDetailChunks? _chunks;
   @override
   ThreadDetailPreparedBodyStore? get _preparedBodies => _chunks?.store;
   final _footerExpansions = <String, _ThreadPostFooterExpansion>{};
-  final _wholeBodyPresentations = ThreadBodyPresentationStore();
+  late final _wholeBodyPresentations = ThreadBodyPresentationStore(
+    lowMemory: _isLowRamDevice,
+  );
   final _pollOptionPresentations = ThreadPollOptionPresentationStore();
+  Object? _nativeSourceScope;
   // Saved body percentages require complete actual geometry. Source reading
   // pages keep their existing whole-body renderer and reading observer.
   bool get _canChunkBodies =>
@@ -191,6 +195,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
     );
     _syncImageViewportCoordinator();
     _bindEndpointNavigation();
+    WidgetsBinding.instance.addObserver(this);
   }
 
   @override
@@ -294,7 +299,11 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
   }
 
   @override
+  void didHaveMemoryPressure() => _wholeBodyPresentations.trimNativeCache();
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _disposeEndpointNavigation();
     _clearFooterExpansions();
     _wholeBodyPresentations.clear();
@@ -309,6 +318,11 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
 
   @override
   Widget build(BuildContext context) {
+    final sourceScope = ref.watch(yamiboForumSourceScopeProvider);
+    if (!identical(_nativeSourceScope, sourceScope)) {
+      _wholeBodyPresentations.clear();
+      _nativeSourceScope = sourceScope;
+    }
     final chunks = _canChunkBodies
         ? _chunks ??= _ThreadDetailChunks(
             ThreadDetailPreparedBodyStore(
@@ -330,10 +344,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
     };
     _pollOptionPresentations.retainSources(pollOptionHtml);
     _wholeBodyPresentations.retainWhere(
-      (pid, html) =>
-          widget.bodyReadingCoordinator == null &&
-          wholeBodyHtml[pid] == html &&
-          chunks?.store[pid] == null,
+      (pid, html) => wholeBodyHtml[pid] == html && chunks?.store[pid] == null,
     );
     final footerPids = _sourcePidsFor(widget).toSet();
     _footerExpansions.removeWhere((pid, expansion) {
@@ -509,7 +520,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
       _footerExpansions.putIfAbsent(pid, _ThreadPostFooterExpansion.new);
 
   ThreadBodyPresentation? _wholeBodyPresentationFor(String pid, String html) =>
-      widget.bodyReadingCoordinator != null || _preparedBodies?[pid] != null
+      _preparedBodies?[pid] != null
       ? null
       : _wholeBodyPresentations.obtain(pid, html);
 

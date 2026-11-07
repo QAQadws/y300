@@ -12,6 +12,7 @@ import 'package:y300/shared/widgets/forum_content_selection_copy_page.dart';
 
 import '../../application/forum_body_preparation_controller.dart';
 import '../../application/forum_body_preparation_executor.dart';
+import '../../application/forum_native_body_cache.dart';
 import '../../domain/models/forum_html_reader_preferences.dart';
 import 'forum_html_preparation_placeholder.dart';
 import 'forum_native_body_images.dart';
@@ -43,6 +44,7 @@ final class ForumNativeBodyFlow extends StatefulWidget {
     this.imageAnchorController,
     this.bodyPresentation,
     this.contentLayout = ForumHtmlContentLayout.document,
+    this.cache,
   });
 
   final ForumHtmlPreparedRenderDocument prepared;
@@ -69,6 +71,7 @@ final class ForumNativeBodyFlow extends StatefulWidget {
   final ForumHtmlImageAnchorController? imageAnchorController;
   final ForumHtmlBodyPresentation? bodyPresentation;
   final ForumHtmlContentLayout contentLayout;
+  final ForumNativeBodyCache? cache;
 
   @override
   State<ForumNativeBodyFlow> createState() => _ForumNativeBodyFlowState();
@@ -85,10 +88,13 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
     maxIssuedLeases: 256,
   );
 
-  final _cache = ForumBodyParagraphCache(
-    maxEntries: 128,
-    maxEstimatedBytes: 8 << 20,
-  );
+  ForumBodyParagraphCache? _localCache;
+  ForumBodyParagraphCache get _cache =>
+      widget.cache?.paragraphs ??
+      (_localCache ??= ForumBodyParagraphCache(
+        maxEntries: 128,
+        maxEstimatedBytes: 8 << 20,
+      ));
   final _preparation = ForumBodyPreparationController();
   final _resolvedImages = <String, ForumNativeBodyImageLayoutHint>{};
   final _changedImages = <String, _ImageChange>{};
@@ -104,7 +110,7 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
     super.initState();
     widget.imageAnchorController?.bindSequence(widget.prepared.sequence);
     _preparation.addListener(_prepare);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _prepare());
+    _prepare();
   }
 
   @override
@@ -115,7 +121,8 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
       widget.imageAnchorController?.bindSequence(widget.prepared.sequence);
     }
     if (identical(oldWidget.prepared, widget.prepared) &&
-        identical(oldWidget.bodyPresentation, widget.bodyPresentation)) {
+        identical(oldWidget.bodyPresentation, widget.bodyPresentation) &&
+        identical(oldWidget.cache, widget.cache)) {
       return;
     }
     _preparation.reset();
@@ -140,6 +147,7 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
           conversionIdentity: 'prepared-forum-body',
         ),
         owner: this,
+        cache: widget.cache,
       );
       if (document != null) setState(() => _document = document);
     } catch (error, stack) {
@@ -659,7 +667,7 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
   void dispose() {
     _preparation.dispose();
     _retireLayouts();
-    _cache.close();
+    _localCache?.close();
     super.dispose();
   }
 }

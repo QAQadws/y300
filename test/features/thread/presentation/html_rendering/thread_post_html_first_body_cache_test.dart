@@ -8,10 +8,96 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
+import 'package:y300/features/thread/presentation/services/thread_body_presentation.dart';
 
 import '../../../../test_support/localized_test_app.dart';
 
 void main() {
+  testWidgets(
+    'page cache reuses HTML, native document and glyphs across remounts',
+    (tester) async {
+      final store = ThreadBodyPresentationStore();
+      addTearDown(store.clear);
+      final preparer = _CountingPreparer();
+      final post = ThreadPost(
+        pid: 'cached-native',
+        author: 'author',
+        authorId: '1',
+        message: '<p>Cached native text</p><p>Second paragraph</p>',
+        number: 1,
+        isFirst: true,
+        dateline: 'date',
+      );
+      final presentation = store.obtain(post.pid, post.message);
+      final container = ProviderContainer(
+        overrides: [
+          forumHtmlReaderPreferencesRepositoryProvider.overrideWithValue(
+            _PreferencesRepository(),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      final theme = ThemeData.light();
+      Widget host(bool shown) => UncontrolledProviderScope(
+        container: container,
+        child: LocalizedTestApp(
+          theme: theme,
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: SizedBox(
+                width: 300,
+                child: shown
+                    ? ThreadPostHtmlFirstBody(
+                        post: post,
+                        threadId: 'cache-thread',
+                        imageReferer: '',
+                        onOpenPostLink: (_) {},
+                        onOpenPostImage: null,
+                        theme: const ForumHtmlRenderThemeFactory()
+                            .fromMaterialTheme(
+                              theme: theme,
+                              surface: theme.colorScheme.surface,
+                            ),
+                        nativeBody: true,
+                        wholeBodyPresentation: presentation,
+                        renderPreparer: preparer,
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpWidget(host(true));
+      await tester.pumpAndSettle();
+      final cache = presentation.nativeCache;
+      final builds = cache.paragraphs.layoutBuildCount;
+      expect(builds, greaterThan(0));
+      expect(preparer.calls, 1);
+      await tester.pumpWidget(host(false));
+      await tester.pumpAndSettle();
+      expect(cache.paragraphs.activeLeases, 0);
+      expect(cache.paragraphs.isClosed, false);
+      await tester.pumpWidget(host(true));
+      await tester.pumpAndSettle();
+      expect(preparer.calls, 1);
+      expect(cache.documentHits, greaterThan(0));
+      expect(cache.preparedHits, greaterThan(0));
+      expect(cache.paragraphs.layoutBuildCount, builds);
+    final visibleLeases = cache.paragraphs.activeLeases;
+    expect(visibleLeases, greaterThan(0));
+    cache.trim();
+    expect(cache.documentCount, 0);
+    expect(cache.paragraphs.activeLeases, visibleLeases);
+    await tester.pump();
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(host(false));
+      store.clear();
+      expect(cache.isClosed, true);
+      expect(cache.paragraphs.activeLeases, 0);
+    },
+  );
+
   testWidgets('ordinary body uses native without a comparison override', (
     tester,
   ) async {
