@@ -194,6 +194,8 @@ final class ForumBodyTextPagePreparation {
     if (_activeFontFrame != null) yield* _activeFontFrame!.nativeLeases;
   }
 
+  /// Admission inspection and display work share this call's quotas. A finished
+  /// probe uses the remaining quota immediately, without an empty extra turn.
   ForumBodyTextPagePreparationStep advance({
     required int maxFragments,
     int maxParts = 32,
@@ -238,13 +240,18 @@ final class ForumBodyTextPagePreparation {
         );
         inspectedFragments = work.fragments;
         inspectedParts = work.parts;
-        return result();
+        if (_budgetProbe != null ||
+            _waiting ||
+            inspectedParts >= maxParts ||
+            inspectedFragments >= maxFragments) {
+          return result();
+        }
       }
       for (
-        var parts = 0;
+        var parts = inspectedParts;
         parts < maxParts &&
             _fragments.length < expectedFragmentCount &&
-            _fragments.length - before < maxFragments;
+            _fragments.length - before + inspectedFragments < maxFragments;
       ) {
         _rejectedAtRevision = cache.budgetRevision;
         final beforeWork = _retainedWork;
@@ -286,11 +293,14 @@ final class ForumBodyTextPagePreparation {
         if (!current) {
           _startBudgetProbe();
           final work = _inspectBudget(
-            maxFragments: maxFragments,
-            maxParts: math.max(0, maxParts - (_retainedWork - workBefore)),
+            maxFragments: math.max(0, maxFragments - inspectedFragments),
+            maxParts: math.max(
+              0,
+              maxParts - inspectedParts - (_retainedWork - workBefore),
+            ),
           );
-          inspectedFragments = work.fragments;
-          inspectedParts = work.parts;
+          inspectedFragments += work.fragments;
+          inspectedParts += work.parts;
         } else {
           _waiting = cache.budgetRevision == _rejectedAtRevision;
         }
@@ -309,6 +319,7 @@ final class ForumBodyTextPagePreparation {
 
   /// Warm lookup is bounded too. A miss or exhausted part budget retains
   /// partial work without shaping or recording pictures inside Widget build.
+  /// Its admission inspection consumes the same [maxParts] allowance.
   bool tryPrepareCached({int maxParts = 32}) {
     _ensureEntry();
     if (maxParts <= 0) throw ArgumentError.value(maxParts, 'maxParts');
@@ -316,17 +327,24 @@ final class ForumBodyTextPagePreparation {
     _operating = true;
     _waiting = false;
     _cacheMiss = false;
+    var inspectedParts = 0;
     try {
       if (_initialProbePending) {
         _initialProbePending = false;
         _startBudgetProbe(afterRejection: false);
       }
       if (_budgetProbe != null) {
-        _inspectBudget(maxFragments: expectedFragmentCount, maxParts: maxParts);
-        return false;
+        final work = _inspectBudget(
+          maxFragments: expectedFragmentCount,
+          maxParts: maxParts,
+        );
+        inspectedParts = work.parts;
+        if (_budgetProbe != null || _waiting || inspectedParts >= maxParts) {
+          return false;
+        }
       }
       for (
-        var parts = 0;
+        var parts = inspectedParts;
         parts < maxParts && _fragments.length < expectedFragmentCount;
       ) {
         final beforeWork = _retainedWork;

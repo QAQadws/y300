@@ -373,38 +373,53 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
     _reportReady(ready);
     _publishWindow(ready && !_scrolling ? window : null);
     if (!mounted || _waiting) return;
-    final slice = _working ?? _nextSlice();
-    if (slice == null) return;
-    _working = slice;
-    try {
-      final preparation = _preparation ??= slice.area.openPagePreparation(
-        slice.page,
-      );
-      final step = preparation.advance(maxFragments: 1, maxParts: 8);
-      _waiting = step.waitingForLayoutBudget;
-      if (step.isReady) {
-        final fragments = preparation.takeFragments();
-        late final List<_NestedTable> nested;
-        try {
-          nested = _openNested(slice);
-        } catch (_) {
-          _release(fragments);
-          rethrow;
-        }
-        _stopWork();
-        setState(() {
+    final clock = Stopwatch()..start();
+    var changed = false;
+    // Consume cheap/cached cells in this slice rather than imposing a vsync
+    // delay on every fragment or completed resource-budget check.
+    for (
+      var stepIndex = 0;
+      stepIndex < 64 && clock.elapsedMicroseconds < 2000;
+      stepIndex++
+    ) {
+      if (!mounted || widget.layout.isClosed || _waiting) break;
+      final slice = _working ?? _nextSlice();
+      if (slice == null) break;
+      _working = slice;
+      try {
+        final preparation = _preparation ??= slice.area.openPagePreparation(
+          slice.page,
+        );
+        final step = preparation.advance(maxFragments: 8, maxParts: 32);
+        _waiting = step.waitingForLayoutBudget;
+        if (step.isReady) {
+          final fragments = preparation.takeFragments();
+          late final List<_NestedTable> nested;
+          try {
+            nested = _openNested(slice);
+          } catch (_) {
+            _release(fragments);
+            rethrow;
+          }
+          _stopWork();
           _ready[slice] = fragments;
           _nested[slice] = nested;
-        });
+          changed = true;
+        }
+      } catch (error, stackTrace) {
+        _stopWork();
+        _failed.add(slice);
+        if (!widget.layout.isClosed) {
+          widget.onFailure(error, stackTrace);
+        }
+        break;
       }
-      if (!_waiting) _schedule();
-    } catch (error, stackTrace) {
-      _stopWork();
-      _failed.add(slice);
-      if (!widget.layout.isClosed) {
-        widget.onFailure(error, stackTrace);
-        _schedule();
-      }
+    }
+    if (changed && mounted) setState(() {});
+    if (!_waiting &&
+        mounted &&
+        (_working != null || _nextSlice() != null || changed)) {
+      _schedule();
     }
   }
 

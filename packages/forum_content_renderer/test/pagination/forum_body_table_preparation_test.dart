@@ -122,6 +122,66 @@ void _advanceBook(ForumBodyTextPageSession session, int pageCount) {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  testWidgets('cached table cells become visible without a frame per cell', (
+    tester,
+  ) async {
+    final cache = _cache();
+    final html =
+        '<table cellpadding="0">${List.generate(4, (row) => '<tr><td>cell${row * 2}</td><td>cell${row * 2 + 1}</td></tr>').join()}</table>';
+    final layout = _layout(_start(_parse(html), cache));
+    expect(layout.cells, hasLength(8));
+    for (final cell in layout.cells) {
+      for (final fragment in _open(cell)) {
+        fragment.close();
+      }
+    }
+    final builds = cache.layoutBuildCount;
+    final horizontal = ScrollController(), vertical = ScrollController();
+    addTearDown(horizontal.dispose);
+    addTearDown(vertical.dispose);
+    addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
+    var ready = false;
+    final cells = <ForumBodyTableAreaLayout>{};
+    final errors = <Object>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Align(
+          child: SizedBox(
+            width: 120,
+            height: 100,
+            child: ForumBodyTableBookViewport(
+              layout: layout,
+              horizontalController: horizontal,
+              verticalController: vertical,
+              onFailure: (error, _) => errors.add(error),
+              onReadyChanged: (value) => ready = value,
+              buildSlice: (_, area, page, fragments) {
+                cells.add(area);
+                return ForumBodyTextPageSurface.prepared(
+                  snapshot: area.snapshot,
+                  pageIndex: page,
+                  layoutId: area.snapshot.layoutId,
+                  fragments: fragments,
+                  compactHeight: true,
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    for (var frame = 0; frame < 6 && !ready; frame++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(ready, true);
+    expect(cells, hasLength(8));
+    expect(cache.layoutBuildCount, builds);
+    expect(errors, isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(cache.activeLeases, 0);
+    expect(tester.takeException(), isNull);
+  });
+
   test('a whole native table publishes as one ordered book page', () {
     final document = _parse(
       '<p>before</p><table width="190" height="100"><caption>cap</caption>'

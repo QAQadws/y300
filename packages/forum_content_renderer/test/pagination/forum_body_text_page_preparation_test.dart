@@ -102,6 +102,35 @@ void _finish(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('cached list continues after its budget probe within the same quota', () {
+    final fixture = _Fixture(
+      html: '<ul><li>A</li><li>B</li></ul>',
+      entries: 16,
+    );
+    final first = fixture.session.openPagePreparation(0);
+    _finish(first);
+    for (final fragment in first.takeFragments()) {
+      fragment.close();
+    }
+    first.close();
+    final builds = fixture.cache.layoutBuildCount;
+    final pictures = fixture.cache.pictureBuildCount;
+    final bounded = fixture.session.openPagePreparation(0);
+    expect(bounded.tryPrepareCached(maxParts: 1), false);
+    bounded.close();
+    final cached = fixture.session.openPagePreparation(0);
+    expect(
+      cached.tryPrepareCached(maxParts: 256),
+      true,
+      reason:
+          'miss=${cached.cacheMiss}, waiting=${cached.waitingForLayoutBudget}, state=${cached.state}',
+    );
+    expect(fixture.cache.layoutBuildCount, builds);
+    expect(fixture.cache.pictureBuildCount, pictures);
+    cached.close();
+    expect(fixture.cache.activeLeases, 0);
+  });
+
   test(
     'an active continuation cannot hide an intrinsically oversized page behind a pin wait',
     () {
