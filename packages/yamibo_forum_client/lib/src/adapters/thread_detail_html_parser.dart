@@ -994,10 +994,12 @@ class ThreadDetailHtmlParser {
     }
     final parts = <String>[
       clone?.innerHtml.trim() ?? '',
-      ..._cleanPostAttachmentHtml(
-        postContainer: postContainer,
-        messageNode: messageNode,
-      ),
+      if (postContainer != null)
+        ..._cleanPostAttachmentHtml(
+          postContainer: postContainer,
+          messageNode: messageNode,
+          seenSources: _collectMessageImageSourceKeys(clone),
+        ),
     ];
     return parts.where((part) => part.isNotEmpty).join('\n');
   }
@@ -1106,22 +1108,19 @@ class ThreadDetailHtmlParser {
   }
 
   List<String> _cleanPostAttachmentHtml({
-    required html_dom.Element? postContainer,
+    required html_dom.Element postContainer,
     required html_dom.Element? messageNode,
+    required Set<String> seenSources,
   }) {
-    if (postContainer == null) {
-      return const <String>[];
-    }
     final output = <String>[];
-    final seenSources = _collectMessageImageSourceKeys(messageNode);
-    final inlineLists = messageNode?.querySelectorAll('.pattl').toSet();
     for (final node in postContainer.querySelectorAll(
       '.pattl, $_attachmentImageSelector',
     )) {
-      if (_hasAncestorClass(node, 'pattl')) continue;
+      if (!_canAppendPostAttachment(node, postContainer, messageNode)) {
+        continue;
+      }
       if (node.classes.contains('pattl') && node.localName != 'img') {
-        if (inlineLists?.contains(node) == true) continue;
-        final html = _cleanPostAttachmentList(node, postContainer, seenSources);
+        final html = _cleanPostAttachmentList(node, seenSources);
         if (html.isNotEmpty) output.add(html);
       } else {
         final image = _cleanUniqueAttachmentImage(node, seenSources);
@@ -1131,24 +1130,37 @@ class ThreadDetailHtmlParser {
     return output;
   }
 
-  String _cleanPostAttachmentList(
-    html_dom.Element list,
+  bool _canAppendPostAttachment(
+    html_dom.Element node,
     html_dom.Element post,
-    Set<String> seenSources,
+    html_dom.Element? message,
   ) {
     for (
-      html_dom.Element? parent = list;
-      parent != null;
-      parent = parent.parent
+      html_dom.Element? current = node;
+      current != null;
+      current = current.parent
     ) {
-      if (parent.attributes.containsKey('hidden') ||
-          parent.classes.contains('jammer') ||
-          _hasDisplayNone(parent)) {
-        return '';
+      final classes = current.classes;
+      // The retained message and attachment lists own their descendants.
+      if (identical(current, message) ||
+          (!identical(current, node) && classes.contains('pattl')) ||
+          current.attributes.containsKey('hidden') ||
+          classes.contains('jammer') ||
+          classes.contains('aimg_tip') ||
+          _hasDisplayNone(current) ||
+          (_isManagedCollapseBody(current) &&
+              !current.parent!.classes.contains('showcollapse_active'))) {
+        return false;
       }
-      if (identical(parent, post)) break;
+      if (identical(current, post)) return true;
     }
+    return false;
+  }
 
+  String _cleanPostAttachmentList(
+    html_dom.Element list,
+    Set<String> seenSources,
+  ) {
     // Discuz can emit the attachment list next to the message table. Keep
     // the names and notices even when their image was already shown inline.
     final wrapper = html_dom.Element.tag('div')..append(list.clone(true));

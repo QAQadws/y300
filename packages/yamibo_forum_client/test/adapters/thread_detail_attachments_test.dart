@@ -34,16 +34,7 @@ void main() {
         </div>
         <div hidden><div class="pattl">隐藏附件列表</div></div>
         <img id="aimg_24" file="/files/03.png">''';
-        final html = mobile
-            ? '''<body id="forum"><div class="viewthread">
-              <div class="plc" id="pid200">
-                <div class="message">$body<div class="poll">投票控件</div></div>
-                $attachments
-              </div></div>'''
-            : '''<div id="postlist"><div id="post_200"><div class="t_fsz">
-              <table><tr><td class="t_f" id="postmessage_200">$body</td></tr></table>
-              $attachments
-              </div></div></div>''';
+        final html = _threadWithAttachments(body, attachments, mobile: mobile);
         final document = html_parser.parse(html);
         final detail = parser.parseDocument(
           document,
@@ -80,5 +71,77 @@ void main() {
         expect(document.querySelector('a[onmouseover]'), isNotNull);
       },
     );
+
+    test(
+      'promotes only visible external images on ${mobile ? 'mobile' : 'desktop'}',
+      () {
+        const body = '''
+          <span style="display:none">
+            <img id="aimg_30" file="/files/visible-copy.png">
+          </span>
+          <div class="showcollapse_box">
+            <div class="showcollapse_title">图片目录</div>
+            <div class="showcollapse_content" style="display:none">
+              <img id="aimg_31" file="/files/folded.png">
+            </div>
+          </div>''';
+        const attachments = '''
+          <img id="aimg_32" file="/files/hidden-self.png" hidden>
+          <div hidden><img id="aimg_33" file="/files/hidden-parent.png"></div>
+          <div style="display: none !important">
+            <img id="aimg_34" file="/files/hidden-display.png">
+          </div>
+          <div class="jammer"><img id="aimg_35" file="/files/jammer.png"></div>
+          <div class="aimg_tip"><img id="aimg_36" file="/files/popup.png"></div>
+          <div class="showcollapse_box">
+            <div class="showcollapse_title">独立折叠</div>
+            <div class="showcollapse_content">
+              <img id="aimg_37" file="/files/external-fold.png">
+            </div>
+          </div>
+          <img id="aimg_38" file="/files/visible-copy.png">
+          <img id="aimg_39" file="/files/folded.png">
+          <div class="showcollapse_box showcollapse_active">
+            <div class="showcollapse_title">默认展开</div>
+            <div class="showcollapse_content">
+              <img id="aimg_40" file="/files/expanded.png">
+            </div>
+          </div>''';
+        final detail = parser.parse(
+          _threadWithAttachments(body, attachments, mobile: mobile),
+          fallbackTid: '100',
+          fallbackPage: 1,
+        );
+        final message = html_parser.parseFragment(detail.posts.single.message);
+        expect(message.querySelectorAll('img').map((image) => image.id), [
+          'aimg_31',
+          'aimg_38',
+          'aimg_40',
+        ]);
+        expect(
+          message.querySelector('.showcollapse_content img')?.attributes['src'],
+          '/files/folded.png',
+        );
+        expect(
+          message.querySelector('#aimg_38')?.attributes['src'],
+          '/files/visible-copy.png',
+        );
+      },
+    );
   }
 }
+
+String _threadWithAttachments(
+  String body,
+  String attachments, {
+  required bool mobile,
+}) => mobile
+    ? '''<body id="forum"><div class="viewthread">
+        <div class="plc" id="pid200">
+          <div class="message">$body<div class="poll">投票控件</div></div>
+          $attachments
+        </div></div>'''
+    : '''<div id="postlist"><div id="post_200"><div class="t_fsz">
+        <table><tr><td class="t_f" id="postmessage_200">$body</td></tr></table>
+        $attachments
+        </div></div></div>''';
