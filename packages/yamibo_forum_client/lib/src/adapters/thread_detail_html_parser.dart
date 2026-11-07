@@ -984,14 +984,14 @@ class ThreadDetailHtmlParser {
     html_dom.Element? postContainer,
     bool removeMobilePoll = false,
   }) {
-    final clone = _cloneAndSanitizeThreadHtml(
-      messageNode,
-      selectorsToRemove: [
+    final clone = messageNode?.clone(true);
+    if (clone != null) {
+      _sanitizeThreadHtml(clone, [
         ..._postChromeSelectors,
         if (removeMobilePoll) '.poll',
-      ],
-      normalizeImageSources: true,
-    );
+      ], preserveCollapseBodies: true);
+      _normalizeThreadImageSources(clone);
+    }
     final parts = <String>[
       clone?.innerHtml.trim() ?? '',
       ..._cleanPostAttachmentHtml(
@@ -1010,42 +1010,84 @@ class ThreadDetailHtmlParser {
     html_dom.Element? source, {
     List<String> selectorsToRemove = const <String>[],
   }) {
-    final clone = _cloneAndSanitizeThreadHtml(
-      source,
-      selectorsToRemove: selectorsToRemove,
-    );
+    final clone = source?.clone(true);
     if (clone == null) {
       return '';
     }
-    return _cleanText(clone.text);
-  }
-
-  html_dom.Element? _cloneAndSanitizeThreadHtml(
-    html_dom.Element? source, {
-    List<String> selectorsToRemove = const <String>[],
-    bool normalizeImageSources = false,
-  }) {
-    if (source == null) {
-      return null;
-    }
-    final clone = source.clone(true);
     _sanitizeThreadHtml(clone, selectorsToRemove);
-    if (normalizeImageSources) {
-      _normalizeThreadImageSources(clone);
-    }
-    return clone;
+    return _cleanText(clone.text);
   }
 
   void _sanitizeThreadHtml(
     html_dom.Element root,
-    List<String> selectorsToRemove,
-  ) {
+    List<String> selectorsToRemove, {
+    bool preserveCollapseBodies = false,
+  }) {
     if (selectorsToRemove.isNotEmpty) {
       root
           .querySelectorAll(selectorsToRemove.join(', '))
           .forEach((node) => node.remove());
     }
-    _removeObfuscatedThreadNodes(root);
+    // Discuz anti-scraping may inject hidden jammer nodes into otherwise valid
+    // post/comment HTML; remove them before downstream parsing and rendering.
+    root.querySelectorAll('font.jammer, .jammer').forEach((node) {
+      node.remove();
+    });
+    // Match against intact siblings so removing one hidden body cannot turn
+    // another into a valid fold. Keep the server's style on managed bodies.
+    final hidden = root
+        .querySelectorAll('[style]')
+        .where(
+          (element) =>
+              _hasDisplayNone(element) &&
+              !(preserveCollapseBodies && _isManagedCollapseBody(element)),
+        )
+        .toList();
+    for (final element in hidden) {
+      element.remove();
+    }
+  }
+
+  bool _isManagedCollapseBody(html_dom.Element element) {
+    final box = element.parent;
+    if (!element.classes.contains('showcollapse_content') ||
+        element.attributes.containsKey('hidden') ||
+        box == null ||
+        !box.classes.contains('showcollapse_box')) {
+      return false;
+    }
+    var hasTitle = false;
+    html_dom.Element? body;
+    for (final child in box.children) {
+      final classes = child.classes;
+      if (classes.contains('showcollapse_box')) continue;
+      if (classes.contains('showcollapse_title')) {
+        if (hasTitle ||
+            body != null ||
+            child.attributes.containsKey('hidden') ||
+            _hasDisplayNone(child)) {
+          return false;
+        }
+        hasTitle = true;
+      } else if (classes.contains('showcollapse_content')) {
+        if (!hasTitle || body != null) return false;
+        body = child;
+      }
+    }
+    return identical(body, element);
+  }
+
+  bool _hasDisplayNone(html_dom.Element element) {
+    final style = element.attributes['style'];
+    if (style == null) return false;
+    for (final declaration in style.split(';')) {
+      final separator = declaration.indexOf(':');
+      if (separator <= 0) continue;
+      final key = declaration.substring(0, separator).trim().toLowerCase();
+      final value = declaration.substring(separator + 1).trim().toLowerCase();
+      if (key == 'display' && value.startsWith('none')) return true;
+    }
+    return false;
   }
 
   void _normalizeThreadImageSources(html_dom.Element root) {
@@ -1061,30 +1103,6 @@ class ThreadDetailHtmlParser {
         image.attributes['src'] = realSource;
       }
     }
-  }
-
-  void _removeObfuscatedThreadNodes(html_dom.Element root) {
-    // Discuz anti-scraping may inject hidden jammer nodes into otherwise valid
-    // post/comment HTML; remove them before downstream parsing and rendering.
-    root.querySelectorAll('font.jammer, .jammer').forEach((node) {
-      node.remove();
-    });
-    for (final element in root.querySelectorAll('[style]')) {
-      if (_hasDisplayNone(element)) element.remove();
-    }
-  }
-
-  bool _hasDisplayNone(html_dom.Element element) {
-    final style = element.attributes['style'];
-    if (style == null) return false;
-    for (final declaration in style.split(';')) {
-      final separator = declaration.indexOf(':');
-      if (separator <= 0) continue;
-      final key = declaration.substring(0, separator).trim().toLowerCase();
-      final value = declaration.substring(separator + 1).trim().toLowerCase();
-      if (key == 'display' && value.startsWith('none')) return true;
-    }
-    return false;
   }
 
   List<String> _cleanPostAttachmentHtml({
