@@ -3,6 +3,7 @@ import 'package:html/parser.dart' as html_parser;
 import '../contracts/thread_detail_models.dart';
 import '../url/forum_uri_resolver.dart';
 import 'discuz_thread_poll_summary_parser.dart';
+import 'discuz_thread_poll_option_content.dart';
 
 /// Source-neutral thread detail html parser.
 class ThreadDetailHtmlParser {
@@ -619,13 +620,12 @@ class ThreadDetailHtmlParser {
     final output = <ThreadPollOption>[];
     for (final item in pollRoot.querySelectorAll('.poll_box > p')) {
       final labelNode = item.querySelector('label');
-      final label = _cleanText(labelNode?.text ?? '');
-      if (label.isEmpty) {
-        continue;
-      }
       final input = item.querySelector('input[name="pollanswers[]"]');
-      final statNode = item.querySelector('em');
-      final statText = _cleanText(statNode?.text ?? '');
+      if (labelNode == null && input == null) continue;
+      final statNodes = _mobilePollStats(item).toList(growable: false);
+      final content = _pollOptionContent(item, mobile: true);
+      if (content == null) continue;
+      final statText = _cleanText(statNodes.map((node) => node.text).join(' '));
       final percent = _parseMobilePollPercent(statText);
       final voteCount = _parseMobilePollVoteCount(statText);
       output.add(
@@ -635,14 +635,59 @@ class ThreadDetailHtmlParser {
             label: labelNode,
             fallback: output.length + 1,
           ),
-          label: _stripPollNumber(label),
+          label: content.label,
+          contentHtml: content.html,
           voteCount: voteCount,
           percent: percent,
-          colorHex: _parseInlineColor(statNode?.attributes['style']),
+          colorHex: statNodes
+              .map((node) => _parseInlineColor(node.attributes['style']))
+              .whereType<String>()
+              .firstOrNull,
         ),
       );
     }
     return output;
+  }
+
+  Iterable<html_dom.Element> _mobilePollStats(html_dom.Element item) sync* {
+    for (final node in item.querySelectorAll('em')) {
+      var parent = node.parent;
+      while (parent != null && parent != item && parent.localName != 'label') {
+        parent = parent.parent;
+      }
+      if (parent != item) continue;
+      final text = _cleanText(node.text);
+      if (_parseMobilePollPercent(text) != null ||
+          _parseMobilePollVoteCount(text) != null) {
+        yield node;
+      }
+    }
+  }
+
+  ({String html, String label})? _pollOptionContent(
+    html_dom.Element source, {
+    bool mobile = false,
+  }) {
+    final clone = source.clone(true);
+    if (mobile) {
+      for (final stat in _mobilePollStats(clone).toList()) {
+        stat.remove();
+      }
+    }
+    _sanitizeThreadHtml(clone, const [
+      'input',
+      'button',
+      'select',
+      'textarea',
+      'script',
+      'style',
+      '[hidden]',
+    ], preserveCollapseBodies: true);
+    _normalizeThreadImageSources(clone);
+    final content = readDiscuzThreadPollOptionContent(clone);
+    final label = _cleanText(content.text);
+    if (label.isEmpty && !content.hasImage) return null;
+    return (html: content.html, label: label);
   }
 
   String _parseMobilePollStatusText(html_dom.Element pollRoot) {
@@ -863,16 +908,15 @@ class ThreadDetailHtmlParser {
 
   List<ThreadPollOption> _parseDesktopPollOptions(html_dom.Element pollRoot) {
     final output = <ThreadPollOption>[];
-    final rows = pollRoot.querySelectorAll('table[summary="poll panel"] tr');
+    final rows = _desktopPollRows(pollRoot);
     for (var index = 0; index < rows.length; index++) {
       final row = rows[index];
       final input = row.querySelector('input[name="pollanswers[]"]');
-      final label = _cleanText(row.querySelector('label')?.text ?? '');
-      if (label.isEmpty) {
-        continue;
-      }
-      final resultRow = index + 1 < rows.length ? rows[index + 1] : null;
       final labelNode = row.querySelector('label');
+      if (labelNode == null && input == null) continue;
+      final content = _pollOptionContent(row);
+      if (content == null) continue;
+      final resultRow = index + 1 < rows.length ? rows[index + 1] : null;
       final optionId = _parsePollOptionId(
         input: input,
         label: labelNode,
@@ -881,7 +925,8 @@ class ThreadDetailHtmlParser {
       output.add(
         ThreadPollOption(
           id: optionId,
-          label: _stripPollNumber(label),
+          label: content.label,
+          contentHtml: content.html,
           voteCount: _parseVoteCount(resultRow),
           percent: _parsePollPercent(resultRow),
           colorHex: _parsePollColor(resultRow),
@@ -889,6 +934,21 @@ class ThreadDetailHtmlParser {
       );
     }
     return output;
+  }
+
+  List<html_dom.Element> _desktopPollRows(html_dom.Element root) {
+    final table = root.querySelector('table[summary="poll panel"]');
+    if (table == null) return const [];
+    return table
+        .querySelectorAll('tr')
+        .where((row) {
+          var parent = row.parent;
+          while (parent != null && parent.localName != 'table') {
+            parent = parent.parent;
+          }
+          return identical(parent, table);
+        })
+        .toList(growable: false);
   }
 
   bool _hasValidPollVoteInputs(
@@ -926,7 +986,7 @@ class ThreadDetailHtmlParser {
   }
 
   String _parseDesktopPollStatusText(html_dom.Element pollRoot) {
-    final rows = pollRoot.querySelectorAll('table[summary="poll panel"] tr');
+    final rows = _desktopPollRows(pollRoot);
     for (final row in rows.reversed) {
       if (row.querySelector('.pbr') != null ||
           row.querySelector('label') != null) {
@@ -1624,12 +1684,6 @@ class ThreadDetailHtmlParser {
 
   String _stripBrackets(String source) {
     return source.replaceAll(RegExp(r'^\[|\]$'), '').trim();
-  }
-
-  String _stripPollNumber(String source) {
-    return source
-        .replaceFirst(RegExp(r'^\s*\d+\.\s*(?:&nbsp;)?\s*'), '')
-        .trim();
   }
 
   html_dom.Element _cloneWithout(

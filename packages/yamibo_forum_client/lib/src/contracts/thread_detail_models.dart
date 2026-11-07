@@ -38,6 +38,7 @@ class ThreadPollOption {
   const ThreadPollOption({
     required this.id,
     required this.label,
+    this.contentHtml,
     this.voteCount,
     this.percent,
     this.colorHex,
@@ -46,8 +47,12 @@ class ThreadPollOption {
   /// Stable option identifier submitted by the poll command.
   final String id;
 
-  /// Human-readable option label.
+  /// Plain description; empty for an image-only source without alt/title.
   final String label;
+
+  /// Option content in source order, excluding voting controls and statistics.
+  /// Null retains the plain label of older snapshots and non-HTML sources.
+  final String? contentHtml;
 
   /// Current vote count when exposed by the source.
   final int? voteCount;

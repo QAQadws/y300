@@ -192,6 +192,7 @@ class ThreadDetailSnapshotCodec
     return <String, Object?>{
       'id': value.id,
       'label': value.label,
+      if (value.contentHtml != null) 'contentHtml': value.contentHtml,
       'voteCount': value.voteCount,
       'percent': value.percent,
       'colorHex': value.colorHex,
@@ -202,6 +203,9 @@ class ThreadDetailSnapshotCodec
     return ThreadPollOption(
       id: LooseJson.string(map['id']),
       label: LooseJson.string(map['label']),
+      contentHtml: map['contentHtml'] is String
+          ? _nullableString(map['contentHtml'])
+          : null,
       voteCount: _nullableInt(map['voteCount']),
       percent: _nullableDouble(map['percent']),
       colorHex: _nullableString(map['colorHex']),
