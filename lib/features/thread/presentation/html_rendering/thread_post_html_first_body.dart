@@ -527,17 +527,30 @@ class _ThreadPostHtmlFirstBodyState
                 isSelectionCurrent: widget.isSelectionCurrent,
                 errorBuilder: (_) =>
                     widget.fallback ?? const ThreadPostHtmlBodyError(),
-                onLayoutPhase: widget.bodyPresentation == null
+                onLayoutPhase:
+                    widget.bodyPresentation == null && bodyLayout == null
                     ? null
-                    : (phase) => _nativeLayoutPhase = phase,
+                    : (phase) {
+                        _nativeLayoutPhase = phase;
+                        if (bodyLayout?.isCurrent == true &&
+                            identical(_bodyLayoutLease, bodyLayout)) {
+                          // The inner flow reports during layout, before the
+                          // waiting box records this frame's completed height.
+                          _bodyLayoutPhase = switch (phase) {
+                            ForumHtmlBodyLayoutPhase.preparing =>
+                              ThreadBodyLayoutPhase.preparing,
+                            ForumHtmlBodyLayoutPhase.built =>
+                              ThreadBodyLayoutPhase.built,
+                            ForumHtmlBodyLayoutPhase.failed =>
+                              ThreadBodyLayoutPhase.failed,
+                          };
+                        }
+                      },
                 onGeometry: (ready, complete) {
                   if (!mounted || _readingIdentity != readingIdentity) return;
                   _readingReady = ready;
                   _nativeBoundaryKnown = complete;
                   coordinator?.schedule();
-                  if (complete && bodyLayout?.isCurrent == true) {
-                    _bodyLayoutPhase = ThreadBodyLayoutPhase.built;
-                  }
                 },
               )
             : ForumHtmlWidgetPostRenderer(

@@ -17,6 +17,102 @@ import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.
 import '../../../../test_support/localized_test_app.dart';
 
 void main() {
+  testWidgets(
+    'native completed height is retained before an immediate remount',
+    (tester) async {
+      final store = ThreadBodyPresentationStore();
+      final container = _container();
+      final pending =
+          <
+            ({
+              ForumHtmlBackgroundPreparationInput input,
+              Completer<ForumHtmlPreparedRenderDocument> result,
+            })
+          >[];
+      final executor = ForumHtmlPreparationExecutor(
+        codeUnitThreshold: 0,
+        worker: (input) {
+          final result = Completer<ForumHtmlPreparedRenderDocument>();
+          pending.add((input: input, result: result));
+          return result.future;
+        },
+      );
+      addTearDown(store.clear);
+      addTearDown(container.dispose);
+      addTearDown(executor.dispose);
+      final post = _post('native', 1, units: 8);
+      final presentation = store.obtain(post.pid, post.message);
+      final theme = ThemeData.light();
+      var shown = true;
+      Widget scene() => UncontrolledProviderScope(
+        container: container,
+        child: LocalizedTestApp(
+          theme: theme,
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: SizedBox(
+                width: 360,
+                child: shown
+                    ? ThreadPostHtmlFirstBody(
+                        nativeBody: true,
+                        post: post,
+                        threadId: '100',
+                        imageReferer: '',
+                        onOpenPostLink: (_) {},
+                        onOpenPostImage: null,
+                        theme: const ForumHtmlRenderThemeFactory()
+                            .fromMaterialTheme(
+                              theme: theme,
+                              surface: theme.colorScheme.surface,
+                            ),
+                        preparationExecutor: executor,
+                        wholeBodyPresentation: presentation,
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpWidget(scene());
+      await _until(tester, () => pending.length == 1);
+      pending.first.result.complete(pending.first.input.prepare());
+      await _until(
+        tester,
+        () => tester
+            .widgetList<ForumBodyFlowBox>(find.byType(ForumBodyFlowBox))
+            .any((box) => box.prefix.isComplete && box.isCurrentLayout),
+      );
+      final waiting = find.byType(ThreadBodyWaitingLayout);
+      final height = tester.getSize(waiting).height;
+      final lease = tester.widget<ThreadBodyWaitingLayout>(waiting).lease;
+      final session = tester
+          .widget<ForumBodyFlowBox>(find.byType(ForumBodyFlowBox))
+          .session;
+      expect(height, greaterThan(300));
+      expect(lease.height, closeTo(height, .01));
+      shown = false;
+      await tester.pumpWidget(scene());
+      expect(session.isClosed, isTrue);
+      expect(session.activeIssuedFragments, 0);
+      shown = true;
+      await tester.pumpWidget(scene());
+      await _until(tester, () => pending.length == 2);
+      expect(tester.getSize(waiting).height, closeTo(height, .01));
+      expect(find.byType(ForumHtmlPreparationPlaceholder), findsOneWidget);
+      pending.last.result.complete(pending.last.input.prepare());
+      await _until(
+        tester,
+        () => tester
+            .widgetList<ForumBodyFlowBox>(find.byType(ForumBodyFlowBox))
+            .any((box) => box.prefix.isComplete && box.isCurrentLayout),
+      );
+      expect(tester.getSize(waiting).height, closeTo(height, .01));
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('cold preparation remount preserves completed height and fold', (
     tester,
   ) async {
