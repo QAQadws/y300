@@ -77,6 +77,7 @@ final class _ThreadPostTextSlots {
     ThreadPost source, {
     required List<String> values,
     required String displayHtml,
+    List<String?>? displayPollOptionHtml,
   }) {
     return ThreadPost(
       pid: source.pid,
@@ -93,7 +94,11 @@ final class _ThreadPostTextSlots {
       commentUrl: source.commentUrl,
       rateSummary: rateSummary?.value(values),
       ratingSummary: ratingSummary?.build(source.ratingSummary!, values),
-      poll: poll?.build(source.poll!, values),
+      poll: poll?.build(
+        source.poll!,
+        values,
+        displayOptionHtml: displayPollOptionHtml,
+      ),
       tagLinks: [
         for (var index = 0; index < source.tagLinks.length; index += 1)
           tags[index].build(source.tagLinks[index], values),
@@ -178,7 +183,17 @@ final class _PollSlots {
   final ThreadTextSlot? statusText;
   final List<_PollOptionSlots> options;
 
-  ThreadPoll build(ThreadPoll source, List<String> values) {
+  ThreadPoll build(
+    ThreadPoll source,
+    List<String> values, {
+    List<String?>? displayOptionHtml,
+  }) {
+    if (displayOptionHtml != null &&
+        displayOptionHtml.length != source.options.length) {
+      throw ArgumentError(
+        'Poll HTML projection must retain each option occurrence',
+      );
+    }
     return ThreadPoll(
       isMultipleChoice: source.isMultipleChoice,
       summary: summary.value(values),
@@ -186,7 +201,11 @@ final class _PollSlots {
       rulesText: rulesText?.value(values) ?? source.rulesText,
       options: [
         for (var index = 0; index < source.options.length; index += 1)
-          options[index].build(source.options[index], values),
+          options[index].build(
+            source.options[index],
+            values,
+            displayHtml: displayOptionHtml?[index],
+          ),
       ],
       canVote: source.canVote,
       maxChoices: source.maxChoices,
@@ -201,10 +220,15 @@ final class _PollOptionSlots {
 
   final ThreadTextSlot label;
 
-  ThreadPollOption build(ThreadPollOption source, List<String> values) {
+  ThreadPollOption build(
+    ThreadPollOption source,
+    List<String> values, {
+    String? displayHtml,
+  }) {
     return ThreadPollOption(
       id: source.id,
       label: label.value(values),
+      contentHtml: displayHtml ?? source.contentHtml,
       voteCount: source.voteCount,
       percent: source.percent,
       colorHex: source.colorHex,
@@ -357,7 +381,13 @@ final class ThreadPostTextSlots {
     ThreadPost source, {
     required List<String> values,
     required String displayHtml,
-  }) => _slots.build(source, values: values, displayHtml: displayHtml);
+    List<String?>? displayPollOptionHtml,
+  }) => _slots.build(
+    source,
+    values: values,
+    displayHtml: displayHtml,
+    displayPollOptionHtml: displayPollOptionHtml,
+  );
 }
 
 final class ThreadRatingDetailsTextSlots {

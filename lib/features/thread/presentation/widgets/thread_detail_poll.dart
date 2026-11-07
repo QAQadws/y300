@@ -14,6 +14,7 @@ class ThreadPollCard extends StatefulWidget {
     this.notice,
     this.expanded,
     this.onExpansionChanged,
+    this.optionContentBuilder,
   });
 
   final ThreadPoll poll;
@@ -27,6 +28,7 @@ class ThreadPollCard extends StatefulWidget {
   final ThreadActionNotice? notice;
   final bool? expanded;
   final ValueChanged<bool>? onExpansionChanged;
+  final Widget Function(ThreadPollOption)? optionContentBuilder;
 
   @override
   State<ThreadPollCard> createState() => _ThreadPollCardState();
@@ -84,9 +86,14 @@ class _ThreadPollCardState extends State<ThreadPollCard> {
                     ),
                   ),
                 const SizedBox(height: 4),
-                for (final option in widget.poll.options) ...[
+                for (final (index, option) in widget.poll.options.indexed) ...[
                   ThreadPollOptionTile(
+                    key: ValueKey(option.id),
                     option: option,
+                    optionNumber: index + 1,
+                    body: option.contentHtml?.trim().isNotEmpty == true
+                        ? widget.optionContentBuilder?.call(option)
+                        : null,
                     palette: widget.palette,
                     isMultipleChoice: widget.poll.isMultipleChoice,
                     showSelector: widget.poll.canVote,
@@ -247,9 +254,8 @@ class _ThreadPollFooter extends StatelessWidget {
     final showSelectionCount =
         poll.canVote && poll.isMultipleChoice && selectedCount > 0;
     final hasInfo = showSelectionCount || deadline?.isNotEmpty == true;
-    final style = Theme.of(
-      context,
-    ).textTheme.labelMedium?.copyWith(color: palette.muted);
+    final style = Theme.of(context).textTheme.labelMedium
+        ?.copyWith(color: palette.muted);
     final info = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -325,6 +331,8 @@ class ThreadPollOptionTile extends StatelessWidget {
     required this.selected,
     required this.enabled,
     required this.onTap,
+    this.body,
+    this.optionNumber = 1,
   });
 
   final ThreadPollOption option;
@@ -334,40 +342,71 @@ class ThreadPollOptionTile extends StatelessWidget {
   final bool selected;
   final bool enabled;
   final VoidCallback onTap;
+  final Widget? body;
+  final int optionNumber;
 
   @override
   Widget build(BuildContext context) {
     final sourcePercent = option.percent;
     final percent = sourcePercent?.isFinite == true ? sourcePercent : null;
     final color = _parseColor(option.colorHex) ?? palette.accent;
+    final description = option.label.trim().isEmpty
+        ? AppLocalizations.of(context).threadPollOptionDescription(optionNumber)
+        : option.label;
+    final icon = Icon(
+      selected
+          ? isMultipleChoice
+                ? Icons.check_box
+                : Icons.radio_button_checked
+          : isMultipleChoice
+          ? Icons.check_box_outline_blank
+          : Icons.radio_button_unchecked,
+      size: 20,
+      color: selected ? palette.accent : palette.softText,
+    );
     final content = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
+          crossAxisAlignment: body == null
+              ? CrossAxisAlignment.center
+              : CrossAxisAlignment.start,
           children: [
             if (showSelector) ...[
-              Icon(
-                selected
-                    ? isMultipleChoice
-                          ? Icons.check_box
-                          : Icons.radio_button_checked
-                    : isMultipleChoice
-                    ? Icons.check_box_outline_blank
-                    : Icons.radio_button_unchecked,
-                size: 20,
-                color: selected ? palette.accent : palette.softText,
-              ),
-              const SizedBox(width: 10),
+              if (body == null)
+                icon
+              else
+                Semantics(
+                  checked: selected,
+                  enabled: enabled,
+                  inMutuallyExclusiveGroup: !isMultipleChoice,
+                  child: IconButton(
+                    key: Key('thread-poll-option-${option.id}'),
+                    tooltip: description,
+                    onPressed: enabled ? onTap : null,
+                    icon: icon,
+                    constraints: const BoxConstraints(
+                      minWidth: 44,
+                      minHeight: 44,
+                    ),
+                  ),
+                ),
+              SizedBox(width: body == null ? 10 : 6),
             ],
             Expanded(
-              child: Text(
-                option.label,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: palette.bodyText,
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
+              child: body == null
+                  ? Text(
+                      description,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: palette.bodyText,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    )
+                  : Semantics(
+                      label: option.label.trim().isEmpty ? description : null,
+                      child: body,
+                    ),
             ),
           ],
         ),
@@ -382,12 +421,10 @@ class ThreadPollOptionTile extends StatelessWidget {
               children: [
                 if (option.voteCount != null)
                   Text(
-                    AppLocalizations.of(
-                      context,
-                    ).threadPollVotes(option.voteCount!),
-                    style: Theme.of(
-                      context,
-                    ).textTheme.labelMedium?.copyWith(color: palette.muted),
+                    AppLocalizations.of(context)
+                        .threadPollVotes(option.voteCount!),
+                    style: Theme.of(context).textTheme.labelMedium
+                        ?.copyWith(color: palette.muted),
                   ),
                 if (percent != null)
                   Text(
@@ -415,6 +452,21 @@ class ThreadPollOptionTile extends StatelessWidget {
         ],
       ],
     );
+    if (body != null) {
+      // Body links and images have their own actions. Only the explicit
+      // selector participates in the poll; no ancestor button merges them.
+      return Container(
+        key: Key('thread-poll-option-row-${option.id}'),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: selected
+              ? palette.accent.withValues(alpha: .07)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: content,
+      );
+    }
     if (!showSelector) {
       return Padding(
         key: Key('thread-poll-option-${option.id}'),

@@ -39,6 +39,7 @@ class ThreadHtmlImageReaderBridge {
     required String imageReferer,
     required ForumHtmlReadableImageSequence sequence,
     required ForumHtmlImageRequest imageRequest,
+    String? pollOptionId,
   }) {
     if (imageRequest.isSticker) {
       return const ThreadHtmlImageReaderBridgeResult.fallback(
@@ -80,6 +81,7 @@ class ThreadHtmlImageReaderBridge {
       referer: imageReferer,
       group: group,
       initialIndex: initialIndex,
+      pollOptionId: pollOptionId,
     );
 
     return ThreadHtmlImageReaderBridgeResult.open(
@@ -90,6 +92,7 @@ class ThreadHtmlImageReaderBridge {
         referer: readerRequest.referer,
         group: readerRequest.group,
         initialIndex: readerRequest.initialIndex,
+        pollOptionId: readerRequest.pollOptionId,
         continuousImages: _readerAdapter.mapRequest(readerRequest),
       ),
     );

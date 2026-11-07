@@ -46,6 +46,7 @@ class ThreadImageOpenRequest {
     required this.referer,
     required this.group,
     required this.initialIndex,
+    this.pollOptionId,
     this.continuousImages = const <ContinuousImageItem>[],
   });
 
@@ -53,6 +54,12 @@ class ThreadImageOpenRequest {
   final String pid;
   final int postNumber;
   final String referer;
+
+  /// Null identifies the post body; otherwise this gallery belongs to one
+  /// actual poll option in the same post, with its own occurrence ordinals.
+  final String? pollOptionId;
+  String get sourceOwnerId =>
+      'thread:$tid:post:$pid${pollOptionId == null ? '' : ':poll:${Uri.encodeComponent(pollOptionId!)}'}';
   final ThreadPostImageGroup group;
 
   /// Position in the gallery's filtered entries.

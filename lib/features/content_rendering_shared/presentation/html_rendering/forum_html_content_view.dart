@@ -31,6 +31,7 @@ class ForumHtmlContentView extends ConsumerStatefulWidget {
     this.contentLayout = ForumHtmlContentLayout.document,
     this.onOpenLink,
     this.onOpenImage,
+    this.imageAnchorController,
     this.theme,
     this.surfaceColor,
     this.foregroundColor,
@@ -51,6 +52,7 @@ class ForumHtmlContentView extends ConsumerStatefulWidget {
   final ValueChanged<String>? onOpenLink;
   final void Function(ForumHtmlReadableImageSequence, ForumHtmlImageRequest)?
   onOpenImage;
+  final ForumHtmlImageAnchorController? imageAnchorController;
   final ForumHtmlThemeContext? theme;
   final Color? surfaceColor;
   final Color? foregroundColor;
@@ -191,6 +193,7 @@ class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
             ),
       fontRevision: fontBinding?.cacheKey ?? '',
       imageHost: _resolveImageHost(document, ownerId),
+      imageAnchorController: widget.imageAnchorController,
       expansion: _expansion,
       onOpenImage: widget.onOpenImage == null
           ? null

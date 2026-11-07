@@ -1489,6 +1489,12 @@
     "placeholders": {"count": {"type": "int"}}
   },
   "threadPollSelectOption": "请选择投票选项",
+  "threadPollOptionDescription": "选项 {number}",
+  "@threadPollOptionDescription": {
+    "placeholders": {
+      "number": {"type": "int"}
+    }
+  },
   "threadPollVoteSuccess": "投票成功",
   "threadPollVoteAlreadyVoted": "已经投过票",
   "threadPollVoteClosed": "投票已关闭",

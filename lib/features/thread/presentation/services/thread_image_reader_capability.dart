@@ -169,7 +169,7 @@ class ThreadImageReaderCapability extends ReaderCapability {
   @override
   ReaderContent get content {
     return ReaderContent(
-      ownerId: 'thread:${request.tid}:post:${request.pid}',
+      ownerId: request.sourceOwnerId,
       initialIndex: request.initialIndex,
       // request.continuousImages 已由 ThreadImageReaderContinuousImageAdapter
       // 在打开入口处映射好；显示偏好由共享引擎在布局时统一应用。
@@ -211,7 +211,9 @@ class ThreadImageReaderCapability extends ReaderCapability {
   ReaderImageExportMetadata? exportMetadataFor(ContinuousImageItem item) {
     return ReaderImageExportMetadata(
       baseName:
-          'Y300-thread-${request.tid}-post-${request.pid}-${item.indexInPost + 1}',
+          'Y300-thread-${request.tid}-post-${request.pid}'
+          '${request.pollOptionId == null ? '' : '-poll-${Uri.encodeComponent(request.pollOptionId!)}'}'
+          '-${item.indexInPost + 1}',
       albumName: 'Y300',
     );
   }

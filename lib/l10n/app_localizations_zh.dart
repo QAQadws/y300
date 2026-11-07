@@ -3575,6 +3575,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get threadPollSelectOption => '请选择投票选项';
 
   @override
+  String threadPollOptionDescription(int number) {
+    return '选项 $number';
+  }
+
+  @override
   String get threadPollVoteSuccess => '投票成功';
 
   @override
@@ -9719,6 +9724,11 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get threadPollSelectOption => '請選擇投票選項';
+
+  @override
+  String threadPollOptionDescription(int number) {
+    return '選項 $number';
+  }
 
   @override
   String get threadPollVoteSuccess => '投票成功';

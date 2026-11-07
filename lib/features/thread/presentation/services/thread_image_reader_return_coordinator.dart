@@ -9,7 +9,7 @@ final class ThreadImageReaderReturnCoordinator {
   ThreadImageReaderReturnCoordinator({required this.scrollController});
 
   final ScrollController scrollController;
-  final _bodies = <String, _ImageReturnBody>{};
+  final _bodies = <({String pid, String? pollOptionId}), _ImageReturnBody>{};
   String? _tid;
   int? _page;
   int _generation = 0;
@@ -19,6 +19,7 @@ final class ThreadImageReaderReturnCoordinator {
     required String tid,
     required int page,
     required Map<String, String> bodyHtmlByPid,
+    Map<String, Map<String, String>> pollOptionHtmlByPid = const {},
   }) {
     if (_disposed) return;
     if (_tid != tid || _page != page) {
@@ -26,23 +27,35 @@ final class ThreadImageReaderReturnCoordinator {
       _tid = tid;
       _page = page;
     }
-    _bodies.removeWhere((pid, body) {
-      if (bodyHtmlByPid[pid] == body.html) return false;
+    final sources = <({String pid, String? pollOptionId}), String>{
+      for (final entry in bodyHtmlByPid.entries)
+        (pid: entry.key, pollOptionId: null): entry.value,
+      for (final post in pollOptionHtmlByPid.entries)
+        for (final option in post.value.entries)
+          (pid: post.key, pollOptionId: option.key): option.value,
+    };
+    _bodies.removeWhere((source, body) {
+      if (sources[source] == body.html) return false;
       body.anchors.dispose();
       return true;
     });
-    for (final entry in bodyHtmlByPid.entries) {
+    for (final entry in sources.entries) {
       _bodies.putIfAbsent(entry.key, () => _ImageReturnBody(entry.value));
     }
   }
 
-  ForumHtmlImageAnchorController? anchorsFor(String pid) =>
-      _disposed ? null : _bodies[pid]?.anchors;
+  ForumHtmlImageAnchorController? anchorsFor(
+    String pid, {
+    String? pollOptionId,
+  }) => _disposed
+      ? null
+      : _bodies[(pid: pid, pollOptionId: pollOptionId)]?.anchors;
 
   Future<void> Function(ThreadImageReaderExitResult)? beforeExitFor(
     ThreadImageOpenRequest request,
   ) {
-    final body = _bodies[request.pid];
+    final source = (pid: request.pid, pollOptionId: request.pollOptionId);
+    final body = _bodies[source];
     if (_disposed || request.tid != _tid || body == null) return null;
     final entries = List<ThreadPostImageEntry>.unmodifiable(
       request.group.entries,
@@ -53,7 +66,7 @@ final class ThreadImageReaderReturnCoordinator {
         !_disposed &&
         generation == _generation &&
         request.tid == _tid &&
-        identical(_bodies[request.pid], body);
+        identical(_bodies[source], body);
     return (result) async {
       if (!isCurrent() ||
           result.tid != request.tid ||

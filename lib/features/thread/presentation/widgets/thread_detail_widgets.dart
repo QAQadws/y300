@@ -14,6 +14,7 @@ import 'package:y300/features/thread/domain/models/thread_ui_feedback.dart';
 import 'package:y300/features/thread/domain/models/thread_post_target.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
+import 'package:y300/features/thread/presentation/html_rendering/thread_poll_option_body.dart';
 import 'package:y300/features/thread/presentation/thread_detail_render_entries.dart';
 import 'package:y300/features/thread/presentation/thread_detail_content_projection.dart';
 
@@ -375,6 +376,15 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
       bodyHtmlByPid: {
         for (final projection in _postProjections)
           projection.sourcePost.pid: projection.displayPost.message,
+      },
+      pollOptionHtmlByPid: {
+        for (final projection in _postProjections)
+          projection.sourcePost.pid: {
+            for (final option
+                in projection.displayPost.poll?.options ??
+                    const <ThreadPollOption>[])
+              option.id: ?option.contentHtml,
+          },
       },
     );
     final entries = _entryPlanner.buildProjectionEntries(
@@ -901,6 +911,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
             imageViewportCoordinator: _imageViewportCoordinator,
             imageAnchorController: widget.imageReaderReturnCoordinator
                 ?.anchorsFor(entry.sourcePost!.pid),
+            imageReaderReturnCoordinator: widget.imageReaderReturnCoordinator,
             imagePrecacheService: widget.htmlImagePrecacheService,
             bodyReadingCoordinator: widget.bodyReadingCoordinator,
             onPreparedBody: onPreparedBody,
@@ -1001,6 +1012,8 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
               ? null
               : _projectionAnchorCoordinator.keyForPid(entry.sourcePost!.pid),
           child: _ThreadPostCardFooterEntry(
+            onOpenPostImages: widget.onOpenPostImages,
+            imageReaderReturnCoordinator: widget.imageReaderReturnCoordinator,
             footerExpansion: _footerExpansionFor(entry.sourcePost!.pid),
             sourcePost: entry.sourcePost!,
             displayPost: entry.displayPost!,

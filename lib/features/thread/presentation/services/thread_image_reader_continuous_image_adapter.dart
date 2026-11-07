@@ -65,7 +65,7 @@ class ThreadImageReaderContinuousImageAdapter {
   }
 
   String _ownerIdFor(ThreadImageOpenRequest request) {
-    return 'thread:${request.tid}:post:${request.pid}';
+    return request.sourceOwnerId;
   }
 
   _ThreadImageReaderDimensions? _dimensionsFor(

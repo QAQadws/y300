@@ -282,6 +282,8 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
 
 class _ThreadPostCardFooterEntry extends StatelessWidget {
   const _ThreadPostCardFooterEntry({
+    this.onOpenPostImages,
+    this.imageReaderReturnCoordinator,
     super.key,
     required this.footerExpansion,
     required this.sourcePost,
@@ -304,6 +306,8 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
 
   final ThreadPost sourcePost;
   final _ThreadPostFooterExpansion footerExpansion;
+  final void Function(ThreadPost, ThreadImageOpenRequest)? onOpenPostImages;
+  final ThreadImageReaderReturnCoordinator? imageReaderReturnCoordinator;
   final ThreadPost displayPost;
   final Map<String, ThreadPostRatingsViewState> displayRatingsByPostId;
   final ThreadDetailPageState state;
@@ -374,6 +378,21 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
           children: [
             if (post.poll != null) ...[
               ThreadPollCard(
+                optionContentBuilder: (option) => ThreadPollOptionBody(
+                  key: ValueKey((sourcePost.pid, option.id)),
+                  post: sourcePost,
+                  option: option,
+                  threadId: state.tid,
+                  imageReferer: imageReferer ?? '',
+                  theme: const ForumHtmlRenderThemeFactory().fromThreadPalette(
+                    palette: palette,
+                    brightness: Theme.of(context).brightness,
+                  ),
+                  onOpenLink: onOpenPostLink,
+                  onOpenImage: onOpenPostImages,
+                  imageAnchorController: imageReaderReturnCoordinator
+                      ?.anchorsFor(sourcePost.pid, pollOptionId: option.id),
+                ),
                 expanded: footerExpansion.value.poll,
                 onExpansionChanged: (expanded) => footerExpansion.value = (
                   comments: footerExpansion.value.comments,
@@ -505,6 +524,7 @@ class _ThreadPostCardEntry extends StatefulWidget {
     this.bodyReadingCoordinator,
     this.wholeBodyPresentation,
     this.keepAlive = true,
+    this.imageReaderReturnCoordinator,
     this.onPreparedBody,
     this.preparerSelector,
     this.enableSafeDisplayPlanning = false,
@@ -558,6 +578,7 @@ class _ThreadPostCardEntry extends StatefulWidget {
   final ThreadBodyReadingCoordinator? bodyReadingCoordinator;
   final ThreadBodyPresentation? wholeBodyPresentation;
   final bool keepAlive;
+  final ThreadImageReaderReturnCoordinator? imageReaderReturnCoordinator;
   final ThreadPreparedBodyHandoff? onPreparedBody;
   final ThreadPreparedBodyPreparerSelector? preparerSelector;
   final bool enableSafeDisplayPlanning;
@@ -633,6 +654,8 @@ class _ThreadPostCardEntryState extends State<_ThreadPostCardEntry>
           enableSafeDisplayPlanning: widget.enableSafeDisplayPlanning,
         ),
         _ThreadPostCardFooterEntry(
+          onOpenPostImages: widget.onOpenPostImages,
+          imageReaderReturnCoordinator: widget.imageReaderReturnCoordinator,
           footerExpansion: widget.footerExpansion,
           key: Key('thread-post-footer-${widget.sourcePost.pid}'),
           sourcePost: widget.sourcePost,
@@ -942,6 +965,19 @@ class ThreadPostCard extends StatelessWidget {
           if (showBody && post.poll != null && interactionPolicy.showPoll) ...[
             const SizedBox(height: 10),
             ThreadPollCard(
+              optionContentBuilder: (option) => ThreadPollOptionBody(
+                key: ValueKey((post.pid, option.id)),
+                post: post,
+                option: option,
+                threadId: threadId,
+                imageReferer: resolvedImageReferer ?? '',
+                theme: const ForumHtmlRenderThemeFactory().fromThreadPalette(
+                  palette: resolvedPalette,
+                  brightness: Theme.of(context).brightness,
+                ),
+                onOpenLink: linkCallback,
+                onOpenImage: imageOpenCallback,
+              ),
               poll: post.poll!,
               selectedOptionIds:
                   detailState?.selectedPollOptionIds ?? const <String>{},

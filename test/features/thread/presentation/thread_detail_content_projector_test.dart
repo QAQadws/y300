@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:html/parser.dart' as html_parser;
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/html_text_node_conversion_service.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/plain_text_batch_conversion_service.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_diagnostics.dart';
@@ -9,9 +10,86 @@ import 'package:y300/features/thread/data/repositories/thread_post_ratings_repos
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 import 'package:y300/features/thread/presentation/thread_detail_content_projector.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
+import 'package:y300/features/thread/presentation/thread_post_text_slots.dart';
 
 void main() {
   group('ThreadDetailContentProjector', () {
+    test(
+      'poll HTML uses the same node-only batch and survives plain rebuilds',
+      () async {
+        const optionHtml =
+            '<b>发</b><img src="/发.png" alt="发">'
+            '<a href="/发">发</a><img src="/发.png">';
+        final source = _source(
+          poll: const ThreadPoll(
+            isMultipleChoice: false,
+            summary: '发',
+            options: [
+              ThreadPollOption(id: '71', label: '发', contentHtml: optionHtml),
+            ],
+          ),
+        );
+        final plain = DefaultPlainTextBatchConversionService();
+        final projected = await ThreadDetailContentProjector(
+          plainTextBatchConversionService: plain,
+          htmlTextNodeConversionService: DomHtmlTextNodeConversionService(
+            plainTextBatchConversionService: plain,
+          ),
+          diagnosticRecorder: _RecordingDiagnosticRecorder(),
+        ).project(source, converter: const _PollConverter());
+        expect(projected.isConverted, isTrue);
+        final option = projected.posts.single.displayPost.poll!.options.single;
+        expect(option.label, '發');
+        final content = html_parser.parseFragment(option.contentHtml!);
+        expect(content.querySelector('b')!.text, '發');
+        expect(content.querySelector('a')!.text, '發');
+        expect(content.querySelector('a')!.attributes['href'], '/发');
+        expect(
+          content
+              .querySelectorAll('img')
+              .map((image) => image.attributes['src']),
+          ['/发.png', '/发.png'],
+        );
+        expect(content.querySelector('img')!.attributes['alt'], '发');
+        expect(
+          source.posts.single.poll!.options.single.contentHtml,
+          optionHtml,
+        );
+        final collector = ThreadPlainTextCollector();
+        final slots = ThreadPostTextSlots.collect(
+          source.posts.single,
+          collector,
+        );
+        final rebuilt = slots.build(
+          source.posts.single,
+          values: collector.sources,
+          displayHtml: source.posts.single.message,
+        );
+        expect(rebuilt.poll!.options.single.contentHtml, optionHtml);
+      },
+    );
+
+    test('an image-only poll edit invalidates the display revision', () {
+      ThreadDetailPageState source(String image) => _source(
+        poll: ThreadPoll(
+          isMultipleChoice: false,
+          summary: 'poll',
+          options: [
+            ThreadPollOption(
+              id: '71',
+              label: '',
+              contentHtml: '<img src="$image">',
+            ),
+          ],
+        ),
+      );
+      expect(
+        ThreadDetailContentProjector.sourceRevisionFor(source('/first.png')),
+        isNot(
+          ThreadDetailContentProjector.sourceRevisionFor(source('/second.png')),
+        ),
+      );
+    });
     test(
       'none mode returns raw content without invoking either batch',
       () async {
@@ -527,6 +605,16 @@ class _TestConverter implements TextConverter {
 
   @override
   Future<String> convertHtml(String html) async => html;
+}
+
+class _PollConverter implements TextConverter {
+  const _PollConverter();
+  @override
+  String get id => 'test:poll';
+  @override
+  TextConversionMode get mode => TextConversionMode.toTraditional;
+  @override
+  Future<String> convertHtml(String html) async => html.replaceAll('发', '發');
 }
 
 class _CountingPassThroughConverter implements TextConverter {

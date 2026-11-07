@@ -6051,6 +6051,12 @@ abstract class AppLocalizations {
   /// **'请选择投票选项'**
   String get threadPollSelectOption;
 
+  /// No description provided for @threadPollOptionDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'选项 {number}'**
+  String threadPollOptionDescription(int number);
+
   /// No description provided for @threadPollVoteSuccess.
   ///
   /// In zh, this message translates to:

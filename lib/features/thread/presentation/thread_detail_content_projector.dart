@@ -50,6 +50,24 @@ final class ThreadDetailContentProjector {
           ),
     };
 
+    final htmlFragments = [for (final post in source.posts) post.message];
+    int? collectOptionHtml(String? html) {
+      if (html == null) return null;
+      final index = htmlFragments.length;
+      htmlFragments.add(html);
+      return index;
+    }
+
+    // Option HTML shares the existing node-only conversion batch. Plain slots
+    // must never convert markup attributes, resource URLs or occurrence order.
+    final pollHtmlIndexes = [
+      for (final post in source.posts)
+        [
+          for (final option in post.poll?.options ?? const <ThreadPollOption>[])
+            collectOptionHtml(option.contentHtml),
+        ],
+    ];
+
     final batch =
         await ThreadContentProjectionExecutor(
           plainTextBatchConversionService: plainTextBatchConversionService,
@@ -57,13 +75,13 @@ final class ThreadDetailContentProjector {
           diagnosticRecorder: diagnosticRecorder,
         ).convert(
           plainSources: collector.sources,
-          htmlFragments: [for (final post in source.posts) post.message],
+          htmlFragments: htmlFragments,
           converter: converter,
           sourceRevision: revision,
         );
     if (!batch.succeeded ||
         batch.plainValues.length != collector.sources.length ||
-        batch.htmlValues.length != source.posts.length) {
+        batch.htmlValues.length != htmlFragments.length) {
       return ThreadDetailContentProjection.raw(
         source,
         mode: converter.mode,
@@ -82,6 +100,10 @@ final class ThreadDetailContentProjector {
             sourcePost,
             values: batch.plainValues,
             displayHtml: batch.htmlValues[index].html,
+            displayPollOptionHtml: [
+              for (final slot in pollHtmlIndexes[index])
+                slot == null ? null : batch.htmlValues[slot].html,
+            ],
           ),
         ),
       );
@@ -199,6 +221,7 @@ final class ThreadDetailContentProjector {
       for (final option in poll.options) {
         yield option.id;
         yield _textHash(option.label);
+        yield _textHash(option.contentHtml);
         yield option.voteCount;
         yield option.percent;
         yield option.colorHex;
