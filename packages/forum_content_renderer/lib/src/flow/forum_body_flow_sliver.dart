@@ -493,7 +493,17 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
           final progress = work.advance(maxFragments: 1, maxParts: 32);
           _waiting = progress.waitingForLayoutBudget;
           if (progress.isReady) {
-            _deliver(index, _makeDelivery(index, work.takeFragments()));
+            _deliver(
+              index,
+              _makeDelivery(
+                index,
+                work.takeFragments(),
+                tableBudget: Duration(
+                  microseconds: 2000 - clock.elapsedMicroseconds,
+                ),
+                tableSteps: 64 - step,
+              ),
+            );
             break;
           }
           if (_waiting && !_intersects(index)) {
@@ -524,13 +534,50 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
 
   _FlowDelivery _makeDelivery(
     int index,
-    List<ForumBodyPreparedTextFragment> fragments,
-  ) {
+    List<ForumBodyPreparedTextFragment> fragments, {
+    Duration tableBudget = const Duration(milliseconds: 2),
+    int tableSteps = 64,
+  }) {
     final page = widget.prefix[index];
     final delivery = _FlowDelivery(fragments);
     try {
       for (final frame in page.tableFrames) {
         delivery.tables.add(_tableDelivery(index, frame));
+      }
+      final flow = widget;
+      final restoring =
+          flow is ForumBodyFlowBox &&
+          flow.initialTableSlice?.index == index &&
+          flow.initialTableSlice!.slice.isPending;
+      if (delivery.tables.isNotEmpty && !restoring && _intersects(index)) {
+        final clip = Rect.fromLTRB(
+          0,
+          _clip.start - _top(index),
+          widget.prefix.width,
+          _clip.end - _top(index),
+        );
+        delivery.tableSlices =
+            ForumBodyTablePreparedSlice.tryPrepareCachedWindows(
+              delivery.tables.map(
+                (table) => (
+                  layout: table.lease.layout,
+                  bounds: clip
+                      .intersect(table.frame.bounds)
+                      .shift(
+                        -table.frame.bounds.topLeft +
+                            Offset(table.horizontal.initialScrollOffset, 0),
+                      ),
+                ),
+              ),
+              timeBudget: tableBudget,
+              maxSteps: tableSteps,
+            ) ??
+            const [];
+        // Child initState claims its own slices during the next build. A
+        // changed clip or cancellation must not strand any unclaimed pins.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          delivery.closePendingTableSlices();
+        });
       }
       return delivery;
     } catch (_) {
@@ -882,6 +929,7 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
             ? widget.preloadExtentFactor
             : 0,
         preloadScope: widget.preloadScope,
+        initialSlices: delivery.tableSlices,
         initialSlice:
             seed != null &&
                 (layout.cells.contains(seed.area) ||
@@ -1010,6 +1058,7 @@ final class _FlowDelivery {
   _FlowDelivery(this.fragments);
   final List<ForumBodyPreparedTextFragment> fragments;
   final tables = <_FlowTableDelivery>[];
+  List<ForumBodyTablePreparedSlice> tableSlices = const [];
   final mountKey = GlobalKey();
 
   bool get isMounted {
@@ -1021,6 +1070,7 @@ final class _FlowDelivery {
   }
 
   void close() {
+    closePendingTableSlices();
     for (final table in tables) {
       table.horizontal.dispose();
       table.lease.close();
@@ -1028,6 +1078,13 @@ final class _FlowDelivery {
     for (final fragment in fragments) {
       fragment.close();
     }
+  }
+
+  void closePendingTableSlices() {
+    for (final slice in tableSlices) {
+      slice.close();
+    }
+    tableSlices = const [];
   }
 }
 

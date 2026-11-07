@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show precisionErrorTolerance;
+import 'package:flutter/foundation.dart'
+    show precisionErrorTolerance, setEquals;
 import 'package:flutter/rendering.dart' show RenderBox, ScrollDirection;
 import 'package:flutter/widgets.dart';
 
@@ -13,6 +14,8 @@ import '../pagination/forum_body_text_page_preparation.dart';
 import '../pagination/forum_body_text_page_session.dart';
 import '../services/forum_body_scroll_geometry.dart';
 import 'forum_body_table_preparation.dart';
+
+part 'forum_body_cached_table_slices.dart';
 
 typedef ForumBodyTableSliceBuilder =
     Widget Function(
@@ -64,6 +67,16 @@ final class ForumBodyTablePreparedSlice {
   final int page;
   List<ForumBodyPreparedTextFragment>? _fragments;
   bool get isPending => _fragments != null;
+
+  /// Acquires only existing glyphs/pictures for visible cells, including nested
+  /// tables. All windows share one bounded attempt; a miss releases the partial
+  /// result. The caller owns unclaimed slices and must close them after mount
+  /// or cancellation. No layout, picture recording or frame scheduling occurs.
+  static List<ForumBodyTablePreparedSlice>? tryPrepareCachedWindows(
+    Iterable<({ForumBodyTableLayout layout, Rect bounds})> windows, {
+    Duration timeBudget = const Duration(milliseconds: 2),
+    int maxSteps = 64,
+  }) => _CachedTableSlices(timeBudget, maxSteps).prepare(windows);
 
   List<ForumBodyPreparedTextFragment>? _take(ForumBodyTableLayout layout) {
     final fragments = _fragments;
@@ -125,11 +138,16 @@ final class ForumBodyTableFlowViewport extends _ForumBodyTableViewport {
     super.onReadyChanged,
     super.onWindowChanged,
     this.initialSlice,
+    this.initialSlices = const [],
     this.preloadExtentFactor = 0,
     this.preloadScope,
   });
 
   final ForumBodyTablePreparedSlice? initialSlice;
+
+  /// One-shot transfers for this table and its descendants. Each viewport
+  /// claims only its own areas; the caller retains unclaimed ownership.
+  final List<ForumBodyTablePreparedSlice> initialSlices;
 
   /// Optional vertical preparation around the enclosing document viewport.
   /// Actual readiness and borrowed windows still describe physical visibility.
@@ -301,11 +319,30 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
   void _adoptInitialSlice() {
     final table = widget;
     if (table is! ForumBodyTableFlowViewport) return;
-    final seed = table.initialSlice;
-    final fragments = seed?._take(table.layout);
-    if (fragments != null) {
-      final slice = (area: seed!.area, page: seed.page);
+    try {
+      _takeInitialSlices(table);
+    } catch (_) {
+      _clear();
+      rethrow;
+    }
+  }
+
+  void _takeInitialSlices(ForumBodyTableFlowViewport table) {
+    for (final seed in [
+      if (table.initialSlice != null) table.initialSlice!,
+      ...table.initialSlices.where(
+        (seed) =>
+            table.layout.cells.contains(seed.area) ||
+            table.layout.captions.contains(seed.area),
+      ),
+    ]) {
+      final fragments = seed._take(table.layout);
+      if (fragments == null) continue;
+      final slice = (area: seed.area, page: seed.page);
       try {
+        if (_ready.containsKey(slice)) {
+          throw StateError('Duplicate prepared table slice');
+        }
         _nested[slice] = _openNested(slice);
         _ready[slice] = fragments;
       } catch (_) {
@@ -397,10 +434,15 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
     }
     final window = _currentBounds() ?? Rect.zero;
     final warm = _preloadBounds(window);
+    var changed = false;
     if (window != _window || warm != _warmBounds) {
       _window = window;
       _warmBounds = warm;
-      _visible = window.isEmpty ? const {} : _slicesIn(window).toSet();
+      final visible = window.isEmpty
+          ? const <_Slice>{}
+          : _slicesIn(window).toSet();
+      changed = !setEquals(visible, _visible);
+      _visible = visible;
       _wanted = warm.isEmpty ? _visible : _slicesIn(warm).toSet();
       _deferredWarm.clear();
     }
@@ -423,9 +465,12 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
         );
     _reportReady(ready);
     _publishWindow(ready && !_scrolling ? window : null);
-    if (!mounted || _waiting) return;
+    if (!mounted) return;
+    if (_waiting) {
+      if (changed) setState(() {});
+      return;
+    }
     final clock = Stopwatch()..start();
-    var changed = false;
     // Consume cheap/cached cells in this slice rather than imposing a vsync
     // delay on every fragment or completed resource-budget check.
     for (
@@ -710,33 +755,8 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
     });
   }
 
-  Iterable<_Slice> _slicesIn(Rect window) sync* {
-    final layout = widget.layout;
-    for (final area in layout.captions.followedBy(layout.cells)) {
-      if (!area.contentBounds.overlaps(window)) continue;
-      final snapshot = area.snapshot;
-      var start = 0;
-      var end = snapshot.length;
-      // Skip all slices whose occupied bottom is above the visible region.
-      while (start < end) {
-        final mid = (start + end) ~/ 2;
-        final bottom =
-            area.contentBounds.top +
-            area.pageTop(mid) +
-            snapshot[mid].usedHeight;
-        if (bottom <= window.top) {
-          start = mid + 1;
-        } else {
-          end = mid;
-        }
-      }
-      for (var page = start; page < snapshot.length; page++) {
-        final top = area.contentBounds.top + area.pageTop(page);
-        if (top >= window.bottom) break;
-        if (snapshot[page].usedHeight > 0) yield (area: area, page: page);
-      }
-    }
-  }
+  Iterable<_Slice> _slicesIn(Rect window) =>
+      _tableSlicesIn(widget.layout, window);
 
   void _stopWork() {
     _preparation?.close();
@@ -886,6 +906,9 @@ final class _TableViewportState extends State<_ForumBodyTableViewport> {
                 horizontalController: table.horizontal,
                 preloadExtentFactor: _preloadFactor,
                 preloadScope: _preloadScope,
+                initialSlices: widget is ForumBodyTableFlowViewport
+                    ? (widget as ForumBodyTableFlowViewport).initialSlices
+                    : const [],
                 buildSlice: widget.buildSlice,
                 onFailure: (error, stack) {
                   if (_ownsNested(entry.key, table)) {

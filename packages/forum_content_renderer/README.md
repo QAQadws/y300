@@ -34,6 +34,8 @@ Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `
 
 Flow 将相同的预加载范围和 scope 传给 `ForumBodyTableFlowViewport`，包括嵌套表格。单元格显示交付在进入视口前挂载，进入后沿用原句柄；表格的 ready、借用窗口和来源坐标仍只包含物理可见区域。可见单元格先于预加载准备，屏外预算等待或失败仅推迟该次可选工作，视口变化后重新尝试，不报告正文失败。独立使用表格 viewport 时可显式传入同名参数，默认仍不扩展显示窗口。
 
+Flow 在交付表格前，按实际可见窗口和已记住的横向偏移尝试取得缓存单元格（包含嵌套表格）。同批根表格与子表格共用剩余的 2ms／64 步显示预算，只查询已有字形和绘图，不重新排版；缺失、压力或预算用尽会释放整批临时句柄，继续既有准备路径。`ForumBodyTablePreparedSlice.tryPrepareCachedWindows` 的结果归调用者所有；通过 `ForumBodyTableFlowViewport.initialSlices` 一次性交给对应 area 的首次挂载，未接收的条目必须在挂载后或取消时关闭。Flow 的交付对象负责该收尾。既有重排恢复用的单个 `initialSlice` 保持原交付方式；实际 ready、选择和语义仍以布局后的物理窗口为准。
+
 通用 renderer 保持整份 prepared document 的兼容路径；应用在自己的会话、布局和阅读契约下决定安全分块范围。收益验证应同时比较简单段落与复杂单块的首屏、尾部定位、返回滚动、字体/主题变化和内容顺序，不单凭理论段落减少比例启用分块。
 
 ## 转换、交互与图片生命周期
