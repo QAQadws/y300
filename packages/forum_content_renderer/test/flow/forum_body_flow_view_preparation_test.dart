@@ -14,7 +14,7 @@ void main() {
           );
           final session = ForumBodyTextPageSession(
             document: const ForumBodyParser().parse(
-              html: List.generate(12, (i) => '<p>line $i</p>').join(),
+              html: List.generate(24, (i) => '<p>line $i</p>').join(),
               sourceId: 'visible-flow',
               conversionIdentity: 'none',
             ),
@@ -56,7 +56,7 @@ void main() {
           expect(session.snapshot.length, 1);
           expect(
             session.snapshot.single.fragments.length,
-            greaterThanOrEqualTo(12),
+            greaterThanOrEqualTo(24),
           );
           if (cold) {
             cache.clearUnpinned();
@@ -123,7 +123,7 @@ void main() {
           );
           expect(cache.layoutBuildCount - previous, lessThanOrEqualTo(1));
           previous = cache.layoutBuildCount;
-          final frames = cold ? 64 : 8;
+          final frames = cold ? 64 : 3;
           for (var i = 0; i < frames && !ready; i++) {
             await tester.pump(const Duration(milliseconds: 16));
             expect(cache.layoutBuildCount - previous, lessThanOrEqualTo(1));

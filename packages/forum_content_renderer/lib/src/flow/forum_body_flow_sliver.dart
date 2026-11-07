@@ -489,8 +489,8 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
         final clock = Stopwatch()..start();
         // Reuse cached fragments within the slice budget instead of waiting
         // a frame for each one. Ordinary views still shape at most once.
-        for (var step = 0; step < 6; step++) {
-          final progress = work.advance(maxFragments: 1, maxParts: 8);
+        for (var step = 0; step < 64; step++) {
+          final progress = work.advance(maxFragments: 1, maxParts: 32);
           _waiting = progress.waitingForLayoutBudget;
           if (progress.isReady) {
             _deliver(index, _makeDelivery(index, work.takeFragments()));

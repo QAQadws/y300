@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart' show SchedulerPhase;
 import 'package:flutter/rendering.dart'
     show GrowthDirection, RenderAbstractViewport, RenderSliver;
 import 'package:y300/core/clipboard/clipboard_text_writer.dart';
@@ -768,11 +769,28 @@ final class _FlowRun {
 /// Fair across the floors that are currently mounted by the lazy list.
 abstract final class _FlowQueue {
   static final _pending = <VoidCallback>{};
+  static final _clock = Stopwatch();
+  static int _steps = 0;
+  static bool _initialized = false;
   static bool _scheduled = false;
+  static bool _draining = false;
 
   static void add(VoidCallback work) {
+    if (!_initialized) {
+      _initialized = true;
+      WidgetsBinding.instance.addPersistentFrameCallback((_) {
+        _clock.reset();
+        _steps = 0;
+      });
+    }
     _pending.add(work);
-    _schedule();
+    if (_draining) return;
+    if (WidgetsBinding.instance.schedulerPhase ==
+        SchedulerPhase.postFrameCallbacks) {
+      _drain();
+    } else {
+      _schedule();
+    }
   }
 
   static void remove(VoidCallback? work) => _pending.remove(work);
@@ -781,19 +799,32 @@ abstract final class _FlowQueue {
     if (_scheduled || _pending.isEmpty) return;
     _scheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final clock = Stopwatch()..start();
+      _scheduled = false;
+      _drain();
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  static void _drain() {
+    if (_draining || _pending.isEmpty) return;
+    _draining = true;
+    _clock.start();
+    try {
+      // Starts already arrive after layout. Use this frame's remaining shared
+      // slice instead of imposing another vsync; no floor gets a fresh budget.
       for (
-        var i = 0;
-        i < 24 && _pending.isNotEmpty && clock.elapsedMicroseconds < 3000;
-        i++
+        ;
+        _steps < 64 && _pending.isNotEmpty && _clock.elapsedMicroseconds < 3000;
+        _steps++
       ) {
         final step = _pending.first;
         _pending.remove(step);
         step();
       }
-      _scheduled = false;
+    } finally {
+      _clock.stop();
+      _draining = false;
       _schedule();
-    });
-    WidgetsBinding.instance.ensureVisualUpdate();
+    }
   }
 }

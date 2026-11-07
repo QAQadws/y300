@@ -36,6 +36,7 @@ Widget _scene(
   bool shown = true,
   ScrollController? scroll,
   ForumHtmlImageAnchorController? anchors,
+  ForumNativeBodyCache? cache,
 }) => LocalizedTestApp(
   home: Scaffold(
     body: SingleChildScrollView(
@@ -46,6 +47,7 @@ Widget _scene(
           width: 300,
           child: shown
               ? ForumNativeBodyFlow(
+                  cache: cache,
                   prepared: prepared,
                   preferences: ForumHtmlReaderPreferences.defaults(),
                   theme: _theme,
@@ -80,6 +82,38 @@ Future<void> _ready(WidgetTester tester, [_Images? host]) => _until(
 );
 
 void main() {
+  testWidgets(
+    'warm body publishes in its start frame without an extra queue frame',
+    (tester) async {
+      final prepared = _prepare('<p>warm body</p>');
+      final host = _Images(prepared);
+      final presentation = ForumHtmlBodyPresentation();
+      final cache = ForumNativeBodyCache();
+      addTearDown(presentation.dispose);
+      addTearDown(cache.close);
+      await tester.pumpWidget(
+        _scene(prepared, host, presentation, cache: cache),
+      );
+      await tester.pumpAndSettle();
+      final old = _flow(tester)!.session;
+      final layouts = cache.paragraphs.layoutBuildCount;
+      await tester.pumpWidget(
+        _scene(prepared, host, presentation, shown: false, cache: cache),
+      );
+      expect(old.isClosed, isTrue);
+      await tester.pumpWidget(
+        _scene(prepared, host, presentation, cache: cache),
+      );
+      await tester.pump();
+      expect(_flow(tester)?.prefix.isNotEmpty, isTrue);
+      expect(cache.paragraphs.layoutBuildCount, layouts);
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(cache.paragraphs.activeLeases, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   for (final (name, html) in [
     (
       'inline',
