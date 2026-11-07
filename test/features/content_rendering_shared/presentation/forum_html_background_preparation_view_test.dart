@@ -11,6 +11,64 @@ import '../../../test_support/localized_test_app.dart';
 import '../../../test_support/native_body_finders.dart';
 
 void main() {
+  testWidgets(
+    'retained geometry survives asynchronous body remount and rejects a different width',
+    (tester) async {
+      final worker = _Worker();
+      final executor = _executor(worker);
+      final scope = _Scope();
+      final presentation = ForumHtmlBodyPresentation();
+      addTearDown(presentation.dispose);
+      final html = '<p>${List.filled(24, 'Stable line').join('<br>')}</p>';
+      Widget scene({bool mounted = true, double width = 320}) => scope.host(
+        SingleChildScrollView(
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: width,
+              child: mounted
+                  ? ForumHtmlContentView(
+                      key: const Key('retained-body'),
+                      html: html,
+                      sourceId: 'retained',
+                      theme: _lightTheme,
+                      preparationExecutor: executor,
+                      bodyPresentation: presentation,
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpWidget(scene());
+      await _frames(tester);
+      worker.complete(0);
+      await tester.pumpAndSettle();
+      final body = find.byKey(const Key('retained-body'));
+      final height = tester.getSize(body).height;
+      expect(height, greaterThan(200));
+      final old = tester
+          .widget<ForumBodyFlowBox>(find.byType(ForumBodyFlowBox))
+          .session;
+      await tester.pumpWidget(scene(mounted: false));
+      expect(old.isClosed, isTrue);
+      expect(old.activeIssuedFragments, 0);
+      await tester.pumpWidget(scene());
+      await _frames(tester);
+      expect(worker.jobs, hasLength(2));
+      expect(find.byType(ForumHtmlPreparationPlaceholder), findsOneWidget);
+      expect(tester.getSize(body).height, closeTo(height, .01));
+      await tester.pumpWidget(scene(width: 200));
+      expect(tester.getSize(body).height, lessThan(height));
+      await tester.pumpWidget(scene());
+      expect(tester.getSize(body).height, closeTo(height, .01));
+      worker.complete(1);
+      await tester.pumpAndSettle();
+      expect(tester.getSize(body).height, closeTo(height, .01));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('failed shared preparation retries through the native body', (
     tester,
   ) async {

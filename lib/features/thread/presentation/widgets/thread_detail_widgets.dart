@@ -15,6 +15,7 @@ import 'package:y300/features/thread/domain/models/thread_post_target.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_poll_option_body.dart';
+import 'package:y300/features/thread/presentation/services/thread_poll_option_presentation_store.dart';
 import 'package:y300/features/thread/presentation/thread_detail_render_entries.dart';
 import 'package:y300/features/thread/presentation/thread_detail_content_projection.dart';
 
@@ -142,6 +143,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
   ThreadDetailPreparedBodyStore? get _preparedBodies => _chunks?.store;
   final _footerExpansions = <String, _ThreadPostFooterExpansion>{};
   final _wholeBodyPresentations = ThreadBodyPresentationStore();
+  final _pollOptionPresentations = ThreadPollOptionPresentationStore();
   // Saved body percentages require complete actual geometry. Source reading
   // pages keep their existing whole-body renderer and reading observer.
   bool get _canChunkBodies =>
@@ -217,6 +219,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
         !identical(oldWidget.scrollController, widget.scrollController) ||
         oldWidget.bodyReadingCoordinator != widget.bodyReadingCoordinator) {
       _wholeBodyPresentations.clear();
+      _pollOptionPresentations.clear();
     }
     if (oldWidget.state.tid != widget.state.tid ||
         oldWidget.state.currentPage != widget.state.currentPage) {
@@ -295,6 +298,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
     _disposeEndpointNavigation();
     _clearFooterExpansions();
     _wholeBodyPresentations.clear();
+    _pollOptionPresentations.clear();
     _retirePreparedBodies();
     _tickerModeNotifier?.removeListener(_handleTickerModeChanged);
     _imageViewportCoordinator?.dispose();
@@ -316,6 +320,15 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
       for (final post in _postProjections)
         post.sourcePost.pid: post.displayPost.message,
     };
+    final pollOptionHtml = {
+      for (final post in _postProjections)
+        post.sourcePost.pid: {
+          for (final option
+              in post.displayPost.poll?.options ?? const <ThreadPollOption>[])
+            option.id: ?option.contentHtml,
+        },
+    };
+    _pollOptionPresentations.retainSources(pollOptionHtml);
     _wholeBodyPresentations.retainWhere(
       (pid, html) =>
           widget.bodyReadingCoordinator == null &&
@@ -377,15 +390,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
         for (final projection in _postProjections)
           projection.sourcePost.pid: projection.displayPost.message,
       },
-      pollOptionHtmlByPid: {
-        for (final projection in _postProjections)
-          projection.sourcePost.pid: {
-            for (final option
-                in projection.displayPost.poll?.options ??
-                    const <ThreadPollOption>[])
-              option.id: ?option.contentHtml,
-          },
-      },
+      pollOptionHtmlByPid: pollOptionHtml,
     );
     final entries = _entryPlanner.buildProjectionEntries(
       posts: _postProjections,
@@ -912,6 +917,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
             imageAnchorController: widget.imageReaderReturnCoordinator
                 ?.anchorsFor(entry.sourcePost!.pid),
             imageReaderReturnCoordinator: widget.imageReaderReturnCoordinator,
+            pollOptionPresentations: _pollOptionPresentations,
             imagePrecacheService: widget.htmlImagePrecacheService,
             bodyReadingCoordinator: widget.bodyReadingCoordinator,
             onPreparedBody: onPreparedBody,
@@ -1012,6 +1018,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
               ? null
               : _projectionAnchorCoordinator.keyForPid(entry.sourcePost!.pid),
           child: _ThreadPostCardFooterEntry(
+            pollOptionPresentations: _pollOptionPresentations,
             onOpenPostImages: widget.onOpenPostImages,
             imageReaderReturnCoordinator: widget.imageReaderReturnCoordinator,
             footerExpansion: _footerExpansionFor(entry.sourcePost!.pid),

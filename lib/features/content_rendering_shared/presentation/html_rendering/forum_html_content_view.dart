@@ -32,6 +32,7 @@ class ForumHtmlContentView extends ConsumerStatefulWidget {
     this.onOpenLink,
     this.onOpenImage,
     this.imageAnchorController,
+    this.bodyPresentation,
     this.theme,
     this.surfaceColor,
     this.foregroundColor,
@@ -53,6 +54,7 @@ class ForumHtmlContentView extends ConsumerStatefulWidget {
   final void Function(ForumHtmlReadableImageSequence, ForumHtmlImageRequest)?
   onOpenImage;
   final ForumHtmlImageAnchorController? imageAnchorController;
+  final ForumHtmlBodyPresentation? bodyPresentation;
   final ForumHtmlThemeContext? theme;
   final Color? surfaceColor;
   final Color? foregroundColor;
@@ -69,14 +71,21 @@ class ForumHtmlContentView extends ConsumerStatefulWidget {
 }
 
 class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
+  // Preparation identity includes the preparer. These immutable defaults must
+  // keep the same identity when a virtualized body mounts again.
+  static final _defaultPreparers = {
+    for (final kind in ForumImageKind.values)
+      kind: DefaultForumHtmlRenderPreparer(contentImageKind: kind),
+  };
   late var _preparation = _createPreparation();
-  late var _defaultPreparer = DefaultForumHtmlRenderPreparer(
-    contentImageKind: widget.contentImageKind,
-  );
+  late var _defaultPreparer = _defaultPreparers[widget.contentImageKind]!;
   Object? _nativeSource;
   var _expansion = <String, bool>{};
   Object? _imageHostIdentity;
   ForumHtmlImageHost? _imageHost;
+  Object? _layoutRevision;
+  String? _layoutSourceId;
+  var _layoutPhase = ForumHtmlBodyLayoutPhase.preparing;
 
   ForumHtmlPreparationController _createPreparation() =>
       ForumHtmlPreparationController(executor: widget.preparationExecutor)
@@ -94,9 +103,7 @@ class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
       _preparation = _createPreparation();
     }
     if (oldWidget.contentImageKind != widget.contentImageKind) {
-      _defaultPreparer = DefaultForumHtmlRenderPreparer(
-        contentImageKind: widget.contentImageKind,
-      );
+      _defaultPreparer = _defaultPreparers[widget.contentImageKind]!;
     }
     if (_preparation.hasError) _preparation.reset();
   }
@@ -109,10 +116,25 @@ class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
 
   @override
   Widget build(BuildContext context) {
+    final body = _buildContent(context);
+    final presentation = widget.bodyPresentation;
+    final revision = _layoutRevision;
+    if (presentation == null || revision == null) return body;
+    return ForumHtmlBodyLayout.observed(
+      presentation: presentation,
+      sourceId: _layoutSourceId!,
+      revision: revision,
+      phase: () => _layoutPhase,
+      child: body,
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     final trimmedHtml = widget.html.trim();
     if (trimmedHtml.isEmpty) {
       _preparation.reset();
       _nativeSource = null;
+      _layoutRevision = null;
       return const SizedBox.shrink();
     }
     final ownerId = _ownerId();
@@ -120,6 +142,8 @@ class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
         ? ref.watch(forumHtmlReaderFontBindingProvider)
         : null;
     if (fontBinding != null && !fontBinding.isReady) {
+      _layoutRevision = null;
+      _layoutPhase = ForumHtmlBodyLayoutPhase.preparing;
       return const ForumHtmlPreparationPlaceholder();
     }
     final preferences =
@@ -146,10 +170,38 @@ class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
       imageCacheOwnerId: ownerId,
       preparer: widget.renderPreparer ?? _defaultPreparer,
     );
+    final textStyle = fontBinding == null
+        ? resolveForumHtmlBaseTextStyle(
+            context,
+            options: preferences.renderOptions,
+            theme: renderTheme,
+          )
+        : resolveForumHtmlReaderTextStyle(
+            context,
+            preferences: preferences,
+            theme: renderTheme,
+            font: fontBinding.resolvedFont,
+          );
+    final revision = (
+      request.identity,
+      preferences.renderOptions,
+      textStyle,
+      fontBinding?.cacheKey,
+      MediaQuery.textScalerOf(context),
+      Directionality.of(context),
+      Localizations.localeOf(context),
+      widget.contentLayout,
+    );
+    if (_layoutRevision != revision) {
+      _layoutRevision = revision;
+      _layoutPhase = ForumHtmlBodyLayoutPhase.preparing;
+    }
+    _layoutSourceId = sourceId;
     ForumHtmlPreparedRenderDocument? document;
     try {
       document = _preparation.resolve(request);
     } catch (_) {
+      _layoutPhase = ForumHtmlBodyLayoutPhase.failed;
       final l10n = AppLocalizations.of(context);
       return Column(
         mainAxisSize: MainAxisSize.min,
@@ -162,39 +214,42 @@ class _ForumHtmlContentViewState extends ConsumerState<ForumHtmlContentView> {
         ],
       );
     }
-    if (document == null) return const ForumHtmlPreparationPlaceholder();
-    final source = (trimmedHtml, sourceId, ownerId, request.preparer);
+    if (document == null) {
+      _layoutPhase = ForumHtmlBodyLayoutPhase.preparing;
+      return const ForumHtmlPreparationPlaceholder();
+    }
+    final source = (
+      trimmedHtml,
+      sourceId,
+      ownerId,
+      request.preparer,
+      widget.bodyPresentation,
+    );
     if (_nativeSource != source) {
       _nativeSource = source;
-      _expansion = {};
+      _expansion = widget.bodyPresentation?.collapseExpansion ?? {};
+      _layoutPhase = ForumHtmlBodyLayoutPhase.preparing;
     }
     final requestIdentity = request.identity;
     bool current() =>
         mounted &&
         _preparation.identity == requestIdentity &&
         (widget.isCurrent?.call() ?? true);
+    final expansion = _expansion;
     return ForumNativeBodyFlow(
       key: ObjectKey(_expansion),
       prepared: document,
       preferences: preferences,
       contentLayout: widget.contentLayout,
       theme: renderTheme,
-      textStyle: fontBinding == null
-          ? resolveForumHtmlBaseTextStyle(
-              context,
-              options: preferences.renderOptions,
-              theme: renderTheme,
-            )
-          : resolveForumHtmlReaderTextStyle(
-              context,
-              preferences: preferences,
-              theme: renderTheme,
-              font: fontBinding.resolvedFont,
-            ),
+      textStyle: textStyle,
       fontRevision: fontBinding?.cacheKey ?? '',
       imageHost: _resolveImageHost(document, ownerId),
       imageAnchorController: widget.imageAnchorController,
       expansion: _expansion,
+      onLayoutPhase: (phase) {
+        if (current() && identical(_expansion, expansion)) _layoutPhase = phase;
+      },
       onOpenImage: widget.onOpenImage == null
           ? null
           : (gallery, image) {

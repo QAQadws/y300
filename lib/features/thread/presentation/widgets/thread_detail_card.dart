@@ -282,6 +282,7 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
 
 class _ThreadPostCardFooterEntry extends StatelessWidget {
   const _ThreadPostCardFooterEntry({
+    this.pollOptionPresentations,
     this.onOpenPostImages,
     this.imageReaderReturnCoordinator,
     super.key,
@@ -308,6 +309,7 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
   final _ThreadPostFooterExpansion footerExpansion;
   final void Function(ThreadPost, ThreadImageOpenRequest)? onOpenPostImages;
   final ThreadImageReaderReturnCoordinator? imageReaderReturnCoordinator;
+  final ThreadPollOptionPresentationStore? pollOptionPresentations;
   final ThreadPost displayPost;
   final Map<String, ThreadPostRatingsViewState> displayRatingsByPostId;
   final ThreadDetailPageState state;
@@ -392,6 +394,11 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
                   onOpenImage: onOpenPostImages,
                   imageAnchorController: imageReaderReturnCoordinator
                       ?.anchorsFor(sourcePost.pid, pollOptionId: option.id),
+                  bodyPresentation: pollOptionPresentations?.obtain(
+                    sourcePost.pid,
+                    option.id,
+                    option.contentHtml!,
+                  ),
                 ),
                 expanded: footerExpansion.value.poll,
                 onExpansionChanged: (expanded) => footerExpansion.value = (
@@ -525,6 +532,7 @@ class _ThreadPostCardEntry extends StatefulWidget {
     this.wholeBodyPresentation,
     this.keepAlive = true,
     this.imageReaderReturnCoordinator,
+    this.pollOptionPresentations,
     this.onPreparedBody,
     this.preparerSelector,
     this.enableSafeDisplayPlanning = false,
@@ -579,6 +587,7 @@ class _ThreadPostCardEntry extends StatefulWidget {
   final ThreadBodyPresentation? wholeBodyPresentation;
   final bool keepAlive;
   final ThreadImageReaderReturnCoordinator? imageReaderReturnCoordinator;
+  final ThreadPollOptionPresentationStore? pollOptionPresentations;
   final ThreadPreparedBodyHandoff? onPreparedBody;
   final ThreadPreparedBodyPreparerSelector? preparerSelector;
   final bool enableSafeDisplayPlanning;
@@ -654,6 +663,7 @@ class _ThreadPostCardEntryState extends State<_ThreadPostCardEntry>
           enableSafeDisplayPlanning: widget.enableSafeDisplayPlanning,
         ),
         _ThreadPostCardFooterEntry(
+          pollOptionPresentations: widget.pollOptionPresentations,
           onOpenPostImages: widget.onOpenPostImages,
           imageReaderReturnCoordinator: widget.imageReaderReturnCoordinator,
           footerExpansion: widget.footerExpansion,

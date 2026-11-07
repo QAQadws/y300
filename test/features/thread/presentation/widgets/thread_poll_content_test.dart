@@ -60,6 +60,8 @@ final class _Harness {
   final requests = <ThreadImageOpenRequest>[];
   final links = <String>[];
   var selections = 0, submissions = 0, revision = 0;
+  var followingPosts = 0;
+  var extraPollOptions = 0;
   var html71 =
       '$_image<p>Alpha</p>$_image<p><a href="https://example.test/read">Open</a></p>';
   var html72 = _image;
@@ -78,6 +80,12 @@ final class _Harness {
       options: [
         ThreadPollOption(id: '71', label: 'Alpha Open', contentHtml: html71),
         ThreadPollOption(id: '72', label: '', contentHtml: html72),
+        for (var i = 0; i < extraPollOptions; i++)
+          ThreadPollOption(
+            id: '${i + 73}',
+            label: '',
+            contentHtml: _image.replaceFirst('height="40"', 'height="300"'),
+          ),
       ],
     ),
   );
@@ -86,6 +94,8 @@ final class _Harness {
     WidgetTester tester, {
     Locale locale = const Locale('zh'),
     bool tall = false,
+    int followingPosts = 0,
+    int extraPollOptions = 0,
   }) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(500, 1400);
@@ -110,6 +120,8 @@ final class _Harness {
       }
     });
     final h = _Harness(tester, cache!);
+    h.followingPosts = followingPosts;
+    h.extraPollOptions = extraPollOptions;
     if (tall) {
       tester.view.physicalSize = const Size(500, 800);
       h.html71 = '$_image<p>${'Words ' * 300}</p>$_image';
@@ -146,7 +158,19 @@ final class _Harness {
                       isLoadingInitial: false,
                       currentPage: 1,
                       hasMore: false,
-                      posts: [h.post],
+                      posts: [
+                        h.post,
+                        for (var i = 0; i < h.followingPosts; i++)
+                          ThreadPost(
+                            pid: '${i + 2}',
+                            author: 'Reader',
+                            authorId: '2',
+                            number: i + 2,
+                            isFirst: false,
+                            dateline: 'today',
+                            message: '<p>Following $i</p>',
+                          ),
+                      ],
                       selectedPollOptionIds: Set.of(h.selected),
                       pollVoteCommandAvailable: true,
                     );
@@ -204,7 +228,7 @@ final class _Harness {
                   ),
           )
           .toList();
-      return boxes.length == (firstImage ? 3 : 1) &&
+      return boxes.length == (firstImage ? 3 + extraPollOptions : 1) &&
           boxes.every((box) => box.prefix.isComplete);
     });
     if (firstImage) {
@@ -325,6 +349,45 @@ void main() {
       await tester.tap(_picture('71', 1));
       expect(h.requests.last.initialEntry?.indexInPost, 1);
       expect(h.requests.last.pollOptionId, '71');
+    },
+  );
+
+  testWidgets(
+    'virtualized poll options retain completed height while remounting',
+    (tester) async {
+      final h = await _Harness.open(
+        tester,
+        tall: true,
+        followingPosts: 24,
+        extraPollOptions: 16,
+      );
+      final old = h.sessionFor('71');
+      final imageTop = tester.getTopLeft(_picture('71', 0)).dy;
+      final card = find.byKey(const ValueKey('thread-post-card-entry-1'));
+      final completedHeight = tester.getSize(card).height;
+      h.scroll.jumpTo(h.scroll.position.maxScrollExtent);
+      await _until(tester, () => old.isClosed);
+      expect(_body('71'), findsNothing);
+      await _until(tester, () => !h.scroll.position.isScrollingNotifier.value);
+      h.scroll.jumpTo(100);
+      await tester.pump();
+      expect(tester.getSize(card).height, closeTo(completedHeight, 1));
+      await _until(tester, () {
+        final boxes = tester.widgetList<ForumBodyFlowBox>(
+          find.descendant(
+            of: _body('71'),
+            matching: find.byType(ForumBodyFlowBox),
+          ),
+        );
+        return boxes.isNotEmpty && boxes.every((box) => box.prefix.isComplete);
+      });
+      await _until(tester, () => _picture('71', 0).evaluate().isNotEmpty);
+      expect(h.scroll.offset, closeTo(100, 1));
+      expect(
+        tester.getTopLeft(_picture('71', 0)).dy,
+        closeTo(imageTop - 100, 1),
+      );
+      expect(h.submissions, 0);
     },
   );
 

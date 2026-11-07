@@ -18,6 +18,7 @@ class ThreadPollOptionBody extends StatelessWidget {
     required this.onOpenLink,
     this.onOpenImage,
     this.imageAnchorController,
+    this.bodyPresentation,
     super.key,
   });
 
@@ -29,6 +30,7 @@ class ThreadPollOptionBody extends StatelessWidget {
   final ValueChanged<String> onOpenLink;
   final void Function(ThreadPost, ThreadImageOpenRequest)? onOpenImage;
   final ForumHtmlImageAnchorController? imageAnchorController;
+  final ForumHtmlBodyPresentation? bodyPresentation;
 
   @override
   Widget build(BuildContext context) => DefaultTextStyle.merge(
@@ -43,6 +45,7 @@ class ThreadPollOptionBody extends StatelessWidget {
       useSharedReaderFont: true,
       theme: theme,
       imageAnchorController: imageAnchorController,
+      bodyPresentation: bodyPresentation,
       renderPreparer: const DefaultForumHtmlRenderPreparer(
         contentImageKind: ForumImageKind.threadInline,
       ),
