@@ -992,6 +992,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
             threadId: config.imageThreadId,
             cacheOwnerId: config.imageCacheOwnerId,
           ).capture(
+            reader: environment!.reader,
             cancellation: token,
             maxCodeUnits: config.sessionLimits.maxTextCodeUnits,
             collapses: collapses,
@@ -1005,7 +1006,7 @@ class _NativeLayoutHostState extends State<NovelReaderNativeLayoutHost> {
         chapter: chapter,
         images: images,
         collapses: collapses,
-        environment: environment!,
+        environment: environment,
         width: box.width,
         height: box.height,
         columns: config.columns,

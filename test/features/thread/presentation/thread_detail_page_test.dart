@@ -3709,6 +3709,34 @@ void main() {
       },
     );
 
+    testWidgets(
+      'image reader excludes non-displayed sources and honors visibility overrides',
+      (tester) async {
+        const image =
+            '<img src="https://example.com/same.jpg" width="180" height="40">';
+        final reader = await _openImageReturnReader(
+          tester,
+          _imageReturnRepository(
+            '<div hidden>$image</div>'
+            '<div style="display:none"><span style="display:block">$image</span></div>'
+            '<div style="visibility:hidden">'
+            '<img src="https://example.com/same.jpg" width="180" height="40" style="visibility:visible">'
+            '</div>$image'
+            '<template>$image</template>'
+            '<div class="showcollapse_gather">$image</div>',
+          ),
+          initialIndex: 3,
+        );
+        expect(
+          reader.request.group.entries.map((entry) => entry.indexInPost),
+          [2, 3],
+        );
+        expect(reader.request.initialIndex, 1);
+        expect(reader.request.initialEntry?.indexInPost, 3);
+        expect(reader.request.continuousImages.map((item) => item.index), [0, 1]);
+      },
+    );
+
     testWidgets('image reader return rejects a refreshed source snapshot', (
       tester,
     ) async {

@@ -209,18 +209,20 @@ void main() {
         policy: host,
       );
       final scheduler = NovelReaderNativeWorkScheduler(nextFrame: () async {});
+      final environment = await _environment(tester);
       final before = await resources.capture(
+        reader: environment.reader,
         cancellation: NovelReaderPaginationCancellationToken(),
         maxCodeUnits: 10000,
         scheduler: scheduler,
       );
       final after = await resources.capture(
+        reader: environment.reader,
         cancellation: NovelReaderPaginationCancellationToken(),
         maxCodeUnits: 10000,
         resolvedLayouts: {'0': const ForumHtmlImageLayout(aspectRatio: 4)},
         scheduler: scheduler,
       );
-      final environment = await _environment(tester);
       final first = await _scope(chapter, environment, images: before);
       final next = await _scope(chapter, environment, images: after);
       expect(next.paginationKey, isNot(first.paginationKey));
@@ -254,6 +256,7 @@ void main() {
       final keys = <String>{};
       for (final width in [24.0, 48.0]) {
         final images = await resources.capture(
+          reader: environment.reader,
           cancellation: NovelReaderPaginationCancellationToken(),
           maxCodeUnits: 10000,
           resolvedLayouts: {

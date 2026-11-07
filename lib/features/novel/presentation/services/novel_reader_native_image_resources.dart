@@ -52,6 +52,7 @@ final class NovelReaderNativeImageResources {
   /// Freeze the synchronous Host hints, not image bytes or dimension I/O.
   /// Later Session work cannot pick up a different hint under the same key.
   Future<NovelReaderNativeImageCatalog> capture({
+    required ForumBodyReaderStyle reader,
     required NovelReaderPaginationCancellationToken cancellation,
     required int maxCodeUnits,
     ForumBodyCollapseLayout? collapses,
@@ -82,7 +83,14 @@ final class NovelReaderNativeImageResources {
         batch = 0;
         watch.reset();
       }
-      if (collapses?.hidesPath(path) == true) continue;
+      if (!const ForumBodyStyleResolver().isVisibleAt(
+        chapter.document,
+        reader,
+        element,
+        collapses: collapses,
+      )) {
+        continue;
+      }
       final anchor = chapter.anchors.imageAtPath(path);
       final original = anchor == null
           ? _resolveSticker(element)

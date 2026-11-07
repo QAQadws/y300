@@ -320,6 +320,14 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
           : null;
       final host = config.imageHost;
       final images = ForumNativeBodyImages(document);
+      final reader = ForumBodyReaderStyle(
+        textStyle: style,
+        fontRevision: config.fontRevision,
+        linkColor: config.theme.link,
+        textDirection: direction,
+        paragraphAfter: config.preferences.typography.paragraphSpacing,
+        theme: config.theme,
+      );
       final clock = Stopwatch()..start();
       for (final (index, element) in document.imageElements.indexed) {
         if (host == null) break;
@@ -329,7 +337,14 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
           if (!_current(run)) return;
           clock.reset();
         }
-        if (collapses.hidesPath(element.path)) continue;
+        if (!const ForumBodyStyleResolver().isVisibleAt(
+          document,
+          reader,
+          element,
+          collapses: collapses,
+        )) {
+          continue;
+        }
         images.add(
           element: element,
           sequence: config.prepared.sequence,
@@ -342,14 +357,6 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
       }
       run.images = images;
       run.host = config.imageHost;
-      final reader = ForumBodyReaderStyle(
-        textStyle: style,
-        fontRevision: config.fontRevision,
-        linkColor: config.theme.link,
-        textDirection: direction,
-        paragraphAfter: config.preferences.typography.paragraphSpacing,
-        theme: config.theme,
-      );
       ForumBodyTextPageSession openSession(
         double bodyWidth, {
         bool probe = false,

@@ -15,6 +15,11 @@ import 'package:y300/features/novel/presentation/services/novel_reader_paginatio
 import '../test_support/native_reader_image_test_host.dart';
 
 const _image = '<img src="https://bbs.yamibo.com/data/attachment/forum/a.png">';
+final _reader = ForumBodyReaderStyle(
+  textStyle: const TextStyle(fontSize: 18),
+  fontRevision: 'image-catalog',
+  linkColor: const Color(0xff0000ff),
+);
 Future<void> _yield() async {}
 
 final class _FrozenDisplay implements ForumHtmlDisplayImage {
@@ -104,6 +109,7 @@ void main() {
       Future<NovelReaderNativeImageCatalog> capture(
         ForumBodyCollapseLayout layout,
       ) => resources.capture(
+        reader: _reader,
         cancellation: NovelReaderPaginationCancellationToken(),
         maxCodeUnits: 10000,
         collapses: layout,
@@ -136,6 +142,35 @@ void main() {
   );
 
   test(
+    'hidden images never enter the captured Host or gallery',
+    () async {
+      final chapter = await _htmlChapter(
+        '<div hidden>$_image</div>'
+        '<div style="display:none">$_image</div>'
+        '<div style="visibility:hidden">$_image</div>'
+        '<div style="visibility:hidden">'
+        '<img src="https://bbs.yamibo.com/data/attachment/forum/a.png" style="visibility:visible">'
+        '</div>$_image'
+        '<template>$_image</template>'
+        '<div class="showcollapse_gather">$_image</div>',
+      );
+      final host = _SnapshotHost();
+      final catalog = await NovelReaderNativeImageResources(
+        chapter: chapter,
+        host: host,
+        policy: NativeReaderImageTestHost(),
+      ).capture(
+        reader: _reader,
+        cancellation: NovelReaderPaginationCancellationToken(),
+        maxCodeUnits: 10000,
+        scheduler: const NovelReaderNativeWorkScheduler(nextFrame: _yield),
+      );
+      expect(host.descriptions, hasLength(2));
+      expect(catalog.sequence.entries.map((entry) => entry.index), [3, 4]);
+    },
+  );
+
+  test(
     'actual Session fits frozen catalog sources in the containing styled block',
     () async {
       final chapter = await _htmlChapter(
@@ -149,6 +184,7 @@ void main() {
             host: host,
             policy: NativeReaderImageTestHost(),
           ).capture(
+            reader: _reader,
             cancellation: NovelReaderPaginationCancellationToken(),
             maxCodeUnits: 10000,
             scheduler: const NovelReaderNativeWorkScheduler(nextFrame: _yield),
@@ -237,6 +273,7 @@ void main() {
     Future<NovelReaderNativeImageCatalog> capture({
       Map<String, ForumHtmlImageLayout> layouts = const {},
     }) => resources.capture(
+      reader: _reader,
       cancellation: NovelReaderPaginationCancellationToken(),
       maxCodeUnits: 10000,
       scheduler: const NovelReaderNativeWorkScheduler(nextFrame: _yield),
@@ -344,6 +381,7 @@ void main() {
         host: host,
         policy: NativeReaderImageTestHost(),
       ).capture(
+        reader: _reader,
         cancellation: NovelReaderPaginationCancellationToken(),
         maxCodeUnits: 10000,
       ),
@@ -363,6 +401,7 @@ void main() {
       Future<NovelReaderNativeImageCatalog> capture(
         Map<String, ForumHtmlImageLayout> layouts,
       ) => resources.capture(
+        reader: _reader,
         cancellation: NovelReaderPaginationCancellationToken(),
         maxCodeUnits: 10000,
         scheduler: const NovelReaderNativeWorkScheduler(nextFrame: _yield),
@@ -416,6 +455,7 @@ void main() {
         host: host,
         policy: host,
       ).capture(
+        reader: _reader,
         cancellation: NovelReaderPaginationCancellationToken(),
         maxCodeUnits: 1,
       ),
@@ -445,6 +485,7 @@ void main() {
             host: host,
             policy: host,
           ).capture(
+            reader: _reader,
             cancellation: token,
             maxCodeUnits: 100000,
             scheduler: NovelReaderNativeWorkScheduler(

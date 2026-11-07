@@ -384,6 +384,7 @@ final class NovelReaderNativeFlowHostState
             threadId: config.threadId,
             cacheOwnerId: config.threadId,
           ).capture(
+            reader: environment.reader,
             cancellation: run.token,
             maxCodeUnits: _limits.maxTextCodeUnits,
             collapses: collapses,

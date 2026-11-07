@@ -45,4 +45,29 @@ final class ForumBodyStyleResolver {
       cursor.close();
     }
   }
+
+  /// Uses the normal ancestor cascade before a resource is handed to a Host.
+  /// No descendants, paragraphs or native layout resources are constructed.
+  bool isVisibleAt(
+    ForumBodyDocument document,
+    ForumBodyReaderStyle reader,
+    ForumBodyElement element, {
+    ForumBodyCollapseLayout? collapses,
+  }) {
+    if (collapses != null && !identical(collapses.document, document)) {
+      throw ArgumentError('Collapse layout belongs to another document');
+    }
+    if (collapses?.hidesPath(element.path) == true) return false;
+    final cursor = open(
+      document,
+      reader,
+      collapses: collapses,
+      contentRoot: element,
+    );
+    try {
+      return !cursor.root.hidden && !cursor.root.visibilityHidden;
+    } finally {
+      cursor.close();
+    }
+  }
 }
