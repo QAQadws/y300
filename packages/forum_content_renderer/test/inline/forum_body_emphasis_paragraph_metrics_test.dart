@@ -4,11 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
 const _body =
-    '<span class="fixture-no-mark" style="font-size:31px">大</span>AB '
+    '<span style="font-size:31px">大</span>AB '
     '<span style="font-size:31px">؀</span>'
-    '<span class="fixture-under">A</span> '
+    'A '
     'e<b style="font-size:31px">́</b> '
-    '<span class="fixture-under">👩‍👩‍👧‍👦</span> 中\n\n';
+    '👩‍👩‍👧‍👦 中\n\n';
 
 class _Scaler extends TextScaler {
   const _Scaler(this.callback);
@@ -22,7 +22,6 @@ class _Scaler extends TextScaler {
 ForumBodyParagraphContent _content({
   String body = _body,
   String height = '.4',
-  bool decorated = true,
   TextDirection direction = TextDirection.ltr,
   bool indent = false,
 }) {
@@ -48,52 +47,7 @@ ForumBodyParagraphContent _content({
   return const ForumBodyParagraphContentBuilder().build(
     document: doc,
     path: '0',
-    styles: decorated ? _withMarks(doc, styles) : styles,
-  );
-}
-
-ForumBodyStyleResult _withMarks(
-  ForumBodyDocument doc,
-  ForumBodyStyleResult styles,
-) {
-  const over = ForumBodyTextEmphasis(
-    shape: ForumBodyEmphasisShape.custom,
-    customMark: 'X',
-    color: Color(0xffff0000),
-  );
-  const under = ForumBodyTextEmphasis(
-    shape: ForumBodyEmphasisShape.custom,
-    customMark: 'X',
-    color: Color(0xffff0000),
-    side: ForumBodyEmphasisSide.under,
-  );
-  final byPath = <String, ForumBodyResolvedStyle>{};
-  void visit(ForumBodyNode node, ForumBodyTextEmphasis inherited) {
-    final mark = node is ForumBodyElement
-        ? switch (node.attributes['class']) {
-            'fixture-no-mark' => const ForumBodyTextEmphasis(),
-            'fixture-under' => under,
-            _ => inherited,
-          }
-        : inherited;
-    byPath[node.path] = styles.byPath[node.path]!.withTextEmphasis(mark);
-    if (node is ForumBodyElement) {
-      for (final child in node.children) {
-        visit(child, mark);
-      }
-    }
-  }
-
-  for (final node in doc.nodes) {
-    visit(node, over);
-  }
-  return ForumBodyStyleResult(
-    identity: styles.identity,
-    fontRevision: styles.fontRevision,
-    root: styles.root,
-    resolverRevision: styles.resolverRevision,
-    issues: styles.issues,
-    byPath: byPath,
+    styles: styles,
   );
 }
 
@@ -123,21 +77,37 @@ ForumBodyEmphasisParagraphMetrics _finish(
   return job.takeMetrics();
 }
 
+ForumBodyEmphasisFragmentInput _fragment(
+  ForumBodyEmphasisParagraphMetrics plan,
+) {
+  final job = ForumBodyEmphasisFragmentInputPreparation(
+    paragraph: plan,
+    startLine: 0,
+    endLine: plan.lines.length,
+    ensureOwner: () {},
+  );
+  addTearDown(job.close);
+  while (!job.isReady) {
+    job.advance();
+  }
+  return job.takeInput();
+}
+
 void _checkSource(ForumBodyEmphasisParagraphMetrics plan) {
   final text = StringBuffer();
-  var offset = 0, start = 0, top = 0.0, marks = 0;
+  var offset = 0, start = 0, top = 0.0;
   for (final group in plan.groups) {
     expect(group.top, top);
     expect(group.startLine, start);
     expect(group.startUtf16, offset);
-    final source = group.allocation.source.rowInput!;
-    expect(source.parentGlyphInput, same(plan.glyphInput));
+    final source = group.source;
+    expect(source.parentContent, same(plan.content));
     expect(group.allocation.reference, same(plan.reference));
     expect(
-      source.text.content.projection.text,
+      source.content.projection.text,
       plan.content.projection.text.substring(group.startUtf16, group.endUtf16),
     );
-    text.write(source.text.content.projection.text);
+    text.write(source.content.projection.text);
     expect(plan.lines[group.startLine].canBreakBefore, isTrue);
     expect(plan.lines[group.endLine - 1].canBreakAfter, isTrue);
     final view = plan.fragment(group.startLine, group.endLine);
@@ -197,44 +167,37 @@ void _checkSource(ForumBodyEmphasisParagraphMetrics plan) {
     offset = group.endUtf16;
     start = group.endLine;
     top += group.height;
-    marks += group.allocation.marks.length;
   }
   expect(text.toString(), plan.content.projection.text);
   expect(start, plan.lines.length);
-  expect(marks, plan.markCount);
   if (plan.groups.isNotEmpty) expect(plan.height, top);
-  expect(plan.retainedTextCodeUnits, plan.content.projection.text.length * 3);
-  expect(plan.retainedRuns, plan.content.runs.length * 2);
+  expect(plan.retainedTextCodeUnits, plan.content.projection.text.length * 2);
+  expect(plan.retainedRuns, plan.content.runs.length);
   expect(() => plan.lines.clear(), throwsUnsupportedError);
   expect(() => plan.groups.clear(), throwsUnsupportedError);
   expect(() => plan.effectiveScales.clear(), throwsUnsupportedError);
 }
 
 void main() {
-  test(
-    'mark-free text shares row allocation without introducing decoration',
-    () {
-      final content = _content(body: 'AB\nCD\nEF', decorated: false);
-      final cache = _cache();
-      final plan = _finish(
-        ForumBodyEmphasisParagraphPreparation(
-          content: content,
-          cache: cache,
-          width: 140,
-          ensureOwner: () {},
-        ),
-      );
-      expect(plan.content, same(content));
-      expect(plan.markCount, 0);
-      expect(plan.groups, hasLength(3));
-      expect(plan.height, greaterThanOrEqualTo(60));
-      for (final group in plan.groups) {
-        expect(group.allocation.marks, isEmpty);
-        expect(group.height, greaterThanOrEqualTo(20));
-      }
-      expect(cache.activeLeases, 0);
-    },
-  );
+  test('tight line height still encloses the original glyphs', () {
+    final content = _content(body: 'AB\nCD\nEF');
+    final cache = _cache();
+    final plan = _finish(
+      ForumBodyEmphasisParagraphPreparation(
+        content: content,
+        cache: cache,
+        width: 140,
+        ensureOwner: () {},
+      ),
+    );
+    expect(plan.content, same(content));
+    expect(plan.groups, hasLength(3));
+    expect(plan.height, greaterThanOrEqualTo(60));
+    for (final group in plan.groups) {
+      expect(group.height, greaterThanOrEqualTo(20));
+    }
+    expect(cache.activeLeases, 0);
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() async {
     await (FontLoader(
@@ -273,14 +236,14 @@ void main() {
         for (final picture in pictures) {
           probe.includeTextPicture(picture);
         }
-        expect(probe.snapshotNativeEstimates(), hasLength(9));
+        expect(probe.snapshotNativeEstimates(), hasLength(8));
         expect(cache.layoutBuildCount, 0);
         expect(cache.pictureBuildCount, 0);
         expect(cache.hitCount, 0);
       } finally {
         probe.close();
       }
-      final tiny = _cache(entries: 8), rejected = tiny.createBudgetProbe();
+      final tiny = _cache(entries: 7), rejected = tiny.createBudgetProbe();
       try {
         for (final slot in plan.nativeFootprintFor(0, plan.lines.length)) {
           slot.request.includeBudget(
@@ -325,11 +288,9 @@ void main() {
       ),
     );
     measured.close();
-    final group = plan.groups.first, cache = _cache(entries: 5);
-    final job = ForumBodyEmphasisAllocatedPreparation(
-      input: group.allocation.source.rowInput!,
-      allocation: group.allocation,
-      plannedSceneInput: group.sceneInput,
+    final cache = _cache(entries: 4);
+    final job = ForumBodyEmphasisFragmentPreparation(
+      input: _fragment(plan),
       cache: cache,
       ensureOwner: () {},
       width: 140,
@@ -351,33 +312,6 @@ void main() {
     );
     expect(cache.layoutBuildCount, 0);
     expect(cache.pictureBuildCount, 0);
-    expect(cache.activeLeases, 0);
-  });
-
-  test('another complete group cannot supply a planned scene', () {
-    final cache = _cache();
-    final plan = _finish(
-      ForumBodyEmphasisParagraphPreparation(
-        content: _content(body: 'AAAA'),
-        cache: cache,
-        ensureOwner: () {},
-        width: 1,
-      ),
-    );
-    final before = cache.layoutBuildCount;
-    expect(
-      () => ForumBodyEmphasisAllocatedPreparation(
-        input: plan.groups[0].allocation.source.rowInput!,
-        allocation: plan.groups[0].allocation,
-        plannedSceneInput: plan.groups[1].sceneInput,
-        cache: cache,
-        ensureOwner: () {},
-        width: 1,
-        expectedTextScaler: plan.textScaler,
-      ),
-      throwsA(isA<ForumBodyEmphasisLineException>()),
-    );
-    expect(cache.layoutBuildCount, before);
     expect(cache.activeLeases, 0);
   });
 
@@ -414,7 +348,7 @@ void main() {
             endLine: plan.lines.length,
           ));
           final native = cache.acquire(
-            content: plan.glyphInput.glyphs,
+            content: plan.content,
             width: width,
             textScaler: plan.textScaler,
           );
@@ -452,14 +386,14 @@ void main() {
       ),
     );
     expect(counts.values, everyElement(1));
-    expect(counts.keys.toSet(), {10.0, 15.5, 20.0, 31.0});
+    expect(counts.keys.toSet(), {20.0, 31.0});
     expect(plan.effectiveScales.keys.toSet(), counts.keys.toSet());
     expect(cache.pictureBuildCount, 0);
     expect(cache.activeLeases, 0);
   });
 
   test(
-    'long paragraph retains all groups beyond the per-group marker limit',
+    'long paragraph retains all groups using five whole-paragraph layouts',
     () {
       final cache = _cache();
       final plan = _finish(
@@ -470,10 +404,9 @@ void main() {
           width: 140,
         ),
       );
-      expect(plan.markCount, 600);
       expect(plan.groups, hasLength(600));
       expect(plan.lines, hasLength(600));
-      expect(cache.layoutBuildCount, 6);
+      expect(cache.layoutBuildCount, 5);
       expect(cache.pictureBuildCount, 0);
       expect(cache.activeLeases, 0);
       _checkSource(plan);
@@ -510,7 +443,7 @@ void main() {
       expect(cache.layoutBuildCount, builds);
       expect(cache.pictureBuildCount, 0);
       expect(b.height, a.height);
-      expect(b.markCount, a.markCount);
+      expect(b.lines.length, a.lines.length);
       _checkSource(b);
     },
   );
@@ -536,74 +469,74 @@ void main() {
     },
   );
 
-  test(
-    'pure paragraph groups rebind current local sources after original cache closes',
-    () {
-      final cache = _cache(), content = _content();
-      final plan = _finish(
-        ForumBodyEmphasisParagraphPreparation(
-          content: content,
-          cache: cache,
-          ensureOwner: () {},
-          width: 1,
-        ),
+  test('one cold fragment rebinds all rows to the original source', () {
+    final cache = _cache(), content = _content(body: 'AB\nCD\nEF');
+    final plan = _finish(
+      ForumBodyEmphasisParagraphPreparation(
+        content: content,
+        cache: cache,
+        ensureOwner: () {},
+        width: 140,
+      ),
+    );
+    cache.close();
+    expect(plan.groups, hasLength(3));
+    final current = _cache(entries: 5);
+    final jobInput = _fragment(plan);
+    final job = ForumBodyEmphasisFragmentPreparation(
+      input: jobInput,
+      cache: current,
+      ensureOwner: () {},
+      width: 140,
+      expectedTextScaler: plan.textScaler,
+    );
+    addTearDown(job.close);
+    for (var n = 0; !job.isReady && n < 50000; n++) {
+      final step = job.advance(maxParts: 1);
+      expect(
+        step.nativeLayoutsBuilt + step.picturesRecorded,
+        lessThanOrEqualTo(1),
       );
-      cache.close();
-      final current = _cache();
-      final copied = StringBuffer();
+      expect(step.waitingForLayoutBudget, isFalse);
+    }
+    expect(job.isReady, isTrue);
+    final visible = job.takeLayout();
+    try {
+      expect(current.layoutBuildCount, 4);
+      // Three isolated paint parents and one merged scene.
+      expect(current.pictureBuildCount, 4);
+      expect(current.activeLeases, 2);
+      expect(
+        visible.nativeLeases
+            .whereType<ForumBodyTextPictureLease>()
+            .single
+            .input,
+        jobInput.pictureInput,
+      );
+      expect(visible.projection, same(content.projection));
       for (final group in plan.groups) {
-        final allocation = group.allocation;
-        final job = ForumBodyEmphasisAllocatedPreparation(
-          input: allocation.source.rowInput!,
-          allocation: allocation,
-          cache: current,
-          ensureOwner: () {},
-          width: 1,
-          expectedTextScaler: plan.textScaler,
-          plannedSceneInput: group.sceneInput,
+        final start = group.startUtf16;
+        final glyph = visible.glyphBoxes(start, start + 1).single.toRect();
+        expect(glyph.top, greaterThanOrEqualTo(group.top - 1e-8));
+        expect(
+          glyph.bottom,
+          lessThanOrEqualTo(group.top + group.height + 1e-8),
         );
-        addTearDown(job.close);
-        for (var n = 0; !job.isReady && n < 50000; n++) {
-          final step = job.advance(maxParts: 1);
-          expect(
-            step.nativeLayoutsBuilt + step.picturesRecorded,
-            lessThanOrEqualTo(1),
-          );
-          expect(step.waitingForLayoutBudget, isFalse);
-        }
-        expect(job.isReady, isTrue);
-        final visible = job.takeLayout();
-        try {
-          expect(visible.pictureInput, group.sceneInput.pictureInput);
-          copied.write(visible.projection.text);
-          for (final mark in allocation.marks) {
-            final unit = allocation
-                .source
-                .input
-                .units[allocation.source.marks[mark.markIndex].unitIndex];
-            final full = content.projection.sourceAtUtf16(
-              group.startUtf16 + unit.governingUtf16,
-            );
-            expect(
-              visible.sourceAt(mark.fontBounds.center).sourceRune,
-              full.sourceRune,
-            );
-          }
-          for (final box in visible.selectionBoxes(
-            0,
-            visible.projection.text.length,
-          )) {
-            expect(box.top, greaterThanOrEqualTo(-1e-8));
-            expect(box.bottom, lessThanOrEqualTo(group.height + 1e-8));
-          }
-        } finally {
-          visible.close();
-        }
-        expect(current.activeLeases, 0);
+        final hit = visible.sourceAt(
+          Offset(glyph.left + glyph.width / 4, glyph.center.dy),
+        );
+        expect(hit.isExact, isTrue);
+        expect(hit.displayUtf16, start);
+        expect(
+          hit.sourceRune,
+          content.projection.sourceAtUtf16(start).sourceRune,
+        );
       }
-      expect(copied.toString(), content.projection.text);
-    },
-  );
+    } finally {
+      visible.close();
+    }
+    expect(current.activeLeases, 0);
+  });
 
   test(
     'empty native paragraph retains its real strut without a synthetic row',
@@ -619,7 +552,6 @@ void main() {
       );
       expect(plan.groups, isEmpty);
       expect(plan.lines, isEmpty);
-      expect(plan.markCount, 0);
       expect(plan.height, greaterThan(0));
       expect(plan.hasTerminalEmptyLine, isFalse);
       expect(plan.height, plan.reference.naturalHeight);
@@ -671,15 +603,13 @@ void main() {
     test(
       'declared owned prefix versus unrelated pin pressure declared=$declared',
       () {
-        final cache = _cache(entries: 6), content = _content(body: 'AB CD');
+        final cache = _cache(entries: 5), content = _content(body: 'AB CD');
         final extra = cache.acquire(
           content: ForumBodyParagraphContent.anonymousInline(
             identity: content.identity,
             fontRevision: 'prefix',
             styleRevision: content.styleRevision,
-            style: content.style.withTextEmphasis(
-              const ForumBodyTextEmphasis(),
-            ),
+            style: content.style,
           ),
           width: 140,
         );
@@ -716,7 +646,7 @@ void main() {
           expect(cache.layoutBuildCount, builds);
           extra.release();
           final plan = _finish(job);
-          expect(plan.markCount, 4);
+          expect(plan.groups, isNotEmpty);
         }
         extra.release();
         expect(cache.activeLeases, 0);
@@ -747,7 +677,7 @@ void main() {
     expect(cache.activeLeases, 0);
   });
 
-  for (final target in [1, 2, 3, 4, 5, 6]) {
+  for (final target in [1, 2, 3, 4, 5]) {
     for (final closeCache in [false, true]) {
       test('retirement after native acquisition $target cache=$closeCache', () {
         final cache = _cache(), content = _content(body: 'AB CD');
@@ -851,7 +781,7 @@ void main() {
     expect(cache.activeLeases, 0);
   });
 
-  test('row, group, mark and height limits never publish a partial plan', () {
+  test('row, group and height limits never publish a partial plan', () {
     final cache = _cache(), content = _content();
     for (final job in [
       ForumBodyEmphasisParagraphPreparation(
@@ -867,13 +797,6 @@ void main() {
         ensureOwner: () {},
         width: 1,
         maxGroupLines: 1,
-      ),
-      ForumBodyEmphasisParagraphPreparation(
-        content: content,
-        cache: cache,
-        ensureOwner: () {},
-        width: 1,
-        maxMarks: 1,
       ),
       ForumBodyEmphasisParagraphPreparation(
         content: content,

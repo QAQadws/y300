@@ -14,7 +14,6 @@ import '../paragraph/forum_body_text_request.dart';
 import '../paragraph/forum_body_text_request_preparation.dart';
 import 'forum_body_emphasis_line_layout.dart';
 import 'forum_body_emphasis_row_allocation.dart';
-import 'forum_body_emphasis_row_input.dart';
 
 part 'forum_body_emphasis_paragraph_preparation.dart';
 part 'forum_body_emphasis_fragment_input.dart';
@@ -37,7 +36,7 @@ final class ForumBodyEmphasisParagraphGroup {
   final ForumBodyEmphasisAllocatedSceneInput sceneInput;
   ForumBodyEmphasisRowAllocation get allocation => sceneInput.allocation;
   final double top;
-  ForumBodyParagraphRowMetrics get source => allocation.source.rowInput!.row;
+  ForumBodyParagraphRowMetrics get source => allocation.source;
   int get startLine => source.selector.startLine;
   int get endLine => source.selector.endLine;
   int get startUtf16 => source.startUtf16;
@@ -59,7 +58,7 @@ typedef ForumBodyEmphasisParagraphFragment = ({
 /// inside a complete grapheme never become independent pagination boundaries.
 final class ForumBodyEmphasisParagraphMetrics {
   ForumBodyEmphasisParagraphMetrics._({
-    required this.glyphInput,
+    required this.content,
     required this.reference,
     required List<ForumBodyEmphasisParagraphGroup> groups,
     required List<ForumBodyParagraphLine> lines,
@@ -68,14 +67,12 @@ final class ForumBodyEmphasisParagraphMetrics {
     required this.alphabeticBaseline,
     required this.intrinsicWidths,
     required this.hasTerminalEmptyLine,
-    required this.markCount,
     required this.retainedTextCodeUnits,
     required this.retainedRuns,
   }) : groups = UnmodifiableListView(groups),
        lines = UnmodifiableListView(lines);
-  static const revision = 2;
-  final ForumBodyEmphasisGlyphInput glyphInput;
-  ForumBodyParagraphContent get content => glyphInput.original;
+  static const revision = 3;
+  final ForumBodyParagraphContent content;
   final ForumBodyParagraphRowReference reference;
   final List<ForumBodyEmphasisParagraphGroup> groups;
   final List<ForumBodyParagraphLine> lines;
@@ -85,7 +82,7 @@ final class ForumBodyEmphasisParagraphMetrics {
   final double height, alphabeticBaseline;
   final ({double minimum, double preferred})? intrinsicWidths;
   final bool hasTerminalEmptyLine;
-  final int markCount, retainedTextCodeUnits, retainedRuns;
+  final int retainedTextCodeUnits, retainedRuns;
   double get width => reference.width;
 
   ({int startLine, int endLine}) lineWindow(ForumBodyParagraphWindow window) {

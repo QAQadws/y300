@@ -4,15 +4,13 @@ enum _FragmentPhase {
   scales,
   prefix,
   probe,
-  bind,
-  adoptMarks,
+  acquireSource,
   acquirePhase,
   frames,
   groupScene,
   compareScene,
   scene,
   releaseParents,
-  releaseMarks,
   sourceRows,
   lines,
   publish,
@@ -51,7 +49,7 @@ final class ForumBodyEmphasisFragmentPreparation {
       rethrow;
     }
   }
-  static const revision = 1;
+  static const revision = 2;
   ForumBodyEmphasisFragmentInput? _input;
   ForumBodyParagraphCache? _cache;
   void Function()? _ensureOwner;
@@ -63,10 +61,7 @@ final class ForumBodyEmphasisFragmentPreparation {
   Iterator<ForumBodyNativeParagraphLease>? _prefix;
   bool _prefixStarted = false, _sceneProbed = false;
   ForumBodyParagraphBudgetProbe? _probe;
-  ForumBodyEmphasisLinePreparation? _binder;
-  _EmphasisNativeBinding? _binding;
   ForumBodyParagraphLease? _source;
-  final _marks = <Object, ForumBodyEmphasisMarkLease>{};
   ForumBodyTextRequestPreparation? _pending;
   final _parents = <ForumBodyParagraphLease>[];
   final _phases = <ForumBodyEmphasisMeasuredPaintPhase>[];
@@ -87,13 +82,10 @@ final class ForumBodyEmphasisFragmentPreparation {
   Iterable<ForumBodyNativeParagraphLease> get _owned sync* {
     if (_source?.isActive == true) yield _source!;
     yield* _parents.where((p) => p.isActive);
-    yield* _marks.values.where((m) => m.isActive);
-    if (_binding != null) yield* _binding!.nativeLeases;
   }
 
   Iterable<ForumBodyNativeParagraphLease> get nativeLeases sync* {
     yield* _owned;
-    if (_binder != null) yield* _binder!.nativeLeases;
     if (_pending != null) yield* _pending!.nativeLeases;
     if (_sceneJob != null) yield* _sceneJob!.nativeLeases;
     if (_picture?.isActive == true) yield _picture!;
@@ -185,82 +177,20 @@ final class ForumBodyEmphasisFragmentPreparation {
               _probe!.close();
               _probe = null;
               _slots = null;
-              _phase = _FragmentPhase.bind;
+              _phase = _FragmentPhase.acquireSource;
             }
-          case _FragmentPhase.bind:
-            if (_group == input.selection.endGroup) {
-              _sceneJob = ForumBodyTextPicturePreparation.cooperative(
-                cache: cache,
-                input: input.pictureInput,
-                text: const [],
-                paragraphRows: _phaseRows,
-                marks: _marks.values,
-                ensureOwner: _guard,
-                additionalOwnedLeases: _otherOwned,
-              );
-              _phase = _FragmentPhase.scene;
-            } else {
-              final source = paragraph.groups[_group].allocation.source;
-              _binder ??= ForumBodyEmphasisLinePreparation._work(
-                input: source.input,
-                rowInput: source.rowInput,
-                cache: cache,
-                ensureOwner: _guard,
-                width: paragraph.width,
-                textScaler: paragraph.textScaler,
-                measureOnly: true,
-                bindOnly: true,
-                metrics: source,
-                baseRequest: source.baseRequest,
-                additionalOwnedLeases: _otherOwned,
-              );
-              final work = _binder!.advance(
-                maxParts: 1,
-                cachedOnly: cachedOnly,
-              );
-              if (work.waitingForLayoutBudget || _binder!.cacheMiss) {
-                _cacheMiss = _binder!.cacheMiss;
-                used += work.partsPrepared;
-                return step(work.waitingForLayoutBudget);
-              }
-              if (_binder!.isReady) {
-                _binding = _binder!._takeBinding();
-                _binder = null;
-                if (_source == null) {
-                  _source = _binding!.base;
-                  _binding!.base = null;
-                  _binding!.row = null;
-                } else if (_source!.nativeInputIdentity !=
-                    _binding!.base!.nativeInputIdentity) {
-                  ForumBodyEmphasisLinePreparation._mismatch();
-                }
-                _phase = _FragmentPhase.adoptMarks;
-              }
-            }
-          case _FragmentPhase.adoptMarks:
-            if (_binding!.marks.isNotEmpty) {
-              final mark = _binding!.marks.removeLast(),
-                  key = mark.nativeInputIdentity;
-              if (_marks.containsKey(key)) {
-                mark.release();
-              } else {
-                _marks[key] = mark;
-              }
-            } else {
-              _binding!.close();
-              _binding = null;
-              _phase = _phases.length == 3
-                  ? _FragmentPhase.groupScene
-                  : _FragmentPhase.acquirePhase;
-            }
+          case _FragmentPhase.acquireSource:
           case _FragmentPhase.acquirePhase:
-            final allocation = paragraph.groups[_group].allocation,
-                paint = allocation.paintInput;
-            final content = switch (_layer) {
-              0 => paint.background,
-              1 => paint.foreground,
-              _ => paint.decoration,
-            };
+            final source = _phase == _FragmentPhase.acquireSource;
+            final allocation = paragraph.groups[_group].allocation;
+            final paint = allocation.paintInput;
+            final content = source
+                ? paragraph.content
+                : switch (_layer) {
+                    0 => paint.background,
+                    1 => paint.foreground,
+                    _ => paint.decoration,
+                  };
             _pending ??= ForumBodyTextRequestPreparation(
               cache: cache,
               request: ForumBodyTextRequest.paragraph(
@@ -268,7 +198,7 @@ final class ForumBodyEmphasisFragmentPreparation {
                 rowIsolationPitch: paragraph.reference.rowIsolationPitch,
               ),
               ensureOwner: _guard,
-              preparePaint: true,
+              preparePaint: !source,
               textScaler: paragraph.textScaler,
               width: paragraph.width,
               additionalOwnedLeases: _otherOwned,
@@ -281,8 +211,19 @@ final class ForumBodyEmphasisFragmentPreparation {
             }
             if (_pending!.isReady) {
               final parent = _pending!.takeLease() as ForumBodyParagraphLease;
-              _parents.add(parent);
               _pending = null;
+              if (source) {
+                _source = parent;
+                if (!identical(parent.content, paragraph.content) ||
+                    parent.nativeInputIdentity !=
+                        paragraph.reference.isolatedInputIdentity) {
+                  ForumBodyEmphasisLinePreparation._mismatch();
+                }
+                _verifyAllocatedParent(allocation, parent, parent);
+                _phase = _FragmentPhase.acquirePhase;
+                break;
+              }
+              _parents.add(parent);
               _verifyAllocatedParent(allocation, _source!, parent);
               _frameJob = ForumBodyParagraphLineFramePreparation(
                 parent: parent,
@@ -301,6 +242,18 @@ final class ForumBodyEmphasisFragmentPreparation {
                   : _FragmentPhase.groupScene;
             }
           case _FragmentPhase.groupScene:
+            if (_group == input.selection.endGroup) {
+              _sceneJob = ForumBodyTextPicturePreparation.cooperative(
+                cache: cache,
+                input: input.pictureInput,
+                text: const [],
+                paragraphRows: _phaseRows,
+                ensureOwner: _guard,
+                additionalOwnedLeases: _otherOwned,
+              );
+              _phase = _FragmentPhase.scene;
+              break;
+            }
             final group = paragraph.groups[_group];
             _groupScene ??= ForumBodyEmphasisAllocatedSceneInputPreparation(
               allocation: group.allocation,
@@ -340,7 +293,7 @@ final class ForumBodyEmphasisFragmentPreparation {
             } else {
               _actualScene = null;
               _group++;
-              _phase = _FragmentPhase.bind;
+              _phase = _FragmentPhase.groupScene;
             }
           case _FragmentPhase.scene:
             final work = _sceneJob!.advance(
@@ -365,12 +318,6 @@ final class ForumBodyEmphasisFragmentPreparation {
               _parents.clear();
               _phases.clear();
               _phaseRows.clear();
-              _phase = _FragmentPhase.releaseMarks;
-            }
-          case _FragmentPhase.releaseMarks:
-            if (_marks.isNotEmpty) {
-              _marks.remove(_marks.keys.first)!.release();
-            } else {
               _index = input.selection.startGroup;
               _phase = _FragmentPhase.sourceRows;
             }
@@ -503,12 +450,8 @@ final class ForumBodyEmphasisFragmentPreparation {
     _picture = null;
     _result = null;
     try {
-      _binder?.close();
-      _binder = null;
       _pending?.close();
       _pending = null;
-      _binding?.close();
-      _binding = null;
       _frameJob?.close();
       _frameJob = null;
       _groupScene?.close();
@@ -524,11 +467,7 @@ final class ForumBodyEmphasisFragmentPreparation {
         for (final parent in _parents) {
           parent.release();
         }
-        for (final mark in _marks.values) {
-          mark.release();
-        }
         _parents.clear();
-        _marks.clear();
         _phases.clear();
         _phaseRows.clear();
         _probe?.close();

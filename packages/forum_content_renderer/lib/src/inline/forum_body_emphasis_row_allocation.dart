@@ -8,7 +8,6 @@ import '../paragraph/forum_body_paragraph_row_reference.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
 import '../paragraph/forum_body_native_request.dart';
 import '../paragraph/forum_body_text_request.dart';
-import 'forum_body_emphasis_line_layout.dart';
 import 'forum_body_emphasis_allocation_geometry.dart';
 
 export 'forum_body_emphasis_allocation_geometry.dart'
@@ -29,23 +28,12 @@ final class ForumBodyEmphasisAllocatedRow {
     required this.bounds,
     required this.logicalOffset,
     required this.glyphOffset,
-    required this.sourceTranslationY,
   });
   final ForumBodyParagraphPhysicalLineSelector physicalLine;
   final double flowTop, flowBottom, alphabeticBaseline;
   final Rect fontBounds, bounds;
   final Offset logicalOffset, glyphOffset;
-
-  /// Translates this row's original emphasis component geometry, including its
-  /// positioned marks, to the allocated component. It is not a semantic offset.
-  final double sourceTranslationY;
 }
-
-typedef ForumBodyEmphasisAllocatedMark = ({
-  int markIndex,
-  Offset offset,
-  Rect fontBounds,
-});
 
 /// Immutable allocation over measured source/font inputs. No native resource,
 /// cache, callback, or live owner is retained. Current source/paint binding is
@@ -55,30 +43,33 @@ final class ForumBodyEmphasisRowAllocation {
     required this.source,
     required this.reference,
     required List<ForumBodyEmphasisAllocatedRow> rows,
-    required List<ForumBodyEmphasisAllocatedMark> marks,
+    required this.textScaler,
     required this.height,
     required this.fontBounds,
     required this.isolatedAlphabeticBaseline,
-    ForumBodyParagraphPaintInput? paintInput,
-  }) : rows = UnmodifiableListView(rows),
-       marks = UnmodifiableListView(marks),
-       _sharedPaintInput = paintInput;
-  static const revision = 3;
-  final ForumBodyEmphasisLineMetrics source;
+    required this.paintInput,
+  }) : rows = UnmodifiableListView(rows);
+  static const revision = 4;
+  final ForumBodyParagraphRowMetrics source;
+  final TextScaler textScaler;
   final ForumBodyParagraphRowReference reference;
   final List<ForumBodyEmphasisAllocatedRow> rows;
-  final List<ForumBodyEmphasisAllocatedMark> marks;
   final double height;
   final Rect fontBounds;
   final double isolatedAlphabeticBaseline;
-  final ForumBodyParagraphPaintInput? _sharedPaintInput;
-  late final paintInput =
-      _sharedPaintInput ?? ForumBodyParagraphPaintInput(reference.content);
+  final ForumBodyParagraphPaintInput paintInput;
 
   /// All temporary fonts, including WHOLE parents for every paint phase.
   /// A final scene has its own input/lease admission in the visible transaction.
   Iterable<ForumBodyNativeRequestSlot> get nativeFootprint sync* {
-    yield* source.nativeFootprint;
+    yield (
+      request: ForumBodyTextRequest.paragraph(
+        reference.content,
+        rowIsolationPitch: reference.rowIsolationPitch,
+      ),
+      width: width,
+      minimumLineCount: reference.lineCount,
+    );
     for (final content in [
       paintInput.background,
       paintInput.foreground,
@@ -89,7 +80,7 @@ final class ForumBodyEmphasisRowAllocation {
           content,
           rowIsolationPitch: reference.rowIsolationPitch,
         ),
-        width: source.requestWidth,
+        width: width,
         minimumLineCount: reference.lineCount,
       );
     }
@@ -99,8 +90,8 @@ final class ForumBodyEmphasisRowAllocation {
   double get alphabeticBaseline => rows.first.alphabeticBaseline;
 }
 
-/// Allocates actual authored advances plus enough room for each row's measured
-/// fonts and emphasis marks. Geometry and paint share this single frozen plan.
+/// Allocates authored advances and enough room for each measured font frame.
+/// Geometry and paint share this single frozen plan.
 /// Local native ascent is stable even when subtracting large global native
 /// baseline/box coordinates would lose the fraction near a rounding threshold.
 /// This defines a NEW allocated baseline, not reconstruction of an original
@@ -108,15 +99,15 @@ final class ForumBodyEmphasisRowAllocation {
 /// an explicit translation; neither is rounded again by the allocation.
 final class ForumBodyEmphasisRowAllocationPreparation {
   ForumBodyEmphasisRowAllocationPreparation({
-    required ForumBodyEmphasisLineMetrics source,
+    required ForumBodyParagraphRowMetrics source,
+    required this.textScaler,
     required ForumBodyParagraphRowReference reference,
     required ForumBodyParagraphLineFrames naturalFrames,
     required ForumBodyParagraphLineFrames isolatedFrames,
     required List<ForumBodyParagraphPhysicalLineSelector> physicalLines,
     required void Function() ensureOwner,
-    ForumBodyParagraphPaintInput? paintInput,
+    required ForumBodyParagraphPaintInput paintInput,
     this.maxLines = 64,
-    this.maxMarks = 512,
     this.maxHeight = 1048576,
   }) : _source = source,
        _reference = reference,
@@ -124,21 +115,15 @@ final class ForumBodyEmphasisRowAllocationPreparation {
        _isolated = isolatedFrames,
        _ensureOwner = ensureOwner,
        _paintInput = paintInput {
-    if (maxLines <= 0 ||
-        maxMarks < 0 ||
-        !maxHeight.isFinite ||
-        maxHeight <= 0) {
+    if (maxLines <= 0 || !maxHeight.isFinite || maxHeight <= 0) {
       throw ArgumentError('Invalid emphasis allocation budget');
     }
     try {
       _guard();
-      final row = source.rowInput?.row;
-      if (row == null ||
-          (paintInput != null &&
-              !identical(paintInput.original, reference.content)) ||
+      if (!identical(paintInput.original, reference.content) ||
           reference.content.paintLayer != ForumBodyParagraphPaintLayer.all ||
-          !identical(row.parentContent, reference.content) ||
-          row.nativeInputIdentity != reference.isolatedInputIdentity ||
+          !identical(source.parentContent, reference.content) ||
+          source.nativeInputIdentity != reference.isolatedInputIdentity ||
           !identical(naturalFrames.content, reference.content) ||
           !identical(isolatedFrames.content, reference.content) ||
           naturalFrames.nativeInputIdentity != reference.naturalInputIdentity ||
@@ -146,11 +131,11 @@ final class ForumBodyEmphasisRowAllocationPreparation {
               reference.isolatedInputIdentity ||
           !identical(naturalFrames.lines, reference.naturalLines) ||
           !identical(isolatedFrames.lines, reference.isolatedLines) ||
-          row.rowIsolationPitch != reference.rowIsolationPitch ||
-          physicalLines.length != row.lineCount) {
+          source.rowIsolationPitch != reference.rowIsolationPitch ||
+          physicalLines.length != source.lineCount) {
         _fail(ForumBodyEmphasisAllocationFailure.source);
       }
-      if (physicalLines.length > maxLines || source.marks.length > maxMarks) {
+      if (physicalLines.length > maxLines) {
         _fail(ForumBodyEmphasisAllocationFailure.limit);
       }
       // This copy is bounded by the admitted complete group. Mutable caller
@@ -162,20 +147,19 @@ final class ForumBodyEmphasisRowAllocationPreparation {
       rethrow;
     }
   }
-  final int maxLines, maxMarks;
+  final int maxLines;
   final double maxHeight;
-  ForumBodyEmphasisLineMetrics? _source;
+  final TextScaler textScaler;
+  ForumBodyParagraphRowMetrics? _source;
   ForumBodyParagraphRowReference? _reference;
   ForumBodyParagraphPaintInput? _paintInput;
   ForumBodyParagraphLineFrames? _natural, _isolated;
   List<ForumBodyParagraphPhysicalLineSelector>? _lines;
   void Function()? _ensureOwner;
-  List<Rect>? _fonts = [], _extents = [];
   List<ForumBodyEmphasisAllocatedRow>? _rows = [];
-  List<ForumBodyEmphasisAllocatedMark>? _marks = [];
   ForumBodyEmphasisRowAllocation? _result;
   Rect? _envelope;
-  int _font = 0, _mark = 0, _row = 0, _placedMark = 0;
+  int _row = 0;
   double _height = 0;
   bool _closed = false, _operating = false;
   bool get isReady => _result != null;
@@ -188,55 +172,20 @@ final class ForumBodyEmphasisRowAllocationPreparation {
     try {
       _guard();
       while (used < maxParts && !isReady) {
-        final source = _source!, group = source.rowInput!.row;
-        if (_font < _lines!.length) {
-          final index = _font++, physical = _lines![index];
-          if (physical.lineIndex != group.selector.startLine + index ||
-              !physical.matchesInput(
-                nativeInputIdentity: group.nativeInputIdentity,
-                group: group.selector,
-              )) {
-            _fail(ForumBodyEmphasisAllocationFailure.source);
-          }
-          final font = physical.fontBounds.shift(
-            source.baseOffset - Offset(0, group.selector.originY),
-          );
-          _rect(font);
-          _fonts!.add(font);
-          _extents!.add(font);
-        } else if (_mark < source.marks.length) {
-          final mark = source.marks[_mark++];
-          if (mark.lineIndex < 0 || mark.lineIndex >= _lines!.length) {
-            _fail(ForumBodyEmphasisAllocationFailure.source);
-          }
-          _rect(mark.fontBounds);
-          _offset(mark.offset);
-          _extents![mark.lineIndex] = _extents![mark.lineIndex].expandToInclude(
-            mark.fontBounds,
-          );
-        } else if (_row < _lines!.length) {
+        if (_row < _lines!.length) {
           _allocate(_row++);
-        } else if (_placedMark < source.marks.length) {
-          final index = _placedMark++, mark = source.marks[index];
-          final offset = Offset(0, _rows![mark.lineIndex].sourceTranslationY);
-          _marks!.add((
-            markIndex: index,
-            offset: mark.offset + offset,
-            fontBounds: mark.fontBounds.shift(offset),
-          ));
         } else {
           _result = ForumBodyEmphasisRowAllocation._(
-            source: source,
+            source: _source!,
             reference: _reference!,
             rows: _rows!,
-            marks: _marks!,
+            textScaler: textScaler,
             height: _height,
             fontBounds: _envelope!,
             isolatedAlphabeticBaseline: _isolated!.nativeAlphabeticBaseline,
-            paintInput: _paintInput,
+            paintInput: _paintInput!,
           );
           _rows = null;
-          _marks = null;
         }
         used++;
         _guard();
@@ -251,15 +200,24 @@ final class ForumBodyEmphasisRowAllocationPreparation {
   }
 
   void _allocate(int index) {
-    final source = _source!, group = source.rowInput!.row;
+    final group = _source!, physical = _lines![index];
     final absolute = group.selector.startLine + index;
+    if (physical.lineIndex != absolute ||
+        !physical.matchesInput(
+          nativeInputIdentity: group.nativeInputIdentity,
+          group: group.selector,
+        )) {
+      _fail(ForumBodyEmphasisAllocationFailure.source);
+    }
+    final extent = physical.fontBounds.shift(
+      Offset(0, -group.selector.originY),
+    );
+    _rect(extent);
     final natural = _reference!.naturalLines[absolute];
     final isolated = _reference!.isolatedLines[absolute];
     final frame = _natural!.frames[absolute];
     final ascent = natural.baseline - natural.top;
-    final originalBaseline =
-        isolated.baseline - group.selector.originY + source.baseOffset.dy;
-    final extent = _extents![index];
+    final originalBaseline = isolated.baseline - group.selector.originY;
     final authoredAdvance = frame.flowBottom - frame.flowTop;
     final allocated = forumBodyAllocateEmphasisRowFrame(
       ascent: ascent,
@@ -279,18 +237,14 @@ final class ForumBodyEmphasisRowAllocationPreparation {
         _isolated!.nativeAlphabeticBaseline.roundToDouble();
     _rows!.add(
       ForumBodyEmphasisAllocatedRow._(
-        physicalLine: _lines![index],
+        physicalLine: physical,
         flowTop: _height,
         flowBottom: _height + height,
         alphabeticBaseline: baseline,
-        fontBounds: _fonts![index].shift(shift),
+        fontBounds: bounds,
         bounds: bounds,
-        logicalOffset: Offset(
-          source.baseOffset.dx,
-          baseline - isolated.baseline,
-        ),
-        glyphOffset: Offset(source.baseOffset.dx, baseline - isolatedGlyph),
-        sourceTranslationY: delta,
+        logicalOffset: Offset(0, baseline - isolated.baseline),
+        glyphOffset: Offset(0, baseline - isolatedGlyph),
       ),
     );
     _envelope = _envelope?.expandToInclude(bounds) ?? bounds;
@@ -331,18 +285,9 @@ final class ForumBodyEmphasisRowAllocationPreparation {
     _isolated = null;
     _lines = null;
     _ensureOwner = null;
-    _fonts = null;
-    _extents = null;
     _rows = null;
-    _marks = null;
     _result = null;
     _envelope = null;
-  }
-}
-
-void _offset(Offset value) {
-  if (!value.dx.isFinite || !value.dy.isFinite) {
-    _fail(ForumBodyEmphasisAllocationFailure.geometry);
   }
 }
 

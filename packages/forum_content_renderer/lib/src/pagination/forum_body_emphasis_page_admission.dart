@@ -20,7 +20,7 @@ enum _AdmissionPhase {
 
 /// Selects the paragraph format and prepares only its numeric admission input.
 /// The session owns traversal/composition; readable scenes belong to PageJob.
-/// Actual overflowing fonts reuse row allocation with zero decoration marks.
+/// Actual overflowing fonts use isolated row frames.
 final class ForumBodyEmphasisPageAdmission {
   ForumBodyEmphasisPageAdmission({
     required ForumBodyParagraphContent content,
@@ -113,9 +113,8 @@ final class ForumBodyEmphasisPageAdmission {
             } else {
               _plainLease!.release();
               _plainLease = null;
-              // The existing row transaction also supports zero marks. Its
-              // isolated whole-source paint keeps glyphs inside their own rows;
-              // simply enlarging the natural fragment clip would leak neighbors.
+              // Isolated whole-source paint keeps glyphs inside their own rows.
+              // Enlarging the natural fragment clip would leak neighbors.
               _measurement = ForumBodyEmphasisParagraphPreparation(
                 content: _content!,
                 cache: cache,
@@ -144,7 +143,7 @@ final class ForumBodyEmphasisPageAdmission {
             // already qualified glyph input can use the ordinary path; a text
             // suffix or an empty visible substring is not sufficient proof.
             if (metrics.groups.isEmpty) {
-              _content = metrics.glyphInput.glyphs;
+              _content = metrics.content;
               _phase = _AdmissionPhase.plainAcquire;
             } else {
               final input = ForumBodyEmphasisPageContent(metrics);

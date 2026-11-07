@@ -1,7 +1,7 @@
 part of 'forum_body_emphasis_paragraph_metrics.dart';
 
 enum _ParagraphPhase {
-  glyphs,
+  setup,
   scales,
   prefix,
   probe,
@@ -13,8 +13,6 @@ enum _ParagraphPhase {
   paintParent,
   paintFrames,
   group,
-  source,
-  measure,
   physical,
   allocate,
   sceneInput,
@@ -27,7 +25,7 @@ enum _ParagraphPhase {
   closed,
 }
 
-/// The shared-cache numeric transaction for a whole wrapping emphasis context.
+/// Computes readable row frames for one wrapping paragraph.
 /// Natural/isolated parents and their frame tables are reused across groups;
 /// each group's existing measurement/allocation is consumed cooperatively.
 /// No painting is prepared and no partial paragraph escapes this transaction.
@@ -41,8 +39,6 @@ final class ForumBodyEmphasisParagraphPreparation {
     double rowIsolationPitch = 256,
     this.maxLines = 4096,
     this.maxGroupLines = 64,
-    this.maxGroupMarks = 512,
-    this.maxMarks = 32768,
     this.maxHeight = 1048576,
     this.captureIntrinsicWidths = false,
     Iterable<ForumBodyNativeParagraphLease> Function()? additionalOwnedLeases,
@@ -68,14 +64,10 @@ final class ForumBodyEmphasisParagraphPreparation {
           maxLines <= 0 ||
           maxGroupLines <= 0 ||
           maxGroupLines > 64 ||
-          maxGroupMarks < 0 ||
-          maxGroupMarks > 512 ||
-          maxMarks < 0 ||
           !maxHeight.isFinite ||
           maxHeight <= 0) {
         throw ArgumentError('Invalid emphasis paragraph budget');
       }
-      _glyphJob = ForumBodyEmphasisGlyphPreparation(content: content);
     } catch (_) {
       close();
       rethrow;
@@ -83,7 +75,7 @@ final class ForumBodyEmphasisParagraphPreparation {
   }
   final double width, maxHeight;
   final bool captureIntrinsicWidths;
-  final int maxLines, maxGroupLines, maxGroupMarks, maxMarks;
+  final int maxLines, maxGroupLines;
   ForumBodyParagraphContent? _content;
   ForumBodyParagraphCache? _cache;
   void Function()? _ensureOwner;
@@ -91,8 +83,6 @@ final class ForumBodyEmphasisParagraphPreparation {
   _ParagraphScaler? _scaler;
   Map<double, double> _scales = {};
   Iterable<ForumBodyNativeParagraphLease> Function()? _additionalOwned;
-  ForumBodyEmphasisGlyphPreparation? _glyphJob;
-  ForumBodyEmphasisGlyphInput? _glyphs;
   ForumBodyParagraphPaintInput? _paintInput;
   List<ForumBodyParagraphContent> _paintContents = const [];
   final _paintParents = <ForumBodyParagraphLease>[];
@@ -115,19 +105,15 @@ final class ForumBodyEmphasisParagraphPreparation {
   ForumBodyParagraphRowReference? _reference;
   ForumBodyParagraphRowPreparation? _groupJob;
   ForumBodyParagraphRowMetrics? _group;
-  ForumBodyEmphasisRowInputPreparation? _sourceJob;
-  ForumBodyEmphasisRowInput? _source;
-  ForumBodyEmphasisLineMetricsPreparation? _measureJob;
-  ForumBodyEmphasisLineMetrics? _measurement;
   ForumBodyParagraphPhysicalLinePreparation? _physicalJob;
   ForumBodyEmphasisRowAllocationPreparation? _allocationJob;
   ForumBodyEmphasisRowAllocation? _allocation;
   List<ForumBodyEmphasisParagraphGroup>? _groups = [];
   List<ForumBodyParagraphLine>? _lines = [];
   ForumBodyEmphasisParagraphMetrics? _result;
-  int _marks = 0, _retainedText = 0, _retainedRuns = 0;
+  int _retainedText = 0;
   bool _operating = false, _cacheMiss = false;
-  var _phase = _ParagraphPhase.glyphs;
+  var _phase = _ParagraphPhase.setup;
   bool get isReady => _phase == _ParagraphPhase.ready;
   bool get cacheMiss => _cacheMiss;
   Iterable<ForumBodyNativeParagraphLease> get nativeLeases sync* {
@@ -135,7 +121,6 @@ final class ForumBodyEmphasisParagraphPreparation {
     if (_isolated?.isActive == true) yield _isolated!;
     yield* _paintParents.where((parent) => parent.isActive);
     if (_requestJob != null) yield* _requestJob!.nativeLeases;
-    if (_measureJob != null) yield* _measureJob!.nativeLeases;
   }
 
   Iterable<ForumBodyNativeParagraphLease> _otherOwned() sync* {
@@ -174,19 +159,14 @@ final class ForumBodyEmphasisParagraphPreparation {
         _guard();
         try {
           switch (_phase) {
-            case _ParagraphPhase.glyphs:
-              _glyphJob!.advance(maxParts: 1);
-              if (_glyphJob!.isReady) {
-                _glyphs = _glyphJob!.takeInput();
-                _paintInput = ForumBodyParagraphPaintInput(_glyphs!.glyphs);
-                _paintContents = [
-                  _paintInput!.background,
-                  _paintInput!.foreground,
-                  _paintInput!.decoration,
-                ];
-                _glyphJob = null;
-                _phase = _ParagraphPhase.scales;
-              }
+            case _ParagraphPhase.setup:
+              _paintInput = ForumBodyParagraphPaintInput(_content!);
+              _paintContents = [
+                _paintInput!.background,
+                _paintInput!.foreground,
+                _paintInput!.decoration,
+              ];
+              _phase = _ParagraphPhase.scales;
             case _ParagraphPhase.scales:
               final content = _content!;
               if (_style < content.runs.length) {
@@ -194,9 +174,6 @@ final class ForumBodyEmphasisParagraphPreparation {
                     ? content.style
                     : content.runs[_style].style;
                 _sample(style.textStyle.fontSize!);
-                if (style.textEmphasis.isEnabled) {
-                  _sample(style.textStyle.fontSize! * .5);
-                }
                 _style++;
               } else {
                 _scaler = _ParagraphScaler(UnmodifiableMapView(_scales));
@@ -224,7 +201,7 @@ final class ForumBodyEmphasisParagraphPreparation {
               if (_probeParent < (_content!.projection.text.isEmpty ? 2 : 5)) {
                 final index = _probeParent++;
                 ForumBodyTextRequest.paragraph(
-                  index < 2 ? _glyphs!.glyphs : _paintContents[index - 2],
+                  index < 2 ? _content! : _paintContents[index - 2],
                   rowIsolationPitch: index == 0 ? null : _pitch,
                 ).includeBudget(_probe!, width: width, textScaler: _scaler!);
               } else {
@@ -238,7 +215,7 @@ final class ForumBodyEmphasisParagraphPreparation {
               _requestJob ??= ForumBodyTextRequestPreparation(
                 cache: cache,
                 request: ForumBodyTextRequest.paragraph(
-                  _glyphs!.glyphs,
+                  _content!,
                   rowIsolationPitch: isolated ? _pitch : null,
                 ),
                 ensureOwner: _guard,
@@ -359,11 +336,6 @@ final class ForumBodyEmphasisParagraphPreparation {
                 }
                 if (_groups!.isEmpty) _height = _natural!.layout.height;
                 _phase = _ParagraphPhase.release;
-                _retainedRuns =
-                    _content!.runs.length +
-                    (identical(_glyphs!.glyphs.runs, _content!.runs)
-                        ? 0
-                        : _glyphs!.glyphs.runs.length);
               } else {
                 _groupJob ??= ForumBodyParagraphRowPreparation(
                   parent: _isolated!,
@@ -375,54 +347,17 @@ final class ForumBodyEmphasisParagraphPreparation {
                 if (_groupJob!.isReady) {
                   _group = _groupJob!.takeMetrics();
                   _groupJob = null;
-                  _sourceJob = ForumBodyEmphasisRowInputPreparation(
-                    parentGlyphInput: _glyphs!,
-                    row: _group!,
-                    maxUnits: maxGroupMarks,
-                  );
-                  _phase = _ParagraphPhase.source;
-                }
-              }
-            case _ParagraphPhase.source:
-              _sourceJob!.advance(maxParts: 1);
-              if (_sourceJob!.isReady) {
-                _source = _sourceJob!.takeInput();
-                _sourceJob = null;
-                if (_source!.text.units.length > maxMarks - _marks) {
-                  _fail(ForumBodyEmphasisParagraphFailure.limit);
-                }
-                _measureJob = ForumBodyEmphasisLineMetricsPreparation.row(
-                  input: _source!,
-                  cache: cache,
-                  ensureOwner: _guard,
-                  textScaler: _scaler!,
-                  additionalOwnedLeases: _otherOwned,
-                );
-                _phase = _ParagraphPhase.measure;
-              }
-            case _ParagraphPhase.measure:
-              final work = _measureJob!.advance(
-                maxParts: 1,
-                cachedOnly: cachedOnly,
-              );
-              if (work.waitingForLayoutBudget || _measureJob!.cacheMiss) {
-                _cacheMiss = _measureJob!.cacheMiss;
-                used += work.partsPrepared;
-                return step(work.waitingForLayoutBudget);
-              }
-              if (_measureJob!.isReady) {
-                _measurement = _measureJob!.takeMetrics();
-                _measureJob = null;
-                _physicalJob = ForumBodyParagraphPhysicalLinePreparation(
-                  group: ForumBodyParagraphRowView.bind(
-                    parent: _isolated!,
-                    metrics: _group!,
+                  _physicalJob = ForumBodyParagraphPhysicalLinePreparation(
+                    group: ForumBodyParagraphRowView.bind(
+                      parent: _isolated!,
+                      metrics: _group!,
+                      ensureOwner: _guard,
+                    ),
+                    frames: _isolatedFrames!,
                     ensureOwner: _guard,
-                  ),
-                  frames: _isolatedFrames!,
-                  ensureOwner: _guard,
-                );
-                _phase = _ParagraphPhase.physical;
+                  );
+                  _phase = _ParagraphPhase.physical;
+                }
               }
             case _ParagraphPhase.physical:
               _physicalJob!.advance(maxParts: 1);
@@ -433,16 +368,16 @@ final class ForumBodyEmphasisParagraphPreparation {
                   _fail(ForumBodyEmphasisParagraphFailure.limit);
                 }
                 _allocationJob = ForumBodyEmphasisRowAllocationPreparation(
-                  source: _measurement!,
+                  source: _group!,
+                  textScaler: _scaler!,
                   reference: _reference!,
                   naturalFrames: _naturalFrames!,
                   isolatedFrames: _isolatedFrames!,
                   physicalLines: physical,
                   ensureOwner: _guard,
                   maxLines: maxGroupLines,
-                  maxMarks: maxGroupMarks,
                   maxHeight: maxHeight - _height,
-                  paintInput: _paintInput,
+                  paintInput: _paintInput!,
                 );
                 _phase = _ParagraphPhase.allocate;
               }
@@ -491,16 +426,9 @@ final class ForumBodyEmphasisParagraphPreparation {
                 ForumBodyEmphasisParagraphGroup._(_sceneInput!, _height),
               );
               _height += _allocation!.height;
-              _marks += _allocation!.marks.length;
-              // Two distinct local projections survive: measured glyph row and
-              // original source/glyph window. Full run tables remain shared.
-              _retainedText +=
-                  _source!.content.projection.text.length +
-                  _group!.content.projection.text.length;
+              _retainedText += _group!.content.projection.text.length;
               _start = _group!.selector.endLine;
               _group = null;
-              _source = null;
-              _measurement = null;
               _allocation = null;
               _sceneInput = null;
               _phase = _ParagraphPhase.group;
@@ -529,7 +457,7 @@ final class ForumBodyEmphasisParagraphPreparation {
                 _fail(ForumBodyEmphasisParagraphFailure.limit);
               }
               _result = ForumBodyEmphasisParagraphMetrics._(
-                glyphInput: _glyphs!,
+                content: _content!,
                 reference: _reference!,
                 groups: _groups!,
                 lines: _lines!,
@@ -540,10 +468,9 @@ final class ForumBodyEmphasisParagraphPreparation {
                     ? _emptyBaseline
                     : _lines!.first.baseline,
                 hasTerminalEmptyLine: _terminal,
-                markCount: _marks,
                 retainedTextCodeUnits:
                     _content!.projection.text.length + _retainedText,
-                retainedRuns: _retainedRuns,
+                retainedRuns: _content!.runs.length,
               );
               _groups = null;
               _lines = null;
@@ -594,10 +521,6 @@ final class ForumBodyEmphasisParagraphPreparation {
     if (next > 16384) throw error;
     _groupJob?.close();
     _groupJob = null;
-    _sourceJob?.close();
-    _sourceJob = null;
-    _measureJob?.close();
-    _measureJob = null;
     _physicalJob?.close();
     _physicalJob = null;
     _allocationJob?.close();
@@ -614,14 +537,11 @@ final class ForumBodyEmphasisParagraphPreparation {
     _reference = null;
     _isolatedFrames = null;
     _group = null;
-    _source = null;
-    _measurement = null;
     _allocation = null;
     _sceneInput = null;
     _groups = [];
     _lines = [];
     _height = 0;
-    _marks = 0;
     _retainedText = 0;
     _start = 0;
     _pitch = next;
@@ -686,13 +606,10 @@ final class ForumBodyEmphasisParagraphPreparation {
     _scales = {};
     _additionalOwned = null;
     _prefix = null;
-    _glyphs = null;
     _naturalFrames = null;
     _isolatedFrames = null;
     _reference = null;
     _group = null;
-    _source = null;
-    _measurement = null;
     _allocation = null;
     _paintInput = null;
     _paintContents = const [];
@@ -726,8 +643,6 @@ final class ForumBodyEmphasisParagraphPreparation {
     }
     _phase = _ParagraphPhase.closed;
     try {
-      _glyphJob?.close();
-      _glyphJob = null;
       _requestJob?.close();
       _requestJob = null;
       _frameJob?.close();
@@ -736,10 +651,6 @@ final class ForumBodyEmphasisParagraphPreparation {
       _referenceJob = null;
       _groupJob?.close();
       _groupJob = null;
-      _sourceJob?.close();
-      _sourceJob = null;
-      _measureJob?.close();
-      _measureJob = null;
       _physicalJob?.close();
       _physicalJob = null;
       _allocationJob?.close();

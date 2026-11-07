@@ -58,7 +58,7 @@ final class ForumBodyEmphasisFragmentLayout implements ForumBodyTextLayout {
   @override
   HtmlProjectedSourcePosition sourceAt(Offset offset) {
     _guard();
-    ForumBodyEmphasisAllocatedLayout._finiteOffset(offset);
+    _finiteAllocatedOffset(offset);
     final selected = input.selection, groups = input.paragraph.groups;
     final wholeY = offset.dy + selected.top;
     var low = selected.startGroup, high = selected.endGroup - 1;

@@ -37,9 +37,9 @@ final class ForumBodyEmphasisAllocatedSceneInputPreparation {
       if (phases.length != 3 ||
           allocation.rows.isEmpty ||
           allocation.rows.length > 64 ||
-          allocation.marks.length > 512 ||
           !identical(source.content, allocation.reference.content) ||
-          source.nativeInputIdentity != allocation.source._baseKey) {
+          source.nativeInputIdentity !=
+              allocation.reference.isolatedInputIdentity) {
         ForumBodyEmphasisLinePreparation._mismatch();
       }
       _phases = List.unmodifiable(phases);
@@ -54,8 +54,8 @@ final class ForumBodyEmphasisAllocatedSceneInputPreparation {
             frames = current.frames;
         if (!parent.matchesNativeInputs(
               content: expected[layer],
-              width: allocation.source.requestWidth,
-              textScaler: allocation.source.textScaler,
+              width: allocation.width,
+              textScaler: allocation.textScaler,
               rowIsolationPitch: allocation.reference.rowIsolationPitch,
             ) ||
             !identical(frames.content, parent.content) ||
@@ -95,8 +95,7 @@ final class ForumBodyEmphasisAllocatedSceneInputPreparation {
     try {
       _guard();
       while (!isReady && used < maxParts) {
-        final allocation = _allocation!,
-            expected = allocation.source.rowInput!.row;
+        final allocation = _allocation!, expected = allocation.source;
         switch (_phase) {
           case _SceneInputPhase.group:
             final current = _phases[_layer];
@@ -146,7 +145,7 @@ final class ForumBodyEmphasisAllocatedSceneInputPreparation {
                   wanted = allocation.rows[index].physicalLine;
               if (actual.selector != wanted.selector ||
                   actual.fontBounds != wanted.fontBounds ||
-                  !ForumBodyEmphasisAllocatedPreparation._samePhaseLine(
+                  !_sameAllocatedPhaseLine(
                     _phases[_layer].frames.lines[actual.lineIndex],
                     allocation.reference.isolatedLines[actual.lineIndex],
                   )) {
@@ -236,33 +235,26 @@ final class ForumBodyEmphasisAllocatedSceneInputPreparation {
   }
 }
 
-// Shared by measured scene planning and the actual visible transaction. The
-// original marker identities are pure keys captured from real native fonts;
-// visible preparation separately requalifies the current marker handles.
+// Shared by measured scene planning and visible scene verification.
 final class _AllocatedSceneCommands {
   _AllocatedSceneCommands(
     this._allocation,
     this._groups,
     this._strips,
     this._guard,
-  ) : _buckets = List.generate(_allocation!.rows.length, (_) => <int>[]);
+  );
   ForumBodyEmphasisRowAllocation? _allocation;
   List<ForumBodyParagraphRowView>? _groups;
   List<List<ForumBodyParagraphPhysicalLineSelector>>? _strips;
   void Function()? _guard;
-  List<List<int>> _buckets;
   List<ForumBodyTextPictureCommand> _commands = [];
   ForumBodyTextPictureInput? _input;
-  int _mark = 0, _row = 0, _layer = 0, _drawMark = 0;
+  int _row = 0, _layer = 0;
   bool get isReady => _input != null;
   void advance() {
     _guard!();
-    final plan = _allocation!, source = plan.source;
-    if (_mark < plan.marks.length) {
-      final index = _mark++, mark = plan.marks[index];
-      if (mark.markIndex != index) ForumBodyEmphasisLinePreparation._mismatch();
-      _buckets[source.marks[index].lineIndex].add(index);
-    } else if (_row < plan.rows.length) {
+    final plan = _allocation!;
+    if (_row < plan.rows.length) {
       final row = plan.rows[_row];
       if (_layer < 3) {
         final layer = _layer++, strip = _strips![layer][_row];
@@ -274,25 +266,12 @@ final class _AllocatedSceneCommands {
                 Offset(0, strip.selector.originY),
           ),
         );
-      } else if (_drawMark < _buckets[_row].length) {
-        final index = _buckets[_row][_drawMark++],
-            placed = plan.marks[index],
-            original = source.marks[index];
-        _commands.add(
-          ForumBodyTextPictureCommand(
-            nativeInputIdentity:
-                source._markKeys[source._unitMarks[original.unitIndex]],
-            offset: placed.offset,
-            fitScale: original.fitScale,
-          ),
-        );
       } else {
         _row++;
         _layer = 0;
-        _drawMark = 0;
       }
     } else {
-      _input = ForumBodyTextPictureInput(commands: _commands, maxCommands: 704);
+      _input = ForumBodyTextPictureInput(commands: _commands, maxCommands: 192);
     }
     _guard!();
   }
@@ -311,10 +290,32 @@ final class _AllocatedSceneCommands {
     _strips = null;
     _guard = null;
     _commands = [];
-    _buckets = [];
     _input = null;
   }
 }
+
+bool _sameAllocatedPhaseLine(
+  ForumBodyParagraphLine a,
+  ForumBodyParagraphLine b,
+) =>
+    a.startUtf16 == b.startUtf16 &&
+    a.endUtf16 == b.endUtf16 &&
+    a.coverageStartUtf16 == b.coverageStartUtf16 &&
+    a.coverageEndUtf16 == b.coverageEndUtf16 &&
+    a.engineStartUtf16 == b.engineStartUtf16 &&
+    a.engineEndUtf16 == b.engineEndUtf16 &&
+    a.engineCoverageStartUtf16 == b.engineCoverageStartUtf16 &&
+    a.engineCoverageEndUtf16 == b.engineCoverageEndUtf16 &&
+    a.unpaintedTrailingSpaceStartUtf16 == b.unpaintedTrailingSpaceStartUtf16 &&
+    a.engineUnpaintedTrailingSpaceStartUtf16 ==
+        b.engineUnpaintedTrailingSpaceStartUtf16 &&
+    a.canBreakBefore == b.canBreakBefore &&
+    a.canBreakAfter == b.canBreakAfter &&
+    a.top == b.top &&
+    a.bottom == b.bottom &&
+    a.baseline == b.baseline &&
+    a.left == b.left &&
+    a.width == b.width;
 
 void _verifyAllocatedParent(
   ForumBodyEmphasisRowAllocation plan,
