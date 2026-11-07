@@ -215,8 +215,9 @@ final class ForumBodyTextPageSession {
     ForumBodyCollapseLayout? collapses,
     // Scope a measured body to its actual descendants, with inherited style.
     ForumBodyElement? contentRoot,
-    // A replaced root has no descendants for the flow cursor to emit.
-    ({ForumBodyImageInput input, ForumBodyImageFrame frame})? scopedImage,
+    // A replaced root has no descendants for the flow cursor to emit. A hidden
+    // root supplies only geometry; it has no frozen display resource.
+    ({ForumBodyImageInput? input, ForumBodyImageFrame frame})? scopedImage,
     double? intrinsicAvailableWidth,
     int? maxImagesPerPage,
     bool dedicatedTables = false,
@@ -282,7 +283,26 @@ final class ForumBodyTextPageSession {
           width: composer.width,
           paragraphBuilder: paragraphBuilder,
           rubyLimits: rubyLimits,
-          inlineImageResolver: inlineImageResolver,
+          inlineImageResolver: (identity, element, style) {
+            if (!style.visibilityHidden) {
+              return inlineImageResolver?.call(identity, element, style);
+            }
+            // Match explicitly inline readable images without consulting the
+            // resource catalog, which intentionally contains visible images.
+            final display = element.style
+                .value('display')
+                ?.trim()
+                .toLowerCase();
+            if (display != 'inline' && display != 'inline-block') return null;
+            final em = textScaler.scale(style.textStyle.fontSize!);
+            return ForumBodyInlineImageInput.hidden(
+              document: document,
+              element: element,
+              box: style.box,
+              em: em,
+              maxHeight: height - math.min(em, height / 2),
+            );
+          },
           collapses: collapses,
           contentRoot: contentRoot,
           dedicatedTables: composeTables,
@@ -350,17 +370,28 @@ final class ForumBodyTextPageSession {
       );
       if (scopedImage != null) {
         try {
-          if (!identical(scopedImage.input.element, contentRoot) ||
-              scopedImage.input.identity != document.identity ||
+          final input = scopedImage.input;
+          if (contentRoot?.kind != ForumBodyElementKind.image ||
+              (input == null
+                  ? !session.contentRootStyle.visibilityHidden
+                  : (!identical(input.element, contentRoot) ||
+                        input.identity != document.identity ||
+                        input.isSticker ||
+                        session.contentRootStyle.visibilityHidden)) ||
               scopedImage.frame.width != width ||
-              scopedImage.input.isSticker ||
               intrinsicAvailableWidth != null ||
               session.contentRootStyle.hidden ||
-              session.contentRootStyle.visibilityHidden ||
               collapses?.hidesPath(contentRoot!.path) == true) {
             throw ArgumentError('Scoped image does not match its content root');
           }
-          session._appendImage(scopedImage.input, scopedImage.frame, left: 0);
+          if (input == null) {
+            session._composer.appendPadding(
+              scopedImage.frame.height,
+              keepTogether: true,
+            );
+          } else {
+            session._appendImage(input, scopedImage.frame, left: 0);
+          }
         } catch (_) {
           session.close();
           rethrow;
@@ -1367,36 +1398,39 @@ final class ForumBodyTextPageSession {
 
   void _admitImage(ForumBodyBlockFlowImage unit) {
     final style = unit.image.event.style;
-    if (style.visibilityHidden) {
-      throw const ForumBodyTextPageSessionException(
-        ForumBodyTextPageSessionFailure.imageStructure,
-      );
-    }
     final node = unit.image.event.node as ForumBodyElement;
-    final input = _imageResolver?.call(unit.identity, node);
+    final input = style.visibilityHidden
+        ? null
+        : _imageResolver?.call(unit.identity, node);
     _ensureActivePlan();
-    if (input == null ||
-        input.identity != unit.identity ||
-        !identical(input.element, node)) {
+    if (!style.visibilityHidden &&
+        (input == null ||
+            input.identity != unit.identity ||
+            !identical(input.element, node))) {
       throw const ForumBodyTextPageSessionException(
         ForumBodyTextPageSessionFailure.imageResource,
       );
     }
-    if (input.isSticker) {
+    if (input?.isSticker == true) {
       throw const ForumBodyTextPageSessionException(
         ForumBodyTextPageSessionFailure.imageStructure,
       );
     }
-    final htmlWidth = input.entry.htmlWidth ?? node.resource?.width;
-    final naturalWidth = htmlWidth ?? input.layout.displaySize?.width;
+    final htmlWidth = input?.entry.htmlWidth ?? node.resource?.width;
+    final htmlHeight = input?.entry.htmlHeight ?? node.resource?.height;
+    final naturalWidth = htmlWidth ?? input?.layout.displaySize?.width;
     final cssWidth = style.box.width;
     final usesNaturalWidth =
         cssWidth == null || cssWidth.unit == ForumBodyLengthUnit.auto;
     final imageWidth = usesNaturalWidth
         ? naturalWidth ?? _intrinsic?.availableWidth
         : null;
-    final frame = ForumBodyImageFrame.resolve(
-      input: input,
+    final frame = ForumBodyImageFrame.fromAspectRatio(
+      aspectRatio:
+          input?.aspectRatio ??
+          (htmlWidth != null && htmlHeight != null
+              ? htmlWidth / htmlHeight
+              : .7),
       width: unit.contentWidth,
       maxHeight: _tableExtent == ForumBodyTableExtent.natural
           ? _maxFlowImageHeight
@@ -1410,7 +1444,17 @@ final class ForumBodyTextPageSession {
       final minimum = usesNaturalWidth && htmlWidth != null ? htmlWidth : 0.0;
       _intrinsic.add(minimum, preferred);
     }
-    _appendImage(input, frame, left: unit.contentLeft);
+    if (style.visibilityHidden) {
+      // Visibility retains the atomic image box, but owns no loaded resource,
+      // first-frame wait, hit target or reading/image coverage.
+      _composer.appendPadding(
+        frame.height,
+        spaceBefore: _margin,
+        keepTogether: true,
+      );
+    } else {
+      _appendImage(input!, frame, left: unit.contentLeft);
+    }
   }
 
   void _appendImage(

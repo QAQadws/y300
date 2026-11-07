@@ -79,8 +79,25 @@ final class ForumBodyImageFrame {
     double? maxImageWidth,
     required TextAlign align,
     required TextDirection direction,
+  }) => ForumBodyImageFrame.fromAspectRatio(
+    aspectRatio: input.aspectRatio,
+    width: width,
+    maxHeight: maxHeight,
+    maxImageWidth: maxImageWidth,
+    align: align,
+    direction: direction,
+  );
+
+  /// Geometry also serves invisible occurrences without resolving a resource.
+  factory ForumBodyImageFrame.fromAspectRatio({
+    required double aspectRatio,
+    required double width,
+    required double maxHeight,
+    double? maxImageWidth,
+    required TextAlign align,
+    required TextDirection direction,
   }) {
-    final ratio = input.aspectRatio;
+    final ratio = aspectRatio;
     if (!width.isFinite ||
         width <= 0 ||
         !maxHeight.isFinite ||

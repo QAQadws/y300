@@ -238,7 +238,7 @@ final class ForumBodyFloatBodyPreparation {
 
   ForumBodyTextPageSession _openBody({
     required bool probe,
-    required ({ForumBodyImageInput input, ForumBodyImageFrame frame})?
+    required ({ForumBodyImageInput? input, ForumBodyImageFrame frame})?
     rootImage,
   }) => ForumBodyTextPageSession(
     document: _document,
@@ -267,18 +267,22 @@ final class ForumBodyFloatBodyPreparation {
     tableExtent: ForumBodyTableExtent.natural,
   );
 
-  ({ForumBodyImageInput input, ForumBodyImageFrame frame}) _measureRootImage() {
+  ({ForumBodyImageInput? input, ForumBodyImageFrame frame})
+  _measureRootImage() {
     final element = source.element;
-    final input = _images.block(_document.identity, element);
+    final input = _style.visibilityHidden
+        ? null
+        : _images.block(_document.identity, element);
     _guard();
-    if (input == null ||
-        input.identity != _document.identity ||
-        !identical(input.element, element)) {
+    if (!_style.visibilityHidden &&
+        (input == null ||
+            input.identity != _document.identity ||
+            !identical(input.element, element))) {
       throw const ForumBodyTextPageSessionException(
         ForumBodyTextPageSessionFailure.imageResource,
       );
     }
-    if (input.isSticker || _style.visibilityHidden) {
+    if (input?.isSticker == true) {
       throw const ForumBodyTextPageSessionException(
         ForumBodyTextPageSessionFailure.imageStructure,
       );
@@ -294,18 +298,22 @@ final class ForumBodyFloatBodyPreparation {
       _fail(ForumBodyFloatBodyFailure.extentLimit);
     }
     final box = _style.box;
-    final htmlWidth = input.entry.htmlWidth ?? element.resource?.width;
-    final htmlHeight = input.entry.htmlHeight ?? element.resource?.height;
+    final htmlWidth = input?.entry.htmlWidth ?? element.resource?.width;
+    final htmlHeight = input?.entry.htmlHeight ?? element.resource?.height;
     final authorHeight = box.height;
     final specifiedHeight = authorHeight?.unit == ForumBodyLengthUnit.percent
         ? null
         : _contentLength(authorHeight, vertical: true);
     final size = fitForumBodyReplacedImage(
       intrinsicWidth:
-          input.naturalSize?.width ??
-          input.layout.displaySize?.width ??
+          input?.naturalSize?.width ??
+          input?.layout.displaySize?.width ??
           availableWidth,
-      aspectRatio: input.aspectRatio,
+      aspectRatio:
+          input?.aspectRatio ??
+          (htmlWidth != null && htmlHeight != null
+              ? htmlWidth / htmlHeight
+              : .7),
       width: box.width == null ? htmlWidth : _contentLength(box.width),
       height: authorHeight == null ? htmlHeight : specifiedHeight,
       minWidth: _contentLength(box.minWidth) ?? 0,

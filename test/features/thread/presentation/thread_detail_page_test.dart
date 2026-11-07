@@ -3719,20 +3719,23 @@ void main() {
           _imageReturnRepository(
             '<div hidden>$image</div>'
             '<div style="display:none"><span style="display:block">$image</span></div>'
+            '<div style="visibility:hidden">$image</div>'
+            '<p>Before<img src="https://example.com/hidden-inline.jpg" '
+            'width="40" height="20" style="display:inline-block;visibility:hidden">After</p>'
             '<div style="visibility:hidden">'
             '<img src="https://example.com/same.jpg" width="180" height="40" style="visibility:visible">'
             '</div>$image'
             '<template>$image</template>'
             '<div class="showcollapse_gather">$image</div>',
           ),
-          initialIndex: 3,
+          initialIndex: 5,
         );
         expect(
           reader.request.group.entries.map((entry) => entry.indexInPost),
-          [2, 3],
+          [4, 5],
         );
         expect(reader.request.initialIndex, 1);
-        expect(reader.request.initialEntry?.indexInPost, 3);
+        expect(reader.request.initialEntry?.indexInPost, 5);
         expect(reader.request.continuousImages.map((item) => item.index), [0, 1]);
       },
     );

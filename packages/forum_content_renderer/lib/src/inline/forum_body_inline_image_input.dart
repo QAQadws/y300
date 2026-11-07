@@ -25,9 +25,10 @@ final class ForumBodyInlineImageSource {
   ForumBodyInlineImageSource({
     required ForumBodyDocument document,
     required this.element,
-    required this.image,
+    required ForumHtmlDisplayImage image,
     this.entry,
-  }) : identity = document.identity {
+  }) : identity = document.identity,
+       _image = image {
     if (!identical(document.nodeAtPath(element.path), element) ||
         element.kind != ForumBodyElementKind.image ||
         element.resource?.rawSource == null ||
@@ -44,21 +45,60 @@ final class ForumBodyInlineImageSource {
       throw ArgumentError('Inline image source does not match its document');
     }
   }
+
+  /// An actual occurrence with geometry but no display resource. It never
+  /// reaches a surface, image Host, semantics or first-frame binding.
+  ForumBodyInlineImageSource.hidden({
+    required ForumBodyDocument document,
+    required this.element,
+  }) : identity = document.identity,
+       _image = null,
+       entry = null {
+    if (!identical(document.nodeAtPath(element.path), element) ||
+        element.kind != ForumBodyElementKind.image) {
+      throw ArgumentError('Hidden image does not match its document');
+    }
+  }
   final ForumBodyIdentity identity;
   final ForumBodyElement element;
-  final ForumHtmlDisplayImage image;
+  final ForumHtmlDisplayImage? _image;
+  bool get isHidden => _image == null;
+  ForumHtmlDisplayImage get image =>
+      _image ?? (throw StateError('Hidden image has no display resource'));
   final ForumHtmlReadableImageEntry? entry;
   int get retainedCodeUnits =>
-      image.sourceUrl.length +
-      image.cacheKey.length +
-      element.resource!.rawSource!.length +
-      (element.resource!.alt?.length ?? 0) +
-      (element.resource!.title?.length ?? 0);
+      (_image?.sourceUrl.length ?? 0) +
+      (_image?.cacheKey.length ?? 0) +
+      (element.resource?.rawSource?.length ?? 0) +
+      (element.resource?.alt?.length ?? 0) +
+      (element.resource?.title?.length ?? 0);
 }
 
 /// Geometry for one frozen source. Replaced elements resolve author lengths
 /// at the actual paragraph width before they become native slots.
 final class ForumBodyInlineImageInput {
+  factory ForumBodyInlineImageInput.hidden({
+    required ForumBodyDocument document,
+    required ForumBodyElement element,
+    required ForumBodyBoxStyle box,
+    required double em,
+    required double maxHeight,
+  }) {
+    final reference = element.resource;
+    final width = reference?.width, height = reference?.height;
+    return ForumBodyInlineImageInput.replaced(
+      source: ForumBodyInlineImageSource.hidden(
+        document: document,
+        element: element,
+      ),
+      box: box,
+      intrinsicSize: width != null && height != null
+          ? Size(width, height)
+          : Size.square(em),
+      maxHeight: maxHeight,
+    );
+  }
+
   factory ForumBodyInlineImageInput({
     required ForumBodyDocument document,
     required ForumBodyElement element,
@@ -89,9 +129,9 @@ final class ForumBodyInlineImageInput {
     if (!maxHeight.isFinite || maxHeight <= 0) {
       throw ArgumentError.value(maxHeight, 'maxHeight');
     }
-    final reference = source.element.resource!;
-    final width = box.width ?? _htmlLength(reference.width);
-    final height = box.height ?? _htmlLength(reference.height);
+    final reference = source.element.resource;
+    final width = box.width ?? _htmlLength(reference?.width);
+    final height = box.height ?? _htmlLength(reference?.height);
     final automaticWidth =
         width == null || width.unit == ForumBodyLengthUnit.auto;
     // A paged flow paragraph has no definite CSS containing-block height.
@@ -137,6 +177,7 @@ final class ForumBodyInlineImageInput {
   ForumBodyIdentity get identity => source.identity;
   ForumBodyElement get element => source.element;
   ForumHtmlDisplayImage get image => source.image;
+  bool get isHidden => source.isHidden;
   final PlaceholderDimensions dimensions;
   final bool usesIntrinsicSize;
   final ({

@@ -609,7 +609,8 @@ final class ForumBodyInlinePageContent extends ForumBodyTextPageContent {
   int imageCountFor(ForumBodyTextPageFragment fragment) {
     final paths = [
       for (final index in visibleAtoms(fragment))
-        if (content.images[index] case final image?) image.element.path,
+        if (content.images[index] case final image? when !image.isHidden)
+          image.element.path,
     ];
     if (fragment.imageCount != paths.length ||
         !listEquals(fragment.imagePaths, paths)) {

@@ -102,7 +102,7 @@ final class ForumBodyTextFlowCursor {
          collapses: collapses,
          contentRoot: contentRoot,
        );
-  static const revision = 19;
+  static const revision = 20;
   final bool dedicatedTables;
 
   /// Requires a consumer for exclusion controls, including clearance BRs.
@@ -342,7 +342,6 @@ final class ForumBodyTextFlowCursor {
           if (element.kind == ForumBodyElementKind.image &&
               (event.style.display == ForumBodyDisplay.inline ||
                   event.style.display == ForumBodyDisplay.inlineBlock) &&
-              !event.style.visibilityHidden &&
               !_insideEditStatus) {
             final image = inlineImageResolver?.call(
               identity,

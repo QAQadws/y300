@@ -253,6 +253,7 @@ final class ForumBodyInlineViewAssembly {
         rect.bottom > _fragment!.height) {
       _fail(ForumBodyInlineViewFailure.geometry);
     }
+    if (input.isHidden) return;
     if (_images.isEmpty) _images = {};
     _images[index] = ForumBodyInlineImageBinding._(
       input,

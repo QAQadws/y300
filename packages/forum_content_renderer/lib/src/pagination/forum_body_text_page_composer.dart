@@ -350,7 +350,7 @@ final class ForumBodyTextPageComposer {
       throw ArgumentError('Invalid page composition inputs');
     }
   }
-  static const revision = 41;
+  static const revision = 42;
   final ForumBodyIdentity identity;
   final String layoutId;
 
@@ -1016,12 +1016,14 @@ final class ForumBodyTextPageComposer {
   /// Admit physical padding independently of paragraph spacing. It can occupy
   /// an otherwise empty page and does not imply source/semantic coverage. Each
   /// advance handles at most one page; huge values still obey maxPages. Caller
-  /// supplies already resolved padding, not a collapsible margin.
+  /// supplies already resolved padding, not a collapsible margin. keepTogether
+  /// retains an invisible replaced box; flowing slices may exceed their height.
   void appendPadding(
     double extent, {
     double spaceBefore = 0,
     double spaceAtPageStart = 0,
     bool opensBackgrounds = true,
+    bool keepTogether = false,
   }) {
     _ensureOpen();
     if (!needsInput) throw StateError('Composition input is still pending');
@@ -1029,7 +1031,8 @@ final class ForumBodyTextPageComposer {
         extent < 0 ||
         !spaceBefore.isFinite ||
         !spaceAtPageStart.isFinite ||
-        spaceAtPageStart < 0) {
+        spaceAtPageStart < 0 ||
+        (keepTogether && extent > height && !_flowing)) {
       throw ArgumentError.value(extent, 'extent');
     }
     _padding = _ActivePadding(
@@ -1037,6 +1040,7 @@ final class ForumBodyTextPageComposer {
       spaceBefore,
       spaceAtPageStart,
       opensBackgrounds,
+      keepTogether,
     );
   }
 
@@ -1056,7 +1060,10 @@ final class ForumBodyTextPageComposer {
         final gap = atPageStart ? active.spaceAtPageStart : active.spaceBefore;
         final top = math.max(0.0, _flowHeight + gap);
         if (!top.isFinite) _fail(ForumBodyTextPageFailure.invalidGeometry);
-        if (top >= height) {
+        if (top >= height ||
+            (active.keepTogether &&
+                top + active.remaining > height &&
+                !atPageStart)) {
           if (atPageStart) _fail(ForumBodyTextPageFailure.oversizedGroup);
           _seal();
           return (
@@ -1065,10 +1072,17 @@ final class ForumBodyTextPageComposer {
             isComplete: false,
           );
         }
+        if (active.keepTogether &&
+            top + active.remaining > height &&
+            !_flowing) {
+          _fail(ForumBodyTextPageFailure.oversizedGroup);
+        }
         _flowHeight = top;
         active.started = true;
       }
-      final consumed = math.min(active.remaining, height - _flowHeight);
+      final consumed = active.keepTogether
+          ? active.remaining
+          : math.min(active.remaining, height - _flowHeight);
       if (active.opensBackgrounds) _touchBackgrounds(_flowHeight);
       _flowHeight += consumed;
       _usedHeight = math.max(_usedHeight, _flowHeight);
@@ -1077,7 +1091,7 @@ final class ForumBodyTextPageComposer {
       // for values such as 0.1 + 0.2. Padding carries no source text coverage.
       active.remaining = after;
       if (after <= precisionErrorTolerance) _padding = null;
-      if (_flowSealExtent == height &&
+      if (_flowSealExtent >= height &&
           (_padding != null || !_backgrounds.needsEndBoundary)) {
         _seal();
       }
@@ -1910,7 +1924,12 @@ final class _CompositionParagraph {
   late final _imageEngineOffsets = _inline?.projection.hasResources == true
       ? <int>[
           for (final atom in _inline!.projection.atoms)
-            if (atom.isResource) atom.engineUtf16,
+            if (atom.isResource &&
+                !(lease! as ForumBodyInlineParagraphLease)
+                    .content
+                    .images[atom.index]!
+                    .isHidden)
+              atom.engineUtf16,
         ]
       : const <int>[];
 
@@ -1923,7 +1942,11 @@ final class _CompositionParagraph {
   late final _imageSourcePaths = _inline?.projection.hasResources == true
       ? <String?>[
           for (final atom in _inline!.projection.atoms)
-            if (atom.isResource)
+            if (atom.isResource &&
+                !(lease! as ForumBodyInlineParagraphLease)
+                    .content
+                    .images[atom.index]!
+                    .isHidden)
               (lease! as ForumBodyInlineParagraphLease)
                   .content
                   .images[atom.index]
@@ -2053,11 +2076,13 @@ final class _ActivePadding {
     this.spaceBefore,
     this.spaceAtPageStart,
     this.opensBackgrounds,
+    this.keepTogether,
   );
   double remaining;
   final double spaceBefore;
   final double spaceAtPageStart;
   final bool opensBackgrounds;
+  final bool keepTogether;
   bool started = false;
 }
 
