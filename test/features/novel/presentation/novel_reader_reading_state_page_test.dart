@@ -1,3 +1,5 @@
+import '../../../../tool/legacy/novel/legacy_reader_surface.dart';
+
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -2636,6 +2638,7 @@ Widget _app(
       novelId: _work,
       initialEpisodeId: _chapter,
       nativePagination: nativePagination,
+      comparisonSurfaceFactory: createLegacyNovelReaderSurface,
       nativeIdleScheduler: nativeIdleScheduler ?? _nativeIdle,
     ),
   ),

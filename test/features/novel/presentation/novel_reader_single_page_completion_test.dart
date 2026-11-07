@@ -1,3 +1,5 @@
+import '../../../../tool/legacy/novel/legacy_reader_surface.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -1065,6 +1067,7 @@ final class _Fixture {
         initialEpisodeId: _chapter,
         openPolicy: openPolicy,
         nativePagination: nativePagination,
+        comparisonSurfaceFactory: createLegacyNovelReaderSurface,
         nativeIdleScheduler: _nativeIdle,
       ),
     ),

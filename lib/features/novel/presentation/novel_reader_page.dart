@@ -37,6 +37,7 @@ import 'package:y300/features/novel/domain/services/novel_reader_progress_policy
 import 'package:y300/features/novel/data/models/novel_models.dart';
 import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_reader_controller.dart';
+import 'package:y300/features/novel/presentation/controllers/novel_reader_paged_navigation_controller.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_chapter_interactions_dock_controller.dart';
 import 'package:y300/features/novel/presentation/novel_text_resolver.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_chapter_turn.dart';
@@ -44,7 +45,7 @@ import 'package:y300/features/novel/presentation/models/novel_reader_logical_sel
 import 'package:y300/features/novel/presentation/models/novel_reader_paged_indicator_layout.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_key.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_pagination_position.dart';
-import 'package:y300/features/novel/presentation/models/novel_reader_conversion_position.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_comparison_surface.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_anchor_navigation_request.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_native_host_status.dart';
 import 'package:y300/features/novel/presentation/models/novel_reader_native_page_coverage.dart';
@@ -56,7 +57,6 @@ import 'package:y300/features/novel/domain/models/novel_reading_body_geometry.da
 import 'package:y300/features/novel/presentation/widgets/novel_reading_body_sliver.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_catalog_row.dart';
 
-import 'package:y300/features/novel/presentation/services/novel_reader_pagination_session_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_owner.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_demand.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_cancellation.dart';
@@ -67,8 +67,6 @@ import 'package:y300/features/novel/presentation/widgets/novel_reader_display_se
 import 'package:y300/features/novel/presentation/widgets/novel_reader_position_bookmarks_dialog.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_text_search_dialog.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_delayed_loading_boundary.dart';
-import 'package:y300/features/novel/presentation/widgets/novel_reader_html_document_view.dart';
-import 'package:y300/features/novel/presentation/widgets/novel_reader_html_paged_surface.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_native_paged_surface.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_native_flow_host.dart';
 import 'package:y300/features/novel/presentation/widgets/novel_reader_logical_selection_region.dart';
@@ -101,8 +99,13 @@ class NovelReaderPage extends ConsumerStatefulWidget {
     required this.initialEpisodeId,
     this.openPolicy = NovelEpisodeOpenPolicy.resumeLastRead,
     bool nativePagination = true,
+    this.comparisonSurfaceFactory,
     this.nativeIdleScheduler,
-  }) : nativePagination = kReleaseMode || nativePagination;
+  }) : assert(
+         nativePagination || comparisonSurfaceFactory != null,
+         'Legacy comparison requires an explicit development surface factory',
+       ),
+       nativePagination = kReleaseMode || nativePagination;
 
   final String novelId;
   final String initialEpisodeId;
@@ -110,6 +113,7 @@ class NovelReaderPage extends ConsumerStatefulWidget {
 
   /// Release routes use the native renderer. Debug and profile can compare.
   final bool nativePagination;
+  final NovelReaderComparisonSurfaceFactory? comparisonSurfaceFactory;
   final NovelReaderPaginationIdleScheduler? nativeIdleScheduler;
 
   @override
@@ -138,7 +142,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
       const NovelReaderTypographyResolver();
   final NovelReaderProgressPolicy _progressPolicy =
       const NovelReaderProgressPolicy();
-  NovelReaderPaginationSessionCache? _legacyPaginationSessionCache;
+  NovelReaderComparisonSurface? _comparisonSurface;
   NovelReaderController? _paginationSessionController;
   NovelReaderNativeOwner? _nativeOwner;
   final _nativeFlowKey = GlobalKey<NovelReaderNativeFlowHostState>();
@@ -156,8 +160,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   NovelReaderPaginationPosition? _nativeUnpublishedPosition;
   ({String surface, String key, int count, bool isFinal})? _nativeControls;
   ({String surface, bool previous})? _nativeOverlayTurn;
-  NovelReaderPaginationSessionCache get _legacyPaginationCache =>
-      _legacyPaginationSessionCache ??= NovelReaderPaginationSessionCache();
   NovelReaderDisplayPreferencesCoordinator? _displayPreferencesCoordinator;
   NovelReaderController? _displayPreferencesOwner;
   Future<void>? _displayCommitTail;
@@ -188,7 +190,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   bool _isProgressSeekInFlight = false;
   String? _progressControlOwner;
   String? _readyReaderSurfaceIdentity;
-  NovelReaderConversionPosition? _conversionPosition;
   final _postRouteSession = ThreadPostNavigationSession();
   String? _postRouteOwner;
   String? _chapterInteractionsPendingOwner;
@@ -218,6 +219,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   @override
   void initState() {
     super.initState();
+    if (!widget.nativePagination) {
+      _comparisonSurface = widget.comparisonSurfaceFactory!();
+    }
     _progressDiagnostics.log(
       'page_open',
       fields: <String, Object?>{
@@ -237,6 +241,34 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     _resumed =
         WidgetsBinding.instance.lifecycleState == null ||
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+  }
+
+  @override
+  void didUpdateWidget(covariant NovelReaderPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.nativePagination && widget.nativePagination) return;
+    if (oldWidget.nativePagination == widget.nativePagination &&
+        oldWidget.comparisonSurfaceFactory == widget.comparisonSurfaceFactory) {
+      return;
+    }
+    _comparisonSurface?.dispose();
+    _comparisonSurface = widget.nativePagination
+        ? null
+        : widget.comparisonSurfaceFactory!();
+    _nativeActivity.value = false;
+    _nativeOwner?.dispose();
+    _nativeOwner = null;
+    _nativePagedEntry = null;
+    _nativeFlowEntry = null;
+    _nativeStatus = null;
+    _nativeStatusSurface = null;
+    _nativeMenuSource = null;
+    _nativeUnpublishedPosition = null;
+    _nativeControls = null;
+    _nativeOverlayTurn = null;
+    _textHighlight = null;
+    _pendingTextNavigation = null;
+    _pagedPosition = null;
   }
 
   @override
@@ -355,7 +387,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     _bookmarkCapture?.cancel();
     _nativeOwner?.dispose();
     _nativeActivity.dispose();
-    _legacyPaginationSessionCache?.dispose();
+    _comparisonSurface?.dispose();
     _verticalDockVisible.dispose();
     _postRouteSession.dispose();
     WidgetsBinding.instance.removeObserver(this);
@@ -408,7 +440,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         _nativeOverlayTurn = null;
         // A source route/reset supplied a newer public position. A visible
         // hint from before that handoff must not override its restore target.
-        _conversionPosition = null;
+        _comparisonSurface?.clearPositionHint();
         _nativePagedEntry = null;
         _nativeFlowEntry = null;
         _nativeMenuSource = null;
@@ -498,14 +530,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
             if (!identical(_textHighlight?.document, viewState.document)) {
               _textHighlight = null;
               _pendingTextNavigation = null;
-            }
-            if (viewState.preferences.flowMode ==
-                    NovelReaderFlowMode.vertical ||
-                _conversionPosition?.chapter.episodeId !=
-                    viewState.currentEpisode.episodeId ||
-                _conversionPosition?.rawHtml !=
-                    viewState.currentContent.rawHtml) {
-              _conversionPosition = null;
             }
             if (_postRouteOwner != readerSurfaceIdentity) {
               _postRouteOwner = readerSurfaceIdentity;
@@ -1352,12 +1376,10 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     if (_paginationSessionController == null) {
       _paginationSessionController = controller;
     } else if (!identical(_paginationSessionController, controller)) {
-      _conversionPosition = null;
       _nativePagedEntry = null;
       _nativeFlowEntry = null;
       _nativeMenuSource = null;
-      _legacyPaginationSessionCache?.dispose();
-      _legacyPaginationSessionCache = null;
+      _comparisonSurface?.reset();
       _nativeOwner?.dispose();
       _textHighlight = null;
       _pendingTextNavigation = null;
@@ -1645,115 +1667,105 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           surfaceIdentity,
         );
       }
-      final cache = _legacyPaginationCache;
-      return NovelReaderHtmlPagedSurface(
-        readingAuthorityIdentity: viewState.readingAuthorityRevision,
-        preparationService: ref.watch(
-          novelReaderHtmlPreparationServiceProvider,
-        ),
-        paginationCache: cache.paginationCache,
-        paginationMeasureCache: cache.measureCache,
-        paginationBoundaryCache: cache.boundaryCache,
-        preparedChapterCache: cache.preparedChapterCache,
-        rawHtml: viewState.currentContent.rawHtml,
-        episode: viewState.currentEpisode,
-        preferences: viewState.renderPreferences,
-        typography: typography,
-        theme: htmlTheme,
-        imageReferer: _imageRefererFor(viewState),
-        progressSnapshot: viewState.progressSnapshot,
-        startsAtBeginning: ref
-            .read(novelReaderControllerProvider(_args).notifier)
-            .startsPagedAtBeginning,
-        chromeInsets: chromeInsets,
-        semanticDocument: viewState.document,
-        conversionPosition: _conversionPosition,
-        onConversionPositionChanged: (position) {
-          if (_isCurrentReaderSurface(surfaceIdentity)) {
-            _conversionPosition = position;
-          }
-        },
-        pageSeekRequest: _pendingPageSeekRequest,
-        navigationController: _pagedNavigationController,
-        chapterEntryRequest: _pendingChapterEntryRequest,
-        onChapterEntryApplied: (request) {
-          if (_isCurrentReaderSurface(surfaceIdentity)) {
-            _retireChapterEntryRequest(requestId: request.requestId);
-          }
-        },
-        previousChapterTitle: viewState.previousEpisode?.episodeTitle,
-        nextChapterTitle: viewState.nextEpisode?.episodeTitle,
-        onTurnToAdjacentChapter: (edge) {
-          if (!_isCurrentReaderSurface(surfaceIdentity)) {
-            return false;
-          }
-          return _turnToAdjacentChapter(edge, viewState);
-        },
-        onContentReady: () => _markReaderSurfaceReady(surfaceIdentity),
-        onContentTerminal: () => _markReaderSurfaceReady(surfaceIdentity),
-        onLinkTap: (link) {
-          if (_isCurrentReaderSurface(surfaceIdentity)) {
-            _openReaderLink(link, externalLauncher);
-          }
-        },
-        onOpenImage: (request) {
-          if (_isCurrentReaderSurface(surfaceIdentity)) {
-            _openHtmlReaderImage(request);
-          }
-        },
-        onImageFallback: (request) {
-          if (_isCurrentReaderSurface(surfaceIdentity)) {
-            _copyNovelImageUrl(request.url);
-          }
-        },
-        onContentInteraction: _cancelPendingReaderTap,
-        onChooseScrollMode: () {
-          if (_isCurrentReaderSurface(surfaceIdentity)) {
-            _chooseScrollMode(
-              ref.read(novelReaderControllerProvider(_args).notifier),
-            );
-          }
-        },
-        onPositionChanged: (position) {
-          if (!_isCurrentReaderSurface(surfaceIdentity)) {
-            return;
-          }
-          setState(() {
-            _pagedPosition = position;
-            final pending = _pendingPageSeekRequest;
-            if (pending != null &&
-                pending.episodeId == position.episodeId &&
-                pending.paginationKey == position.paginationKey &&
-                pending.pageIndex == position.pageIndex) {
-              _pendingPageSeekRequest = null;
-              _progressSliderPreview = null;
-              _isProgressSeekInFlight = false;
+      return _comparisonSurface!.buildPaged(
+        ref,
+        NovelReaderComparisonPagedRequest(
+          isCurrent: () => _isCurrentReaderSurface(surfaceIdentity),
+          readingAuthorityIdentity: viewState.readingAuthorityRevision,
+          rawHtml: viewState.currentContent.rawHtml,
+          episode: viewState.currentEpisode,
+          preferences: viewState.renderPreferences,
+          typography: typography,
+          theme: htmlTheme,
+          imageReferer: _imageRefererFor(viewState),
+          progressSnapshot: viewState.progressSnapshot,
+          startsAtBeginning: ref
+              .read(novelReaderControllerProvider(_args).notifier)
+              .startsPagedAtBeginning,
+          chromeInsets: chromeInsets,
+          semanticDocument: viewState.document,
+          pageSeekRequest: _pendingPageSeekRequest,
+          navigationController: _pagedNavigationController,
+          chapterEntryRequest: _pendingChapterEntryRequest,
+          onChapterEntryApplied: (request) {
+            if (_isCurrentReaderSurface(surfaceIdentity)) {
+              _retireChapterEntryRequest(requestId: request.requestId);
             }
-          });
-          _overlayController.hideMenu();
-          _publishPagedPosition();
-          _observeReadingSurface();
-        },
-        onImagesReadyChanged: (ready) {
-          if (_isCurrentReaderSurface(surfaceIdentity)) {
-            _imagesReady = ready;
+          },
+          previousChapterTitle: viewState.previousEpisode?.episodeTitle,
+          nextChapterTitle: viewState.nextEpisode?.episodeTitle,
+          onTurnToAdjacentChapter: (edge) {
+            if (!_isCurrentReaderSurface(surfaceIdentity)) {
+              return false;
+            }
+            return _turnToAdjacentChapter(edge, viewState);
+          },
+          onContentReady: () => _markReaderSurfaceReady(surfaceIdentity),
+          onContentTerminal: () => _markReaderSurfaceReady(surfaceIdentity),
+          onLinkTap: (link) {
+            if (_isCurrentReaderSurface(surfaceIdentity)) {
+              _openReaderLink(link, externalLauncher);
+            }
+          },
+          onOpenImage: (request) {
+            if (_isCurrentReaderSurface(surfaceIdentity)) {
+              _openHtmlReaderImage(request);
+            }
+          },
+          onImageFallback: (request) {
+            if (_isCurrentReaderSurface(surfaceIdentity)) {
+              _copyNovelImageUrl(request.url);
+            }
+          },
+          onContentInteraction: _cancelPendingReaderTap,
+          onChooseScrollMode: () {
+            if (_isCurrentReaderSurface(surfaceIdentity)) {
+              _chooseScrollMode(
+                ref.read(novelReaderControllerProvider(_args).notifier),
+              );
+            }
+          },
+          onPositionChanged: (position) {
+            if (!_isCurrentReaderSurface(surfaceIdentity)) {
+              return;
+            }
+            setState(() {
+              _pagedPosition = position;
+              final pending = _pendingPageSeekRequest;
+              if (pending != null &&
+                  pending.episodeId == position.episodeId &&
+                  pending.paginationKey == position.paginationKey &&
+                  pending.pageIndex == position.pageIndex) {
+                _pendingPageSeekRequest = null;
+                _progressSliderPreview = null;
+                _isProgressSeekInFlight = false;
+              }
+            });
+            _overlayController.hideMenu();
             _publishPagedPosition();
             _observeReadingSurface();
-          }
-        },
-        onScrollActivityChanged: (scrolling) {
-          if (_isCurrentReaderSurface(surfaceIdentity)) {
-            _readingScrolling = scrolling;
-            _observeReadingSurface();
-          }
-        },
-        onNavigationUnavailable: (_) {
-          if (_isCurrentReaderSurface(surfaceIdentity)) {
-            _showReaderSnackBar(
-              AppLocalizations.of(context).novelPositionChanged,
-            );
-          }
-        },
+          },
+          onImagesReadyChanged: (ready) {
+            if (_isCurrentReaderSurface(surfaceIdentity)) {
+              _imagesReady = ready;
+              _publishPagedPosition();
+              _observeReadingSurface();
+            }
+          },
+          onScrollActivityChanged: (scrolling) {
+            if (_isCurrentReaderSurface(surfaceIdentity)) {
+              _readingScrolling = scrolling;
+              _observeReadingSurface();
+            }
+          },
+          onNavigationUnavailable: (_) {
+            if (_isCurrentReaderSurface(surfaceIdentity)) {
+              _showReaderSnackBar(
+                AppLocalizations.of(context).novelPositionChanged,
+              );
+            }
+          },
+        ),
       );
     }
     final session = _verticalSession.bind(
@@ -1772,9 +1784,6 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
     final nativePreparation = widget.nativePagination
         ? ref.watch(novelReaderNativePreparationServiceProvider)
         : null;
-    final htmlPreparation = widget.nativePagination
-        ? null
-        : ref.watch(novelReaderHtmlPreparationServiceProvider);
     void onImagesReady(bool ready) {
       if (_isCurrentReaderSurface(surfaceIdentity)) {
         _imagesReady = ready;
@@ -1921,41 +1930,41 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                   _openNativeTextSelection(surfaceIdentity, selection),
                 ),
               )
-            : NovelReaderHtmlDocumentView(
-                preparationService: htmlPreparation,
-                asSliver: true,
-                preparedChapterCache:
-                    _legacyPaginationCache.preparedChapterCache,
-                rawHtml: viewState.currentContent.rawHtml,
-                episode: viewState.currentEpisode,
-                preferences: viewState.renderPreferences,
-                typography: typography,
-                theme: htmlTheme,
-                imageReferer: _imageRefererFor(viewState),
-                onLinkTap: (link) {
-                  if (_isCurrentReaderSurface(surfaceIdentity)) {
-                    _openReaderLink(link, externalLauncher);
-                  }
-                },
-                onOpenImage: (request) {
-                  if (_isCurrentReaderSurface(surfaceIdentity)) {
-                    _openHtmlReaderImage(request);
-                  }
-                },
-                onImageFallback: (request) {
-                  if (_isCurrentReaderSurface(surfaceIdentity)) {
-                    _copyNovelImageUrl(request.url);
-                  }
-                },
-                onContentInteraction: _cancelPendingReaderTap,
-                onImagesReadyChanged: onImagesReady,
-                onContentReady: onContentReady,
-                onContentTerminal: onContentTerminal,
-                onRetry: () {
-                  if (_isCurrentReaderSurface(surfaceIdentity)) {
-                    ref.invalidate(novelReaderControllerProvider(_args));
-                  }
-                },
+            : _comparisonSurface!.buildFlow(
+                ref,
+                NovelReaderComparisonFlowRequest(
+                  asSliver: true,
+                  rawHtml: viewState.currentContent.rawHtml,
+                  episode: viewState.currentEpisode,
+                  preferences: viewState.renderPreferences,
+                  typography: typography,
+                  theme: htmlTheme,
+                  imageReferer: _imageRefererFor(viewState),
+                  onLinkTap: (link) {
+                    if (_isCurrentReaderSurface(surfaceIdentity)) {
+                      _openReaderLink(link, externalLauncher);
+                    }
+                  },
+                  onOpenImage: (request) {
+                    if (_isCurrentReaderSurface(surfaceIdentity)) {
+                      _openHtmlReaderImage(request);
+                    }
+                  },
+                  onImageFallback: (request) {
+                    if (_isCurrentReaderSurface(surfaceIdentity)) {
+                      _copyNovelImageUrl(request.url);
+                    }
+                  },
+                  onContentInteraction: _cancelPendingReaderTap,
+                  onImagesReadyChanged: onImagesReady,
+                  onContentReady: onContentReady,
+                  onContentTerminal: onContentTerminal,
+                  onRetry: () {
+                    if (_isCurrentReaderSurface(surfaceIdentity)) {
+                      ref.invalidate(novelReaderControllerProvider(_args));
+                    }
+                  },
+                ),
               ),
       ),
       if (viewState.nextEpisode != null &&

@@ -1,3 +1,5 @@
+import '../../tool/legacy/novel/legacy_reader_surface.dart';
+
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -100,6 +102,7 @@ void main() {
                 novelId: source.novelId,
                 initialEpisodeId: source.episodeId,
                 nativePagination: true,
+                comparisonSurfaceFactory: createLegacyNovelReaderSurface,
                 nativeIdleScheduler: () async {},
               ),
             ),

@@ -1,3 +1,5 @@
+import '../../../../tool/legacy/novel/legacy_reader_surface.dart';
+
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -425,6 +427,7 @@ void main() {
               novelId: 'novel:49:100',
               initialEpisodeId: episodeId,
               nativePagination: false,
+              comparisonSurfaceFactory: createLegacyNovelReaderSurface,
             ),
           ),
         ),
@@ -498,6 +501,7 @@ void main() {
       transitionDuration: const Duration(seconds: 1),
       pageBuilder: (_, _, _) => const NovelReaderPage(
         nativePagination: false,
+        comparisonSurfaceFactory: createLegacyNovelReaderSurface,
         novelId: 'novel:49:100',
         initialEpisodeId: 'novel:49:100:5001',
       ),
@@ -3179,6 +3183,7 @@ void main() {
           ],
           child: const NovelReaderPage(
             nativePagination: false,
+            comparisonSurfaceFactory: createLegacyNovelReaderSurface,
             novelId: 'novel:49:100',
             initialEpisodeId: 'novel:49:100:5001',
           ),
@@ -3223,6 +3228,7 @@ void main() {
           ],
           child: const NovelReaderPage(
             nativePagination: false,
+            comparisonSurfaceFactory: createLegacyNovelReaderSurface,
             novelId: 'novel:49:100',
             initialEpisodeId: 'novel:49:100:5001',
           ),
@@ -3985,6 +3991,7 @@ Widget _buildReaderApp({
                   novelId: 'novel:49:100',
                   initialEpisodeId: initialEpisodeId,
                   nativePagination: false,
+                  comparisonSurfaceFactory: createLegacyNovelReaderSurface,
                 ),
           )
         : ValueListenableBuilder<ThemeData>(
@@ -3998,6 +4005,7 @@ Widget _buildReaderApp({
                       novelId: 'novel:49:100',
                       initialEpisodeId: initialEpisodeId,
                       nativePagination: false,
+                      comparisonSurfaceFactory: createLegacyNovelReaderSurface,
                     ),
               );
             },
@@ -4036,6 +4044,7 @@ class _NovelReaderRoundTripHost extends StatelessWidget {
             initialEpisodeId: 'novel:49:100:5001',
             openPolicy: policy,
             nativePagination: false,
+            comparisonSurfaceFactory: createLegacyNovelReaderSurface,
           ),
         ),
       );

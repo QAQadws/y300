@@ -1,3 +1,5 @@
+import './legacy/novel/legacy_reader_surface.dart';
+
 // Isolated profile executable. Uses the real reader page, synthetic I/O only.
 import 'dart:async';
 import 'dart:convert';
@@ -607,6 +609,7 @@ class _MainPageProfileState extends State<_MainPageProfile> {
           novelId: source.novelId,
           initialEpisodeId: source.episodeId,
           nativePagination: native,
+          comparisonSurfaceFactory: createLegacyNovelReaderSurface,
         );
         if (!_roundedAppearance) return reader;
         return ForumBodyTextBackgroundStyle(

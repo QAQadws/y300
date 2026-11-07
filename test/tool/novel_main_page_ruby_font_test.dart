@@ -1,3 +1,5 @@
+import '../../tool/legacy/novel/legacy_reader_surface.dart';
+
 import 'dart:async';
 import 'dart:ui' as ui;
 
@@ -225,6 +227,7 @@ void main() {
               novelId: args.novelId,
               initialEpisodeId: args.episodeId,
               nativePagination: true,
+              comparisonSurfaceFactory: createLegacyNovelReaderSurface,
               nativeIdleScheduler: () async {},
             ),
           ),

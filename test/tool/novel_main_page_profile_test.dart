@@ -1,3 +1,5 @@
+import '../../tool/legacy/novel/legacy_reader_surface.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -359,6 +361,7 @@ void main() {
           novelId: source.novelId,
           initialEpisodeId: source.episodeId,
           nativePagination: native,
+          comparisonSurfaceFactory: createLegacyNovelReaderSurface,
           nativeIdleScheduler: () async {},
         );
         Future<void> unawaitedPush() => navigator.currentState!.push<void>(

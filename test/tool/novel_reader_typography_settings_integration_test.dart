@@ -1,3 +1,5 @@
+import '../../tool/legacy/novel/legacy_reader_surface.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -194,6 +196,7 @@ void _testSettings(_Setting setting) {
             novelId: source.novelId,
             initialEpisodeId: source.episodeId,
             nativePagination: true,
+            comparisonSurfaceFactory: createLegacyNovelReaderSurface,
             nativeIdleScheduler: () async {},
           ),
         ),
