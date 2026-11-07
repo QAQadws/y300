@@ -413,6 +413,12 @@ class _MainPageProfileState extends State<_MainPageProfile> {
               metric: profileDistribution(
                 successfulOpens.map((run) => run[metric]! as int),
               ),
+          if (!_memoryMode && backend == 'native')
+            'nativeBackgroundPlanNotifiedUs': profileDistribution(
+              successfulOpens
+                  .map((run) => run['nativeBackgroundPlanNotifiedUs'])
+                  .whereType<int>(),
+            ),
         });
         _emit({'event': 'sample_summary', ...matrix.last});
       }
@@ -726,20 +732,40 @@ class _MainPageProfileState extends State<_MainPageProfile> {
       checkVisiblePage('first', latest);
       if (!latest.complete) {
         begin('background');
-        latest = await _wait(
-          key,
-          args,
-          (value) {
-            observePlanCompletion(value);
-            return value.ready && value.complete;
-          },
-          // The background source yields after sealed pages; a longer corpus
-          // may need hundreds of those slots. Reader deadlines are unchanged.
-          timeout: _corpus == 'long-text'
-              ? const Duration(seconds: 60)
-              : const Duration(seconds: 25),
-        );
-        end();
+        final controller = latest.nativeController;
+        // Keep the existing frame observation for historical comparisons.
+        // The stream timestamp can land between those observations.
+        final planChanges = !_memoryMode && controller != null
+            ? controller.changes.listen((_) {
+                if (controller.snapshot?.isComplete == true) {
+                  run.putIfAbsent(
+                    'nativeBackgroundPlanNotifiedUs',
+                    () => clock.elapsedMicroseconds,
+                  );
+                }
+              })
+            : null;
+        try {
+          latest = await _wait(
+            key,
+            args,
+            (value) {
+              observePlanCompletion(value);
+              return value.ready && value.complete;
+            },
+            // The background source yields after sealed pages. Longer corpora
+            // may need hundreds of those slots.
+            timeout: _corpus == 'long-text'
+                ? const Duration(seconds: 60)
+                : const Duration(seconds: 25),
+          );
+          if (!identical(latest.nativeController, controller)) {
+            run.remove('nativeBackgroundPlanNotifiedUs');
+          }
+        } finally {
+          end();
+          if (planChanges != null) await planChanges.cancel();
+        }
       }
       run['completeUs'] = clock.elapsedMicroseconds;
       run['pageCount'] = latest.count;
