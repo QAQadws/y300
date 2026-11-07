@@ -167,10 +167,11 @@ final class ForumBodyFlowTextAnchor implements ForumBodyFlowSourceAnchor {
         }
         final projection = delivery.projection;
         for (final line in delivery.lines) {
-          // A partially clipped row can have many glyphs outside the clip.
-          // Start with a complete measured row to keep the probe bounded.
-          if (line.top + fragment.top < clip.top - .001 ||
-              line.bottom + fragment.top > clip.bottom + .001) {
+          // Typographic leading can extend past a cell even while its ink is
+          // fully visible. Use the row only as a coarse intersection; each
+          // sampled grapheme must still prove its actual painted bounds below.
+          if (line.bottom + fragment.top <= clip.top ||
+              line.top + fragment.top >= clip.bottom) {
             continue;
           }
           final start = math.max(

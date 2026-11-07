@@ -154,7 +154,7 @@ void main() {
         maxEntries: 64,
         maxEstimatedBytes: 8 << 20,
       );
-      const width = 80.0;
+      const width = 40.0;
       final session = _session(_html, cache, width: width);
       final scroll = ScrollController();
       addTearDown(cache.close);
@@ -238,6 +238,19 @@ void main() {
       final point = ForumBodyFlowTextAnchor.firstVisibleInTable(inner)!;
       expect(point.anchor.path.startsWith(deep.area.element.path), isTrue);
       expect(point.anchor.text, 'd');
+      root.horizontalController.jumpTo(
+        root.horizontalController.offset +
+            point.bounds.left -
+            inner.bounds.left +
+            point.bounds.width / 2,
+      );
+      await tester.pumpAndSettle();
+      final clipped = ForumBodyTableFlowViewport.borrowPaintedWindow(deepest)!;
+      expect(
+        ForumBodyFlowTextAnchor.firstVisibleInTable(clipped)!.anchor.text,
+        'e',
+        reason: 'The partially clipped first glyph cannot become the anchor.',
+      );
       final retired = tester
           .widgetList<ForumBodyTableFlowViewport>(
             find.byType(ForumBodyTableFlowViewport),
