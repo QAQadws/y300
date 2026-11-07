@@ -77,6 +77,11 @@ final class _FlowSelectionDelegate extends StaticSelectionContainerDelegate {
   bool selectedAll = false;
 
   @override
+  Comparator<Selectable> get compareOrder =>
+      (a, b) =>
+          _compareEmptySelectionGeometry(a, b) ?? super.compareOrder(a, b);
+
+  @override
   SelectionResult dispatchSelectionEvent(SelectionEvent event) {
     selectedAll = event is SelectAllSelectionEvent;
     return super.dispatchSelectionEvent(event);
@@ -235,6 +240,8 @@ final class _PageSelectionScopeState
 final class _PageSelectionDelegate extends StaticSelectionContainerDelegate {
   @override
   Comparator<Selectable> get compareOrder => (a, b) {
+    final emptyOrder = _compareEmptySelectionGeometry(a, b);
+    if (emptyOrder != null) return emptyOrder;
     if (a is _RenderSelectableFragment && b is _RenderSelectableFragment) {
       final first = a._input.columnOrder;
       final second = b._input.columnOrder;
@@ -248,6 +255,20 @@ final class _PageSelectionDelegate extends StaticSelectionContainerDelegate {
   @override
   SelectedContent? getSelectedContent() =>
       _joinSelected(selectables.whereType<_RenderSelectableFragment>());
+}
+
+int? _compareEmptySelectionGeometry(Selectable a, Selectable b) {
+  // A delivery can retire before Flutter flushes its queued registrations.
+  // Its empty bounds have no screen order; only live geometry reaches Flutter's
+  // bounding-box comparator, which requires at least one rectangle.
+  final firstEmpty = a.boundingBoxes.isEmpty;
+  final secondEmpty = b.boundingBoxes.isEmpty;
+  if (!firstEmpty && !secondEmpty) return null;
+  return firstEmpty == secondEmpty
+      ? 0
+      : firstEmpty
+      ? 1
+      : -1;
 }
 
 SelectedContent? _joinSelected(Iterable<_RenderSelectableFragment> selected) {

@@ -2,7 +2,7 @@ import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart'
     show MaterialApp, Scaffold, SelectionArea;
-import 'package:flutter/semantics.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
@@ -117,6 +117,83 @@ final class _Fixture {
 }
 
 void main() {
+  testWidgets(
+    'pending selection registration tolerates an already retired fragment',
+    (tester) async {
+      final fixture = _Fixture('<p>First</p><p>Second</p>', height: 200);
+      final fragments = fixture.prepare(0);
+      expect(fragments, hasLength(2));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SelectionArea(
+              child: ForumBodyFlowSelectionScope(
+                child: Align(
+                  alignment: Alignment.topLeft,
+                  child: ForumBodyTextPageSurface.prepared(
+                    snapshot: fixture.session.snapshot,
+                    pageIndex: 0,
+                    layoutId: 'selection',
+                    fragments: fragments,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final elements = find
+          .descendant(
+            of: find.byType(ForumBodyTextPageSurface),
+            matching: find.byWidgetPredicate(
+              (widget) => widget is RenderObjectWidget,
+            ),
+          )
+          .evaluate()
+          .toList();
+      final selectables = elements
+          .map((element) => element.renderObject)
+          .whereType<Selectable>()
+          .toSet();
+      final first = selectables.singleWhere((s) => s.contentLength == 5);
+      final second = selectables.singleWhere((s) => s.contentLength == 6);
+      final registrar = SelectionContainer.maybeOf(
+        elements.firstWhere((e) => identical(e.renderObject, first)),
+      )!;
+      final flowRegistrar = SelectionContainer.maybeOf(
+        tester.element(find.byType(ForumBodyTextPageSurface)),
+      )!;
+      final comparators = [
+        for (final parent in [registrar, flowRegistrar])
+          // ignore: invalid_use_of_protected_member
+          (parent as MultiSelectableSelectionContainerDelegate).compareOrder,
+      ];
+      for (final compare in comparators) {
+        expect(compare(first, second), lessThan(0));
+      }
+      fragments.first.close();
+      expect(first.boundingBoxes, isEmpty);
+      expect(second.boundingBoxes, isNotEmpty);
+      // Exercise the comparator used by Flutter's deferred additions batch while
+      // the retired delivery's render child is still attached.
+      for (final compare in comparators) {
+        final ordered = [first, second]..sort(compare);
+        expect(ordered, [second, first]);
+      }
+      fragments.last.close();
+      for (final compare in comparators) {
+        expect(compare(first, second), 0);
+        expect(compare(second, first), 0);
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      for (final fragment in fragments) {
+        fragment.close();
+      }
+      expect(fixture.cache.activeLeases, 0);
+    },
+  );
+
   TestWidgetsFlutterBinding.ensureInitialized();
 
   for (final extent in ForumBodyTableExtent.values) {
