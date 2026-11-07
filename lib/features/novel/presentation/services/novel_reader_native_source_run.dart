@@ -95,6 +95,7 @@ final class NovelReaderNativeSourceRun {
   final _clock = Stopwatch();
   int _steps = 0;
   int _frames = 0;
+  bool _idleDue = false;
   void Function()? _removeParent;
   StreamSubscription<void>? _retirement;
   StreamSubscription<int>? _owner;
@@ -177,17 +178,23 @@ final class NovelReaderNativeSourceRun {
             _state = NovelReaderNativeSourceRunState.complete;
             return prefix;
           }
-          final demand = _demand!;
-          final resume = _demandLease!.afterPublication(published);
-          // Idle deferral has already yielded to the scheduler. Carry the
-          // spent frame budget forward without charging the wait to it.
-          if (demand.isDeferring) _clock.stop();
-          await resume;
-          _guard();
-          _clock.start();
+          if (_idleDue || _sliceSpent) {
+            _idleDue = false;
+            final demand = _demand!;
+            final resume = _demandLease!.afterPublication(published);
+            final deferred = demand.isDeferring;
+            if (deferred) _clock.stop();
+            await resume;
+            _guard();
+            // Idle (including demand promotion) already gave Flutter a turn.
+            // A new bounded slice must not immediately wait for another frame.
+            if (deferred) _resetSlice();
+          }
         }
-        if (_steps >= limits.maxStepsPerFrame ||
-            _clock.elapsed >= limits.frameBudget) {
+        if (_sliceSpent) {
+          // Mid-page work can yield a frame, but background idle deferral is
+          // legal only after the next stable publication has been consumed.
+          _idleDue = true;
           await _yieldFrame();
         }
         _guard();
@@ -230,6 +237,13 @@ final class NovelReaderNativeSourceRun {
     await _scheduler!.nextFrame(_token);
     _guard();
     _frames++;
+    _resetSlice();
+  }
+
+  bool get _sliceSpent =>
+      _steps >= limits.maxStepsPerFrame || _clock.elapsed >= limits.frameBudget;
+
+  void _resetSlice() {
     _steps = 0;
     _clock.reset();
     _clock.start();

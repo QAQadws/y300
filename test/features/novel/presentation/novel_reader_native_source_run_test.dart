@@ -252,6 +252,7 @@ void main() {
       session: fixture.session,
       demand: workDemand,
       parent: fixture.parent,
+      limits: const NovelReaderNativeSourceRunLimits(maxStepsPerFrame: 1),
       scheduler: NovelReaderNativeWorkScheduler(nextFrame: () async {}),
       onPublication: (_, _) {
         publications++;
@@ -273,50 +274,94 @@ void main() {
     idle.complete();
   });
 
+  test('background batches yield once at their bound and idle starts a fresh slice', () async {
+    final fixture = NativeReaderTestFixture(
+      '<p>abcdefgh</p>',
+      width: 20,
+      height: 10,
+      complete: false,
+    );
+    final firstIdle = Completer<void>();
+    final waiting = Completer<void>();
+    final workDemand = NovelReaderPaginationDemand(
+      lookAhead: 0,
+      idleScheduler: () {
+        if (waiting.isCompleted) return Future<void>.value();
+        waiting.complete();
+        return firstIdle.future;
+      },
+    )..update(targetPending: false, pageIndex: 0);
+    addTearDown(workDemand.dispose);
+    var frames = 0;
+    final publicationFrames = <int>[];
+    final run = NovelReaderNativeSourceRun(
+      session: fixture.session,
+      demand: workDemand,
+      parent: fixture.parent,
+      limits: const NovelReaderNativeSourceRunLimits(
+        frameBudget: Duration(milliseconds: 60),
+        maxStepsPerFrame: 4,
+      ),
+      scheduler: NovelReaderNativeWorkScheduler(
+        nextFrame: () async {
+          frames++;
+        },
+      ),
+      onPublication: (_, _) => publicationFrames.add(frames),
+    );
+    addTearDown(run.close);
+    final future = run.run();
+    await waiting.future;
+    expect(publicationFrames.length, greaterThan(1));
+    expect(publicationFrames.length, lessThan(4));
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+    firstIdle.complete();
+    expect((await future).length, 4);
+    expect(publicationFrames.every((frame) => frame == 1), isTrue);
+  });
+
   test(
-    'idle deferral does not consume the remaining source frame budget',
+    'mid-page frame yields still defer at the next stable background page',
     () async {
       final fixture = NativeReaderTestFixture(
-        '<p>abcdefgh</p>',
+        '<p>abcdefghijklmnopqrstuvwxyz</p>',
         width: 20,
-        height: 10,
+        height: 60,
         complete: false,
       );
-      final firstIdle = Completer<void>();
+      final idle = Completer<void>();
       final waiting = Completer<void>();
       final workDemand = NovelReaderPaginationDemand(
         lookAhead: 0,
         idleScheduler: () {
-          if (waiting.isCompleted) return Future<void>.value();
-          waiting.complete();
-          return firstIdle.future;
+          if (!waiting.isCompleted) waiting.complete();
+          return idle.future;
         },
       )..update(targetPending: false, pageIndex: 0);
       addTearDown(workDemand.dispose);
-      var frames = 0;
-      final publicationFrames = <int>[];
       final run = NovelReaderNativeSourceRun(
         session: fixture.session,
         demand: workDemand,
         parent: fixture.parent,
         limits: const NovelReaderNativeSourceRunLimits(
-          frameBudget: Duration(milliseconds: 60),
+          frameBudget: Duration(seconds: 1),
+          maxStepsPerFrame: 2,
+          linesPerStep: 1,
         ),
-        scheduler: NovelReaderNativeWorkScheduler(
-          nextFrame: () async {
-            frames++;
-          },
-        ),
-        onPublication: (_, _) => publicationFrames.add(frames),
+        scheduler: NovelReaderNativeWorkScheduler(nextFrame: () async {}),
+        onPublication: (_, _) {},
       );
       addTearDown(run.close);
       final future = run.run();
       await waiting.future;
-      expect(publicationFrames, hasLength(1));
-      await Future<void>.delayed(const Duration(milliseconds: 80));
-      firstIdle.complete();
-      expect((await future).length, 4);
-      expect(publicationFrames[1], publicationFrames.first);
+      expect(fixture.session.snapshot.length, 1);
+      expect(run.framesWaited, greaterThan(1));
+      final frames = run.framesWaited;
+      await _flush();
+      expect(run.framesWaited, frames);
+      workDemand.update(targetPending: true, pageIndex: 2);
+      expect((await future).isComplete, isTrue);
+      idle.complete();
     },
   );
 
