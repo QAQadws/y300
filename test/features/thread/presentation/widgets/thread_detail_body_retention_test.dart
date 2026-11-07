@@ -97,10 +97,7 @@ void main() {
       expect(session.activeIssuedFragments, 0);
       shown = true;
       await tester.pumpWidget(scene());
-      await _until(tester, () => pending.length == 2);
       expect(tester.getSize(waiting).height, closeTo(height, .01));
-      expect(find.byType(ForumHtmlPreparationPlaceholder), findsOneWidget);
-      pending.last.result.complete(pending.last.input.prepare());
       await _until(
         tester,
         () => tester
@@ -108,6 +105,9 @@ void main() {
             .any((box) => box.prefix.isComplete && box.isCurrentLayout),
       );
       expect(tester.getSize(waiting).height, closeTo(height, .01));
+      expect(pending, hasLength(1));
+      expect(store.nativeCache.preparedHits, greaterThan(0));
+      expect(store.nativeCache.documentHits, greaterThan(0));
       await tester.pumpWidget(const SizedBox.shrink());
       expect(tester.takeException(), isNull);
     },
@@ -173,16 +173,8 @@ void main() {
     await tester.pumpWidget(host());
     await _until(tester, () => pending.length == 1);
     pending[0].result.complete(pending[0].input.prepare());
-    await _until(
-      tester,
-      () => find
-          .byKey(const Key('forum-html-collapse-toggle-one-fold'))
-          .evaluate()
-          .isNotEmpty,
-    );
-    await tester.tap(
-      find.byKey(const Key('forum-html-collapse-toggle-one-fold')),
-    );
+    await _until(tester, () => _foldToggle('one').evaluate().isNotEmpty);
+    await tester.tap(_foldToggle('one'));
     await tester.pumpAndSettle();
     final completedHeight = tester
         .getSize(find.byType(ThreadBodyWaitingLayout))
@@ -192,15 +184,18 @@ void main() {
         .widget<ThreadBodyWaitingLayout>(find.byType(ThreadBodyWaitingLayout))
         .lease;
     expect(firstLease.height, completedHeight);
-    expect(firstLease.rendering.collapseExpansion['one-fold'], true);
+    expect(firstLease.rendering.collapseExpansion.values, [true]);
+    final expansion = Map<String, bool>.of(
+      firstLease.rendering.collapseExpansion,
+    );
     final preferences = container
         .read(forumHtmlReaderPreferencesControllerProvider)
         .requireValue;
-    (container.read(forumHtmlReaderPreferencesControllerProvider.notifier)
-            as _Preferences)
-        .replace(
-          preferences.copyWith(conversionMode: TextConversionMode.toSimplified),
-        );
+    (container.read(
+      forumHtmlReaderPreferencesControllerProvider.notifier,
+    ) as _Preferences).replace(
+      preferences.copyWith(conversionMode: TextConversionMode.toSimplified),
+    );
     await tester.pumpAndSettle();
     expect(
       tester
@@ -212,6 +207,8 @@ void main() {
     await tester.pumpWidget(host());
     await _until(tester, () => executor.activeCount == 0);
     expect(firstLease.isCurrent, false);
+    // Exercise a real cold remount after reusable inputs have been trimmed.
+    store.trimNativeCache();
     show = true;
     await tester.pumpWidget(host());
     await _until(tester, () => pending.length == 2);
@@ -223,10 +220,7 @@ void main() {
     pending[1].result.complete(pending[1].input.prepare());
     await _until(
       tester,
-      () => find
-          .byKey(const Key('forum-html-collapse-content-one-fold'))
-          .evaluate()
-          .isNotEmpty,
+      () => _nativeText('fold-content-one').evaluate().isNotEmpty,
     );
     await tester.pumpAndSettle();
     expect(
@@ -240,7 +234,7 @@ void main() {
         .widget<ThreadBodyWaitingLayout>(find.byType(ThreadBodyWaitingLayout))
         .lease;
     expect(resized, isNot(same(firstLease)));
-    expect(resized.rendering.collapseExpansion['one-fold'], true);
+    expect(resized.rendering.collapseExpansion, expansion);
     expect(resized.height, greaterThan(completedHeight));
     firstLease.recordHeight(1);
     expect(resized.height, greaterThan(completedHeight));
@@ -258,9 +252,7 @@ void main() {
       await tester.pumpAndSettle();
       final body = _body(tester, 'one')!;
       final pure = body.wholeBodyPresentation!;
-      await tester.tap(
-        find.byKey(const Key('forum-html-collapse-toggle-one-fold')),
-      );
+      await tester.tap(_foldToggle('one'));
       await tester.pumpAndSettle();
       await tester.ensureVisible(
         find.byKey(const Key('thread-post-comment-header')).first,
@@ -278,10 +270,7 @@ void main() {
       await _scrollTo(tester, host.controller, 'one-unit[0]', -1);
       await tester.pumpAndSettle();
       expect(_body(tester, 'one')!.wholeBodyPresentation, same(pure));
-      expect(
-        find.byKey(const Key('forum-html-collapse-content-one-fold')),
-        findsOneWidget,
-      );
+      expect(_nativeText('fold-content-one'), findsOneWidget);
       expect(find.text('comment-one', skipOffstage: false), findsNothing);
       host.posts = [_post('one', 1, units: 35, prefix: 'replacement-')];
       host.notifyListeners();
@@ -292,10 +281,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(pure.isActive, false);
-      expect(
-        find.byKey(const Key('forum-html-collapse-content-one-fold')),
-        findsNothing,
-      );
+      expect(_nativeText('fold-content-one'), findsNothing);
       final replacement = _body(tester, 'one')!.wholeBodyPresentation!;
       host.page = 2;
       host.notifyListeners();
@@ -316,19 +302,16 @@ void main() {
       await tester.pumpWidget(host.widget());
       await _until(tester, () => _body(tester, 'one') != null);
       await tester.pumpAndSettle();
-      expect(_body(tester, 'one')!.wholeBodyPresentation, isNull);
-      await tester.tap(
-        find.byKey(const Key('forum-html-collapse-toggle-one-fold')),
-      );
+      final pure = _body(tester, 'one')!.wholeBodyPresentation!;
+      expect(find.byType(ThreadBodyWaitingLayout), findsNothing);
+      await tester.tap(_foldToggle('one'));
       await tester.pumpAndSettle();
       await _scrollTo(tester, host.controller, 'four-unit[0]', 1);
       expect(_body(tester, 'one'), isNotNull);
-      expect(_body(tester, 'one')!.wholeBodyPresentation, isNull);
+      expect(_body(tester, 'one')!.wholeBodyPresentation, same(pure));
+      expect(find.byType(ThreadBodyWaitingLayout), findsNothing);
       await _scrollTo(tester, host.controller, 'one-unit[0]', -1);
-      expect(
-        find.byKey(const Key('forum-html-collapse-content-one-fold')),
-        findsOneWidget,
-      );
+      expect(_nativeText('fold-content-one'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       expect(tester.takeException(), isNull);
     },
@@ -474,6 +457,24 @@ ThreadPost _post(
   ],
 );
 
+Finder _foldToggle(String pid) => find.descendant(
+  of: find.byWidgetPredicate(
+    (widget) => widget is ThreadPostHtmlFirstBody && widget.post.pid == pid,
+  ),
+  matching: find.byWidgetPredicate((widget) {
+    final key = widget.key;
+    return key is ValueKey<String> &&
+        key.value.startsWith('forum-native-collapse-toggle-');
+  }),
+);
+
+Finder _nativeText(String text) => find.byWidgetPredicate(
+  (widget) =>
+      widget is ForumBodyParagraphSurface &&
+      widget.lease.isActive &&
+      widget.lease.content.projection.text.contains(text),
+);
+
 ThreadPostHtmlFirstBody? _body(WidgetTester tester, String pid) {
   final bodies = tester
       .widgetList<ThreadPostHtmlFirstBody>(
@@ -501,7 +502,7 @@ Future<void> _scrollTo(
   int direction,
 ) async {
   for (var i = 0; i < 200; i++) {
-    final matches = find.textContaining(marker, findRichText: true);
+    final matches = _nativeText(marker);
     final viewport = tester.getRect(
       find.byKey(const Key('thread-detail-list')),
     );

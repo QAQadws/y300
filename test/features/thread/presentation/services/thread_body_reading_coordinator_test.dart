@@ -247,45 +247,52 @@ void main() {
     },
   );
 
-  testWidgets('folds use current visible geometry without inventing navigation', (
-    tester,
-  ) async {
-    final harness = _Harness(
-      html:
-          '<p>start</p><div class="showcollapse_box" id="fold"><div class="showcollapse_title">fold</div><div class="showcollapse_content"><p>hidden text</p></div></div>',
-    );
-    addTearDown(harness.dispose);
-    await tester.pumpWidget(harness.host());
-    await tester.pumpAndSettle();
-    final closed = harness.observer.viewports.last.samples.single;
-    expect(closed.finalBoundaryKnown, isTrue);
-    expect(find.text('hidden text', findRichText: true), findsNothing);
-    final cancellations = harness.observer.completionCancellations;
-    await tester.tap(
-      find.byKey(const Key('forum-html-collapse-toggle-200-fold')),
-    );
-    await tester.pumpAndSettle();
-    final expanded = harness.observer.viewports.last.samples.single;
-    expect(expanded.finalBoundaryKnown, isTrue);
-    expect(expanded.bodyHeight, greaterThan(closed.bodyHeight));
-    expect(expanded.geometryIdentity, isNot(closed.geometryIdentity));
-    expect(find.text('hidden text', findRichText: true), findsOneWidget);
-    await tester.tap(
-      find.byKey(const Key('forum-html-collapse-toggle-200-fold')),
-    );
-    await tester.pumpAndSettle();
-    final closedAgain = harness.observer.viewports.last.samples.single;
-    expect(closedAgain.finalBoundaryKnown, isTrue);
-    expect(closedAgain.bodyHeight, closed.bodyHeight);
-    expect(closedAgain.geometryIdentity, isNot(expanded.geometryIdentity));
-    expect(closedAgain.geometryIdentity, isNot(closed.geometryIdentity));
-    expect(harness.observer.viewports.last.userNavigationRevision, 0);
-    expect(
-      harness.observer.completionCancellations,
-      greaterThan(cancellations),
-    );
-    expect(find.text('hidden text', findRichText: true), findsNothing);
-  });
+  testWidgets(
+    'folds use current visible geometry without inventing navigation',
+    (tester) async {
+      final harness = _Harness(
+        html: '<p>start</p><div class="showcollapse_box" id="fold"><div class="showcollapse_title">fold</div><div class="showcollapse_content"><p>hidden text</p></div></div>',
+      );
+      addTearDown(harness.dispose);
+      await tester.pumpWidget(harness.host());
+      await tester.pumpAndSettle();
+      final closed = harness.observer.viewports.last.samples.single;
+      expect(closed.finalBoundaryKnown, isTrue);
+      final hidden = find.byWidgetPredicate(
+        (widget) =>
+            widget is ForumBodyParagraphSurface &&
+            widget.lease.isActive &&
+            widget.lease.content.projection.text.contains('hidden text'),
+      );
+      final toggle = find.byWidgetPredicate((widget) {
+        final key = widget.key;
+        return key is ValueKey<String> &&
+            key.value.startsWith('forum-native-collapse-toggle-');
+      });
+      expect(hidden, findsNothing);
+      final cancellations = harness.observer.completionCancellations;
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      final expanded = harness.observer.viewports.last.samples.single;
+      expect(expanded.finalBoundaryKnown, isTrue);
+      expect(expanded.bodyHeight, greaterThan(closed.bodyHeight));
+      expect(expanded.geometryIdentity, isNot(closed.geometryIdentity));
+      expect(hidden, findsOneWidget);
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      final closedAgain = harness.observer.viewports.last.samples.single;
+      expect(closedAgain.finalBoundaryKnown, isTrue);
+      expect(closedAgain.bodyHeight, closed.bodyHeight);
+      expect(closedAgain.geometryIdentity, isNot(expanded.geometryIdentity));
+      expect(closedAgain.geometryIdentity, isNot(closed.geometryIdentity));
+      expect(harness.observer.viewports.last.userNavigationRevision, 0);
+      expect(
+        harness.observer.completionCancellations,
+        greaterThan(cancellations),
+      );
+      expect(hidden, findsNothing);
+    },
+  );
 
   testWidgets(
     'PID-centered native content restores using actual body coordinates',
