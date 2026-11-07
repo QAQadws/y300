@@ -993,6 +993,48 @@ void main() {
     },
   );
 
+  for (final acknowledge in [false, true]) {
+    test(
+      'source failure retains a ready first delivery until acknowledgement or close (ack=$acknowledge)',
+      () async {
+        final fixture = NativeReaderTestFixture(
+          '<p>abcdefgh</p><div style="position:absolute">unsupported</div>',
+          width: 20,
+          height: 10,
+          complete: false,
+        );
+        final controller = _controller(
+          fixture,
+          entry: NovelReaderChapterEdge.start,
+        );
+        controller.start();
+        await _until(() => controller.error != null);
+        expect(controller.phase, NovelReaderNativePagedPhase.paused);
+        expect(controller.visiblePageIndex, isNull);
+        final target = controller.readyTarget!;
+        expect(target.pageIndex, 0);
+        expect(target.view.isReady, isTrue);
+        final prefix = controller.snapshot;
+        final error = controller.error;
+        if (acknowledge) {
+          final leases = target.view.takeLeases();
+          expect(controller.confirmVisible(target, leases)!.pageIndex, 0);
+          expect(controller.visiblePageIndex, 0);
+          expect(controller.snapshot, same(prefix));
+          expect(controller.error, same(error));
+          expect(controller.phase, NovelReaderNativePagedPhase.paused);
+          for (final lease in leases) {
+            lease.release();
+          }
+        }
+        controller.close();
+        expect(fixture.session.activeIssuedLeases, 0);
+        expect(fixture.session.reservedViewLeases, 0);
+        expect(fixture.parent.isCancelled, isFalse);
+      },
+    );
+  }
+
   test('paused reader navigates only the accepted sealed prefix without resuming source', () async {
     final (fixture: fixture, controller: controller, leases: oldLeases) =
         await _failedReadable();

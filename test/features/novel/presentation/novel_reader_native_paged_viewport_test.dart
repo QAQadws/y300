@@ -1179,7 +1179,11 @@ void main() {
     (tester) async {
       final idle = Completer<void>();
       final frames = _FrameGate(held: false);
-      final fixture = _fixture();
+      // Exceed the source slice's deterministic work bound: the small fixture
+      // may now finish all pages before background idle is needed.
+      final fixture = _fixture(
+        html: '<p>${List.filled(96, 'abcdefghijklmnopqrst').join()}</p>',
+      );
       final controller = _controller(
         fixture,
         frames: frames,
@@ -1187,15 +1191,21 @@ void main() {
       );
       final reports = <NovelReaderPaginationPosition>[];
       await tester.pumpWidget(_reader(controller, Object(), Object(), reports));
-      await tester.pumpAndSettle();
+      // Keep the background idle deadline pending; pumpAndSettle's 100ms step
+      // can release it and complete this now-batched chapter before the seek.
+      for (var frame = 0; frame < 40 && reports.isEmpty; frame++) {
+        await tester.pump(const Duration(milliseconds: 1));
+      }
+      expect(reports, hasLength(1));
       expect(controller.snapshot!.isComplete, isFalse);
       final original = tester.renderObject(
-        find.byType(ForumBodyParagraphSurface),
+        find.byType(ForumBodyParagraphSurface).first,
       );
       frames.hold();
-      expect(controller.requestPage(8), isTrue);
+      expect(controller.snapshot!.length, lessThan(90));
+      expect(controller.requestPage(90), isTrue);
       await tester.pumpAndSettle();
-      expect(controller.requestedPageIndex, 8);
+      expect(controller.requestedPageIndex, 90);
       expect(reports, hasLength(1));
       await tester.drag(find.byType(PageView), const Offset(80, 0));
       await tester.pumpAndSettle();
@@ -1206,7 +1216,7 @@ void main() {
       expect(controller.visiblePageIndex, 0);
       expect(reports, hasLength(1));
       expect(
-        tester.renderObject(find.byType(ForumBodyParagraphSurface)),
+        tester.renderObject(find.byType(ForumBodyParagraphSurface).first),
         same(original),
       );
       expect(
@@ -1243,20 +1253,17 @@ void main() {
   });
 
   testWidgets(
-    'late source failure retains reading until real navigation within its accepted prefix',
+    'source failure before first acknowledgement retains its readable prefix',
     (tester) async {
-      final idle = Completer<void>();
       final fixture = _fixture(
         html: '$_html<div style="position:absolute">unsupported</div>',
       );
-      final controller = _controller(fixture, idle: () => idle.future);
+      final controller = _controller(fixture);
       final reports = <NovelReaderPaginationPosition>[];
       await tester.pumpWidget(_reader(controller, Object(), Object(), reports));
       await tester.pumpAndSettle();
       expect(reports, hasLength(1));
-      expect(controller.error, isNull);
-      idle.complete();
-      await tester.pumpAndSettle();
+      expect(controller.error, isNotNull);
       expect(controller.phase, NovelReaderNativePagedPhase.paused);
       expect(find.byType(ForumBodyTextPageSurface), findsOneWidget);
       expect(reports, hasLength(1));

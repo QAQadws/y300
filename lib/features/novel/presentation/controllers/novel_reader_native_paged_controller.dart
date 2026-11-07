@@ -444,6 +444,9 @@ final class NovelReaderNativePagedController {
         ? NovelReaderNativePagedPhase.ready
         : NovelReaderNativePagedPhase.paused;
     _prefixNavigation = false;
+    if (_error != null) {
+      _window!.close(retainMountedText: delivery.view);
+    }
     if (_ticket != null) _watch!.markReadable(_ticket!);
     _ticket = null;
     _syncDemand();
@@ -1058,12 +1061,14 @@ final class NovelReaderNativePagedController {
             .then<void>(
               (_) {},
               onError: (Object error, StackTrace stack) {
-                if (!isClosed && epoch == _producerEpoch) _pause(error);
+                if (!isClosed && epoch == _producerEpoch) {
+                  _pause(error, retainPublishedTarget: true);
+                }
               },
             ),
       );
     } catch (error) {
-      _pause(error);
+      _pause(error, retainPublishedTarget: true);
     }
   }
 
@@ -1334,11 +1339,21 @@ final class NovelReaderNativePagedController {
     }
   }
 
-  void _pause(Object error) {
+  void _pause(Object error, {bool retainPublishedTarget = false}) {
     if (isClosed) return;
+    final target = _target;
+    final retainTarget =
+        retainPublishedTarget &&
+        _visible == null &&
+        target != null &&
+        target.requestId == _requestId &&
+        target.pageIndex < _snapshot!.length &&
+        (target.view.isReady || target.view.hasLiveTextMount);
     _resolvedEntryEdge = null;
     _error = error;
-    _prefixNavigation = false;
+    // A later source failure cannot revoke a validated first-page delivery
+    // merely because its physical acknowledgement has not arrived yet.
+    _prefixNavigation = retainTarget;
     _phase = NovelReaderNativePagedPhase.paused;
     _producerEpoch++;
     _cancelAnchorWork();
@@ -1348,8 +1363,10 @@ final class NovelReaderNativePagedController {
     _probe = null;
     _watch?.close();
     _ticket = null;
-    _target = null;
-    _window?.close();
+    if (!retainTarget) {
+      _target = null;
+      _window?.close();
+    }
     _notify();
   }
 
