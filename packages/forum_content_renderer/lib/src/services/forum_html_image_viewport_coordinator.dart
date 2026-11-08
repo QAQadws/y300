@@ -175,7 +175,12 @@ final class ForumHtmlImageViewportCoordinator {
         handle._applyMode(ForumHtmlImageViewportMode.dormant);
       }
     }
-    placements.sort((left, right) => left.distance.compareTo(right.distance));
+    placements.sort((left, right) {
+      // A long image's center can be far outside the screen while its pixels
+      // fill most of it. Spend first-frame slots on actual visible coverage.
+      final coverage = right.visibleExtent.compareTo(left.visibleExtent);
+      return coverage != 0 ? coverage : left.distance.compareTo(right.distance);
+    });
 
     var waitingVisible = 0;
     final modes = <ForumHtmlImageViewportHandle, ForumHtmlImageViewportMode>{};
@@ -371,7 +376,10 @@ final class ForumHtmlImageViewportCoordinator {
     }
     final lower = bounds.top < bounds.bottom ? bounds.top : bounds.bottom;
     final upper = bounds.top < bounds.bottom ? bounds.bottom : bounds.top;
-    final visible = upper >= viewportStart && lower <= viewportEnd;
+    final visibleExtent =
+        upper.clamp(viewportStart, viewportEnd) -
+        lower.clamp(viewportStart, viewportEnd);
+    final visible = visibleExtent > 0;
     final near =
         upper >= viewportStart - prefetchExtent &&
         lower <= viewportEnd + prefetchExtent;
@@ -380,12 +388,13 @@ final class ForumHtmlImageViewportCoordinator {
     return _ForumHtmlImagePlacement(
       handle: handle,
       visible: visible,
+      visibleExtent: visibleExtent,
       near: near,
       distance: (imageCenter - viewportCenter).abs(),
-      below: lower > viewportEnd,
+      below: lower >= viewportEnd,
       edgeDistance: visible
           ? 0
-          : lower > viewportEnd
+          : lower >= viewportEnd
           ? lower - viewportEnd
           : viewportStart - upper,
     );
@@ -548,6 +557,7 @@ final class _ForumHtmlImagePlacement {
   const _ForumHtmlImagePlacement({
     required this.handle,
     required this.visible,
+    required this.visibleExtent,
     required this.near,
     required this.distance,
     required this.below,
@@ -556,6 +566,7 @@ final class _ForumHtmlImagePlacement {
 
   final ForumHtmlImageViewportHandle handle;
   final bool visible;
+  final double visibleExtent;
   final bool near;
   final double distance;
   final bool below;

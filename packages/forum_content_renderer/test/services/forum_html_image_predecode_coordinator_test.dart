@@ -3,6 +3,44 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
 void main() {
+  testWidgets('visible work prioritizes the largest on-screen image area', (
+    tester,
+  ) async {
+    final fixture = await _Fixture.mount(tester, heights: [30, 30, 2400]);
+
+    expect(fixture.mode(2), ForumHtmlImageViewportMode.display);
+    expect(
+      fixture.handles.where(
+        (h) => h.value == ForumHtmlImageViewportMode.display,
+      ),
+      hasLength(2),
+    );
+  });
+
+  for (final edge in ['leading', 'trailing']) {
+    testWidgets(
+      'an image touching the $edge edge does not take a visible slot',
+      (tester) async {
+        final fixture = await _Fixture.mount(
+          tester,
+          heights: edge == 'leading' ? [300, 3000] : [3000, 100],
+          maxVisibleFirstFrames: 1,
+        );
+        fixture.controller.jumpTo(edge == 'leading' ? 300 : 2700);
+        await tester.pump();
+
+        expect(
+          fixture.mode(edge == 'leading' ? 1 : 0),
+          ForumHtmlImageViewportMode.display,
+        );
+        expect(
+          fixture.mode(edge == 'leading' ? 0 : 1),
+          isNot(ForumHtmlImageViewportMode.display),
+        );
+      },
+    );
+  }
+
   testWidgets('a displayed admitted frame survives either side of the edge', (
     tester,
   ) async {
