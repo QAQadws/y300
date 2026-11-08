@@ -16,6 +16,8 @@ import '../../application/forum_native_body_cache.dart';
 import '../../domain/models/forum_html_reader_preferences.dart';
 import 'forum_html_preparation_placeholder.dart';
 import 'forum_native_body_images.dart';
+import 'forum_native_body_flow_input.dart';
+import 'forum_native_body_flow_preloads.dart';
 
 part 'forum_native_block_reflow.dart';
 part 'forum_native_source_reflow.dart';
@@ -45,6 +47,8 @@ final class ForumNativeBodyFlow extends StatefulWidget {
     this.bodyPresentation,
     this.contentLayout = ForumHtmlContentLayout.document,
     this.cache,
+    this.preparationIdentity,
+    this.resourceIdentity,
   });
 
   final ForumHtmlPreparedRenderDocument prepared;
@@ -72,22 +76,13 @@ final class ForumNativeBodyFlow extends StatefulWidget {
   final ForumHtmlBodyPresentation? bodyPresentation;
   final ForumHtmlContentLayout contentLayout;
   final ForumNativeBodyCache? cache;
+  final Object? preparationIdentity, resourceIdentity;
 
   @override
   State<ForumNativeBodyFlow> createState() => _ForumNativeBodyFlowState();
 }
 
 class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
-  static const _sliceHeight = 768.0;
-  static const _limits = ForumBodyTextPageSessionLimits(
-    maxPages: 10000,
-    maxFragments: 100000,
-    maxParagraphs: 16384,
-    maxTextCodeUnits: 1024 * 1024,
-    maxRuns: 100000,
-    maxIssuedLeases: 256,
-  );
-
   ForumBodyParagraphCache? _localCache;
   ForumBodyParagraphCache get _cache =>
       widget.cache?.paragraphs ??
@@ -104,6 +99,14 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
   Object? _error;
   var _revision = 0;
   var _foldRevision = 0;
+  ForumNativeBodyFlowPreloads? _preloads;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _preloads = ForumNativeBodyFlowPreloadScope.maybeOf(context);
+    _prepare();
+  }
 
   @override
   void initState() {
@@ -140,15 +143,20 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
     }
     final prepared = widget.prepared;
     try {
-      final document = _preparation.resolve(
-        ForumBodyPreparationInput(
-          html: prepared.preparedHtml,
-          sourceId: prepared.sequence.sourceId,
-          conversionIdentity: 'prepared-forum-body',
-        ),
-        owner: this,
-        cache: widget.cache,
-      );
+      final staged = _preloads?.peek(widget.preparationIdentity ?? this);
+      final document =
+          staged?.input.resourceIdentity == widget.resourceIdentity &&
+              staged?.input.prepared.preparedHtml == prepared.preparedHtml
+          ? staged!.input.document
+          : _preparation.resolve(
+              ForumBodyPreparationInput(
+                html: prepared.preparedHtml,
+                sourceId: prepared.sequence.sourceId,
+                conversionIdentity: 'prepared-forum-body',
+              ),
+              owner: this,
+              cache: widget.cache,
+            );
       if (document != null) setState(() => _document = document);
     } catch (error, stack) {
       _fail(error, stack);
@@ -185,6 +193,26 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
         _foldRevision,
       );
       final key = (inputs, _revision);
+      final input = document == null
+          ? null
+          : ForumNativeBodyFlowInput(
+              document: document,
+              prepared: widget.prepared,
+              width: width,
+              compactMinWidth: compactMinWidth,
+              textStyle: style,
+              fontRevision: widget.fontRevision,
+              textScaler: scaler,
+              direction: direction,
+              paragraphAfter: widget.preferences.typography.paragraphSpacing,
+              theme: widget.theme,
+              cache: _cache,
+              host: widget.imageHost,
+              expansion: widget.expansion,
+              presentation: widget.bodyPresentation,
+              preparationIdentity: widget.preparationIdentity,
+              resourceIdentity: widget.resourceIdentity,
+            );
       if (document != null &&
           width.isFinite &&
           width > 0 &&
@@ -197,8 +225,27 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
             : const <String, _ImageChange>{};
         _changedImages.clear();
         final run = _pending = _FlowRun(inputs, _foldRevision, changes);
+        final seed = input == null || _shown != null
+            ? null
+            : _preloads?.take(input);
+        if (seed != null) {
+          _bindSource(run, seed.body);
+          run.initialSlices = seed.slices;
+          final prefix = seed.body.source.prefix!;
+          for (final page in prefix) {
+            run.append(page);
+          }
+          run.prefix = prefix;
+          _shown?.close();
+          _shown = run;
+        }
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!_current(run)) return;
+          if (seed != null) {
+            run.source!.resume();
+            widget.onGeometry?.call(false, run.prefix!.isComplete);
+            return;
+          }
           widget.onGeometry?.call(false, false);
           unawaited(
             _start(
@@ -212,6 +259,23 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
             ),
           );
         });
+      }
+      final pending = _pending;
+      if (pending != null && pending.source != null && input != null) {
+        final seed = _preloads?.take(input, mountedSource: pending.source);
+        if (seed != null) {
+          if (identical(seed.body.source, pending.source)) {
+            for (final slice in pending.initialSlices) {
+              slice.close();
+            }
+            pending.initialSlices = seed.slices;
+          } else {
+            for (final slice in seed.slices) {
+              slice.close();
+            }
+            seed.body.close();
+          }
+        }
       }
       final run = _shown;
       final table = run?.initialTable;
@@ -245,6 +309,7 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
                 imageAnchorController: widget.imageAnchorController,
                 imagePathForIndex: run.images!.pathForIndex,
                 initialSlice: run.initialSlice,
+                initialSlices: run.initialSlices,
                 initialTableSlice: table == null
                     ? null
                     : (index: table.index, slice: table.slice),
@@ -325,95 +390,55 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
   ) async {
     try {
       final config = widget;
-      final collapses = ForumBodyCollapseLayout(
-        document,
-        expansionOverrides: config.expansion,
-      );
-      final learned = Map<String, ForumNativeBodyImageLayoutHint>.of(
-        _resolvedImages,
-      );
-      final previousImages = _shown?.host == config.imageHost
-          ? _shown?.images
-          : null;
-      final host = config.imageHost;
-      final images = ForumNativeBodyImages(
-        document,
-        presentation: config.bodyPresentation,
-      );
-      final reader = ForumBodyReaderStyle(
-        textStyle: style,
-        fontRevision: config.fontRevision,
-        linkColor: config.theme.link,
-        textDirection: direction,
-        paragraphAfter: config.preferences.typography.paragraphSpacing,
-        theme: config.theme,
-      );
-      final clock = Stopwatch()..start();
-      for (final (index, element) in document.imageElements.indexed) {
-        if (host == null) break;
-        if (index != 0 &&
-            (index % 48 == 0 || clock.elapsedMicroseconds >= 3000)) {
-          final binding = WidgetsBinding.instance;
-          // Reflow starts after a frame; endOfFrame alone does not schedule
-          // the next frame when called from that phase.
-          binding.ensureVisualUpdate();
-          await binding.endOfFrame;
-          if (!_current(run)) return;
-          clock.reset();
-        }
-        if (!const ForumBodyStyleResolver().isVisibleAt(
-          document,
-          reader,
-          element,
-          collapses: collapses,
-        )) {
-          continue;
-        }
-        images.add(
-          element: element,
-          sequence: config.prepared.sequence,
-          host: host,
-          // Host estimates can learn from other images in the thread. Keep
-          // already laid-out occurrences stable until their own size arrives.
-          learnedLayout:
-              learned[element.path] ?? previousImages?.layoutHintFor(element),
-        );
-      }
-      if (!_current(run)) return;
-      run.images = images;
-      run.host = config.imageHost;
-      final cache = _cache;
-      final layoutId = 'forum-flow-${identityHashCode(run)}';
-      ForumBodyTextPageSession openSession(
-        double bodyWidth, {
-        bool probe = false,
-      }) => ForumBodyTextPageSession(
+      final input = ForumNativeBodyFlowInput(
         document: document,
-        width: bodyWidth,
-        height: _sliceHeight,
-        layoutId: layoutId,
-        reader: reader,
-        textScaler: scaler,
-        cache: cache,
-        limits: _limits,
-        collapses: collapses,
-        tableExtent: ForumBodyTableExtent.natural,
-        intrinsicAvailableWidth: probe ? width : null,
-        captureFloats: true,
-        imageResolver: images.block,
-        inlineImageResolver: (identity, element, style) =>
-            images.inline(identity, element, style, scaler, _sliceHeight),
-      );
-      final source = run.source = ForumBodyFlowSource(
+        prepared: config.prepared,
         width: width,
         compactMinWidth: compactMinWidth,
-        openSession: openSession,
+        textStyle: style,
+        fontRevision: config.fontRevision,
+        textScaler: scaler,
+        direction: direction,
+        paragraphAfter: config.preferences.typography.paragraphSpacing,
+        theme: config.theme,
+        cache: _cache,
+        host: config.imageHost,
+        expansion: config.expansion,
+        presentation: config.bodyPresentation,
+        preparationIdentity: config.preparationIdentity,
+        resourceIdentity: config.resourceIdentity,
       );
-      source.addListener(() => _sourceChanged(run));
-      source.start();
+      final opening = input.open(
+        isCurrent: () => _current(run),
+        learned: Map.of(_resolvedImages),
+        previousImages: _shown?.host == config.imageHost
+            ? _shown?.images
+            : null,
+      );
+      final prepared = opening is ForumNativeBodyPreparedSource
+          ? opening
+          : await opening;
+      if (!_current(run)) {
+        prepared.close();
+        return;
+      }
+      _bindSource(run, prepared);
+      prepared.source.start();
     } catch (error, stack) {
       if (_current(run)) _fail(error, stack);
     }
+  }
+
+  void _bindSource(_FlowRun run, ForumNativeBodyPreparedSource prepared) {
+    run.preparedSource = prepared;
+    run.images = prepared.images;
+    run.host = prepared.input.host;
+    final source = run.source = prepared.source;
+    run.sourceListener = () => _sourceChanged(run);
+    source.addListener(run.sourceListener!);
+    final preloads = _preloads;
+    preloads?.bind(run, prepared);
+    run.releaseSource = () => preloads?.release(run, prepared) ?? false;
   }
 
   void _sourceChanged(_FlowRun run) {
@@ -729,9 +754,13 @@ final class _FlowRun {
   final tableWindows = <(int, String), _TableWindow>{};
   _SourceReflowProbe? sourceProbe;
   ForumBodyFlowPreparedSlice? initialSlice;
+  List<ForumBodyFlowPreparedSlice> initialSlices = [];
+  bool Function()? releaseSource;
+  VoidCallback? sourceListener;
   _TableResult? initialTable;
 
   ForumBodyFlowSource? source;
+  ForumNativeBodyPreparedSource? preparedSource;
   ForumBodyTextPageSession? get session => source?.session;
   ForumBodyTextPageSnapshot? prefix;
   ForumHtmlImageHost? host;
@@ -774,11 +803,18 @@ final class _FlowRun {
   }
 
   void close() {
+    final retained = releaseSource?.call() ?? false;
+    releaseSource = null;
+    if (sourceListener case final listener?) source?.removeListener(listener);
+    sourceListener = null;
     cancelSourceProbe();
     initialSlice?.close();
+    for (final slice in initialSlices) {
+      slice.close();
+    }
     initialTable?.slice.close();
     tableWindows.clear();
-    source?.close();
+    if (!retained) source?.close();
   }
 
   void cancelSourceProbe() {

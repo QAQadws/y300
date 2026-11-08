@@ -10,6 +10,7 @@ import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/tex
 import 'package:y300/features/thread/domain/contracts/thread_body_reading_observer.dart';
 import 'package:y300/features/thread/presentation/html_rendering/thread_post_html_first_body.dart';
 import 'package:y300/features/thread/presentation/services/thread_body_presentation.dart';
+import 'package:y300/features/thread/presentation/services/thread_detail_quick_scroll_coordinator.dart';
 import 'package:y300/features/thread/presentation/services/thread_body_reading_coordinator.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
@@ -17,6 +18,97 @@ import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.
 import '../../../../test_support/localized_test_app.dart';
 
 void main() {
+  testWidgets(
+    'native endpoint prepares an unmounted target before scrolling and transfers its source',
+    (tester) async {
+      final host = _PageHost(nativeBody: true);
+      addTearDown(host.dispose);
+      await tester.pumpWidget(host.widget());
+      await _until(
+        tester,
+        () => find.byType(ForumBodyFlowBox).evaluate().isNotEmpty,
+      );
+      await tester.pumpAndSettle();
+      expect(_body(tester, 'four'), isNull);
+      final preloads = tester
+          .widget<ForumNativeBodyFlowPreloadScope>(
+            find.byType(ForumNativeBodyFlowPreloadScope),
+          )
+          .notifier!;
+      final request = ForumHtmlPreparationRequest(
+        html: host.posts.last.message.trim(),
+        preferences: host.container
+            .read(forumHtmlReaderFontBindingProvider)
+            .preferences,
+        theme: _body(tester, 'one')!.theme,
+        sourceId: 'four',
+        threadId: '100',
+        imageCacheOwnerId: '100',
+        preparer: const DefaultForumHtmlRenderPreparer(
+          enablePlainTextLinks: true,
+        ),
+      );
+      ForumNativeBodyPreparedSource? prepared;
+      double? preparationOffset;
+      bool? wasMounted;
+      void observe() {
+        // The controller publishes after all target text/table delivery is ready.
+        final candidate = preloads.peek(request.identity);
+        if (candidate == null || prepared != null) return;
+        prepared = candidate;
+        preparationOffset = host.controller.offset;
+        wasMounted = find
+            .byType(ThreadPostHtmlFirstBody, skipOffstage: false)
+            .evaluate()
+            .any(
+              (element) =>
+                  (element.widget as ThreadPostHtmlFirstBody).post.pid ==
+                  'four',
+            );
+      }
+
+      preloads.addListener(observe);
+      host.quick.updateMetrics(host.controller.position);
+      var finished = false;
+      final navigation = host.quick
+          .navigate(animate: false)
+          .then((_) => finished = true);
+      for (
+        var frame = 0;
+        frame < 200 && prepared == null && !finished;
+        frame++
+      ) {
+        await tester.pump();
+      }
+      expect(prepared, isNotNull);
+      var transferred = false;
+      for (var frame = 0; frame < 200 && !finished; frame++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        transferred |= tester
+            .widgetList<ForumBodyFlowBox>(find.byType(ForumBodyFlowBox))
+            .any((box) => identical(box.session, prepared!.source.session));
+      }
+      expect(finished, isTrue);
+      await navigation;
+      preloads.removeListener(observe);
+      expect(prepared, isNotNull);
+      expect(preparationOffset, 0);
+      expect(wasMounted, isFalse);
+      await tester.pumpAndSettle();
+      expect(transferred, isTrue);
+      expect(
+        tester
+            .widgetList<ForumBodyFlowBox>(find.byType(ForumBodyFlowBox))
+            .any((box) => identical(box.session, prepared!.source.session)),
+        isTrue,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(prepared!.source.isClosed, isTrue);
+      expect(prepared!.source.session!.activeIssuedFragments, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'native completed height is retained before an immediate remount',
     (tester) async {
@@ -333,7 +425,7 @@ ProviderContainer _container() => ProviderContainer(
 );
 
 class _PageHost extends ChangeNotifier {
-  _PageHost({bool sourceReading = false}) {
+  _PageHost({bool sourceReading = false, this.nativeBody = false}) {
     if (sourceReading) {
       coordinator = ThreadBodyReadingCoordinator(
         observer: _Untracked(),
@@ -344,6 +436,10 @@ class _PageHost extends ChangeNotifier {
   }
   final container = _container();
   final controller = ScrollController();
+  final bool nativeBody;
+  late final quick = ThreadDetailQuickScrollCoordinator(
+    scrollController: controller,
+  );
   ThreadBodyReadingCoordinator? coordinator;
   var posts = [
     _post('one', 1),
@@ -365,6 +461,8 @@ class _PageHost extends ChangeNotifier {
               width: 400,
               height: 600,
               child: ThreadDetailContent(
+                nativeBody: nativeBody,
+                quickScrollCoordinator: quick,
                 key: const ValueKey('same-owner'),
                 state:
                     ThreadDetailPageState.initial(
@@ -400,6 +498,7 @@ class _PageHost extends ChangeNotifier {
 
   @override
   void dispose() {
+    quick.dispose();
     coordinator?.dispose();
     controller.dispose();
     container.dispose();

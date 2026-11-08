@@ -19,6 +19,7 @@ final class ForumHtmlPreparationController extends ChangeNotifier {
   _consumer;
   bool _closed = false;
   ForumNativeBodyCache? _cache;
+  ForumHtmlPreparedRenderDocument? _document;
 
   Object? get identity => _consumer.identity;
   bool get hasError => _consumer.hasError;
@@ -26,12 +27,22 @@ final class ForumHtmlPreparationController extends ChangeNotifier {
   ForumHtmlPreparedRenderDocument? resolve(
     ForumHtmlPreparationRequest request, {
     ForumNativeBodyCache? cache,
+    ({Object identity, ForumHtmlPreparedRenderDocument document})? seed,
   }) {
     if (!identical(_cache, cache)) {
       _consumer.reset();
+      _document = null;
       _cache = cache;
     }
-    final cached = cache?.preparedFor(request.identity);
+    if (seed?.identity == request.identity &&
+        !identical(_document, seed!.document)) {
+      // A transferred source references this exact prepared document. Replace
+      // an equivalent earlier value once, then keep that accepted value stable.
+      _consumer.reset();
+    }
+    final cached = seed?.identity == request.identity
+        ? seed!.document
+        : cache?.preparedFor(request.identity);
     final document = _consumer.resolve(
       identity: request.identity,
       admit: () => _executor.tryAcquire(request),
@@ -42,6 +53,7 @@ final class ForumHtmlPreparationController extends ChangeNotifier {
           : request.prepareSynchronously,
     );
     if (document != null) {
+      _document = document;
       cache?.rememberPrepared(
         request.identity,
         document,
@@ -51,12 +63,16 @@ final class ForumHtmlPreparationController extends ChangeNotifier {
     return document;
   }
 
-  void reset() => _consumer.reset();
+  void reset() {
+    _document = null;
+    _consumer.reset();
+  }
 
   @override
   void dispose() {
     if (_closed) return;
     _closed = true;
+    _document = null;
     _consumer.dispose();
     super.dispose();
   }

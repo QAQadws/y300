@@ -57,6 +57,7 @@ part 'thread_detail_card.dart';
 part 'thread_detail_loading.dart';
 part 'thread_detail_chunk_body.dart';
 part 'thread_detail_endpoint_navigation.dart';
+part 'thread_detail_native_preload.dart';
 
 class ThreadDetailContent extends ConsumerStatefulWidget {
   const ThreadDetailContent({
@@ -136,13 +137,18 @@ class ThreadDetailContent extends ConsumerStatefulWidget {
 }
 
 class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
-    with _ThreadDetailEndpointNavigation, WidgetsBindingObserver {
+    with
+        _ThreadDetailEndpointNavigation,
+        _ThreadNativeEndpointPreparation,
+        WidgetsBindingObserver {
+  @override
   late final _isLowRamDevice =
       DeviceMemoryProfileStore.current?.isLowRamDevice ?? false;
   _ThreadDetailChunks? _chunks;
   @override
   ThreadDetailPreparedBodyStore? get _preparedBodies => _chunks?.store;
   final _footerExpansions = <String, _ThreadPostFooterExpansion>{};
+  @override
   late final _wholeBodyPresentations = ThreadBodyPresentationStore(
     lowMemory: _isLowRamDevice,
   );
@@ -299,12 +305,18 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
   }
 
   @override
-  void didHaveMemoryPressure() => _wholeBodyPresentations.trimNativeCache();
+  void didHaveMemoryPressure() {
+    _cancelNativePreparation();
+    if (mounted) setState(() {});
+    _wholeBodyPresentations.trimNativeCache();
+  }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _disposeEndpointNavigation();
+    _cancelNativePreparation();
+    _nativePreloads.dispose();
     _clearFooterExpansions();
     _wholeBodyPresentations.clear();
     _pollOptionPresentations.clear();
@@ -317,8 +329,34 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ForumNativeBodyFlowPreloadScope(
+    controller: _nativePreloads,
+    child: _buildContent(context),
+  );
+
+  Widget _buildContent(BuildContext context) {
     final sourceScope = ref.watch(yamiboForumSourceScopeProvider);
+    final font = ref.watch(forumHtmlReaderFontBindingProvider);
+    final nativeLayoutIdentity = (
+      sourceScope,
+      widget.state.tid,
+      widget.state.currentPage,
+      widget.projection?.displayIdentity,
+      font.cacheKey,
+      font.isReady,
+      font.preferences.renderOptions,
+      Theme.of(context),
+      MediaQuery.sizeOf(context),
+      MediaQuery.textScalerOf(context),
+      Directionality.of(context),
+      Localizations.localeOf(context),
+      widget.imageReferer,
+      widget.htmlImagePrecacheService,
+    );
+    if (_nativePreparationLayout != nativeLayoutIdentity) {
+      _cancelNativePreparation();
+      _nativePreparationLayout = nativeLayoutIdentity;
+    }
     if (!identical(_nativeSourceScope, sourceScope)) {
       _wholeBodyPresentations.clear();
       _nativeSourceScope = sourceScope;
@@ -873,6 +911,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
   }
 
   void _handleTickerModeChanged() {
+    if (_tickerModeNotifier?.value.enabled == false) _cancelNativePreparation();
     _imageViewportCoordinator?.setActive(
       _tickerModeNotifier?.value.enabled ?? true,
     );
@@ -1089,6 +1128,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
     return '${widget.state.tid}:${widget.state.currentPage}:$postIds';
   }
 
+  @override
   double? _fallbackAspectRatioForBlockImage(
     ThreadPost post,
     ForumImageLoadSpec spec,
@@ -1101,6 +1141,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
     );
   }
 
+  @override
   void _handleBlockImageResolved(
     ThreadPost post,
     ForumImageLoadSpec spec,

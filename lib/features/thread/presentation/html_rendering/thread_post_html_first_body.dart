@@ -390,6 +390,17 @@ class _ThreadPostHtmlFirstBodyState
           : sourcePost.pid.trim();
       final request = preparationRequest ?? _requestForBody(html, preferences);
       final identity = request.identity;
+      final resourceIdentity = (
+        widget.threadId,
+        widget.imageReferer,
+        widget.imagePrecacheService,
+      );
+      final candidate = _nativeBody
+          ? ForumNativeBodyFlowPreloadScope.maybeOf(context)?.peek(identity)
+          : null;
+      final staged = candidate?.input.resourceIdentity == resourceIdentity
+          ? candidate
+          : null;
       if (_preparation.identity != identity) {
         // Retire the previous reading handle before a new asynchronous wait.
         widget.readingCoordinator?.unregister(this);
@@ -398,6 +409,9 @@ class _ThreadPostHtmlFirstBodyState
       final preparedDocument = _preparation.resolve(
         request,
         cache: _nativeBody ? widget.wholeBodyPresentation?.nativeCache : null,
+        seed: staged == null
+            ? null
+            : (identity: identity, document: staged.input.prepared),
       );
       if (preparedDocument == null || !fontReady) {
         _bodyLayoutPhase = ThreadBodyLayoutPhase.preparing;
@@ -427,7 +441,10 @@ class _ThreadPostHtmlFirstBodyState
         _nativeBody,
         widget.bodyPresentation,
       );
-      if ((tracked || _nativeBody) && _readingIdentity != readingIdentity) {
+      if ((tracked || _nativeBody) &&
+          (_readingIdentity != readingIdentity ||
+              (staged != null &&
+                  !identical(_readingImageHost, staged.input.host)))) {
         // A font or image-host change retires layout readiness, while folds
         // still belong to the same prepared HTML document.
         _clearReading(preserveExpansion: true);
@@ -447,12 +464,14 @@ class _ThreadPostHtmlFirstBodyState
                 onBlockImageResolved: widget.onBlockImageResolved,
                 imagePrecacheService: widget.imagePrecacheService,
               );
-          _readingImageHost = tracked
-              ? ThreadBodyReadingImageHost(
-                  delegate: delegate,
-                  tracker: _readingImages!,
-                )
-              : delegate;
+          _readingImageHost =
+              staged?.input.host ??
+              (tracked
+                  ? ThreadBodyReadingImageHost(
+                      delegate: delegate,
+                      tracker: _readingImages!,
+                    )
+                  : delegate);
         }
       }
       if (tracked) {
@@ -516,6 +535,8 @@ class _ThreadPostHtmlFirstBodyState
                     ? null
                     : ObjectKey(widget.bodyPresentation),
                 prepared: preparedDocument,
+                preparationIdentity: identity,
+                resourceIdentity: resourceIdentity,
                 cache: widget.wholeBodyPresentation?.nativeCache,
                 preferences: preferences,
                 theme: widget.theme,
