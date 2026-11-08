@@ -4,6 +4,8 @@
 
 本地 Flutter HTML 准备与渲染包，负责 prepared document、DOM 规范化、主题与文字样式、正文布局、折叠和图片 viewport 调度。
 
+`ForumBodyFlowSource` 驱动一个活跃的自然流来源，显式借用不捕获 Widget／Context 的会话工厂，拥有会话及串行推进，跨来源共享原有 3ms／64 步帧预算。它不要求正文 Widget 已挂载；调用方可更换监听者而不重启来源。compact 探测只发布最终宽度，预算等待可恢复，owner 退休会结束等待。`stop` 停止后续推进并保留已发布前缀供现有视图使用，`close` 释放整个任务。来源前缀不等于显示片段或图片首帧就绪；任务与活跃会话不进入可复用缓存，实际显示交付及页面代次仍由宿主管理。
+
 Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `theme`。图片 `Host` 可选；宿主通过中立的准备、显示、尺寸和预取端口提供图片能力。准备资源与显示资源分别保持身份，迟到回调和取消仍受当前绑定与显示代次约束。
 
 `ForumHtmlImageView` 为同一图片显示实现提供独立入口，只接收 `ForumHtmlDisplayImage`、`ForumHtmlImageHost` 和可选 viewport／尺寸回调，不解析 HTML 或装配缓存请求。HTML 图片工厂直接使用它；自研正文可复用相同的尺寸查询、首帧、失败、重试与预取生命周期。更新 Host、显示身份或视口会退役相应回调及工作代次，A→B→A 的旧结果不能写回。正文分片的资源准入、布局代次与来源位置仍由包含它的布局会话负责。

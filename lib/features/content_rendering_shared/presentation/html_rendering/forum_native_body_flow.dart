@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart' show SchedulerPhase;
 import 'package:flutter/rendering.dart'
     show GrowthDirection, RenderAbstractViewport, RenderSliver;
 import 'package:y300/core/clipboard/clipboard_text_writer.dart';
@@ -380,8 +379,11 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
               learned[element.path] ?? previousImages?.layoutHintFor(element),
         );
       }
+      if (!_current(run)) return;
       run.images = images;
       run.host = config.imageHost;
+      final cache = _cache;
+      final layoutId = 'forum-flow-${identityHashCode(run)}';
       ForumBodyTextPageSession openSession(
         double bodyWidth, {
         bool probe = false,
@@ -389,10 +391,10 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
         document: document,
         width: bodyWidth,
         height: _sliceHeight,
-        layoutId: 'forum-flow-${identityHashCode(run)}',
+        layoutId: layoutId,
         reader: reader,
         textScaler: scaler,
-        cache: _cache,
+        cache: cache,
         limits: _limits,
         collapses: collapses,
         tableExtent: ForumBodyTableExtent.natural,
@@ -402,58 +404,28 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
         inlineImageResolver: (identity, element, style) =>
             images.inline(identity, element, style, scaler, _sliceHeight),
       );
-      if (compactMinWidth != null) {
-        run.compactProbe = (
-          min: compactMinWidth,
-          max: width,
-          open: openSession,
-        );
-      }
-      run.step = () => _advance(run);
-      _useSession(run, openSession(width, probe: compactMinWidth != null));
+      final source = run.source = ForumBodyFlowSource(
+        width: width,
+        compactMinWidth: compactMinWidth,
+        openSession: openSession,
+      );
+      source.addListener(() => _sourceChanged(run));
+      source.start();
     } catch (error, stack) {
       if (_current(run)) _fail(error, stack);
     }
   }
 
-  void _useSession(_FlowRun run, ForumBodyTextPageSession session) {
-    unawaited(run.budget?.cancel());
-    run.session?.close();
-    run.session = session;
-    run.waiting = false;
-    run.budget = session.layoutBudgetChanges.listen((_) {
-      if (_current(run) && run.waiting) {
-        run.waiting = false;
-        _FlowQueue.add(run.step!);
-      }
-    });
-    _FlowQueue.add(run.step!);
-  }
-
-  void _advance(_FlowRun run) {
+  void _sourceChanged(_FlowRun run) {
     if (!_current(run) || _error != null) return;
-    final session = run.session!;
+    final source = run.source!;
+    if (source.error case final error?) {
+      _fail(error, source.errorStack!);
+      return;
+    }
     try {
-      final step = session.advance(maxEvents: 16, maxLines: 4);
-      run.waiting = step.waitingForLayoutBudget;
-      if (run.compactProbe case final probe?) {
-        // Measure with the same formatting and resource inputs as the visible
-        // body. Probe slices must never appear at a provisional width.
-        if (!step.isComplete) {
-          if (!run.waiting) _FlowQueue.add(run.step!);
-          return;
-        }
-        run.compactProbe = null;
-        final preferred = session.intrinsicWidths!.preferred;
-        final width = preferred.isFinite && preferred > 0
-            ? preferred.ceilToDouble().clamp(probe.min, probe.max).toDouble()
-            : probe.max;
-        if (width < probe.max) {
-          _useSession(run, probe.open(width));
-          return;
-        }
-      }
-      final snapshot = session.snapshot;
+      final snapshot = source.prefix;
+      if (snapshot == null) return;
       if (snapshot.length != run.prefix?.length ||
           snapshot.isComplete != run.prefix?.isComplete) {
         for (var i = run.prefix?.length ?? 0; i < snapshot.length; i++) {
@@ -462,7 +434,6 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
         run.prefix = snapshot;
         _present(run);
       }
-      if (!step.isComplete && !run.waiting) _FlowQueue.add(run.step!);
     } catch (error, stack) {
       _fail(error, stack);
     }
@@ -544,7 +515,7 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
     if (prefix[first].tableFrames.isNotEmpty) return;
     final job = run.session!.openPagePreparation(first);
     try {
-      if (_FlowQueue.prepareCached(job) && _current(run)) {
+      if (ForumBodyFlowSource.tryPrepareCached(job) && _current(run)) {
         run.initialSlice = ForumBodyFlowPreparedSlice(
           session: run.session!,
           index: first,
@@ -704,6 +675,7 @@ class _ForumNativeBodyFlowState extends State<ForumNativeBodyFlow> {
 
   void _fail(Object error, StackTrace stack) {
     debugPrint('[ForumBody][flow] ${error.runtimeType}');
+    _pending?.source?.stop();
     setState(() => _error = error);
     widget.onGeometry?.call(false, false);
   }
@@ -759,20 +731,13 @@ final class _FlowRun {
   ForumBodyFlowPreparedSlice? initialSlice;
   _TableResult? initialTable;
 
-  ForumBodyTextPageSession? session;
-  ({
-    double min,
-    double max,
-    ForumBodyTextPageSession Function(double width) open,
-  })?
-  compactProbe;
+  ForumBodyFlowSource? source;
+  ForumBodyTextPageSession? get session => source?.session;
   ForumBodyTextPageSnapshot? prefix;
   ForumHtmlImageHost? host;
   ForumNativeBodyImages? images;
-  StreamSubscription<int>? budget;
-  VoidCallback? step;
   double height = 0;
-  bool ready = false, waiting = false;
+  bool ready = false;
   bool reflowScheduled = false;
   bool seedAttempted = false;
 
@@ -809,91 +774,15 @@ final class _FlowRun {
   }
 
   void close() {
-    _FlowQueue.remove(step);
-    unawaited(budget?.cancel());
-    compactProbe = null;
     cancelSourceProbe();
     initialSlice?.close();
     initialTable?.slice.close();
     tableWindows.clear();
-    session?.close();
+    source?.close();
   }
 
   void cancelSourceProbe() {
     sourceProbe?.close();
     sourceProbe = null;
-  }
-}
-
-/// Fair across the floors that are currently mounted by the lazy list.
-abstract final class _FlowQueue {
-  static final _pending = <VoidCallback>{};
-  static final _clock = Stopwatch();
-  static int _steps = 0;
-  static bool _initialized = false;
-  static bool _scheduled = false;
-  static bool _draining = false;
-
-  static void add(VoidCallback work) {
-    if (!_initialized) {
-      _initialized = true;
-      WidgetsBinding.instance.addPersistentFrameCallback((_) {
-        _clock.reset();
-        _steps = 0;
-      });
-    }
-    _pending.add(work);
-    if (_draining) return;
-    if (WidgetsBinding.instance.schedulerPhase ==
-        SchedulerPhase.postFrameCallbacks) {
-      _drain();
-    } else {
-      _schedule();
-    }
-  }
-
-  static void remove(VoidCallback? work) => _pending.remove(work);
-
-  static bool prepareCached(ForumBodyTextPagePreparation job) {
-    // Share the source frame's remaining budget. A warm delivery must not
-    // introduce another independent slice or perform shaping/picture work.
-    while (_draining && _steps < 64 && _clock.elapsedMicroseconds < 3000) {
-      _steps++;
-      if (job.tryPrepareCached(maxParts: 32)) return true;
-      if (job.cacheMiss || job.waitingForLayoutBudget) return false;
-    }
-    return false;
-  }
-
-  static void _schedule() {
-    if (_scheduled || _pending.isEmpty) return;
-    _scheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scheduled = false;
-      _drain();
-    });
-    WidgetsBinding.instance.ensureVisualUpdate();
-  }
-
-  static void _drain() {
-    if (_draining || _pending.isEmpty) return;
-    _draining = true;
-    _clock.start();
-    try {
-      // Starts already arrive after layout. Use this frame's remaining shared
-      // slice instead of imposing another vsync; no floor gets a fresh budget.
-      while (_steps < 64 &&
-          _pending.isNotEmpty &&
-          _clock.elapsedMicroseconds < 3000) {
-        _steps++;
-        final step = _pending.first;
-        _pending.remove(step);
-        step();
-      }
-    } finally {
-      _clock.stop();
-      _draining = false;
-      _schedule();
-    }
   }
 }

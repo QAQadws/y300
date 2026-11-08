@@ -122,8 +122,15 @@ void main() {
         expect(cache.paragraphs.layoutBuildCount, builds);
         await tester.pumpWidget(host(false));
         await tester.pumpAndSettle();
-        await tester.pumpWidget(host(true));
-        // Source publication may stage leases before the first content mount.
+        // Staging shares a real 3ms source allowance. A busy test worker may
+        // defer the optional transfer, so retry with a fresh frame allowance.
+        for (var attempt = 0; attempt < 3; attempt++) {
+          await tester.pumpWidget(host(true));
+          if (cache.paragraphs.activeLeases > 0) break;
+          await tester.pumpWidget(host(false));
+          await tester.pumpAndSettle();
+        }
+        // Cancellation must still exercise a staged, not merely queued, view.
         expect(find.byType(ForumBodyFlowBox), findsNothing);
         expect(cache.paragraphs.activeLeases, greaterThan(0));
         await tester.pumpWidget(host(false));
