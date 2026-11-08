@@ -7,9 +7,12 @@ import 'package:flutter/widgets.dart';
 import 'package:forum_content_renderer/forum_text.dart';
 
 import '../block/forum_body_block_flow_cursor.dart';
+import '../block/forum_body_block_box.dart';
+import '../contracts/forum_html_image_host.dart';
 import '../document/forum_body_collapse_layout.dart';
 import '../document/forum_body_document.dart';
 import '../flow/forum_body_text_flow_cursor.dart';
+import '../inline/forum_body_inline_image_input.dart';
 import '../inline/forum_body_native_space_span.dart';
 import '../paragraph/forum_body_first_line_indent.dart';
 import '../paragraph/forum_body_paragraph_content.dart';
@@ -17,6 +20,15 @@ import '../paragraph/forum_body_paragraph_layout.dart'
     show ForumBodyParagraphLayout, ForumBodyParagraphWindow;
 import '../style/forum_body_paint_text_style.dart';
 import '../style/forum_body_style_options.dart';
+import '../style/forum_body_style_resolver.dart';
+import '../style/forum_body_length.dart';
+import '../style/forum_body_box_style.dart';
+import '../style/forum_body_replaced_image_size.dart';
+import '../html_rendering/widgets/forum_html_image_view.dart';
+import '../contracts/forum_html_display_image.dart';
+
+part 'forum_body_continuous_images.dart';
+part 'forum_body_continuous_paint.dart';
 
 /// Unsupported experiment input must remain visible to its developer host;
 /// silently flattening it would make a performance comparison misleading.
@@ -48,6 +60,9 @@ final class ForumBodyContinuousController {
   Size? get size => isReady ? _view!.size : null;
   String? get copyText => isReady ? _view!._copyText : null;
   int get layoutCount => _view?._layoutCount ?? 0;
+
+  /// Cumulative TextPainter allocations, including outside list markers.
+  int get textPainterCreationCount => _view?._textPainterCreationCount ?? 0;
   int get paragraphCount => isReady ? _view!._texts.length : 0;
   ForumBodyContinuousHit? hitTest(Offset point) =>
       isReady ? _view!._hit(point) : null;
@@ -67,8 +82,9 @@ final class ForumBodyContinuousController {
 /// A bounded prototype of normal continuous text flow. Native text is shaped
 /// during performLayout and painted by that same TextPainter. There is no page
 /// composer, precomputed geometry phase, preparation job, lease or frame queue.
-/// Resource/mixed-format support is deliberately not delegated to pagination.
-final class ForumBodyContinuous extends LeafRenderObjectWidget {
+/// Resource children participate in that layout through the existing image Host.
+/// Mixed formats are never delegated to pagination.
+final class ForumBodyContinuous extends StatelessWidget {
   const ForumBodyContinuous({
     super.key,
     required this.document,
@@ -78,6 +94,9 @@ final class ForumBodyContinuous extends LeafRenderObjectWidget {
     this.onTap,
     this.expansion = const {},
     this.contentRoot,
+    this.imageSources = const {},
+    this.imageHost,
+    this.onImageTap,
   });
 
   final ForumBodyDocument document;
@@ -87,14 +106,26 @@ final class ForumBodyContinuous extends LeafRenderObjectWidget {
   final ValueChanged<ForumBodyContinuousHit>? onTap;
   final Map<String, bool> expansion;
   final ForumBodyElement? contentRoot;
+  final Map<String, ForumBodyInlineImageSource> imageSources;
+  final ForumHtmlImageHost? imageHost;
+  final ValueChanged<ForumBodyInlineImageSource>? onImageTap;
 
   @override
-  RenderBox createRenderObject(BuildContext context) => _ContinuousBox(this);
+  Widget build(BuildContext context) =>
+      _ContinuousSurface(input: this, children: _continuousImages(this));
+}
+
+final class _ContinuousSurface extends MultiChildRenderObjectWidget {
+  const _ContinuousSurface({required this.input, required super.children});
+  final ForumBodyContinuous input;
+
+  @override
+  RenderBox createRenderObject(BuildContext context) => _ContinuousBox(input);
   @override
   void updateRenderObject(
     BuildContext context,
     covariant RenderBox renderObject,
-  ) => (renderObject as _ContinuousBox).configure(this);
+  ) => (renderObject as _ContinuousBox).configure(input);
 }
 
 Object _readerKey(ForumBodyReaderStyle reader) => (
@@ -114,7 +145,10 @@ Object _readerKey(ForumBodyReaderStyle reader) => (
   reader.theme?.signature,
 );
 
-final class _ContinuousBox extends RenderBox {
+final class _ContinuousBox extends RenderBox
+    with
+        ContainerRenderObjectMixin<RenderBox, _ContinuousParentData>,
+        RenderBoxContainerDefaultsMixin<RenderBox, _ContinuousParentData> {
   _ContinuousBox(ForumBodyContinuous input)
     : _input = input,
       _expansion = Map.of(input.expansion);
@@ -123,8 +157,13 @@ final class _ContinuousBox extends RenderBox {
   final _painters = <TextPainter>[];
   final _texts = <_Text>[];
   final _paints = <_Paint>[];
+  final _textLayouts = <int, _Text>{};
+  final _markerLayouts = <String, TextPainter>{};
   bool _ready = false;
+  bool _layoutDirty = true;
+  double? _layoutWidth;
   int _layoutCount = 0;
+  int _textPainterCreationCount = 0;
   String _copyText = '';
   TapGestureRecognizer? _tap;
 
@@ -144,6 +183,7 @@ final class _ContinuousBox extends RenderBox {
     if (changed) {
       _expansion = Map.of(input.expansion);
       _ready = false;
+      _layoutDirty = true;
       _retireTap();
       markNeedsLayout();
       markNeedsSemanticsUpdate();
@@ -170,13 +210,17 @@ final class _ContinuousBox extends RenderBox {
     super.dispose();
   }
 
-  void _clear() {
+  void _clear({bool discardText = true}) {
     _retireTap();
     _ready = false;
-    for (final painter in _painters) {
-      painter.dispose();
+    if (discardText) {
+      for (final painter in _painters) {
+        painter.dispose();
+      }
+      _painters.clear();
+      _textLayouts.clear();
+      _markerLayouts.clear();
     }
-    _painters.clear();
     _texts.clear();
     _paints.clear();
     _copyText = '';
@@ -188,6 +232,7 @@ final class _ContinuousBox extends RenderBox {
   }
 
   TextPainter _text(InlineSpan span, ForumBodyResolvedStyle style) {
+    _textPainterCreationCount++;
     final painter = TextPainter(
       text: span,
       textAlign: style.textAlign,
@@ -201,9 +246,9 @@ final class _ContinuousBox extends RenderBox {
 
   @override
   void performLayout() {
-    _clear();
-    _layoutCount++;
     final width = constraints.maxWidth;
+    _clear(discardText: _layoutDirty || _layoutWidth != width);
+    _layoutCount++;
     if (!width.isFinite || width <= 0) {
       throw ArgumentError('Continuous body requires a finite positive width');
     }
@@ -218,6 +263,7 @@ final class _ContinuousBox extends RenderBox {
       collapses: collapses,
       contentRoot: _input.contentRoot,
       dedicatedTables: true,
+      allowReplacedImageHeight: true,
       paragraphBuilder: const ForumBodyParagraphContentBuilder(
         maxInputCodeUnits: 65536,
         maxRuns: 2048,
@@ -225,6 +271,14 @@ final class _ContinuousBox extends RenderBox {
     );
     final open = <_Background>[];
     final markers = <String, TextPainter>{};
+    final imageBoxes = <String, ForumBodyBlockBox>{};
+    final resources = <String, RenderBox>{};
+    var child = firstChild;
+    while (child != null) {
+      final data = child.parentData! as _ContinuousParentData;
+      resources[data.path] = child;
+      child = data.nextSibling;
+    }
     final copied = StringBuffer();
     var endsWithNewline = false;
     String? previousPath;
@@ -232,6 +286,27 @@ final class _ContinuousBox extends RenderBox {
     void startBoxes() {
       for (final box in open) {
         box.top ??= y;
+      }
+    }
+
+    void placeMarkers(List<ForumBodyListItemMarker> items, double baseline) {
+      for (final marker in items) {
+        final font = markers.remove(marker.itemPath);
+        if (font == null) continue;
+        final left = marker.style.textDirection == TextDirection.ltr
+            ? marker.contentLeft - font.height * .25 - font.width
+            : marker.contentLeft + marker.contentWidth + font.height * .25;
+        _paints.add(
+          _Label(
+            font,
+            Offset(
+              left,
+              y +
+                  baseline -
+                  font.computeDistanceToActualBaseline(TextBaseline.alphabetic),
+            ),
+          ),
+        );
       }
     }
 
@@ -255,7 +330,7 @@ final class _ContinuousBox extends RenderBox {
               flow.resolveListItemGutter(unit, 0);
               break;
             }
-            final painter = _text(
+            final painter = _markerLayouts[unit.marker.itemPath] ??= _text(
               TextSpan(
                 text: label,
                 style: forumBodyPaintTextStyle(unit.marker.style),
@@ -284,6 +359,11 @@ final class _ContinuousBox extends RenderBox {
               case ForumBodyTextFlowBoundaryKind.openBlock:
                 final style = unit.boundary.event!.style;
                 final box = unit.box!;
+                if (unit.boundary.event!.node case ForumBodyElement(
+                  kind: ForumBodyElementKind.image,
+                )) {
+                  imageBoxes[unit.boundary.event!.node.path] = box;
+                }
                 final background = _Background(
                   unit.contentLeft - box.padding.left - box.leftBorder,
                   box.borderBoxWidth,
@@ -301,15 +381,18 @@ final class _ContinuousBox extends RenderBox {
           case ForumBodyBlockFlowParagraph():
             startBoxes();
             final original = unit.paragraph.content;
+            final cached = _textLayouts[unit.paragraph.index];
             final window = unit.paragraph.window;
             final end = original.projection.text.length;
-            final content = switch (window) {
-              ForumBodyParagraphWindow.full => original,
-              ForumBodyParagraphWindow.beforeTerminalEmptyLine =>
-                original.displayWindow(startUtf16: 0, endUtf16: end - 1),
-              ForumBodyParagraphWindow.terminalEmptyLine =>
-                original.displayWindow(startUtf16: end, endUtf16: end),
-            };
+            final content =
+                cached?.content ??
+                switch (window) {
+                  ForumBodyParagraphWindow.full => original,
+                  ForumBodyParagraphWindow.beforeTerminalEmptyLine =>
+                    original.displayWindow(startUtf16: 0, endUtf16: end - 1),
+                  ForumBodyParagraphWindow.terminalEmptyLine =>
+                    original.displayWindow(startUtf16: end, endUtf16: end),
+                };
             if (content.hasBaselineShift) {
               throw ForumBodyContinuousUnsupported(
                 'baseline-shift',
@@ -349,7 +432,7 @@ final class _ContinuousBox extends RenderBox {
                       content.textSpan,
                     ],
                   );
-            final painter = _text(span, content.style);
+            final painter = cached?.painter ?? _text(span, content.style);
             final fitted =
                 content.layoutMode != ForumBodyParagraphLayoutMode.wrap;
             painter.layout(
@@ -359,13 +442,17 @@ final class _ContinuousBox extends RenderBox {
             final scale = fitted && painter.width > inner
                 ? inner / painter.width
                 : 1.0;
-            final text = _Text(
-              content,
-              painter,
-              Offset(unit.contentLeft + inset, y),
-              scale,
-              indent == 0 ? 0 : 2,
-            );
+            final text =
+                cached ??
+                _Text(
+                  content,
+                  painter,
+                  Offset(unit.contentLeft + inset, y),
+                  scale,
+                  indent == 0 ? 0 : 2,
+                );
+            text.offset = Offset(unit.contentLeft + inset, y);
+            _textLayouts[unit.paragraph.index] = text;
             _texts.add(text);
             _paints.add(text);
             final baseline =
@@ -373,28 +460,7 @@ final class _ContinuousBox extends RenderBox {
                   TextBaseline.alphabetic,
                 ) *
                 scale;
-            for (final marker in unit.listMarkers) {
-              final font = markers.remove(marker.itemPath);
-              if (font == null) continue;
-              final left = marker.style.textDirection == TextDirection.ltr
-                  ? marker.contentLeft - font.height * .25 - font.width
-                  : marker.contentLeft +
-                        marker.contentWidth +
-                        font.height * .25;
-              _paints.add(
-                _Label(
-                  font,
-                  Offset(
-                    left,
-                    y +
-                        baseline -
-                        font.computeDistanceToActualBaseline(
-                          TextBaseline.alphabetic,
-                        ),
-                  ),
-                ),
-              );
-            }
+            placeMarkers(unit.listMarkers, baseline);
             y += painter.height * scale;
             if (window != ForumBodyParagraphWindow.terminalEmptyLine) {
               if (copied.isNotEmpty &&
@@ -422,10 +488,38 @@ final class _ContinuousBox extends RenderBox {
             );
             y += unit.thickness;
           case ForumBodyBlockFlowImage():
-            throw ForumBodyContinuousUnsupported(
-              'image',
-              unit.image.event.node.path,
+            startBoxes();
+            final resource = resources[unit.image.event.node.path];
+            if (resource == null) {
+              throw ForumBodyContinuousUnsupported(
+                'image-resource',
+                unit.image.event.node.path,
+              );
+            }
+            final style = unit.image.event.style;
+            final box = imageBoxes.remove(unit.image.event.node.path)!;
+            final height = style.box.height;
+            final contentHeight = height?.unit != ForumBodyLengthUnit.px
+                ? null
+                : math.max(
+                    0.0,
+                    height!.value -
+                        (style.box.sizing == ForumBodyBoxSizing.borderBox
+                            ? box.padding.vertical
+                            : 0),
+                  );
+            resource.layout(
+              BoxConstraints.tightFor(
+                width: unit.contentWidth,
+                height: contentHeight,
+              ),
+              parentUsesSize: true,
             );
+            final data = resource.parentData! as _ContinuousParentData;
+            data.offset = Offset(unit.contentLeft, y);
+            _paints.add(_Child(resource));
+            placeMarkers(unit.listMarkers, resource.size.height);
+            y += resource.size.height;
           case ForumBodyBlockFlowTable():
             throw ForumBodyContinuousUnsupported(
               'table',
@@ -442,6 +536,8 @@ final class _ContinuousBox extends RenderBox {
       size = constraints.constrain(Size(width, math.max(0, y)));
       _copyText = copied.toString();
       _ready = true;
+      _layoutDirty = false;
+      _layoutWidth = width;
       markNeedsSemanticsUpdate();
     } catch (_) {
       _clear();
@@ -488,6 +584,39 @@ final class _ContinuousBox extends RenderBox {
   @override
   bool hitTestSelf(Offset position) => _ready;
   @override
+  void setupParentData(RenderBox child) {
+    if (child.parentData is! _ContinuousParentData) {
+      child.parentData = _ContinuousParentData();
+    }
+  }
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) {
+    if (!_ready) return false;
+    for (final record in _paints.reversed) {
+      if (record is! _Child) continue;
+      final child = record.child;
+      final data = child.parentData! as _ContinuousParentData;
+      if (result.addWithPaintOffset(
+        offset: data.offset,
+        position: position,
+        hitTest: (result, local) => child.hitTest(result, position: local),
+      )) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  @override
+  void visitChildrenForSemantics(RenderObjectVisitor visitor) {
+    if (!_ready) return;
+    for (final record in _paints) {
+      if (record is _Child) visitor(record.child);
+    }
+  }
+
+  @override
   void handleEvent(PointerEvent event, BoxHitTestEntry entry) {
     if (event is PointerDownEvent) {
       (_tap ??= TapGestureRecognizer()
@@ -502,14 +631,21 @@ final class _ContinuousBox extends RenderBox {
   @override
   void paint(PaintingContext context, Offset offset) {
     if (!_ready) return;
-    final canvas = context.canvas;
-    canvas.save();
-    canvas.translate(offset.dx, offset.dy);
-    final clip = canvas.getLocalClipBounds();
+    final clip = context.canvas.getLocalClipBounds().shift(-offset);
     for (final record in _paints) {
-      if (record.bounds.overlaps(clip)) record.paint(canvas);
+      if (!record.bounds.overlaps(clip)) continue;
+      if (record is _Child) {
+        final data = record.child.parentData! as _ContinuousParentData;
+        context.paintChild(record.child, offset + data.offset);
+      } else if (record is _CanvasPaint) {
+        // A child may create a composited layer, replacing context.canvas.
+        final canvas = context.canvas;
+        canvas.save();
+        canvas.translate(offset.dx, offset.dy);
+        record.paint(canvas);
+        canvas.restore();
+      }
     }
-    canvas.restore();
   }
 
   @override
@@ -518,88 +654,5 @@ final class _ContinuousBox extends RenderBox {
     config.isSemanticBoundary = true;
     config.textDirection = _input.reader.textDirection;
     config.label = _ready ? _copyText : '';
-  }
-}
-
-sealed class _Paint {
-  Rect get bounds;
-  void paint(Canvas canvas);
-}
-
-final class _Text implements _Paint {
-  _Text(this.content, this.painter, this.offset, this.scale, this.prefix);
-  final ForumBodyParagraphContent content;
-  final TextPainter painter;
-  final Offset offset;
-  final double scale;
-  final int prefix;
-  @override
-  Rect get bounds => offset & (painter.size * scale);
-  @override
-  void paint(Canvas canvas) {
-    canvas.save();
-    canvas.translate(offset.dx, offset.dy);
-    canvas.scale(scale);
-    painter.paint(canvas, Offset.zero);
-    canvas.restore();
-  }
-}
-
-final class _Label implements _Paint {
-  _Label(this.painter, this.offset);
-  final TextPainter painter;
-  final Offset offset;
-  @override
-  Rect get bounds => offset & painter.size;
-  @override
-  void paint(Canvas canvas) => painter.paint(canvas, offset);
-}
-
-final class _Rule implements _Paint {
-  _Rule(this.bounds, this.color);
-  @override
-  final Rect bounds;
-  final Color color;
-  @override
-  void paint(Canvas canvas) => canvas.drawRect(bounds, Paint()..color = color);
-}
-
-final class _Background implements _Paint {
-  _Background(this.left, this.width, this.color, this.quote);
-  final double left, width;
-  final Color? color;
-  final ForumBodyQuoteDecoration? quote;
-  double? top, bottom;
-  @override
-  Rect get bounds => Rect.fromLTWH(
-    left,
-    top ?? 0,
-    width,
-    math.max(0, (bottom ?? top ?? 0) - (top ?? 0)),
-  );
-  @override
-  void paint(Canvas canvas) {
-    final rect = bounds;
-    if (rect.isEmpty) return;
-    final radius = quote == null
-        ? Radius.zero
-        : const Radius.circular(ForumBodyQuoteDecoration.radius * 1.0);
-    if (color != null) {
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(rect, radius),
-        Paint()..color = color!,
-      );
-    }
-    if (quote != null) {
-      canvas.drawRect(
-        Rect.fromLTWH(
-          rect.left,
-          rect.top,
-          ForumBodyQuoteDecoration.borderWidth * 1.0,
-          rect.height,
-        ),
-        Paint()..color = quote!.borderColor,
-      );
-    }
   }
 }

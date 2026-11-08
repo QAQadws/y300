@@ -45,6 +45,36 @@ List<ForumBodyBlockFlowUnit> _drain(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test(
+    'replaced height needs an opted-in resource layout, not a text block',
+    () {
+      const html =
+          '<img src="https://example.invalid/a.png" style="height:30px">';
+      final normal = _cursor(html);
+      addTearDown(normal.close);
+      expect(() => _drain(normal), throwsA(isA<ForumBodyBlockFlowException>()));
+      final replaced = ForumBodyBlockFlowCursor(
+        document: _document(html),
+        reader: _reader,
+        width: 200,
+        allowReplacedImageHeight: true,
+      );
+      addTearDown(replaced.close);
+      final image = _drain(
+        replaced,
+      ).whereType<ForumBodyBlockFlowImage>().single;
+      expect(image.image.event.style.box.height, const ForumBodyLength(30));
+      final text = ForumBodyBlockFlowCursor(
+        document: _document('<div style="height:30px">text</div>'),
+        reader: _reader,
+        width: 200,
+        allowReplacedImageHeight: true,
+      );
+      addTearDown(text.close);
+      expect(() => _drain(text), throwsA(isA<ForumBodyBlockFlowException>()));
+    },
+  );
+
   for (final (html, spaces) in [
     (
       '<p style="margin:10px 0 20px">a</p><p style="margin:30px 0 40px">b</p>',

@@ -187,6 +187,7 @@ final class ForumBodyBlockFlowCursor {
     bool dedicatedTables = false,
     bool captureFloats = false,
     bool dedicateFloatedTables = false,
+    this.allowReplacedImageHeight = false,
   }) : _flow = ForumBodyTextFlowCursor(
          document: document,
          reader: reader,
@@ -209,6 +210,10 @@ final class ForumBodyBlockFlowCursor {
   static const revision = 13;
   final double width;
   final ForumBodyBlockEdgeMargins edgeMargins;
+
+  /// Opt in only when the resource layout consumes the resolved CSS height.
+  /// Ordinary fixed-height text blocks keep their existing rejection policy.
+  final bool allowReplacedImageHeight;
   final double _rootFontSize;
   TextDirection get _rootDirection => _flow.rootStyle.textDirection;
   final ForumBodyTextFlowCursor _flow;
@@ -569,7 +574,7 @@ final class ForumBodyBlockFlowCursor {
     return value;
   }
 
-  static void _validateNormalFlow(
+  void _validateNormalFlow(
     ForumBodyElement node,
     ForumBodyResolvedStyle style,
   ) {
@@ -594,7 +599,12 @@ final class ForumBodyBlockFlowCursor {
       final name = declaration.property;
       final raw = declaration.value.trim().toLowerCase();
       final unsupported = switch (name) {
-        'height' => raw != 'auto' && raw != 'initial' && raw != 'unset',
+        'height' =>
+          !(allowReplacedImageHeight &&
+                  node.kind == ForumBodyElementKind.image) &&
+              raw != 'auto' &&
+              raw != 'initial' &&
+              raw != 'unset',
         'min-height' => !const {
           '0',
           '0px',
