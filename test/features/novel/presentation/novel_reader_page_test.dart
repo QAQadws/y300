@@ -408,6 +408,114 @@ void main() {
   );
 
   testWidgets(
+    'motion preview retains the ready page and its current position',
+    (tester) async {
+      final paragraphs = [List.filled(1000, '阅读正文').join()];
+      final repository = _FakeNovelRepository(
+        preferences: NovelReaderPreferences.defaults(),
+        firstParagraphs: paragraphs,
+        firstRawHtml: '<p>${paragraphs.single}</p>',
+      );
+      await tester.pumpWidget(_buildReaderApp(repository: repository));
+      await _pumpPagedCacheReady(tester);
+      final surfaces = find.byType(NovelReaderHtmlPagedSurface);
+      final first = tester.widget<NovelReaderHtmlPagedSurface>(surfaces);
+      expect(first.navigationController!.turnNext(), isTrue);
+      await tester.pumpAndSettle();
+      final pageFinder = find.byKey(const Key('novel-reader-paged-page-view'));
+      final pageController = tester.widget<PageView>(pageFinder).controller!;
+      final planCount = first.paginationCache!.length;
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(NovelReaderPage)),
+      );
+      const args = NovelReaderArgs(
+        novelId: 'novel:49:100',
+        episodeId: 'novel:49:100:5001',
+      );
+      final provider = novelReaderControllerProvider(args);
+      final controller = container.read(provider.notifier);
+      controller.previewPreferences(
+        container
+            .read(provider)
+            .value!
+            .preferences
+            .copyWith(
+              pageEffect: NovelReaderPageEffect.staggered,
+              pageSpeed: NovelReaderPageSpeed.relaxed,
+            ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<PageView>(pageFinder).controller,
+        same(pageController),
+      );
+      expect(pageController.page, 1);
+      expect(first.paginationCache!.length, planCount);
+      expect(
+        find.byKey(const Key('novel-reader-delayed-loading-indicator')),
+        findsNothing,
+      );
+      final current = tester.widget<NovelReaderHtmlPagedSurface>(surfaces);
+      expect(current.navigationController!.turnNext(), isTrue);
+      await tester.pumpAndSettle();
+      expect(pageController.page, 2);
+      expect(container.read(provider).value!.progressSnapshot.pageIndex, 2);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'display sheet applies and saves margins, page effect and speed',
+    (tester) async {
+      final repository = _FakeNovelRepository(
+        preferences: NovelReaderPreferences.defaults(),
+      );
+      await tester.pumpWidget(_buildReaderApp(repository: repository));
+      await _pumpPagedCacheReady(tester);
+      await _showReaderMenu(tester);
+      await tester.tap(
+        find.byKey(const Key('shared-reader-bottom-action-display')),
+      );
+      await tester.pumpAndSettle();
+      final margin = find.byKey(const Key('novel-reader-page-padding-slider'));
+      await tester.ensureVisible(margin);
+      final slider = tester.widget<Slider>(
+        find.descendant(of: margin, matching: find.byType(Slider)),
+      );
+      slider.onChanged!(24);
+      await tester.pumpAndSettle();
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(NovelReaderPage)),
+      );
+      for (final (key, label) in [
+        ('novel-reader-page-effect-control', l10n.novelPageEffectStaggered),
+        ('novel-reader-page-speed-control', l10n.novelPageSpeedRelaxed),
+      ]) {
+        final choice = find.descendant(
+          of: find.byKey(Key(key)),
+          matching: find.text(label),
+        );
+        await tester.ensureVisible(choice);
+        await tester.pumpAndSettle();
+        await tester.tap(choice);
+        await tester.pumpAndSettle();
+      }
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      expect(repository.latestPreferences!.pagePadding, 24);
+      expect(
+        repository.latestPreferences!.pageEffect,
+        NovelReaderPageEffect.staggered,
+      );
+      expect(
+        repository.latestPreferences!.pageSpeed,
+        NovelReaderPageSpeed.relaxed,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
     'reader argument rebinding retires old session caches on the same Page',
     (tester) async {
       final repository = _FakeNovelRepository(
@@ -1672,7 +1780,7 @@ void main() {
       );
       expect(
         find.byKey(const Key('novel-reader-page-padding-slider')),
-        findsNothing,
+        findsOneWidget,
       );
       expect(
         find.byKey(const Key('novel-reader-first-line-indent-slider')),

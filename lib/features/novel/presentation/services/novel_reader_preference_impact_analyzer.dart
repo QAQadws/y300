@@ -59,6 +59,8 @@ class DefaultNovelReaderPreferenceImpactAnalyzer
       impacts.add(NovelReaderPreferenceImpact.flowModeSwitch);
     }
     if (previous.themePreset != next.themePreset ||
+        previous.pageEffect != next.pageEffect ||
+        previous.pageSpeed != next.pageSpeed ||
         previous.showProgressIndicator != next.showProgressIndicator) {
       impacts.add(NovelReaderPreferenceImpact.repaintOnly);
     }

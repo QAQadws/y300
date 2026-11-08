@@ -38,7 +38,10 @@ import 'package:y300/features/novel/presentation/services/novel_reader_paginatio
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_render_environment.dart';
 import 'package:y300/features/novel/presentation/services/novel_reading_image_host.dart';
 import 'package:y300/features/novel/presentation/novel_text_resolver.dart';
-import 'package:y300/features/library_shared/presentation/reader/reader_paged_turn_motion.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_page_motion.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_paper_turn.dart';
+import 'package:y300/features/novel/presentation/widgets/novel_reader_paragraph_motion.dart';
+import 'package:y300/features/novel/presentation/models/novel_reader_paragraph_clock.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_models.dart';
 import 'package:y300/features/library_shared/presentation/services/library_error_summary.dart';
 import 'package:y300/features/thread/domain/models/thread_image_open_models.dart';
@@ -349,9 +352,7 @@ class _NovelReaderHtmlPagedSurfaceState
                 ).baseTextStyle(context).merge(widget.typography.body),
                 textAlign: widget.typography.textAlign,
               );
-          // Knob lives in NovelReaderSpacing.pagedPagePadding (via prefs
-          // defaults). Everything below derives the measured page box and the
-          // rendered Padding from this one value on purpose — see that doc.
+          // Measurement, rendering and cache identity share the live margin.
           final pagePadding = widget.preferences.pagePadding
               .clamp(0.0, 96.0)
               .toDouble();
@@ -686,6 +687,14 @@ class _NovelReaderHtmlPagedSurfaceState
                           reverse:
                               widget.preferences.flowMode ==
                               NovelReaderFlowMode.pagedRtl,
+                          pageEffect: widget.preferences.pageEffect,
+                          pageSpeed: widget.preferences.pageSpeed,
+                          paperInsets: EdgeInsets.fromLTRB(
+                            (constraints.maxWidth - pageWidth) / 2,
+                            pagePadding + topChromeInset,
+                            (constraints.maxWidth - pageWidth) / 2,
+                            pagePadding + bottomChromeInset,
+                          ),
                           showProgressIndicator:
                               widget.preferences.showProgressIndicator,
                           previousChapterTitle: widget.previousChapterTitle,
@@ -766,7 +775,7 @@ class _NovelReaderHtmlPagedSurfaceState
                   return Stack(
                     fit: StackFit.expand,
                     children: [
-                      pagedContent,
+                      ClipRect(child: pagedContent),
                       if (_requestError != null || targetIsPending)
                         Positioned(
                           top: topChromeInset,
@@ -1674,6 +1683,9 @@ class _NovelReaderPagedPageView extends StatefulWidget {
     required this.onConsumePendingForwardPage,
     required this.onCancelPendingForwardPage,
     required this.reverse,
+    required this.pageEffect,
+    required this.pageSpeed,
+    this.paperInsets = EdgeInsets.zero,
     required this.showProgressIndicator,
     this.previousChapterTitle,
     this.nextChapterTitle,
@@ -1714,6 +1726,9 @@ class _NovelReaderPagedPageView extends StatefulWidget {
   final bool Function(int target) onConsumePendingForwardPage;
   final VoidCallback onCancelPendingForwardPage;
   final bool reverse;
+  final NovelReaderPageEffect pageEffect;
+  final NovelReaderPageSpeed pageSpeed;
+  final EdgeInsets paperInsets;
   final bool showProgressIndicator;
   final String? previousChapterTitle;
   final String? nextChapterTitle;
@@ -1747,6 +1762,8 @@ class _NovelReaderPagedPageView extends StatefulWidget {
 
 class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
   late final PageController _pageController;
+  late final NovelReaderPaperClock _paperClock;
+  late final NovelReaderParagraphClock _paragraphClock;
   int _currentPage = 0;
   bool _reportedInitialPage = false;
   bool _hasUserNavigated = false;
@@ -1770,6 +1787,8 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
       initialPage: widget.initialPage,
       keepPage: false,
     );
+    _paperClock = NovelReaderPaperClock(_pageController);
+    _paragraphClock = NovelReaderParagraphClock(_pageController);
     widget.navigationController?._attach(this);
     _scheduleInitialPosition();
   }
@@ -1928,6 +1947,8 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
   void dispose() {
     widget.navigationController?._detach(this);
     _chapterTurnHint.dispose();
+    _paperClock.dispose();
+    _paragraphClock.dispose();
     _pageController.dispose();
     super.dispose();
   }
@@ -1936,6 +1957,12 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final pageCount = widget.plan.pageCount;
+    final paperEnabled =
+        widget.pageEffect == NovelReaderPageEffect.paper &&
+        !MediaQuery.disableAnimationsOf(context);
+    final fullSheetEnabled =
+        NovelReaderPageMotion.isFullSheet(widget.pageEffect) &&
+        !MediaQuery.disableAnimationsOf(context);
     final totalPageLabel = widget.isPageCountFinal
         ? l10n.novelPages(pageCount)
         : l10n.novelPageCountPending;
@@ -1971,83 +1998,143 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
         children: [
           NotificationListener<ScrollNotification>(
             onNotification: _onScrollNotification,
-            child: PageView.builder(
-              key: const Key('novel-reader-paged-page-view'),
-              controller: _pageController,
-              reverse: widget.reverse,
-              allowImplicitScrolling: false,
-              // A chapter that fits on a single page has no scrollable extent, so
-              // the default physics would refuse the drag outright and the
-              // turn-past-the-edge gesture would be dead there. This only
-              // overrides `shouldAcceptUserOffset`; `Scrollable` still appends the
-              // platform physics underneath, so clamping/bouncing behaviour and
-              // page snapping are untouched.
-              physics: const AlwaysScrollableScrollPhysics(),
-              itemCount: pageCount,
-              onPageChanged: _onPageChanged,
-              itemBuilder: (context, index) {
-                final page = widget.plan.pages[index];
-                return Padding(
-                  key: ValueKey<String>(
-                    'novel-reader-paged-content-inset-${page.index}',
-                  ),
-                  padding: EdgeInsets.only(bottom: widget.contentBottomInset),
-                  child: _NovelReaderPagedPage(
-                    key: ValueKey<String>(
-                      'novel-reader-paged-page-${page.index}',
-                    ),
-                    page: page,
-                    plan: widget.plan,
-                    theme: widget.theme,
-                    htmlPreferences: widget.htmlPreferences,
-                    typography: widget.typography,
-                    renderEnvironment: widget.renderEnvironment,
-                    renderDocument: widget.renderDocument,
-                    episode: widget.episode,
-                    imageReferer: widget.imageReferer,
-                    onLinkTap: widget.onLinkTap,
-                    onOpenImage: widget.onOpenImage,
-                    onImageFallback: widget.onImageFallback,
-                    onContentInteraction: widget.onContentInteraction,
-                    imageReaderBridge: widget.imageReaderBridge,
-                    imageHost: widget.imageHost,
-                    isVisible: index == _currentPage,
-                    readingAuthorityIdentity: widget.readingAuthorityIdentity,
-                    onImagesReadyChanged: widget.onImagesReadyChanged,
-                    onScrollActivityChanged: widget.onScrollActivityChanged,
-                    onBodyVisibilityChanged: (visibility) =>
-                        _onBodyVisibilityChanged(index, visibility),
-                  ),
-                );
+            child: Listener(
+              key: const Key('novel-reader-page-pointer-listener'),
+              behavior: HitTestBehavior.translucent,
+              onPointerDown: (event) {
+                if (mounted && paperEnabled) {
+                  _updatePaperTouch(event.localPosition.dy);
+                }
               },
+              onPointerMove: (event) {
+                if (mounted && paperEnabled) {
+                  _updatePaperTouch(event.localPosition.dy);
+                }
+              },
+              child: PageView.builder(
+                key: const Key('novel-reader-paged-page-view'),
+                controller: _pageController,
+                reverse: widget.reverse,
+                allowImplicitScrolling: false,
+                clipBehavior:
+                    fullSheetEnabled ||
+                        widget.pageEffect == NovelReaderPageEffect.staggered &&
+                            !MediaQuery.disableAnimationsOf(context)
+                    ? Clip.none
+                    : Clip.hardEdge,
+                pageSnapping: false,
+                physics: NovelReaderPageScrollPhysics(
+                  durationScale: () => MediaQuery.disableAnimationsOf(context)
+                      ? 0.01
+                      : NovelReaderPageMotion.snapDurationScale(
+                          widget.pageEffect,
+                          widget.pageSpeed,
+                        ),
+                  // Preserve single-page turn-past-the-edge gestures.
+                  parent: const AlwaysScrollableScrollPhysics(),
+                ),
+                itemCount: pageCount,
+                onPageChanged: _onPageChanged,
+                itemBuilder: (context, index) {
+                  final page = widget.plan.pages[index];
+                  return NovelReaderPageTransition(
+                    controller: _pageController,
+                    index: index,
+                    effect: MediaQuery.disableAnimationsOf(context)
+                        ? NovelReaderPageEffect.fade
+                        : widget.pageEffect,
+                    reverse: widget.reverse,
+                    paperColor: widget.theme.surface,
+                    paperClock: _paperClock,
+                    paragraphClock: _paragraphClock,
+                    paperInsets: widget.paperInsets,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Padding(
+                          key: ValueKey<String>(
+                            'novel-reader-paged-content-inset-${page.index}',
+                          ),
+                          padding: EdgeInsets.only(
+                            bottom: widget.contentBottomInset,
+                          ),
+                          child: _NovelReaderPagedPage(
+                            key: ValueKey<String>(
+                              'novel-reader-paged-page-${page.index}',
+                            ),
+                            page: page,
+                            plan: widget.plan,
+                            theme: widget.theme,
+                            htmlPreferences: widget.htmlPreferences,
+                            typography: widget.typography,
+                            renderEnvironment: widget.renderEnvironment,
+                            renderDocument: widget.renderDocument,
+                            episode: widget.episode,
+                            imageReferer: widget.imageReferer,
+                            onLinkTap: widget.onLinkTap,
+                            onOpenImage: widget.onOpenImage,
+                            onImageFallback: widget.onImageFallback,
+                            onContentInteraction: widget.onContentInteraction,
+                            imageReaderBridge: widget.imageReaderBridge,
+                            imageHost: widget.imageHost,
+                            isVisible: index == _currentPage,
+                            readingAuthorityIdentity:
+                                widget.readingAuthorityIdentity,
+                            onImagesReadyChanged: widget.onImagesReadyChanged,
+                            onScrollActivityChanged:
+                                widget.onScrollActivityChanged,
+                            onBodyVisibilityChanged: (visibility) =>
+                                _onBodyVisibilityChanged(index, visibility),
+                          ),
+                        ),
+                        if (fullSheetEnabled && widget.showProgressIndicator)
+                          _pageIndicator(index),
+                      ],
+                    ),
+                  );
+                },
+              ),
             ),
           ),
           _NovelReaderChapterTurnHintOverlay(
             hint: _chapterTurnHint,
             bottomInset: widget.contentBottomInset,
           ),
-          if (widget.showProgressIndicator)
-            Positioned(
-              key: const Key('novel-reader-page-indicator'),
-              right: NovelReaderPagedIndicatorLayout.rightInset,
-              bottom: NovelReaderPagedIndicatorLayout.bottomInset,
-              child: Text(
-                l10n.novelPageIndicator(
-                  _currentPage + 1,
-                  widget.isPageCountFinal
-                      ? '$pageCount'
-                      : l10n.novelPageCountPending,
-                ),
-                key: const Key('novel-reader-page-indicator-text'),
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  fontSize: NovelReaderPagedIndicatorLayout.fontSize,
-                  height: NovelReaderPagedIndicatorLayout.lineHeight,
-                  letterSpacing: 0,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
+          if (widget.showProgressIndicator && !fullSheetEnabled)
+            _pageIndicator(_currentPage),
         ],
+      ),
+    );
+  }
+
+  void _updatePaperTouch(double dy) {
+    if (!_pageController.hasClients) return;
+    final size = context.size;
+    if (size == null) return;
+    final height = size.height + widget.paperInsets.vertical;
+    if (height > 0) _paperClock.touchY = (dy + widget.paperInsets.top) / height;
+  }
+
+  Widget _pageIndicator(int index) {
+    final l10n = AppLocalizations.of(context);
+    return Positioned(
+      key: const Key('novel-reader-page-indicator'),
+      right: NovelReaderPagedIndicatorLayout.rightInset,
+      bottom: NovelReaderPagedIndicatorLayout.bottomInset,
+      child: Text(
+        l10n.novelPageIndicator(
+          index + 1,
+          widget.isPageCountFinal
+              ? '${widget.plan.pageCount}'
+              : l10n.novelPageCountPending,
+        ),
+        key: const Key('novel-reader-page-indicator-text'),
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          fontSize: NovelReaderPagedIndicatorLayout.fontSize,
+          height: NovelReaderPagedIndicatorLayout.lineHeight,
+          letterSpacing: 0,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
       ),
     );
   }
@@ -2126,10 +2213,17 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
     _tapTurnAnimationIdentity = identity;
     _forwardAnimationTarget = confirmOnArrival ? target : null;
     try {
+      if (MediaQuery.disableAnimationsOf(context)) {
+        _pageController.jumpToPage(target);
+        return;
+      }
       await _pageController.animateToPage(
         target,
-        duration: ReaderPagedTurnMotion.animationDuration,
-        curve: ReaderPagedTurnMotion.animationCurve,
+        duration: NovelReaderPageMotion.duration(
+          widget.pageEffect,
+          widget.pageSpeed,
+        ),
+        curve: NovelReaderPageMotion.curve(widget.pageEffect),
       );
     } finally {
       if (mounted && identical(_tapTurnAnimationIdentity, identity)) {
@@ -2712,6 +2806,7 @@ class _NovelReaderPagedPageState extends ConsumerState<_NovelReaderPagedPage> {
     }
     final contentIdentity = _contentIdentity;
     Widget child = ForumHtmlWidgetPostRenderer(
+      blockDecorator: decorateNovelReaderParagraph,
       key: ValueKey<int>(widget.page.index),
       html: widget.page.html,
       theme: widget.theme,

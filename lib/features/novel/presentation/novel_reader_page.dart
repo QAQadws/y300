@@ -23,7 +23,6 @@ import 'package:y300/features/library_shared/presentation/reader/reader_corner_d
 import 'package:y300/features/novel/application/novel_reader_display_preferences_coordinator.dart';
 import 'package:y300/features/novel/application/novel_reader_vertical_session_coordinator.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_document.dart';
-import 'package:y300/features/novel/domain/models/novel_reader_spacing.dart';
 import 'package:y300/features/novel/domain/models/novel_episode_open_policy.dart';
 import 'package:y300/features/novel/domain/models/novel_source_reading_context.dart';
 import 'package:y300/features/novel/data/services/novel_reader_progress_diagnostics.dart';
@@ -510,11 +509,16 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
   }
 
   String _readerSurfaceIdentity(NovelReaderViewState viewState) {
+    // Motion changes do not replace the content owner or retire ready/position proof.
+    final surfacePreferences = viewState.renderPreferences.copyWith(
+      pageEffect: NovelReaderPageEffect.slide,
+      pageSpeed: NovelReaderPageSpeed.standard,
+    );
     return '${viewState.currentEpisode.episodeId}|'
         '${viewState.readingSurfaceRevision}|'
         '${viewState.document.rawHtmlHash}|'
         '${viewState.preferences.flowMode.name}|'
-        '${viewState.renderPreferences.hashCode}|'
+        '${surfacePreferences.hashCode}|'
         '${viewState.bodyFont.cacheKey}';
   }
 
@@ -1151,7 +1155,7 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
         child: LayoutBuilder(
           builder: (context, constraints) {
             final sidePadding = math.max(
-              NovelReaderSpacing.verticalPagePadding,
+              viewState.preferences.pagePadding,
               (constraints.maxWidth - _safeContentMaxWidth(typography)) / 2,
             );
             return CustomScrollView(
@@ -1162,10 +1166,9 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
                   key: const Key('novel-reader-content-column'),
                   padding: EdgeInsets.fromLTRB(
                     sidePadding,
-                    NovelReaderSpacing.verticalPagePadding +
-                        chromeInsets.topInset,
+                    viewState.preferences.pagePadding + chromeInsets.topInset,
                     sidePadding,
-                    NovelReaderSpacing.verticalPagePadding +
+                    viewState.preferences.pagePadding +
                         chromeInsets.persistentBottomInset,
                   ),
                   sliver: SliverMainAxisGroup(slivers: children),

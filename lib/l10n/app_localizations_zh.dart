@@ -2205,6 +2205,39 @@ class AppLocalizationsZh extends AppLocalizations {
   String get novelLineSpacing => '间隔';
 
   @override
+  String get novelPagePadding => '页边距';
+
+  @override
+  String get novelPageEffect => '翻页动效';
+
+  @override
+  String get novelPageEffectSlide => '平移';
+
+  @override
+  String get novelPageEffectPaper => '纸页翻动';
+
+  @override
+  String get novelPageEffectFade => '渐隐';
+
+  @override
+  String get novelPageEffectCover => '覆盖';
+
+  @override
+  String get novelPageEffectStaggered => '段落接续';
+
+  @override
+  String get novelPageSpeed => '翻页速度';
+
+  @override
+  String get novelPageSpeedRelaxed => '舒缓';
+
+  @override
+  String get novelPageSpeedStandard => '标准';
+
+  @override
+  String get novelPageSpeedBrisk => '利落';
+
+  @override
   String get novelTheme => '主题';
 
   @override
@@ -7730,6 +7763,39 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get novelLineSpacing => '間隔';
+
+  @override
+  String get novelPagePadding => '頁邊距';
+
+  @override
+  String get novelPageEffect => '翻頁動效';
+
+  @override
+  String get novelPageEffectSlide => '平移';
+
+  @override
+  String get novelPageEffectPaper => '紙頁翻動';
+
+  @override
+  String get novelPageEffectFade => '漸隱';
+
+  @override
+  String get novelPageEffectCover => '覆蓋';
+
+  @override
+  String get novelPageEffectStaggered => '段落接續';
+
+  @override
+  String get novelPageSpeed => '翻頁速度';
+
+  @override
+  String get novelPageSpeedRelaxed => '舒緩';
+
+  @override
+  String get novelPageSpeedStandard => '標準';
+
+  @override
+  String get novelPageSpeedBrisk => '俐落';
 
   @override
   String get novelTheme => '主題';

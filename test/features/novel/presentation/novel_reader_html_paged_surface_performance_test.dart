@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
 import '../../../test_support/localized_test_app.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
@@ -36,8 +38,112 @@ import 'package:y300/features/novel/presentation/services/novel_reader_paginatio
 import 'package:y300/features/novel/presentation/widgets/novel_reader_html_paged_surface.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader_models.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 void main() {
+  for (final mode in [
+    NovelReaderFlowMode.pagedLtr,
+    NovelReaderFlowMode.pagedRtl,
+  ]) {
+    for (final effect in [
+      NovelReaderPageEffect.fade,
+      NovelReaderPageEffect.cover,
+    ]) {
+      testWidgets(
+        '$effect carries each page indicator through a turn in $mode',
+        (tester) async {
+          final coordinator = _BudgetPaginationCoordinator();
+          final host = _BudgetSurfaceHost(coordinator, enforceBudgets: false)
+            ..preferences = NovelReaderPreferences.defaults().copyWith(
+              flowMode: mode,
+              pageEffect: effect,
+            );
+          _disposeBudgetHost(tester, coordinator);
+          await _pumpBudgetHost(tester, host);
+          coordinator.emit(0, pageCount: 3, isComplete: true);
+          await tester.pumpAndSettle();
+          final finder = find.byKey(const Key('novel-reader-paged-page-view'));
+          final l10n = AppLocalizations.of(tester.element(finder));
+          final controller = tester.widget<PageView>(finder).controller!;
+          controller.jumpTo(controller.position.viewportDimension * .25);
+          await tester.pump();
+          expect(find.text(l10n.novelPageIndicator(1, '3')), findsOneWidget);
+          expect(find.text(l10n.novelPageIndicator(2, '3')), findsOneWidget);
+          controller.jumpToPage(1);
+          await tester.pumpAndSettle();
+          expect(find.text(l10n.novelPageIndicator(2, '3')), findsOneWidget);
+          expect(host.positions.last.pageIndex, 1);
+          expect(coordinator.attempts, hasLength(1));
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
+  for (final mode in [
+    NovelReaderFlowMode.pagedLtr,
+    NovelReaderFlowMode.pagedRtl,
+  ]) {
+    testWidgets('page motion settings retain layout and navigation in $mode', (
+      tester,
+    ) async {
+      final coordinator = _BudgetPaginationCoordinator();
+      final host = _BudgetSurfaceHost(coordinator, enforceBudgets: false)
+        ..preferences = NovelReaderPreferences.defaults().copyWith(
+          flowMode: mode,
+        );
+      _disposeBudgetHost(tester, coordinator);
+      await _pumpBudgetHost(tester, host);
+      coordinator.emit(0, pageCount: 3, isComplete: true);
+      await tester.pumpAndSettle();
+      final pageFinder = find.byKey(const Key('novel-reader-paged-page-view'));
+      final element = tester.element(pageFinder);
+      for (final effect in NovelReaderPageEffect.values) {
+        host.preferences = host.preferences.copyWith(
+          pageEffect: effect,
+          pageSpeed: NovelReaderPageSpeed.brisk,
+        );
+        await _pumpBudgetHost(tester, host);
+        expect(tester.element(pageFinder), same(element));
+        expect(coordinator.attempts, hasLength(1));
+        expect(host.navigation.turnNext(), isTrue);
+        await tester.pumpAndSettle();
+        expect(host.positions.last.pageIndex, 1);
+        expect(host.positions.last.hasUserNavigated, isTrue);
+        expect(host.navigation.turnPrevious(), isTrue);
+        await tester.pumpAndSettle();
+        expect(host.positions.last.pageIndex, 0);
+        expect(tester.takeException(), isNull);
+      }
+    });
+  }
+
+  testWidgets(
+    'padding changes invalidate measured layout and rendered insets together',
+    (tester) async {
+      final coordinator = _BudgetPaginationCoordinator();
+      final host = _BudgetSurfaceHost(coordinator, enforceBudgets: false);
+      _disposeBudgetHost(tester, coordinator);
+      await _pumpBudgetHost(tester, host);
+      coordinator.emit(0, pageCount: 3, isComplete: true);
+      await tester.pumpAndSettle();
+      final original = coordinator.attempts.single.key;
+      host.preferences = host.preferences.copyWith(pagePadding: 24);
+      await _pumpBudgetHost(tester, host);
+      expect(coordinator.attempts, hasLength(2));
+      final changed = coordinator.attempts.last.key;
+      expect(changed.layoutFingerprint, isNot(original.layoutFingerprint));
+      expect(changed.viewportHeightPx, original.viewportHeightPx - 32);
+      coordinator.emit(1, pageCount: 3, isComplete: true);
+      await tester.pumpAndSettle();
+      final padding = tester.widget<Padding>(
+        find.byKey(const Key('novel-reader-paged-surface')),
+      );
+      expect(padding.padding.resolve(TextDirection.ltr).left, 24);
+      expect(host.positions.last.paginationKey, changed.layoutFingerprint);
+    },
+  );
+
   testWidgets('text-only current page reports images ready without a host', (
     tester,
   ) async {
@@ -52,51 +158,55 @@ void main() {
     expect(host.imagesReady.last, isTrue);
   });
 
-  testWidgets('current image waits for its first frame; neighbor never blocks it', (
-    tester,
-  ) async {
-    final coordinator = _BudgetPaginationCoordinator()
-      ..pageHtml = {
-        0: '<img src="https://images.test/first.png" width="160" height="100">',
-        1: '<img src="https://images.test/second.png" width="160" height="100">',
-      };
-    final images = _ControlledPagedImageHost();
-    final host = _BudgetSurfaceHost(coordinator, enforceBudgets: false)
-      ..imageHost = images
-      ..rawHtml = coordinator.pageHtml.values.join();
-    _disposeBudgetHost(tester, coordinator);
-    addTearDown(images.dispose);
-    await _pumpBudgetHost(tester, host);
-    coordinator.emit(0, pageCount: 2, isComplete: true);
-    await tester.pump();
-    await tester.pump();
-    await tester.pumpAndSettle();
-    expect(host.imagesReady.last, isFalse);
-    images.show('https://images.test/first.png');
-    await tester.pump();
-    await tester.pumpAndSettle();
-    expect(host.imagesReady.last, isTrue);
+  testWidgets(
+    'current image waits for its first frame; neighbor never blocks it',
+    (tester) async {
+      final coordinator = _BudgetPaginationCoordinator()
+        ..pageHtml = {
+          0: '<img src="https://images.test/first.png" width="160" height="100">',
+          1: '<img src="https://images.test/second.png" width="160" height="100">',
+        };
+      final images = _ControlledPagedImageHost();
+      final host = _BudgetSurfaceHost(coordinator, enforceBudgets: false)
+        ..imageHost = images
+        ..rawHtml = coordinator.pageHtml.values.join();
+      _disposeBudgetHost(tester, coordinator);
+      addTearDown(images.dispose);
+      await _pumpBudgetHost(tester, host);
+      coordinator.emit(0, pageCount: 2, isComplete: true);
+      await tester.pump();
+      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(host.imagesReady.last, isFalse);
+      images.show('https://images.test/first.png');
+      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(host.imagesReady.last, isTrue);
 
-    final pageView = find.byKey(const Key('novel-reader-paged-page-view'));
-    final gesture = await tester.startGesture(tester.getCenter(pageView));
-    await gesture.moveBy(const Offset(-140, 0));
-    await tester.pump();
-    await tester.pump();
-    expect(images.frames.containsKey('https://images.test/second.png'), isTrue);
-    expect(host.positions.last.pageIndex, 0);
-    expect(host.imagesReady.last, isTrue);
-    await gesture.up();
-    await tester.pumpAndSettle();
+      final pageView = find.byKey(const Key('novel-reader-paged-page-view'));
+      final gesture = await tester.startGesture(tester.getCenter(pageView));
+      await gesture.moveBy(const Offset(-140, 0));
+      await tester.pump();
+      await tester.pump();
+      expect(
+        images.frames.containsKey('https://images.test/second.png'),
+        isTrue,
+      );
+      expect(host.positions.last.pageIndex, 0);
+      expect(host.imagesReady.last, isTrue);
+      await gesture.up();
+      await tester.pumpAndSettle();
 
-    expect(host.navigation.turnNext(), isTrue);
-    await tester.pumpAndSettle();
-    expect(host.positions.last.pageIndex, 1);
-    expect(host.imagesReady.last, isFalse);
-    images.show('https://images.test/second.png');
-    await tester.pump();
-    await tester.pumpAndSettle();
-    expect(host.imagesReady.last, isTrue);
-  });
+      expect(host.navigation.turnNext(), isTrue);
+      await tester.pumpAndSettle();
+      expect(host.positions.last.pageIndex, 1);
+      expect(host.imagesReady.last, isFalse);
+      images.show('https://images.test/second.png');
+      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(host.imagesReady.last, isTrue);
+    },
+  );
 
   testWidgets('failed image cannot make a paged chapter completion-ready', (
     tester,
@@ -707,16 +817,15 @@ void main() {
                 progressPercent: 0,
               ),
               chromeInsets: insets,
-              coordinatorBuilder:
-                  ({
-                    required BuildContext context,
-                    required ForumHtmlThemeContext theme,
-                    required ForumHtmlReaderPreferences preferences,
-                    required String sourceId,
-                    required String? threadId,
-                    required String? imageCacheOwnerId,
-                    required String? imageReferer,
-                  }) => coordinator,
+              coordinatorBuilder: ({
+                required BuildContext context,
+                required ForumHtmlThemeContext theme,
+                required ForumHtmlReaderPreferences preferences,
+                required String sourceId,
+                required String? threadId,
+                required String? imageCacheOwnerId,
+                required String? imageReferer,
+              }) => coordinator,
             ),
           ),
         ),
@@ -794,16 +903,15 @@ void main() {
                 pageIndex: 0,
                 progressPercent: 0,
               ),
-              coordinatorBuilder:
-                  ({
-                    required BuildContext context,
-                    required ForumHtmlThemeContext theme,
-                    required ForumHtmlReaderPreferences preferences,
-                    required String sourceId,
-                    required String? threadId,
-                    required String? imageCacheOwnerId,
-                    required String? imageReferer,
-                  }) => coordinator,
+              coordinatorBuilder: ({
+                required BuildContext context,
+                required ForumHtmlThemeContext theme,
+                required ForumHtmlReaderPreferences preferences,
+                required String sourceId,
+                required String? threadId,
+                required String? imageCacheOwnerId,
+                required String? imageReferer,
+              }) => coordinator,
             ),
           ),
         ),
@@ -1074,7 +1182,10 @@ void main() {
     'a missing forward page keeps one target until it becomes readable',
     (tester) async {
       final coordinator = _BudgetPaginationCoordinator();
-      final host = _BudgetSurfaceHost(coordinator, enforceBudgets: false);
+      final host = _BudgetSurfaceHost(coordinator, enforceBudgets: false)
+        ..preferences = NovelReaderPreferences.defaults().copyWith(
+          pageEffect: NovelReaderPageEffect.staggered,
+        );
       _disposeBudgetHost(tester, coordinator);
       await _pumpBudgetHost(tester, host);
       coordinator.emit(0, pageCount: 2);
@@ -1681,16 +1792,15 @@ void main() {
                 anchorNodeId: 'paragraph-1',
                 progressPercent: 0.5,
               ),
-              coordinatorBuilder:
-                  ({
-                    required BuildContext context,
-                    required ForumHtmlThemeContext theme,
-                    required ForumHtmlReaderPreferences preferences,
-                    required String sourceId,
-                    required String? threadId,
-                    required String? imageCacheOwnerId,
-                    required String? imageReferer,
-                  }) => coordinator,
+              coordinatorBuilder: ({
+                required BuildContext context,
+                required ForumHtmlThemeContext theme,
+                required ForumHtmlReaderPreferences preferences,
+                required String sourceId,
+                required String? threadId,
+                required String? imageCacheOwnerId,
+                required String? imageReferer,
+              }) => coordinator,
               diagnosticsSink: diagnostics,
               onPositionChanged: (position) {
                 positions.add(position);
@@ -1808,16 +1918,15 @@ void main() {
               ),
               navigationController: navigation,
               pageSeekRequest: seekRequest,
-              coordinatorBuilder:
-                  ({
-                    required BuildContext context,
-                    required ForumHtmlThemeContext theme,
-                    required ForumHtmlReaderPreferences preferences,
-                    required String sourceId,
-                    required String? threadId,
-                    required String? imageCacheOwnerId,
-                    required String? imageReferer,
-                  }) => coordinator,
+              coordinatorBuilder: ({
+                required BuildContext context,
+                required ForumHtmlThemeContext theme,
+                required ForumHtmlReaderPreferences preferences,
+                required String sourceId,
+                required String? threadId,
+                required String? imageCacheOwnerId,
+                required String? imageReferer,
+              }) => coordinator,
               onPositionChanged: positions.add,
             ),
           ),

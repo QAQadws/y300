@@ -30,6 +30,10 @@ export 'src/html_rendering/forum_html_render_style_policy.dart';
 export 'src/html_rendering/forum_html_render_text_style_resolver.dart';
 export 'src/html_rendering/forum_html_preparation_pipeline.dart';
 export 'src/html_rendering/forum_html_renderer.dart';
+export 'src/html_rendering/forum_html_block_decorator.dart'
+    show ForumHtmlBlockDecorator;
+export 'src/html_rendering/forum_html_paragraph_metrics.dart'
+    show ForumHtmlParagraphMetrics, RenderForumHtmlParagraphMetrics;
 export 'src/html_rendering/forum_html_safe_display_planner.dart';
 export 'src/html_rendering/theme/css_author_color_parser.dart';
 export 'src/html_rendering/theme/css_inline_style_declarations.dart';

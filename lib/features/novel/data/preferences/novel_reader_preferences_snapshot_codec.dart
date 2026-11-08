@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:y300/features/fonts/fonts.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_preferences.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_spacing.dart';
 
 final class NovelReaderPreferencesSnapshotCodec {
   const NovelReaderPreferencesSnapshotCodec();
@@ -20,6 +21,9 @@ final class NovelReaderPreferencesSnapshotCodec {
       'schemaVersion': schemaVersion,
       'fontSize': normalized.fontSize,
       'lineHeight': normalized.lineHeight,
+      'pagePadding': normalized.pagePadding,
+      'pageEffect': normalized.pageEffect.name,
+      'pageSpeed': normalized.pageSpeed.name,
       'fontFamily': normalized.fontFamily,
       'flowMode': normalized.flowMode.storageValue,
       'themePreset': normalized.themePreset.storageValue,
@@ -53,6 +57,22 @@ final class NovelReaderPreferencesSnapshotCodec {
           fallback: defaults.lineHeight,
         ),
         fontFamily: _fontId(decoded['fontFamily']),
+        pagePadding: _validDouble(
+          decoded['pagePadding'],
+          min: NovelReaderSpacing.minimumPagePadding,
+          max: NovelReaderSpacing.maximumPagePadding,
+          fallback: defaults.pagePadding,
+        ),
+        pageEffect: _enumValue(
+          decoded['pageEffect'],
+          NovelReaderPageEffect.values,
+          defaults.pageEffect,
+        ),
+        pageSpeed: _enumValue(
+          decoded['pageSpeed'],
+          NovelReaderPageSpeed.values,
+          defaults.pageSpeed,
+        ),
         // A persisted schema-1 snapshot predates the new-reader default.
         // Preserve its former implicit vertical mode when this field is
         // absent or unknown instead of silently migrating an existing user.
@@ -88,6 +108,14 @@ final class NovelReaderPreferencesSnapshotCodec {
         fallback: defaults.lineHeight,
       ),
       fontFamily: _fontId(preferences.fontFamily),
+      pagePadding: _validDouble(
+        preferences.pagePadding,
+        min: NovelReaderSpacing.minimumPagePadding,
+        max: NovelReaderSpacing.maximumPagePadding,
+        fallback: defaults.pagePadding,
+      ),
+      pageEffect: preferences.pageEffect,
+      pageSpeed: preferences.pageSpeed,
       flowMode: preferences.flowMode,
       themePreset: preferences.themePreset,
       conversionMode: preferences.conversionMode,
@@ -106,6 +134,13 @@ final class NovelReaderPreferencesSnapshotCodec {
       return fallback;
     }
     return value;
+  }
+
+  T _enumValue<T extends Enum>(Object? raw, List<T> values, T fallback) {
+    for (final value in values) {
+      if (value.name == raw) return value;
+    }
+    return fallback;
   }
 
   String _fontId(Object? raw) =>

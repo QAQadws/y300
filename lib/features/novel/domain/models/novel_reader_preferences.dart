@@ -4,6 +4,18 @@ enum NovelReaderThemePreset { followApp, light, sepia, dark }
 
 enum NovelReaderFlowMode { vertical, pagedLtr, pagedRtl }
 
+/// Names are stable schema-1 snapshot tokens, independent of reading direction.
+enum NovelReaderPageEffect { slide, paper, fade, cover, staggered }
+
+enum NovelReaderPageSpeed {
+  relaxed(1.35),
+  standard(1),
+  brisk(0.7);
+
+  const NovelReaderPageSpeed(this.durationScale);
+  final double durationScale;
+}
+
 enum NovelReaderTextAlignMode { start, justify, center }
 
 /// Traditional/simplified conversion direction for the novel reader.
@@ -131,6 +143,8 @@ class NovelReaderPreferences {
     required this.pagePadding,
     required this.fontFamily,
     this.flowMode = NovelReaderFlowMode.pagedLtr,
+    this.pageEffect = NovelReaderPageEffect.slide,
+    this.pageSpeed = NovelReaderPageSpeed.standard,
     NovelReaderThemePreset themePreset = NovelReaderThemePreset.followApp,
     this.contentMaxWidth = 720,
     this.firstLineIndent = 0,
@@ -151,6 +165,8 @@ class NovelReaderPreferences {
     required this.pagePadding,
     required this.fontFamily,
     required this.flowMode,
+    required this.pageEffect,
+    required this.pageSpeed,
     required this.themePreset,
     required this.contentMaxWidth,
     required this.firstLineIndent,
@@ -169,6 +185,8 @@ class NovelReaderPreferences {
       pagePadding: NovelReaderSpacing.pagedPagePadding,
       fontFamily: 'system',
       flowMode: NovelReaderFlowMode.pagedLtr,
+      pageEffect: NovelReaderPageEffect.slide,
+      pageSpeed: NovelReaderPageSpeed.standard,
       themePreset: NovelReaderThemePreset.followApp,
       contentMaxWidth: 720,
       firstLineIndent: 0,
@@ -188,6 +206,8 @@ class NovelReaderPreferences {
   /// Persisted choice: `system` or a font content ID, never an engine family.
   final String fontFamily;
   final NovelReaderFlowMode flowMode;
+  final NovelReaderPageEffect pageEffect;
+  final NovelReaderPageSpeed pageSpeed;
   final NovelReaderThemePreset themePreset;
   final double contentMaxWidth;
   final double firstLineIndent;
@@ -211,6 +231,8 @@ class NovelReaderPreferences {
         other.pagePadding == pagePadding &&
         other.fontFamily == fontFamily &&
         other.flowMode == flowMode &&
+        other.pageEffect == pageEffect &&
+        other.pageSpeed == pageSpeed &&
         other.themePreset == themePreset &&
         other.contentMaxWidth == contentMaxWidth &&
         other.firstLineIndent == firstLineIndent &&
@@ -229,6 +251,8 @@ class NovelReaderPreferences {
     pagePadding,
     fontFamily,
     flowMode,
+    pageEffect,
+    pageSpeed,
     themePreset,
     contentMaxWidth,
     firstLineIndent,
@@ -247,6 +271,8 @@ class NovelReaderPreferences {
     String? themeMode,
     String? fontFamily,
     NovelReaderFlowMode? flowMode,
+    NovelReaderPageEffect? pageEffect,
+    NovelReaderPageSpeed? pageSpeed,
     NovelReaderThemePreset? themePreset,
     double? contentMaxWidth,
     double? firstLineIndent,
@@ -263,6 +289,8 @@ class NovelReaderPreferences {
       pagePadding: pagePadding ?? this.pagePadding,
       fontFamily: fontFamily ?? this.fontFamily,
       flowMode: flowMode ?? this.flowMode,
+      pageEffect: pageEffect ?? this.pageEffect,
+      pageSpeed: pageSpeed ?? this.pageSpeed,
       themePreset: themeMode == null
           ? (themePreset ?? this.themePreset)
           : NovelReaderThemePresetCodec.fromStorage(themeMode),

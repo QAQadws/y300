@@ -1,23 +1,12 @@
-/// Page margins of the novel reader surfaces.
+/// Defaults and supported logical-pixel range for the shared page margin.
 ///
-/// Tuning guide: both values are safe knobs, but they are not interchangeable.
-///
-/// [verticalPagePadding] is pure visual padding on a scrolling list — changing
-/// it only moves pixels.
-///
-/// [pagedPagePadding] is *also* an input to the pagination math. In
-/// `NovelReaderHtmlPagedSurface` one `LayoutBuilder` derives the measured page
-/// box (`pageWidth` / `paginationHeight`) and the rendered `Padding` from the
-/// same value, and that value is part of both the pagination cache key and the
-/// typography signature. So a change here re-measures and re-paginates rather
-/// than stretching an existing layout. Keep it that way: never hardcode a
-/// padding literal into only one of the two paths, or the page breaker will
-/// measure against a box the renderer does not use and text will overflow.
-///
-/// Growing [pagedPagePadding] shrinks the content box, which is the direction
-/// that can push a page's last line past the bottom edge if the two paths ever
-/// disagree. Shrinking it is the safe direction.
+/// Both reading modes use the live preferences.pagePadding. Paged measurement,
+/// visible insets and the layout cache identity must derive from that same value
+/// so increasing a margin re-paginates instead of overflowing an old page.
 abstract final class NovelReaderSpacing {
+  static const double minimumPagePadding = 0;
+  static const double maximumPagePadding = 48;
+
   /// Page margin of the scrolling (vertical) reading mode.
   static const double verticalPagePadding = 8;
 

@@ -1,4 +1,5 @@
 import '../../application/forum_html_render_preferences_projection.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
@@ -12,8 +13,10 @@ import 'package:y300/features/content_rendering_shared/application/forum_html_im
 import 'package:y300/features/content_rendering_shared/application/host/cache_forum_html_image_host.dart';
 import 'package:y300/features/content_rendering_shared/domain/models/forum_html_reader_preferences.dart';
 import 'package:y300/features/content_rendering_shared/application/forum_html_render_preparer.dart';
+
 import '../../application/forum_html_preparation_controller.dart';
 import '../../application/forum_html_preparation_executor.dart';
+
 import 'package:y300/l10n/app_localizations.dart';
 
 class ForumHtmlWidgetPostRenderer extends StatefulWidget {
@@ -50,6 +53,7 @@ class ForumHtmlWidgetPostRenderer extends StatefulWidget {
     this.linkBaseUri,
     this.contentLayout = ForumHtmlContentLayout.document,
     this.hasTrailingContent = false,
+    this.blockDecorator,
   });
 
   static final Uri forumBaseUri = Uri.parse('https://bbs.yamibo.com/');
@@ -96,6 +100,7 @@ class ForumHtmlWidgetPostRenderer extends StatefulWidget {
   final ForumHtmlBlockSpacingMode blockSpacingMode;
   final ForumHtmlContentLayout contentLayout;
   final bool hasTrailingContent;
+  final ForumHtmlBlockDecorator? blockDecorator;
 
   /// The current source document, so fragment links retain article identity.
   final Uri? linkBaseUri;
@@ -203,6 +208,7 @@ class _ForumHtmlWidgetPostRendererState
       blockSpacingMode: widget.blockSpacingMode,
       contentLayout: widget.contentLayout,
       hasTrailingContent: widget.hasTrailingContent,
+      blockDecorator: widget.blockDecorator,
       linkBaseUri:
           widget.linkBaseUri ?? ForumHtmlWidgetPostRenderer.forumBaseUri,
     );

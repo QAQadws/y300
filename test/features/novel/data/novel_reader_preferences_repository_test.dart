@@ -61,6 +61,9 @@ void main() {
       'schemaVersion',
       'fontSize',
       'lineHeight',
+      'pagePadding',
+      'pageEffect',
+      'pageSpeed',
       'fontFamily',
       'flowMode',
       'themePreset',
@@ -81,6 +84,9 @@ void main() {
         fontSize: 22,
         flowMode: NovelReaderFlowMode.pagedLtr,
         themePreset: NovelReaderThemePreset.light,
+        pagePadding: 24,
+        pageEffect: NovelReaderPageEffect.paper,
+        pageSpeed: NovelReaderPageSpeed.relaxed,
       ),
     );
     legacySource.value = NovelReaderPreferences.defaults().copyWith(
@@ -97,6 +103,9 @@ void main() {
     expect(loaded.fontSize, 22);
     expect(loaded.flowMode, NovelReaderFlowMode.pagedLtr);
     expect(loaded.themePreset, NovelReaderThemePreset.light);
+    expect(loaded.pagePadding, 24);
+    expect(loaded.pageEffect, NovelReaderPageEffect.paper);
+    expect(loaded.pageSpeed, NovelReaderPageSpeed.relaxed);
     expect(legacySource.callCount, 0);
   });
 
@@ -220,6 +229,47 @@ void main() {
       );
       expect(codec.decode(jsonEncode(encoded)).flowMode, flowMode);
     }
+  });
+
+  test(
+    'codec round-trips page motion without persisting unsupported layout',
+    () {
+      const codec = NovelReaderPreferencesSnapshotCodec();
+      for (final effect in NovelReaderPageEffect.values) {
+        for (final speed in NovelReaderPageSpeed.values) {
+          final preferences = NovelReaderPreferences.defaults().copyWith(
+            pagePadding: 48,
+            pageEffect: effect,
+            pageSpeed: speed,
+          );
+          expect(codec.decode(codec.encode(preferences)), preferences);
+        }
+      }
+    },
+  );
+
+  test('old and invalid page settings fall back field by field', () {
+    const codec = NovelReaderPreferencesSnapshotCodec();
+    for (final padding in <Object?>[null, '24', -1, 49, true]) {
+      final decoded = codec.decode(
+        jsonEncode({
+          'schemaVersion': 1,
+          'fontSize': 22,
+          'pagePadding': padding,
+          'pageEffect': 'future-effect',
+          'pageSpeed': 42,
+        }),
+      );
+      expect(decoded.pagePadding, 8);
+      expect(decoded.pageEffect, NovelReaderPageEffect.slide);
+      expect(decoded.pageSpeed, NovelReaderPageSpeed.standard);
+      expect(decoded.fontSize, 22);
+    }
+    final normalized = codec.normalize(
+      NovelReaderPreferences.defaults().copyWith(pagePadding: double.nan),
+    );
+    expect(normalized.pagePadding, 8);
+    expect(codec.decode('{"schemaVersion":1}').pagePadding, 8);
   });
 
   test('codec upgrades legacy system themes to follow app', () {

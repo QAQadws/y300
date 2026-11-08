@@ -16,6 +16,8 @@ Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `
 
 ## 长正文与按需布局
 
+`ForumHtmlRenderer.blockDecorator` 是可选的纯绘制装饰端口；宿主必须保持子项的布局和 intrinsic size，并在同一正文中稳定提供该能力。普通段落使用保留的完整 Widget，结构性外层 div 不合并全部段落；表格、引用、列表、折叠和具有背景／边框／padding 等盒样式的祖先按整体装饰，避免对子孙重复叠加变换。普通富文本块包含硬换行时，通过 `ForumHtmlParagraphMetrics` 暴露其真实排版后的段落矩形；`RenderForumHtmlParagraphMetrics.paragraphs` 是只读局部坐标，只在 layout 更新，不把 UTF-16 选区作为阅读锚点。空行仍保留在原始 RichText 中，不新建 renderer 或改写 BR 为 P；宿主可据真实段落边界绘制一次动画期间保留的纹理，不按任意屏幕条带分组。此端口不修改 prepared HTML、文本坐标、图片编号、准备／分页缓存身份，也不负责动画时钟或阅读导航。更新装饰回调通过保留的 child 绑定传递；切换是否提供该能力属于结构变化，会重建对应正文。
+
 `RenderMode.column` 生成 box 正文，适合卡片等 box 宿主。`RenderMode.sliverList` 需要真实的外层 sliver 视口。宿主应保留原有楼层懒构建：一次挂载每个楼层的 renderer，再仅让它们的 sliver 懒布局，会提前触发所有楼层的准备工作。内嵌 shrink-wrap 列表仍需测量正文总高度，不能用它证明屏外段落没有布局。
 
 当前 fwfh 0.17.4 的 sliver 模式会先解析整份 HTML、处理样式并建立根 children 列表，之后按需挂载与布局子项。平级段落可减少初始 RenderObject 数量；一个带装饰的巨大容器、一个含大量 BR 的行内段落仍可能成为单个子项，初始构建不会随可见段落数减少。分别统计 DOM/样式访问、文字 Widget 创建、实际挂载和布局，不能将这些指标混为一项。

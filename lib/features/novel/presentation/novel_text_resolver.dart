@@ -139,6 +139,24 @@ abstract final class NovelTextResolver {
     };
   }
 
+  static String pageEffect(
+    AppLocalizations l10n,
+    NovelReaderPageEffect effect,
+  ) => switch (effect) {
+    NovelReaderPageEffect.slide => l10n.novelPageEffectSlide,
+    NovelReaderPageEffect.paper => l10n.novelPageEffectPaper,
+    NovelReaderPageEffect.fade => l10n.novelPageEffectFade,
+    NovelReaderPageEffect.cover => l10n.novelPageEffectCover,
+    NovelReaderPageEffect.staggered => l10n.novelPageEffectStaggered,
+  };
+
+  static String pageSpeed(AppLocalizations l10n, NovelReaderPageSpeed speed) =>
+      switch (speed) {
+        NovelReaderPageSpeed.relaxed => l10n.novelPageSpeedRelaxed,
+        NovelReaderPageSpeed.standard => l10n.novelPageSpeedStandard,
+        NovelReaderPageSpeed.brisk => l10n.novelPageSpeedBrisk,
+      };
+
   static String chapterTurnHint(
     AppLocalizations l10n,
     NovelReaderChapterTurnHint hint,

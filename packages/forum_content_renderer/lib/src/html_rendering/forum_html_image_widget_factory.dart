@@ -10,6 +10,8 @@ import '../contracts/forum_html_image_host.dart';
 import '../contracts/forum_html_image_predecode_host.dart';
 import 'forum_html_prepared_render_document.dart';
 import 'forum_html_render_callbacks.dart';
+import 'forum_html_block_decorator.dart';
+import 'forum_html_paragraph_metrics.dart';
 import 'widgets/forum_html_block_image_frame.dart';
 import '../services/forum_html_image_viewport_coordinator.dart';
 import '../services/forum_html_image_anchor_controller.dart';
@@ -42,6 +44,8 @@ class ForumHtmlImageWidgetFactory extends WidgetFactory {
     this.onBodyBuilt,
     this.readableImageKeyPrefix,
     this.hasTrailingContentFor,
+    this.decorateBlock,
+    this.blockDecorationEnabled,
   });
 
   final ValueListenable<ForumHtmlImageFactoryBinding> binding;
@@ -53,7 +57,56 @@ class ForumHtmlImageWidgetFactory extends WidgetFactory {
   final void Function(ForumHtmlImageLayoutShift shift)? onImageLayoutShift;
   final String? readableImageKeyPrefix;
   final bool Function()? hasTrailingContentFor;
+  final Widget Function(Widget child)? decorateBlock;
+  final bool Function()? blockDecorationEnabled;
   var _nextImageIndex = 0;
+
+  @override
+  void parse(BuildTree tree) {
+    super.parse(tree);
+    final decorate = decorateBlock;
+    if (decorate == null ||
+        blockDecorationEnabled?.call() == false ||
+        !ForumHtmlBlockDecorationPolicy.isBlock(tree.element) ||
+        ForumHtmlBlockDecorationPolicy.hasBlockAncestor(tree.element)) {
+      return;
+    }
+    tree.register(
+      BuildOp.v2(
+        onRenderedBlock: (_, block) {
+          if (block is WidgetPlaceholder) {
+            block.wrapWith((_, child) => decorate(child));
+          }
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget? buildText(
+    BuildTree tree,
+    InheritedProperties resolved,
+    InlineSpan text,
+  ) {
+    var child = super.buildText(tree, resolved, text);
+    final decorate = decorateBlock;
+    if (child == null ||
+        decorate == null ||
+        blockDecorationEnabled?.call() == false) {
+      return child;
+    }
+    if (!ForumHtmlBlockDecorationPolicy.isAtomic(tree.element) &&
+        !ForumHtmlBlockDecorationPolicy.hasAtomicAncestor(tree.element) &&
+        text.toPlainText(includeSemanticsLabels: false).contains('\n')) {
+      child = ForumHtmlParagraphMetrics(child: child);
+    }
+    if (ForumHtmlBlockDecorationPolicy.isBlock(tree.element) ||
+        ForumHtmlBlockDecorationPolicy.hasBlockAncestor(tree.element)) {
+      return child;
+    }
+    // Unwrapped body text, including inline images, is one intact paragraph.
+    return decorate(child);
+  }
 
   @override
   Iterable<dynamic> getDependencies(BuildContext context) {

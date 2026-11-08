@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/fonts/fonts.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
+import 'package:y300/features/novel/domain/models/novel_reader_spacing.dart';
 import 'package:y300/features/novel/presentation/novel_text_resolver.dart';
 import 'package:y300/features/novel/presentation/controllers/novel_chapter_interactions_dock_controller.dart';
 import 'package:y300/l10n/app_localizations.dart';
@@ -105,6 +106,17 @@ class _NovelReaderDisplaySettingsSheetState
                       _draft.copyWith(lineHeight: _snap(value, 0.05)),
                     ),
                   ),
+                  _SettingsSlider(
+                    key: const Key('novel-reader-page-padding-slider'),
+                    label: l10n.novelPagePadding,
+                    value: _draft.pagePadding,
+                    min: NovelReaderSpacing.minimumPagePadding,
+                    max: NovelReaderSpacing.maximumPagePadding,
+                    displayValue: _draft.pagePadding.toStringAsFixed(0),
+                    onChanged: (value) => _applyPreferences(
+                      _draft.copyWith(pagePadding: _snap(value, 1)),
+                    ),
+                  ),
                 ],
               ),
               _SettingsSection(
@@ -181,6 +193,28 @@ class _NovelReaderDisplaySettingsSheetState
                     onChanged: (value) =>
                         _applyPreferences(_draft.copyWith(flowMode: value)),
                   ),
+                  if (_draft.flowMode != NovelReaderFlowMode.vertical) ...[
+                    ReaderSegmentControl<NovelReaderPageEffect>(
+                      key: const Key('novel-reader-page-effect-control'),
+                      label: l10n.novelPageEffect,
+                      value: _draft.pageEffect,
+                      values: NovelReaderPageEffect.values,
+                      labelBuilder: (value) =>
+                          NovelTextResolver.pageEffect(l10n, value),
+                      onChanged: (value) =>
+                          _applyPreferences(_draft.copyWith(pageEffect: value)),
+                    ),
+                    ReaderSegmentControl<NovelReaderPageSpeed>(
+                      key: const Key('novel-reader-page-speed-control'),
+                      label: l10n.novelPageSpeed,
+                      value: _draft.pageSpeed,
+                      values: NovelReaderPageSpeed.values,
+                      labelBuilder: (value) =>
+                          NovelTextResolver.pageSpeed(l10n, value),
+                      onChanged: (value) =>
+                          _applyPreferences(_draft.copyWith(pageSpeed: value)),
+                    ),
+                  ],
                   ReaderSegmentControl<NovelReaderConversionMode>(
                     key: const Key('novel-reader-conversion-mode-control'),
                     label: l10n.novelConversionMode,

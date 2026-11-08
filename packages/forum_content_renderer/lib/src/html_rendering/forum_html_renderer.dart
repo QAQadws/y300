@@ -12,6 +12,7 @@ import '../services/forum_html_body_presentation.dart';
 import '../services/forum_html_image_viewport_coordinator.dart';
 import '../services/forum_html_image_anchor_controller.dart';
 import 'forum_html_image_widget_factory.dart';
+import 'forum_html_block_decorator.dart';
 import 'forum_html_prepared_render_document.dart';
 import 'forum_html_render_callbacks.dart';
 import 'forum_html_render_style_policy.dart';
@@ -44,6 +45,7 @@ class ForumHtmlRenderer extends StatefulWidget {
     this.linkBaseUri,
     this.contentLayout = ForumHtmlContentLayout.document,
     this.hasTrailingContent = false,
+    this.blockDecorator,
   });
 
   final ForumHtmlPreparedRenderDocument preparedDocument;
@@ -78,6 +80,7 @@ class ForumHtmlRenderer extends StatefulWidget {
 
   /// True for a display fragment before the logical body's final content edge.
   final bool hasTrailingContent;
+  final ForumHtmlBlockDecorator? blockDecorator;
 
   @override
   State<ForumHtmlRenderer> createState() => _ForumHtmlRendererState();
@@ -193,6 +196,8 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
             _buildCustomWidget(element, stylePolicy, document, binding),
         factoryBuilder: () => ForumHtmlImageWidgetFactory(
           binding: binding,
+          decorateBlock: _decorateBlock,
+          blockDecorationEnabled: () => widget.blockDecorator != null,
           bodyPresentationFor: () =>
               _configuration.value.bodyPresentation ??
               _inlineLayoutPresentation,
@@ -222,6 +227,7 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
           widget.contentLayout,
           widget.hasTrailingContent,
           widget.linkBaseUri,
+          widget.blockDecorator != null,
         ],
         textStyle: baseStyle,
         onTapUrl: (url) {
@@ -274,11 +280,12 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
     ValueNotifier<ForumHtmlImageFactoryBinding> binding,
   ) {
     if (stylePolicy.isDiscuzEditStatusElement(element)) {
-      return _DiscuzEditStatusText(
+      final child = _DiscuzEditStatusText(
         text: element.text.trim(),
         baseStyle: (context) =>
             widget.textStyle ?? stylePolicy.baseTextStyle(context),
       );
+      return _decorateCustomBlock(element, child);
     }
     if (!stylePolicy.isForumCollapseElement(element)) return null;
     final collapseId = _collapseSourceId(element);
@@ -295,44 +302,62 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
     final contentHtml = _DeferredCollapseContentHtml(
       _firstChildWithClass(element, 'showcollapse_content'),
     );
-    return ValueListenableBuilder<ForumHtmlRenderer>(
-      valueListenable: _configuration,
-      builder: (context, configuration, _) => ForumCollapseBlock.lazyContent(
-        titleHtml:
-            titleHtml ??
-            const HtmlEscape().convert(configuration.labels.fallbackTitle),
-        contentHtmlBuilder: contentHtml.call,
-        labels: configuration.labels,
-        initiallyExpanded:
-            configuration.collapseExpansion?[collapseId] ?? initiallyExpanded,
-        onExpandedChanged: (expanded) =>
-            configuration.collapseExpansion?[collapseId] = expanded,
-        sourceId: collapseId,
-        onInteraction: () => widget.callbacks.onInteraction?.call(),
-        nestedRendererBuilder: (html, {required sourceId}) =>
-            _ForumHtmlInheritedHostBinding(
-              binding: binding,
-              child: ForumHtmlRenderer(
-                preparedDocument: document.copyWith(preparedHtml: html),
-                theme: configuration.theme,
-                options: configuration.options,
-                textStyle: configuration.textStyle,
-                textAlign: configuration.textAlign,
-                labels: configuration.labels,
-                callbacks: configuration.callbacks,
-                collapseExpansion: configuration.collapseExpansion,
-                bodyPresentation: configuration.bodyPresentation,
-                buildAsync: configuration.buildAsync,
-                enableCaching: configuration.enableCaching,
-                sourceId: sourceId,
-                blockSpacingMode: configuration.blockSpacingMode,
-                contentLayout: configuration.contentLayout,
-                linkBaseUri: configuration.linkBaseUri,
+    return _decorateCustomBlock(
+      element,
+      ValueListenableBuilder<ForumHtmlRenderer>(
+        valueListenable: _configuration,
+        builder: (context, configuration, _) => ForumCollapseBlock.lazyContent(
+          titleHtml:
+              titleHtml ??
+              const HtmlEscape().convert(configuration.labels.fallbackTitle),
+          contentHtmlBuilder: contentHtml.call,
+          labels: configuration.labels,
+          initiallyExpanded:
+              configuration.collapseExpansion?[collapseId] ?? initiallyExpanded,
+          onExpandedChanged: (expanded) =>
+              configuration.collapseExpansion?[collapseId] = expanded,
+          sourceId: collapseId,
+          onInteraction: () => widget.callbacks.onInteraction?.call(),
+          nestedRendererBuilder: (html, {required sourceId}) =>
+              _ForumHtmlInheritedHostBinding(
+                binding: binding,
+                child: ForumHtmlRenderer(
+                  preparedDocument: document.copyWith(preparedHtml: html),
+                  theme: configuration.theme,
+                  options: configuration.options,
+                  textStyle: configuration.textStyle,
+                  textAlign: configuration.textAlign,
+                  labels: configuration.labels,
+                  callbacks: configuration.callbacks,
+                  collapseExpansion: configuration.collapseExpansion,
+                  bodyPresentation: configuration.bodyPresentation,
+                  buildAsync: configuration.buildAsync,
+                  enableCaching: configuration.enableCaching,
+                  sourceId: sourceId,
+                  blockSpacingMode: configuration.blockSpacingMode,
+                  contentLayout: configuration.contentLayout,
+                  linkBaseUri: configuration.linkBaseUri,
+                ),
               ),
-            ),
+        ),
       ),
     );
   }
+
+  Widget _decorateCustomBlock(html_dom.Element element, Widget child) =>
+      widget.blockDecorator == null ||
+          ForumHtmlBlockDecorationPolicy.hasBlockAncestor(element)
+      ? child
+      : _decorateBlock(child);
+
+  Widget _decorateBlock(Widget child) =>
+      ValueListenableBuilder<ForumHtmlRenderer>(
+        valueListenable: _configuration,
+        child: child,
+        builder: (context, configuration, retainedChild) =>
+            configuration.blockDecorator?.call(context, retainedChild!) ??
+            retainedChild!,
+      );
 
   @override
   void dispose() {

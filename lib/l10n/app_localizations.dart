@@ -3624,6 +3624,72 @@ abstract class AppLocalizations {
   /// **'间隔'**
   String get novelLineSpacing;
 
+  /// No description provided for @novelPagePadding.
+  ///
+  /// In zh, this message translates to:
+  /// **'页边距'**
+  String get novelPagePadding;
+
+  /// No description provided for @novelPageEffect.
+  ///
+  /// In zh, this message translates to:
+  /// **'翻页动效'**
+  String get novelPageEffect;
+
+  /// No description provided for @novelPageEffectSlide.
+  ///
+  /// In zh, this message translates to:
+  /// **'平移'**
+  String get novelPageEffectSlide;
+
+  /// No description provided for @novelPageEffectPaper.
+  ///
+  /// In zh, this message translates to:
+  /// **'纸页翻动'**
+  String get novelPageEffectPaper;
+
+  /// No description provided for @novelPageEffectFade.
+  ///
+  /// In zh, this message translates to:
+  /// **'渐隐'**
+  String get novelPageEffectFade;
+
+  /// No description provided for @novelPageEffectCover.
+  ///
+  /// In zh, this message translates to:
+  /// **'覆盖'**
+  String get novelPageEffectCover;
+
+  /// No description provided for @novelPageEffectStaggered.
+  ///
+  /// In zh, this message translates to:
+  /// **'段落接续'**
+  String get novelPageEffectStaggered;
+
+  /// No description provided for @novelPageSpeed.
+  ///
+  /// In zh, this message translates to:
+  /// **'翻页速度'**
+  String get novelPageSpeed;
+
+  /// No description provided for @novelPageSpeedRelaxed.
+  ///
+  /// In zh, this message translates to:
+  /// **'舒缓'**
+  String get novelPageSpeedRelaxed;
+
+  /// No description provided for @novelPageSpeedStandard.
+  ///
+  /// In zh, this message translates to:
+  /// **'标准'**
+  String get novelPageSpeedStandard;
+
+  /// No description provided for @novelPageSpeedBrisk.
+  ///
+  /// In zh, this message translates to:
+  /// **'利落'**
+  String get novelPageSpeedBrisk;
+
   /// No description provided for @novelTheme.
   ///
   /// In zh, this message translates to:
