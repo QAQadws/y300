@@ -1,5 +1,7 @@
 # forum_content_renderer
 
+自然流显式需求可用 `suspend` 暂停来源推进，`resume` 沿同一会话继续；已暂停的来源仍可通过 `prepare` 在共享帧预算内准备自己拥有的正文或嵌套表格页。外来 preparation 不转移所有权，`cancelPreparation` 只取消该事务，`stop`／`close` 取消剩余事务。交付的 fragments 由消费者独立释放。`ForumBodyFlowBox.initialSlices` 接受同一会话的多个已准备正文片段及表格叶子；`ForumBodyTableLayout.slicesIn` 是显示和预加载共用的窗口相交规则。它们只证明排版与显示资源已准备，不证明图片已有首帧。
+
 文字坐标、来源映射和显示/行内/字带投影由本包的 [统一文字基础](TEXT_COORDINATES.md) 唯一实现。`forum_text.dart` 可供纯数据消费者使用，模块不导入 Flutter UI；新渲染不依赖旧 HTML 分页包。
 
 本地 Flutter HTML 准备与渲染包，负责 prepared document、DOM 规范化、主题与文字样式、正文布局、折叠和图片 viewport 调度。

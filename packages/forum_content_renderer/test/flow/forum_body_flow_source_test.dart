@@ -87,6 +87,199 @@ Future<void> _until(WidgetTester tester, bool Function() ready) async {
 }
 
 void main() {
+  testWidgets(
+    'invalid later flow transfer closes earlier accepted deliveries',
+    (tester) async {
+      final fixture = _Fixture(), foreign = _Fixture();
+      fixture.source.start();
+      foreign.source.start();
+      await tester.pumpAndSettle();
+      final session = fixture.source.session!, other = foreign.source.session!;
+      final seeds = [
+        ForumBodyFlowPreparedSlice(
+          session: session,
+          index: 0,
+          fragments: session.preparePageFragments(0),
+        ),
+        ForumBodyFlowPreparedSlice(
+          session: other,
+          index: 0,
+          fragments: other.preparePageFragments(0),
+        ),
+      ];
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: SingleChildScrollView(
+            child: ForumBodyFlowBox(
+              session: session,
+              prefix: session.snapshot,
+              initialSlices: seeds,
+              onFailure: (_, _) {},
+              buildSlice: (_, _, _, _) => const SizedBox.shrink(),
+            ),
+          ),
+        ),
+      );
+      expect(tester.takeException(), isStateError);
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(fixture.cache.activeLeases, 0);
+      expect(foreign.cache.activeLeases, 0);
+    },
+  );
+
+  testWidgets(
+    'suspended prefix prepares display and resumes the same session',
+    (tester) async {
+      final fixture = _Fixture(html: '<p>${'abcdefghij' * 100}</p>');
+      fixture.source.addListener(() {
+        if (fixture.source.prefix?.isNotEmpty == true) fixture.source.suspend();
+      });
+      fixture.source.start();
+      await tester.pumpAndSettle();
+      final prefix = fixture.source.prefix!;
+      final session = fixture.source.session!;
+      expect(prefix.isComplete, isFalse);
+      var delivered = false;
+      final work = fixture.source.prepare(session.openPagePreparation(0)).then((
+        fragments,
+      ) {
+        expectSync(fragments, isNotEmpty);
+        for (final fragment in fragments) {
+          fragment.close();
+        }
+        delivered = true;
+      });
+      await _until(tester, () => delivered);
+      await work;
+      expect(fixture.source.prefix, same(prefix));
+      // Resume through the existing prefix without reopening or reparsing.
+      fixture.source.resume();
+      await _until(tester, () => fixture.source.prefix!.length > prefix.length);
+      expect(fixture.source.session, same(session));
+      expect(fixture.source.prefix![0], same(prefix[0]));
+    },
+  );
+
+  testWidgets('resume before start clears an earlier suspension', (
+    tester,
+  ) async {
+    final fixture = _Fixture();
+    fixture.source.suspend();
+    fixture.source.resume();
+    await tester.pumpAndSettle();
+    expect(fixture.source.prefix!.isComplete, isTrue);
+  });
+
+  testWidgets('resume retries a budget event received while suspended', (
+    tester,
+  ) async {
+    final fixture = _Fixture(cacheEntries: 1);
+    final foreign = fixture.pinForeign();
+    addTearDown(foreign.release);
+    fixture.source.start();
+    await _until(tester, () => fixture.source.session!.waitingForLayoutBudget);
+    fixture.source.suspend();
+    foreign.release();
+    await tester.pumpAndSettle();
+    expect(fixture.source.prefix?.isComplete, isNot(true));
+    fixture.source.resume();
+    await tester.pumpAndSettle();
+    expect(fixture.source.prefix!.isComplete, isTrue);
+  });
+
+  testWidgets('foreign preparation is rejected without taking ownership', (
+    tester,
+  ) async {
+    final first = _Fixture(), second = _Fixture();
+    first.source.start();
+    second.source.start();
+    await tester.pumpAndSettle();
+    final job = second.source.session!.openPagePreparation(0);
+    expect(() => first.source.prepare(job), throwsStateError);
+    var accepted = false;
+    final result = second.source.prepare(job).then((fragments) {
+      for (final fragment in fragments) {
+        fragment.close();
+      }
+      accepted = true;
+    });
+    await _until(tester, () => accepted);
+    await result;
+  });
+
+  for (final closeSource in [false, true]) {
+    testWidgets(
+      'cancel queued preparation without leaking leases ($closeSource)',
+      (tester) async {
+        final fixture = _Fixture();
+        fixture.source.start();
+        await tester.pumpAndSettle();
+        final session = fixture.source.session!;
+        final job = session.openPagePreparation(0);
+        final future = expectLater(
+          fixture.source.prepare(job),
+          throwsA(isA<ForumBodyFlowPreparationCancelled>()),
+        );
+        if (closeSource) {
+          fixture.source.close();
+        } else {
+          fixture.source.cancelPreparation(job);
+        }
+        await future;
+        await tester.pumpAndSettle();
+        expect(fixture.source.isClosed, closeSource);
+        expect(session.activeIssuedFragments, 0);
+        if (!closeSource) {
+          final fragments = session.preparePageFragments(0);
+          expect(fragments, isNotEmpty);
+          for (final fragment in fragments) {
+            fragment.close();
+          }
+        }
+        expect(fixture.cache.activeLeases, 0);
+      },
+    );
+  }
+
+  testWidgets('root source drives owned nested table cells', (tester) async {
+    final fixture = _Fixture(
+      html:
+          '<table><tr><td>outer<table><tr><td>nested</td></tr></table></td></tr></table>',
+    );
+    fixture.source.start();
+    await tester.pumpAndSettle();
+    expect(fixture.source.error, isNull);
+    final session = fixture.source.session!;
+    var prepared = 0;
+    Future<void> visit(ForumBodyTableLayout layout) async {
+      for (final slice in layout.slicesIn(Offset.zero & layout.size)) {
+        final fragments = await fixture.source.prepare(
+          slice.area.openPagePreparation(slice.page),
+        );
+        prepared++;
+        for (final fragment in fragments) {
+          fragment.close();
+        }
+        for (final frame in slice.area.snapshot[slice.page].tableFrames) {
+          await visit(
+            slice.area.tableLayoutForPage(slice.page, path: frame.path)!,
+          );
+        }
+      }
+    }
+
+    var done = false;
+    final result = visit(
+      session.tableLayoutForPage(0)!,
+    ).then((_) => done = true);
+    await _until(tester, () => done);
+    await result;
+    expect(prepared, greaterThanOrEqualTo(2));
+    fixture.source.close();
+    expect(fixture.cache.activeLeases, 0);
+  });
+
   testWidgets('source publishes immutable prefixes without mounting a body', (
     tester,
   ) async {

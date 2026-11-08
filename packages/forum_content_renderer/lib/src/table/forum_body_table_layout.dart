@@ -22,6 +22,9 @@ final class ForumBodyTableAreaLayout {
   ForumBodyTextPagePreparation openPagePreparation(int page) =>
       _body.session.openPagePreparation(page);
 
+  bool ownsPagePreparation(ForumBodyTextPagePreparation preparation) =>
+      _body.session.ownsPagePreparation(preparation);
+
   bool ownsPreparedFragments(List<ForumBodyPreparedTextFragment> fragments) =>
       _body.session.ownsPreparedFragments(fragments);
 
@@ -77,6 +80,36 @@ final class ForumBodyTableLayout {
   bool _closed = false;
   bool get isClosed => _closed || _cache.isClosed;
   Stream<int> get layoutBudgetChanges => _cache.budgetChanges;
+
+  /// The same cell/page window used by visible table delivery and preloading.
+  Iterable<({ForumBodyTableAreaLayout area, int page})> slicesIn(
+    Rect window, {
+    VoidCallback? beforeVisit,
+  }) sync* {
+    for (final area in captions.followedBy(cells)) {
+      beforeVisit?.call();
+      if (!area.contentBounds.overlaps(window)) continue;
+      final snapshot = area.snapshot;
+      var start = 0, end = snapshot.length;
+      while (start < end) {
+        final mid = (start + end) ~/ 2;
+        final bottom =
+            area.contentBounds.top +
+            area.pageTop(mid) +
+            snapshot[mid].usedHeight;
+        if (bottom <= window.top) {
+          start = mid + 1;
+        } else {
+          end = mid;
+        }
+      }
+      for (var page = start; page < snapshot.length; page++) {
+        beforeVisit?.call();
+        if (area.contentBounds.top + area.pageTop(page) >= window.bottom) break;
+        if (snapshot[page].usedHeight > 0) yield (area: area, page: page);
+      }
+    }
+  }
 
   void close() {
     if (_closed) return;

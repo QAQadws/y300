@@ -5,6 +5,11 @@ import 'package:flutter/widgets.dart';
 import '../pagination/forum_body_text_page_composer.dart';
 import '../pagination/forum_body_text_page_preparation.dart';
 import '../pagination/forum_body_text_page_session.dart';
+import '../pagination/forum_body_prepared_text_fragment.dart';
+
+final class ForumBodyFlowPreparationCancelled implements Exception {
+  const ForumBodyFlowPreparationCancelled();
+}
 
 typedef ForumBodyFlowSessionFactory =
     ForumBodyTextPageSession Function(double width, {required bool probe});
@@ -39,10 +44,12 @@ final class ForumBodyFlowSource extends ChangeNotifier {
   ForumBodyTextPageSnapshot? _prefix;
   StreamSubscription<int>? _budget;
   StreamSubscription<void>? _retirement;
+  final _preparations = <_FlowPreparation>{};
   Object? _error;
   StackTrace? _stack;
   bool _started = false, _closed = false, _stopped = false, _waiting = false;
   bool _probing = false, _notifying = false;
+  bool _suspended = false;
 
   ForumBodyTextPageSession? get session => _session;
   ForumBodyTextPageSnapshot? get prefix => _prefix;
@@ -50,6 +57,57 @@ final class ForumBodyFlowSource extends ChangeNotifier {
   StackTrace? get errorStack => _stack;
   bool get isClosed => _closed;
   bool get isStopped => _stopped;
+  bool get isSuspended => _suspended;
+
+  /// Holds background source work after a requested prefix is available.
+  /// Owned display preparation remains eligible for the shared frame budget.
+  void suspend() {
+    if (_closed || _stopped) return;
+    _suspended = true;
+    _FlowSourceQueue.remove(_advance);
+  }
+
+  void resume() {
+    if (_closed || _stopped) throw StateError('Natural-flow source is retired');
+    if (!_started) {
+      _suspended = false;
+      start();
+      return;
+    }
+    if (!_suspended) return;
+    _suspended = false;
+    _waiting = false;
+    if (_prefix?.isComplete != true) _FlowSourceQueue.add(_advance);
+  }
+
+  /// Takes an owned page/cell transaction and returns its display leases.
+  /// Invalid/foreign transactions remain owned by their caller. The caller
+  /// must close transferred fragments if its request retires before use.
+  Future<List<ForumBodyPreparedTextFragment>> prepare(
+    ForumBodyTextPagePreparation preparation,
+  ) {
+    if (_closed ||
+        _stopped ||
+        _session?.ownsPagePreparation(preparation) != true) {
+      throw StateError('Preparation belongs to a different flow owner');
+    }
+    if (_preparations.length >= _session!.limits.maxPagePreparations) {
+      throw const ForumBodyTextPageSessionException(
+        ForumBodyTextPageSessionFailure.preparationLimit,
+      );
+    }
+    final work = _FlowPreparation(this, preparation);
+    _preparations.add(work);
+    _FlowSourceQueue.add(work.advance);
+    return work.result.future;
+  }
+
+  /// Cancels this demand's transaction without retiring a borrowed source.
+  void cancelPreparation(ForumBodyTextPagePreparation preparation) {
+    for (final work in _preparations.toList()) {
+      if (identical(work.job, preparation)) work.cancel();
+    }
+  }
 
   /// Idempotent for a new display owner adopting already-started source work.
   void start() {
@@ -75,16 +133,23 @@ final class ForumBodyFlowSource extends ChangeNotifier {
     _session = session;
     _waiting = false;
     _budget = session.layoutBudgetChanges.listen((_) {
-      if (!_closed && !_stopped && _error == null && _waiting) {
-        _waiting = false;
-        _FlowSourceQueue.add(_advance);
+      if (!_closed && !_stopped && _error == null) {
+        if (_waiting && !_suspended) {
+          _waiting = false;
+          _FlowSourceQueue.add(_advance);
+        }
+        if (_preparations.isNotEmpty) {
+          for (final work in _preparations.toList()) {
+            if (work.waiting) _FlowSourceQueue.add(work.advance);
+          }
+        }
       }
     }, onDone: () => _ownerRetired(session));
     _retirement = session.retirement.listen(
       (_) => _ownerRetired(session),
       onDone: () => _ownerRetired(session),
     );
-    _FlowSourceQueue.add(_advance);
+    if (!_suspended) _FlowSourceQueue.add(_advance);
   }
 
   void _ownerRetired(ForumBodyTextPageSession session) {
@@ -98,7 +163,7 @@ final class ForumBodyFlowSource extends ChangeNotifier {
   }
 
   void _advance() {
-    if (_closed || _stopped || _error != null) return;
+    if (_closed || _stopped || _suspended || _error != null) return;
     final session = _session!;
     try {
       final step = session.advance(maxEvents: 16, maxLines: 4);
@@ -128,7 +193,11 @@ final class ForumBodyFlowSource extends ChangeNotifier {
         _prefix = snapshot;
         _publish();
       }
-      if (!_closed && !_stopped && !step.isComplete && !_waiting) {
+      if (!_closed &&
+          !_stopped &&
+          !_suspended &&
+          !step.isComplete &&
+          !_waiting) {
         _FlowSourceQueue.add(_advance);
       }
     } catch (error, stack) {
@@ -167,6 +236,9 @@ final class ForumBodyFlowSource extends ChangeNotifier {
     _budget = null;
     unawaited(_retirement?.cancel());
     _retirement = null;
+    for (final work in _preparations.toList()) {
+      work.cancel();
+    }
   }
 
   void close() => dispose();
@@ -180,6 +252,44 @@ final class ForumBodyFlowSource extends ChangeNotifier {
     _session?.close();
     // A cancellation listener may retire its owner during publication.
     if (!_notifying) super.dispose();
+  }
+}
+
+final class _FlowPreparation {
+  _FlowPreparation(this.owner, this.job);
+  final ForumBodyFlowSource owner;
+  final ForumBodyTextPagePreparation job;
+  final result = Completer<List<ForumBodyPreparedTextFragment>>.sync();
+  bool waiting = false;
+
+  void advance() {
+    if (result.isCompleted) return;
+    try {
+      final step = job.advance(maxFragments: 8, maxParts: 32);
+      waiting = step.waitingForLayoutBudget;
+      if (step.isReady) {
+        final fragments = job.takeFragments();
+        _retire();
+        result.complete(fragments);
+      } else if (!waiting) {
+        _FlowSourceQueue.add(advance);
+      }
+    } catch (error, stack) {
+      _retire();
+      result.completeError(error, stack);
+    }
+  }
+
+  void _retire() {
+    _FlowSourceQueue.remove(advance);
+    owner._preparations.remove(this);
+    job.close();
+  }
+
+  void cancel() {
+    if (result.isCompleted) return;
+    _retire();
+    result.completeError(const ForumBodyFlowPreparationCancelled());
   }
 }
 

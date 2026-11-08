@@ -123,12 +123,14 @@ final class ForumBodyFlowBox extends _ForumBodyFlow {
     this.imageAnchorController,
     this.imagePathForIndex,
     this.initialSlice,
+    this.initialSlices = const [],
     this.initialTableSlice,
   });
 
   final ForumHtmlImageAnchorController? imageAnchorController;
   final String? Function(int index)? imagePathForIndex;
   final ForumBodyFlowPreparedSlice? initialSlice;
+  final List<ForumBodyFlowPreparedSlice> initialSlices;
   final ({int index, ForumBodyTablePreparedSlice slice})? initialTableSlice;
 
   /// Borrow the currently painted box, including a retained predecessor while
@@ -141,17 +143,20 @@ final class ForumBodyFlowBox extends _ForumBodyFlow {
   }
 }
 
-/// Transfers an already prepared non-table slice to its first flow view.
+/// Transfers prepared body fragments and table leaves to their first flow view.
 /// The caller closes it if publication is cancelled before the view takes it.
 final class ForumBodyFlowPreparedSlice {
   ForumBodyFlowPreparedSlice({
     required this.session,
     required this.index,
     required List<ForumBodyPreparedTextFragment> fragments,
-  }) : _fragments = List.unmodifiable(fragments);
+    List<ForumBodyTablePreparedSlice> tableSlices = const [],
+  }) : tableSlices = List.unmodifiable(tableSlices),
+       _fragments = List.unmodifiable(fragments);
 
   final ForumBodyTextPageSession session;
   final int index;
+  final List<ForumBodyTablePreparedSlice> tableSlices;
   List<ForumBodyPreparedTextFragment>? _fragments;
 
   List<ForumBodyPreparedTextFragment>? _take(_ForumBodyFlow flow) {
@@ -160,7 +165,6 @@ final class ForumBodyFlowPreparedSlice {
     if (!identical(session, flow.session) ||
         index < 0 ||
         index >= flow.prefix.length ||
-        flow.prefix[index].table != null ||
         !session.ownsPreparedFragments(fragments)) {
       throw StateError('Prepared flow slice belongs to a different layout');
     }
@@ -180,6 +184,9 @@ final class ForumBodyFlowPreparedSlice {
     if (fragments == null) return;
     for (final fragment in fragments) {
       fragment.close();
+    }
+    for (final slice in tableSlices) {
+      slice.close();
     }
   }
 }
@@ -318,24 +325,55 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
       throw StateError('Flowing body prefix changed');
     }
     _updatePrefix();
-    if (!identical(oldWidget.session, widget.session)) _adoptInitialSlice();
+    if (!identical(oldWidget.session, widget.session) ||
+        (oldWidget is ForumBodyFlowBox &&
+            widget is ForumBodyFlowBox &&
+            !identical(
+              oldWidget.initialSlices,
+              (widget as ForumBodyFlowBox).initialSlices,
+            ))) {
+      _adoptInitialSlice();
+    }
     _schedule();
   }
 
   void _adoptInitialSlice() {
     final flow = widget;
     if (flow is! ForumBodyFlowBox) return;
-    final seed = flow.initialSlice;
-    final fragments = seed?._take(flow);
-    if (fragments != null) {
-      _ready[seed!.index] = _makeDelivery(seed.index, fragments);
-    }
-    final table = flow.initialTableSlice;
-    if (table != null &&
-        table.slice.isPending &&
-        !_ready.containsKey(table.index) &&
-        flow.prefix[table.index].fragments.isEmpty) {
-      _ready[table.index] = _makeDelivery(table.index, const []);
+    final seeds = [?flow.initialSlice, ...flow.initialSlices];
+    try {
+      for (final seed in seeds) {
+        final fragments = seed._take(flow);
+        if (fragments == null) continue;
+        if (_ready.containsKey(seed.index)) {
+          for (final fragment in fragments) {
+            fragment.close();
+          }
+          for (final table in seed.tableSlices) {
+            table.close();
+          }
+        } else {
+          _ready[seed.index] = _makeDelivery(
+            seed.index,
+            fragments,
+            preparedTableSlices: seed.tableSlices,
+          );
+        }
+      }
+      final table = flow.initialTableSlice;
+      if (table != null &&
+          table.slice.isPending &&
+          !_ready.containsKey(table.index) &&
+          flow.prefix[table.index].fragments.isEmpty) {
+        _ready[table.index] = _makeDelivery(table.index, const []);
+      }
+    } catch (_) {
+      _clear();
+      for (final seed in seeds) {
+        seed.close();
+      }
+      flow.initialTableSlice?.slice.close();
+      rethrow;
     }
   }
 
@@ -537,9 +575,11 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
     List<ForumBodyPreparedTextFragment> fragments, {
     Duration tableBudget = const Duration(milliseconds: 2),
     int tableSteps = 64,
+    List<ForumBodyTablePreparedSlice> preparedTableSlices = const [],
   }) {
     final page = widget.prefix[index];
-    final delivery = _FlowDelivery(fragments);
+    final delivery = _FlowDelivery(fragments)
+      ..tableSlices = preparedTableSlices;
     try {
       for (final frame in page.tableFrames) {
         delivery.tables.add(_tableDelivery(index, frame));
@@ -549,7 +589,10 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
           flow is ForumBodyFlowBox &&
           flow.initialTableSlice?.index == index &&
           flow.initialTableSlice!.slice.isPending;
-      if (delivery.tables.isNotEmpty && !restoring && _intersects(index)) {
+      if (delivery.tables.isNotEmpty &&
+          preparedTableSlices.isEmpty &&
+          !restoring &&
+          _intersects(index)) {
         final clip = Rect.fromLTRB(
           0,
           _clip.start - _top(index),
@@ -575,9 +618,11 @@ final class _ForumBodyFlowState extends State<_ForumBodyFlow> {
             const [];
         // Child initState claims its own slices during the next build. A
         // changed clip or cancellation must not strand any unclaimed pins.
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          delivery.closePendingTableSlices();
-        });
+      }
+      if (delivery.tableSlices.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => delivery.closePendingTableSlices(),
+        );
       }
       return delivery;
     } catch (_) {

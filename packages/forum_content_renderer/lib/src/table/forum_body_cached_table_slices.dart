@@ -5,31 +5,7 @@ Iterable<_Slice> _tableSlicesIn(
   ForumBodyTableLayout layout,
   Rect window, {
   VoidCallback? beforeVisit,
-}) sync* {
-  for (final area in layout.captions.followedBy(layout.cells)) {
-    beforeVisit?.call();
-    if (!area.contentBounds.overlaps(window)) continue;
-    final snapshot = area.snapshot;
-    var start = 0;
-    var end = snapshot.length;
-    while (start < end) {
-      final mid = (start + end) ~/ 2;
-      final bottom =
-          area.contentBounds.top + area.pageTop(mid) + snapshot[mid].usedHeight;
-      if (bottom <= window.top) {
-        start = mid + 1;
-      } else {
-        end = mid;
-      }
-    }
-    for (var page = start; page < snapshot.length; page++) {
-      beforeVisit?.call();
-      final top = area.contentBounds.top + area.pageTop(page);
-      if (top >= window.bottom) break;
-      if (snapshot[page].usedHeight > 0) yield (area: area, page: page);
-    }
-  }
-}
+}) => layout.slicesIn(window, beforeVisit: beforeVisit);
 
 final class _CachedTableUnavailable implements Exception {
   const _CachedTableUnavailable();

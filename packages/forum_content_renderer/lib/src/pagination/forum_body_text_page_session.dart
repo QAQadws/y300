@@ -575,6 +575,20 @@ final class ForumBodyTextPageSession {
       !isLayoutOwnerRetired &&
       fragments.every((item) => _issued.contains(item) && item.isActive);
 
+  /// Includes cell/caption transactions in this source's owned table tree.
+  bool ownsPagePreparation(ForumBodyTextPagePreparation preparation) =>
+      !isClosed &&
+      !isLayoutOwnerRetired &&
+      (_preparations.contains(preparation) ||
+          _tables.values.any(
+            (table) =>
+                !table.isClosed &&
+                [
+                  ...table.cells,
+                  ...table.captions,
+                ].any((area) => area.ownsPagePreparation(preparation)),
+          ));
+
   /// Reads a logical text range from the currently published prefix. The
   /// caller advances the copy in work slices and closes it on cancellation.
   /// No page preparation, native lease or mounted widget is required.
