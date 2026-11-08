@@ -12,12 +12,6 @@ mixin _ThreadDetailEndpointNavigation on ConsumerState<ThreadDetailContent> {
   List<ThreadDetailPostProjection> get _postProjections;
   Object? get _renderLayoutIdentity;
   bool _isCurrentPreparedRequest(ForumHtmlPreparationRequest request);
-  Future<ThreadDetailEndpointNavigationResult> _prepareNativeEndpoint(
-    ThreadDetailQuickScrollTarget target,
-    bool Function() isCurrent,
-  );
-  void _retireNativeEndpoint(bool Function() isCurrent);
-  void _cancelNativePreparation();
 
   final _endpointBoundaryKey = GlobalKey(debugLabel: 'thread-page-endpoint');
   ThreadDetailQuickScrollTarget? _endpointTarget;
@@ -41,12 +35,8 @@ mixin _ThreadDetailEndpointNavigation on ConsumerState<ThreadDetailContent> {
     _targetCenterKey = pending.center;
   }
 
-  void _bindEndpointNavigation() =>
-      widget.quickScrollCoordinator?.bindEndpointNavigator(
-        this,
-        _navigateToEndpoint,
-        onRetired: _retireNativeEndpoint,
-      );
+  void _bindEndpointNavigation() => widget.quickScrollCoordinator
+      ?.bindEndpointNavigator(this, _navigateToEndpoint);
 
   void _updateEndpointNavigation(ThreadDetailContent previous) {
     final ownerChanged =
@@ -73,7 +63,6 @@ mixin _ThreadDetailEndpointNavigation on ConsumerState<ThreadDetailContent> {
         previous.projection?.displayIdentity !=
             widget.projection?.displayIdentity) {
       _endpointGeneration++;
-      _cancelNativePreparation();
     }
     if (ownerChanged) {
       _pendingEndpointBuild = null;
@@ -102,7 +91,6 @@ mixin _ThreadDetailEndpointNavigation on ConsumerState<ThreadDetailContent> {
     required Duration duration,
     required bool Function() isCurrent,
   }) async {
-    if (widget.nativeBody) return _prepareNativeEndpoint(target, isCurrent);
     // Reparenting a whole renderer would discard its local folds/image state.
     // Keep this fast path to pages whose bodies already have pure safe plans.
     final preparedBodies = _preparedBodies;

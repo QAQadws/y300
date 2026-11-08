@@ -67,28 +67,6 @@ final class ThreadBodyPresentation {
 
   bool get isActive => _active;
 
-  /// Resolves the same pure layout state without taking a mounted body's lease.
-  /// A demand cannot invalidate a differently laid out, still mounted body.
-  ForumHtmlBodyPresentation? prepareForLayout(Object layoutIdentity) {
-    if (!_active || (_consumer != null && _layoutIdentity != layoutIdentity)) {
-      return null;
-    }
-    _setLayout(layoutIdentity);
-    return _rendering;
-  }
-
-  void _setLayout(Object layoutIdentity) {
-    if (_layoutIdentity == layoutIdentity) return;
-    _height = null;
-    if (_layoutIdentity != null) {
-      final expansion = Map<String, bool>.of(_rendering.collapseExpansion);
-      _rendering.dispose();
-      _rendering = ForumHtmlBodyPresentation()
-        ..collapseExpansion.addAll(expansion);
-    }
-    _layoutIdentity = layoutIdentity;
-  }
-
   ThreadBodyLayoutLease bind({
     required Object consumer,
     required Object layoutIdentity,
@@ -98,7 +76,16 @@ final class ThreadBodyPresentation {
     if (!changed && identical(_consumer, consumer) && _lease != null) {
       return _lease!;
     }
-    _setLayout(layoutIdentity);
+    if (changed) {
+      _height = null;
+      if (_layoutIdentity != null) {
+        final expansion = Map<String, bool>.of(_rendering.collapseExpansion);
+        _rendering.dispose();
+        _rendering = ForumHtmlBodyPresentation()
+          ..collapseExpansion.addAll(expansion);
+      }
+    }
+    _layoutIdentity = layoutIdentity;
     _consumer = consumer;
     return _lease = ThreadBodyLayoutLease._(this, _rendering);
   }

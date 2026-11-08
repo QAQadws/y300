@@ -10,53 +10,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/thread/presentation/services/thread_detail_quick_scroll_coordinator.dart';
 
 void main() {
-  testWidgets(
-    'endpoint retirement uses the same request guard and cannot cancel its replacement',
-    (tester) async {
-      final scroll = ScrollController();
-      final coordinator = ThreadDetailQuickScrollCoordinator(
-        scrollController: scroll,
-      );
-      await tester.pumpWidget(
-        MaterialApp(
-          home: SingleChildScrollView(
-            controller: scroll,
-            child: const SizedBox(height: 2400),
-          ),
-        ),
-      );
-      coordinator.updateMetrics(scroll.position);
-      final pending = <Completer<ThreadDetailEndpointNavigationResult>>[];
-      final guards = <bool Function()>[], retired = <bool Function()>[];
-      coordinator.bindEndpointNavigator(Object(), ({
-        required target,
-        required animate,
-        required duration,
-        required isCurrent,
-      }) {
-        guards.add(isCurrent);
-        final result = Completer<ThreadDetailEndpointNavigationResult>();
-        pending.add(result);
-        return result.future;
-      }, onRetired: retired.add);
-      final first = coordinator.navigate(animate: false);
-      coordinator.cancelNavigation();
-      expect(retired, [same(guards.first)]);
-      final second = coordinator.navigate(animate: false);
-      expect(guards.last(), isTrue);
-      pending.first.complete(ThreadDetailEndpointNavigationResult.retired);
-      await first;
-      expect(retired, hasLength(1));
-      expect(guards.last(), isTrue);
-      pending.last.complete(ThreadDetailEndpointNavigationResult.reached);
-      await second;
-      expect(retired, [same(guards.first), same(guards.last)]);
-      await tester.pumpWidget(const SizedBox.shrink());
-      coordinator.dispose();
-      scroll.dispose();
-    },
-  );
-
   testWidgets('disposal retires a queued layout notification', (tester) async {
     final controller = ScrollController();
     addTearDown(controller.dispose);

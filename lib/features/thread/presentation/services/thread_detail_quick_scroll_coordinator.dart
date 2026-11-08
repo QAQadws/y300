@@ -41,28 +41,21 @@ final class ThreadDetailQuickScrollCoordinator extends ChangeNotifier {
   bool _notificationScheduled = false;
   int _navigationGeneration = 0;
   _EndpointBinding? _endpointBinding;
-  _EndpointRequest? _endpointRequest;
 
   void bindEndpointNavigator(
     Object owner,
-    ThreadDetailEndpointNavigator navigate, {
-    void Function(bool Function() guard)? onRetired,
-  }) {
-    _endpointRequest?.retire();
-    _endpointBinding = _EndpointBinding(owner, navigate, onRetired);
+    ThreadDetailEndpointNavigator navigate,
+  ) {
+    _endpointBinding = _EndpointBinding(owner, navigate);
   }
 
   void unbindEndpointNavigator(Object owner) {
-    if (identical(_endpointBinding?.owner, owner)) {
-      _endpointRequest?.retire();
-      _endpointBinding = null;
-    }
+    if (identical(_endpointBinding?.owner, owner)) _endpointBinding = null;
   }
 
   void cancelNavigation() {
     _navigationGeneration++;
     _navigationInterrupted = true;
-    _endpointRequest?.retire();
     final wasNavigating = _isNavigating;
     _isNavigating = false;
     if (wasNavigating && _scrollController.hasClients) {
@@ -81,7 +74,6 @@ final class ThreadDetailQuickScrollCoordinator extends ChangeNotifier {
     }
     if (_isNavigating && direction != ScrollDirection.idle) {
       _navigationInterrupted = true;
-      _endpointRequest?.retire();
     }
     switch (direction) {
       case ScrollDirection.forward:
@@ -154,24 +146,17 @@ final class ThreadDetailQuickScrollCoordinator extends ChangeNotifier {
     onNavigationStarted?.call();
     _navigationInterrupted = false;
     _notifyChanges();
-    final endpoint = _endpointBinding;
-    final request = endpoint == null
-        ? null
-        : _EndpointRequest(
-            () =>
-                isCurrent() &&
-                !_navigationInterrupted &&
-                identical(_endpointBinding, endpoint),
-            endpoint.onRetired,
-          );
-    _endpointRequest = request;
     try {
+      final endpoint = _endpointBinding;
       if (endpoint != null) {
         final result = await endpoint.navigate(
           target: requestedTarget,
           animate: animate,
           duration: animationDuration,
-          isCurrent: request!.guard,
+          isCurrent: () =>
+              isCurrent() &&
+              !_navigationInterrupted &&
+              identical(_endpointBinding, endpoint),
         );
         if (!identical(_endpointBinding, endpoint) ||
             !isCurrent() ||
@@ -220,8 +205,6 @@ final class ThreadDetailQuickScrollCoordinator extends ChangeNotifier {
         return true;
       }());
     } finally {
-      request?.retire();
-      if (identical(_endpointRequest, request)) _endpointRequest = null;
       if (isCurrent()) {
         _isNavigating = false;
         _navigationInterrupted = false;
@@ -309,27 +292,13 @@ final class ThreadDetailQuickScrollCoordinator extends ChangeNotifier {
   void dispose() {
     _isDisposed = true;
     _navigationGeneration++;
-    _endpointRequest?.retire();
     _endpointBinding = null;
     super.dispose();
   }
 }
 
 final class _EndpointBinding {
-  _EndpointBinding(this.owner, this.navigate, this.onRetired);
+  _EndpointBinding(this.owner, this.navigate);
   final Object owner;
   final ThreadDetailEndpointNavigator navigate;
-  final void Function(bool Function() guard)? onRetired;
-}
-
-final class _EndpointRequest {
-  _EndpointRequest(this.guard, this.onRetired);
-  final bool Function() guard;
-  final void Function(bool Function() guard)? onRetired;
-  bool _retired = false;
-  void retire() {
-    if (_retired) return;
-    _retired = true;
-    onRetired?.call(guard);
-  }
 }
