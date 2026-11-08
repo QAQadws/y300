@@ -421,8 +421,17 @@ void main() {
       await _until(tester, () => reader.positions.isNotEmpty);
       expect(reader.controller.requestPage(1), isTrue);
       await _until(tester, () => reader.controller.visiblePageIndex == 1);
+      // Page confirmation can precede the image Widget's asynchronous build.
+      // Neighbor/previous mounts are not the settled command's hit target.
+      Finder currentImage() => find
+          .descendant(
+            of: find.byKey(ObjectKey(reader.controller.visibleView)),
+            matching: find.byType(ForumHtmlImageView),
+          )
+          .hitTestable();
+      await _until(tester, () => currentImage().evaluate().length == 1);
       final before = reader.positions.length;
-      await tester.tap(find.byType(ForumHtmlImageView).first);
+      await tester.tap(currentImage());
       expect(reader.taps.single.entry.index, 1);
       expect(reader.taps.single.sequence.entries.map((e) => e.index), [0, 1]);
       final tap = reader.taps.single;
@@ -442,7 +451,8 @@ void main() {
       );
       expect(tap.isCurrent, isFalse);
       final current = reader.controller;
-      await tester.tap(find.byType(ForumHtmlImageView).first);
+      await _until(tester, () => currentImage().evaluate().length == 1);
+      await tester.tap(currentImage());
       final currentTap = reader.taps.last, a = reader.host;
       expect(currentTap.isCurrent, isTrue);
       addTearDown(a.completeDimensions);
