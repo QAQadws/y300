@@ -40,7 +40,7 @@ const _commentSource = 'profile-blog-comment-31';
 
 void main() {
   testWidgets(
-    'blog body shares font settings while conversion and author CSS remain local',
+    'blog font changes preserve local conversion and author emphasis',
     (tester) async {
       final host = _Host()..convert = true;
       host.preferences.value = host.preferences.value.copyWith(
@@ -68,7 +68,7 @@ void main() {
       expect(find.text('評論', findRichText: true), findsOneWidget);
       expect(_styleForText(tester, 'Article 11').fontFamily, 'NativeUi');
       final authorStyle = _styleForText(tester, 'Author emphasis');
-      expect(authorStyle.fontFamily, 'AuthorFont');
+      expect(authorStyle.fontFamily, FontIdentity.runtimeFamily(_first.id));
       expect(authorStyle.fontWeight, FontWeight.w700);
       expect(authorStyle.fontStyle, FontStyle.italic);
 
@@ -85,6 +85,13 @@ void main() {
         _commentSource,
         FontIdentity.runtimeFamily(_second.id),
       );
+      final updatedAuthorStyle = _styleForText(tester, 'Author emphasis');
+      expect(
+        updatedAuthorStyle.fontFamily,
+        FontIdentity.runtimeFamily(_second.id),
+      );
+      expect(updatedAuthorStyle.fontWeight, FontWeight.w700);
+      expect(updatedAuthorStyle.fontStyle, FontStyle.italic);
       expect(_renderer(tester, _articleSource).preparedDocument, same(source));
       expect(host.converter.inputs, conversions);
       expect(host.preferences.value.conversionMode, TextConversionMode.none);

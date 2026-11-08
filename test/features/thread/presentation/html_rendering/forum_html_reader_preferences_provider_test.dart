@@ -17,34 +17,38 @@ void main() {
     expect(defaults.preserveAuthorFontSize, isTrue);
   });
 
-  test('render projection preserves values without Host conversion policy', () {
-    const preferences = ForumHtmlReaderPreferences(
-      typography: RichTextTypography(
-        fontScale: 1.25,
-        lineHeightScale: 1.8,
-        paragraphSpacing: 18,
-      ),
-      conversionMode: TextConversionMode.none,
-      preserveAuthorFontSize: false,
-    );
-
-    expect(
-      preferences.renderOptions,
-      const ForumHtmlRenderOptions(
-        fontScale: 1.25,
-        lineHeightScale: 1.8,
-        paragraphSpacing: 18,
+  test(
+    'render projection preserves typography and applies reader font policy',
+    () {
+      const preferences = ForumHtmlReaderPreferences(
+        typography: RichTextTypography(
+          fontScale: 1.25,
+          lineHeightScale: 1.8,
+          paragraphSpacing: 18,
+        ),
+        conversionMode: TextConversionMode.none,
         preserveAuthorFontSize: false,
-      ),
-    );
-    for (final mode in TextConversionMode.values) {
-      final converted = preferences.copyWith(conversionMode: mode);
-      expect(converted.renderOptions, preferences.renderOptions);
-      if (mode != preferences.conversionMode) {
-        expect(converted, isNot(preferences));
+      );
+
+      expect(
+        preferences.renderOptions,
+        const ForumHtmlRenderOptions(
+          fontScale: 1.25,
+          lineHeightScale: 1.8,
+          paragraphSpacing: 18,
+          preserveAuthorFontSize: false,
+          preserveAuthorFontFamily: false,
+        ),
+      );
+      for (final mode in TextConversionMode.values) {
+        final converted = preferences.copyWith(conversionMode: mode);
+        expect(converted.renderOptions, preferences.renderOptions);
+        if (mode != preferences.conversionMode) {
+          expect(converted, isNot(preferences));
+        }
       }
-    }
-  });
+    },
+  );
 
   test('repository uses production defaults when storage is empty', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{});

@@ -62,6 +62,10 @@ flutter build apk --release --target-platform android-arm64
 
 Y300 的部分 UI 设计与交互参考自 [kodjodevf/mangayomi](https://github.com/kodjodevf/mangayomi)
 
+小说阅读器的段落接续、渐隐和覆盖翻页动效参考了 [Wenku8_Flutter](https://github.com/mikufoxxx/Wenku8_Flutter) 的阅读器实现。Y300 根据自身的 HTML 分页和阅读器结构实现并调整了这些效果
+
+参考代码及其原始版权和许可声明见 Wenku8_Flutter 的 [NOTICE](https://github.com/mikufoxxx/Wenku8_Flutter/blob/master/NOTICE) 和 [LICENSE](https://github.com/mikufoxxx/Wenku8_Flutter/blob/master/LICENSE)。Wenku8_Flutter 的 Flutter 组合版本按 GNU GPL v3 分发；Y300 源代码按 GPL-3.0-only 授权
+
 ## 免责声明
 
 Y300 不是 Yamibo / 百合会官方客户端。论坛帖子、漫画、小说、图片及其他内容归原作者或相应权利人所有。使用时请尊重原作者，并遵守 Yamibo 的相关规则

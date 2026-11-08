@@ -196,6 +196,7 @@ class _NovelReaderDisplaySettingsSheetState
                   if (_draft.flowMode != NovelReaderFlowMode.vertical) ...[
                     ReaderSegmentControl<NovelReaderPageEffect>(
                       key: const Key('novel-reader-page-effect-control'),
+                      scrollable: true,
                       label: l10n.novelPageEffect,
                       value: _draft.pageEffect,
                       values: NovelReaderPageEffect.values,

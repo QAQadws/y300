@@ -78,6 +78,7 @@ class ReaderSegmentControl<T extends Object> extends StatelessWidget {
     required this.labelBuilder,
     required this.onChanged,
     this.enabled = true,
+    this.scrollable = false,
   });
 
   final String label;
@@ -87,6 +88,9 @@ class ReaderSegmentControl<T extends Object> extends StatelessWidget {
   final ValueChanged<T> onChanged;
   final bool enabled;
 
+  /// Keeps the choices on one horizontally scrollable line.
+  final bool scrollable;
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -94,21 +98,23 @@ class ReaderSegmentControl<T extends Object> extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final control = Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final item in values)
-                _ReaderChoiceButton(
-                  key: ValueKey<String>('reader-segment-${labelBuilder(item)}'),
-                  label: labelBuilder(item),
-                  selected: item == value,
-                  enabled: enabled,
-                  scheme: scheme,
-                  onPressed: () => onChanged(item),
-                ),
-            ],
-          );
+          final buttons = [
+            for (final item in values)
+              _ReaderChoiceButton(
+                key: ValueKey<String>('reader-segment-${labelBuilder(item)}'),
+                label: labelBuilder(item),
+                selected: item == value,
+                enabled: enabled,
+                scheme: scheme,
+                onPressed: () => onChanged(item),
+              ),
+          ];
+          final control = scrollable
+              ? SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(spacing: 8, children: buttons),
+                )
+              : Wrap(spacing: 8, runSpacing: 8, children: buttons);
           if (constraints.maxWidth < 360) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
