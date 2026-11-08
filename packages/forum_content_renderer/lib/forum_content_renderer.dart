@@ -48,6 +48,7 @@ export 'src/html_rendering/widgets/forum_collapse_block.dart';
 export 'src/services/forum_html_body_presentation.dart';
 export 'src/services/forum_http_text_link_detector.dart';
 export 'src/services/forum_html_image_viewport_coordinator.dart';
+export 'src/services/forum_html_image_visibility_metrics.dart';
 export 'src/services/forum_html_image_predecode_policy.dart';
 export 'src/services/forum_html_image_anchor_controller.dart'
     show ForumHtmlImageAnchorController;

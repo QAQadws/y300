@@ -48,4 +48,16 @@ Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `
 
 可选任务完成后释放名额继续推进；两个可见首帧等待占满时暂停新任务，快速滚动推迟新增解码并在滚动停止后恢复。取消立即阻止迟到结果，但在途操作完成前仍占执行名额。预加载失败不自动循环重试，图片显示保留自身重试行为。Host 应复用实际显示的 provider key、限定解码像素预算并在首帧后释放临时监听；不持有长期 Context 或全帖 bitmap。设备档位、内存预算与启用范围由 App 注入，本包不读取 provider 或持久化偏好。
 
+## 可见首帧与回看观测
+
+显示片段的图片身份优先使用准备阶段保留的原始可读编号，缺少编号时才回退到 DOM 位置；同一来源中重复 URL 的不同图片位置不能合并成一次回看。
+
+`ForumHtmlImageViewportCoordinator.visibilityObserver` 可注入公开的 `ForumHtmlImageVisibilityObserver`。关闭时不增加观测 paint 节点或额外滚动监听。开启后使用 Host 的首帧就绪回调、当前绑定的实际 paint 和帧末几何共同确认：正面积视口交集才算可见，祖先裁剪／`paintsChild` 与横向表格滚动均参与复核。下载、磁盘命中和预解码成功均不能单独算作首帧显示。采样描述 Flutter 绘制／合成层就绪，不是 GPU 实际呈现时间，也不检测任意覆盖层遮挡；Host 须通过 `setActive` 提供页面前台／路由资格。Host 的首帧回调须在图片内容可参与当前绘制时报告。
+
+`ForumHtmlImageVisibilityMetrics` 按会话保管访问与有界成功历史；相同 sourceId、DOM 图片位置与不可变显示身份在回收重挂后仍能识别。一次访问从首次可见采样开始，在离屏、隐藏、卸载或绑定退役时结束。回看分母为历史中曾成功绘制过的图片再次可见的访问，失败、离屏放弃与仍等待的回看也包含在内；仅进入的首个采样帧已有图才记命中和零等待。成功、失败、放弃与 pending 分开汇总，重试不改写本次访问的首个结局。历史被驱逐后按未知首次访问处理，不算有证据的回看。
+
+默认最多记忆 512 个成功图片身份、128 个活跃访问；驱逐和超限观察次数单独导出。成功等待、成功回看等待、失败等待与放弃等待各保留最近 256 个时长，以 nearest-rank 导出 P50/P95/P99，空样本为 null，不能把这些分位数解释成全会话全部样本。快照只导出数字，不包含图片身份、URL、路径或正文；记录不持有 Context、Widget、像素或传输对象。`close` 永久拒绝迟到观察并释放身份。宿主负责更换 owner／来源时关闭旧记录器，异常 observer 不得影响图片显示或清理。
+
+Y300 原生帖子 Host 在 debug 默认接入此端口，profile/release 可通过 `--dart-define=Y300_RENDER_METRICS=true` 显式启用；暂停／退出输出 `[ThreadImageVisibility]` 汇总。换帖、翻页、来源筛选／排序及图片服务换绑开启新的统计会话；不合并 reader 既有磁盘／预加载命中口径。
+
 在包目录执行 `flutter pub get`、`flutter analyze --no-pub`、`flutter test --no-pub`。`example/` 是独立 Flutter 工程，显式组装准备与渲染；在该目录执行相同命令可验证公开入口及折叠交互。当前与 App 统一固定 HTML 库 0.17.4；后续升级仍须核对真实段距、列表与字号几何，并同步 App 分页布局修订号，避免复用旧布局页码。尚不对外发布。

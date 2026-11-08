@@ -13,6 +13,7 @@ import 'forum_html_render_callbacks.dart';
 import 'forum_html_block_decorator.dart';
 import 'forum_html_paragraph_metrics.dart';
 import 'widgets/forum_html_block_image_frame.dart';
+import 'widgets/forum_html_image_paint_observer.dart';
 import '../services/forum_html_image_viewport_coordinator.dart';
 import '../services/forum_html_image_anchor_controller.dart';
 import '../services/forum_html_body_presentation.dart';
@@ -173,6 +174,13 @@ class ForumHtmlImageWidgetFactory extends WidgetFactory {
         }
         final presentation = isSticker ? bodyPresentationFor?.call() : null;
         final child = _ForumHtmlImageView(
+          observationIdentity: binding.viewport?.visibilityObserver == null
+              ? image.identity
+              : (
+                  binding.sourceId,
+                  readableIndex ?? _occurrencePath(tree.element),
+                  image.identity,
+                ),
           host: host,
           image: image,
           initialInlineSize: presentation?.inlineImageSizeFor(image.identity),
@@ -203,6 +211,14 @@ class ForumHtmlImageWidgetFactory extends WidgetFactory {
       if (parent.localName == 'table') return true;
     }
     return false;
+  }
+
+  String _occurrencePath(html_dom.Element element) {
+    final indices = <int>[];
+    for (var node = element; node.parent != null; node = node.parent!) {
+      indices.add(node.parent!.nodes.indexOf(node));
+    }
+    return indices.reversed.join('/');
   }
 
   Widget? _fallback(BuildTree tree, ImageSource src) {
@@ -319,6 +335,7 @@ bool _validSize(Size size) =>
 
 class _ForumHtmlImageView extends StatefulWidget {
   const _ForumHtmlImageView({
+    required this.observationIdentity,
     required this.host,
     required this.image,
     this.initialInlineSize,
@@ -329,6 +346,7 @@ class _ForumHtmlImageView extends StatefulWidget {
   });
 
   final ForumHtmlImageHost host;
+  final Object observationIdentity;
   final ForumHtmlDisplayImage image;
   final Size? initialInlineSize;
   final ValueChanged<Size>? rememberInlineSize;
@@ -381,7 +399,9 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
   void initState() {
     super.initState();
     _restoreInlineLayout();
-    _viewportHandle = widget.viewportCoordinator?.register();
+    _viewportHandle = widget.viewportCoordinator?.register(
+      observationIdentity: widget.observationIdentity,
+    );
     _loadDimensions();
   }
 
@@ -394,11 +414,14 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
     );
     if (coordinatorChanged) {
       _viewportHandle?.dispose();
-      _viewportHandle = widget.viewportCoordinator?.register();
+      _viewportHandle = widget.viewportCoordinator?.register(
+        observationIdentity: widget.observationIdentity,
+      );
       _lastMode = null;
       _callbackRevision++;
       _cancelPrefetch();
     }
+    _viewportHandle?.configureObservation(widget.observationIdentity);
     final bindingChanged =
         oldWidget.image.identity != widget.image.identity ||
         oldWidget.image.htmlSize != widget.image.htmlSize ||
@@ -518,7 +541,18 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
     aspectRatio: _layout.aspectRatio ?? 0.7,
     // LayoutBuilder's build scope also relayouts on mode changes. Keep it inside
     // the tight clip so content changes do not invalidate surrounding tables.
-    child: _clipMedia(child),
+    child: _clipMedia(
+      _viewportHandle?.observesVisibility == true
+          ? ForumHtmlImagePaintObserver(
+              onPaint: () {
+                if (_firstFrameRendered && _acceptCallback(_callbackRevision)) {
+                  _viewportHandle?.reportFramePainted();
+                }
+              },
+              child: child,
+            )
+          : child,
+    ),
   );
 
   Widget _buildImageContent() {
