@@ -202,6 +202,10 @@ final class ThreadDetailContentProjector {
         yield option.voteCount;
         yield option.percent;
         yield option.colorHex;
+        yield option.image?.url;
+        yield option.image?.alt;
+        yield option.image?.width;
+        yield option.image?.height;
       }
     }
     for (final comment in post.comments) {

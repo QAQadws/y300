@@ -195,16 +195,34 @@ class ThreadDetailSnapshotCodec
       'voteCount': value.voteCount,
       'percent': value.percent,
       'colorHex': value.colorHex,
+      'image': value.image == null
+          ? null
+          : <String, Object?>{
+              'url': value.image!.url,
+              'alt': value.image!.alt,
+              'width': value.image!.width,
+              'height': value.image!.height,
+            },
     };
   }
 
   ThreadPollOption _decodePollOption(Map<String, dynamic> map) {
+    final image = LooseJson.map(map['image']);
+    final imageUrl = _nullableString(image['url']);
     return ThreadPollOption(
       id: LooseJson.string(map['id']),
       label: LooseJson.string(map['label']),
       voteCount: _nullableInt(map['voteCount']),
       percent: _nullableDouble(map['percent']),
       colorHex: _nullableString(map['colorHex']),
+      image: imageUrl == null
+          ? null
+          : ThreadPollOptionImage(
+              url: imageUrl,
+              alt: _nullableString(image['alt']),
+              width: _nullableDouble(image['width']),
+              height: _nullableDouble(image['height']),
+            ),
     );
   }
 

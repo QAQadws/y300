@@ -637,8 +637,9 @@ class ThreadDetailHtmlParser {
     final output = <ThreadPollOption>[];
     for (final item in pollRoot.querySelectorAll('.poll_box > p')) {
       final labelNode = item.querySelector('label');
-      final label = _cleanText(labelNode?.text ?? '');
-      if (label.isEmpty) {
+      final label = _stripPollNumber(_cleanText(labelNode?.text ?? ''));
+      final image = _parsePollImage(item);
+      if (label.isEmpty && image == null) {
         continue;
       }
       final input = item.querySelector('input[name="pollanswers[]"]');
@@ -653,10 +654,11 @@ class ThreadDetailHtmlParser {
             label: labelNode,
             fallback: output.length + 1,
           ),
-          label: _stripPollNumber(label),
+          label: label,
           voteCount: voteCount,
           percent: percent,
           colorHex: _parseInlineColor(statNode?.attributes['style']),
+          image: image,
         ),
       );
     }
@@ -881,6 +883,37 @@ class ThreadDetailHtmlParser {
 
   List<ThreadPollOption> _parseDesktopPollOptions(html_dom.Element pollRoot) {
     final output = <ThreadPollOption>[];
+    // Discuz image polls use several cells per row, with text outside labels.
+    final imageCells = pollRoot.querySelectorAll('td[id^="polloption_"]');
+    if (imageCells.isNotEmpty) {
+      for (final cell in imageCells) {
+        final label = _cleanText(cell.querySelector('.polltd > p')?.text ?? '');
+        final image = _parsePollImage(cell);
+        if (label.isEmpty && image == null) continue;
+        final input = cell.querySelector('input[name="pollanswers[]"]');
+        final result = cell.querySelector('.imgfc');
+        output.add(
+          ThreadPollOption(
+            id:
+                input?.attributes['value']?.trim() ??
+                cell.id.substring('polloption_'.length),
+            label: label,
+            image: image,
+            voteCount: int.tryParse(
+              RegExp(r'\d+')
+                      .firstMatch(result?.querySelector('.z')?.text ?? '')
+                      ?.group(0) ??
+                  '',
+            ),
+            percent: _parseMobilePollPercent(
+              result?.querySelector('.y')?.text ?? '',
+            ),
+            colorHex: _parsePollColor(cell),
+          ),
+        );
+      }
+      return output;
+    }
     final rows = pollRoot.querySelectorAll('table[summary="poll panel"] tr');
     for (var index = 0; index < rows.length; index++) {
       final row = rows[index];
@@ -907,6 +940,32 @@ class ThreadDetailHtmlParser {
       );
     }
     return output;
+  }
+
+  ThreadPollOptionImage? _parsePollImage(html_dom.Element option) {
+    final node = option.querySelector('img');
+    final url = _resolve(node?.attributes['src']);
+    if (node == null || url == null) return null;
+    // nophoto is Discuz's empty slot, not an option attachment.
+    final uri = Uri.parse(url);
+    if ((uri.scheme != 'https' && uri.scheme != 'http') || uri.host.isEmpty) {
+      return null;
+    }
+    final path = uri.path.toLowerCase();
+    if (path.endsWith('/image/common/nophoto.gif')) return null;
+    double? dimension(String name) {
+      final raw = node.attributes[name]?.trim() ?? '';
+      final match = RegExp(r'^(\d+(?:\.\d+)?)(?:px)?$').firstMatch(raw);
+      final value = double.tryParse(match?.group(1) ?? '');
+      return value != null && value.isFinite && value > 0 ? value : null;
+    }
+
+    return ThreadPollOptionImage(
+      url: url,
+      alt: node.attributes['alt'],
+      width: dimension('width'),
+      height: dimension('height'),
+    );
   }
 
   bool _hasValidPollVoteInputs(
@@ -990,7 +1049,7 @@ class ThreadDetailHtmlParser {
   }
 
   String? _parsePollColor(html_dom.Element? row) {
-    final style = row?.querySelector('.pbr')?.attributes['style'] ?? '';
+    final style = row?.querySelector('.pbr, .jdt')?.attributes['style'] ?? '';
     final match = RegExp(
       r'background(?:-color)?\s*:\s*(#[0-9a-fA-F]{3,8}|[a-zA-Z]+)',
     ).firstMatch(style);

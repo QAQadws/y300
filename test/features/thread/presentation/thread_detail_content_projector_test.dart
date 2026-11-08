@@ -193,6 +193,45 @@ void main() {
       expect(projection.posts.single.displayPost.poll?.participantCount, 0);
     });
 
+    test(
+      'poll images survive conversion and invalidate its source revision',
+      () async {
+        const image = ThreadPollOptionImage(
+          url: 'https://example.test/option.jpg',
+          alt: '原图.jpg',
+          width: 130,
+          height: 200,
+        );
+        final source = _source(
+          poll: const ThreadPoll(
+            isMultipleChoice: false,
+            summary: '投票摘要',
+            options: [ThreadPollOption(id: '1', label: '投票选项', image: image)],
+          ),
+        );
+        final projection = await ThreadDetailContentProjector(
+          plainTextBatchConversionService: _PrefixPlainService(),
+          htmlTextNodeConversionService: _RecordingHtmlService(),
+          diagnosticRecorder: _RecordingDiagnosticRecorder(),
+        ).project(source, converter: const _TestConverter());
+        expect(
+          projection.posts.single.displayPost.poll!.options.single.image,
+          same(image),
+        );
+        final withoutImage = _source(
+          poll: const ThreadPoll(
+            isMultipleChoice: false,
+            summary: '投票摘要',
+            options: [ThreadPollOption(id: '1', label: '投票选项')],
+          ),
+        );
+        expect(
+          ThreadDetailContentProjector.sourceRevisionFor(source),
+          isNot(ThreadDetailContentProjector.sourceRevisionFor(withoutImage)),
+        );
+      },
+    );
+
     test('plain failure discards the whole converted surface', () async {
       final source = _source();
       final html = _RecordingHtmlService();

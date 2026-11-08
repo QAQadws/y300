@@ -32,6 +32,29 @@ class ForumPostAttachmentImage {
   final String ext;
 }
 
+/// Source-provided thumbnail belonging to a poll option, independent of its text.
+class ThreadPollOptionImage {
+  /// Creates a [ThreadPollOptionImage].
+  const ThreadPollOptionImage({
+    required this.url,
+    this.alt,
+    this.width,
+    this.height,
+  });
+
+  /// Validated, resolved thumbnail URL; not an inferred original attachment URL.
+  final String url;
+
+  /// Source-provided image description or filename.
+  final String? alt;
+
+  /// Thumbnail width when explicitly supplied by the source.
+  final double? width;
+
+  /// Thumbnail height when explicitly supplied by the source.
+  final double? height;
+}
+
 /// Source-neutral thread poll option.
 class ThreadPollOption {
   /// Creates a [ThreadPollOption].
@@ -41,6 +64,7 @@ class ThreadPollOption {
     this.voteCount,
     this.percent,
     this.colorHex,
+    this.image,
   });
 
   /// Stable option identifier submitted by the poll command.
@@ -57,6 +81,9 @@ class ThreadPollOption {
 
   /// Optional source-provided chart color.
   final String? colorHex;
+
+  /// Optional thumbnail displayed alongside [label].
+  final ThreadPollOptionImage? image;
 }
 
 /// Source-neutral thread poll.

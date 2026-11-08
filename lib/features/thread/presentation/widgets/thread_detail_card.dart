@@ -358,6 +358,8 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
           children: [
             if (post.poll != null) ...[
               ThreadPollCard(
+                imageOwnerId: state.tid,
+                imageReferer: imageReferer,
                 expanded: footerExpansion.value.poll,
                 onExpansionChanged: (expanded) => footerExpansion.value = (
                   comments: footerExpansion.value.comments,
@@ -904,6 +906,8 @@ class ThreadPostCard extends StatelessWidget {
           if (showBody && post.poll != null && interactionPolicy.showPoll) ...[
             const SizedBox(height: 10),
             ThreadPollCard(
+              imageOwnerId: detailState?.tid ?? 'post:${post.pid}',
+              imageReferer: resolvedImageReferer,
               poll: post.poll!,
               selectedOptionIds:
                   detailState?.selectedPollOptionIds ?? const <String>{},

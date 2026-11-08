@@ -14,6 +14,8 @@ class ThreadPollCard extends StatefulWidget {
     this.notice,
     this.expanded,
     this.onExpansionChanged,
+    this.imageOwnerId = 'poll',
+    this.imageReferer,
   });
 
   final ThreadPoll poll;
@@ -27,6 +29,8 @@ class ThreadPollCard extends StatefulWidget {
   final ThreadActionNotice? notice;
   final bool? expanded;
   final ValueChanged<bool>? onExpansionChanged;
+  final String imageOwnerId;
+  final String? imageReferer;
 
   @override
   State<ThreadPollCard> createState() => _ThreadPollCardState();
@@ -87,6 +91,8 @@ class _ThreadPollCardState extends State<ThreadPollCard> {
                 for (final option in widget.poll.options) ...[
                   ThreadPollOptionTile(
                     option: option,
+                    imageOwnerId: widget.imageOwnerId,
+                    imageReferer: widget.imageReferer,
                     palette: widget.palette,
                     isMultipleChoice: widget.poll.isMultipleChoice,
                     showSelector: widget.poll.canVote,
@@ -325,6 +331,8 @@ class ThreadPollOptionTile extends StatelessWidget {
     required this.selected,
     required this.enabled,
     required this.onTap,
+    this.imageOwnerId = 'poll',
+    this.imageReferer,
   });
 
   final ThreadPollOption option;
@@ -334,6 +342,8 @@ class ThreadPollOptionTile extends StatelessWidget {
   final bool selected;
   final bool enabled;
   final VoidCallback onTap;
+  final String imageOwnerId;
+  final String? imageReferer;
 
   @override
   Widget build(BuildContext context) {
@@ -357,6 +367,17 @@ class ThreadPollOptionTile extends StatelessWidget {
                     : Icons.radio_button_unchecked,
                 size: 20,
                 color: selected ? palette.accent : palette.softText,
+              ),
+              const SizedBox(width: 10),
+            ],
+            if (option.image != null) ...[
+              ThreadPollOptionImageView(
+                key: ValueKey('thread-poll-image-${option.id}'),
+                image: option.image!,
+                ownerId: imageOwnerId,
+                referer: imageReferer,
+                backgroundColor: palette.pollTrack,
+                foregroundColor: palette.softText,
               ),
               const SizedBox(width: 10),
             ],

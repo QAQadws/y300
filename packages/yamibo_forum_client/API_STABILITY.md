@@ -67,6 +67,13 @@ Supported does not mean that every source provides every capability. Callers
 must still gate behavior on the returned capability set and treat `unknown` or
 `unsupported` as unavailable.
 
+`ThreadPollOption.image` is an optional source-neutral thumbnail value. It keeps
+the option's text and vote identifier independent of its image. URLs are resolved
+from source markup; original attachment URLs are not inferred from thumbnails.
+Optional width/height describe explicit source attributes, not decoded geometry.
+The Host owns image requests, decoding, persistent dimensions and stable layout.
+The additive snapshot field remains compatible with older text-only snapshots.
+
 ## Experimental
 
 The following composition APIs are public for advanced integrations but remain

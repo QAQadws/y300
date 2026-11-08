@@ -208,6 +208,7 @@ final class _PollOptionSlots {
       voteCount: source.voteCount,
       percent: source.percent,
       colorHex: source.colorHex,
+      image: source.image,
     );
   }
 }

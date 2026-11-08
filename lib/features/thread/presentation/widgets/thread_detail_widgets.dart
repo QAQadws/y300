@@ -32,6 +32,7 @@ import 'package:y300/features/thread/presentation/services/thread_image_preload_
 import 'package:y300/features/thread/presentation/services/thread_image_reader_return_coordinator.dart';
 import 'package:y300/features/thread/presentation/services/thread_body_reading_coordinator.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
+import 'package:y300/features/thread/presentation/widgets/thread_poll_option_image.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_post_render_context.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 import 'package:y300/shared/widgets/forum_content_spacing.dart';
