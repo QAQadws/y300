@@ -275,6 +275,7 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
     required this.highlighted,
     required this.imageReferer,
     required this.onOpenPostActions,
+    this.onOpenPollOptionActions,
     required this.onOpenPostLink,
     required this.onOpenCommentAuthorProfile,
     required this.onTogglePollOption,
@@ -294,6 +295,7 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
   final bool highlighted;
   final String? imageReferer;
   final ValueChanged<ThreadPost> onOpenPostActions;
+  final ThreadPollOptionActionCallback? onOpenPollOptionActions;
   final ValueChanged<String> onOpenPostLink;
   final ValueChanged<ThreadPostCommentEntry> onOpenCommentAuthorProfile;
   final void Function(ThreadPoll poll, ThreadPollOption option)
@@ -367,6 +369,9 @@ class _ThreadPostCardFooterEntry extends StatelessWidget {
                   poll: expanded,
                 ),
                 poll: post.poll!,
+                onLongPressOption: onOpenPollOptionActions == null
+                    ? null
+                    : (option) => onOpenPollOptionActions!(sourcePost, option),
                 selectedOptionIds: state.selectedPollOptionIds,
                 isSubmitting: state.isPollVoteSubmitting,
                 commandAvailable: state.pollVoteCommandAvailable,
@@ -476,6 +481,7 @@ class _ThreadPostCardEntry extends StatefulWidget {
     required this.onHtmlFirstImageFallbackAspectRatio,
     required this.onHtmlFirstBlockImageResolved,
     required this.onOpenPostActions,
+    this.onOpenPollOptionActions,
     required this.onOpenCommentAuthorProfile,
     required this.onTogglePollOption,
     required this.onSubmitPollVote,
@@ -526,6 +532,7 @@ class _ThreadPostCardEntry extends StatefulWidget {
   )
   onHtmlFirstBlockImageResolved;
   final ValueChanged<ThreadPost> onOpenPostActions;
+  final ThreadPollOptionActionCallback? onOpenPollOptionActions;
   final ValueChanged<ThreadPostCommentEntry> onOpenCommentAuthorProfile;
   final void Function(ThreadPoll poll, ThreadPollOption option)
   onTogglePollOption;
@@ -621,6 +628,7 @@ class _ThreadPostCardEntryState extends State<_ThreadPostCardEntry>
           highlighted: widget.highlighted,
           imageReferer: widget.imageReferer,
           onOpenPostActions: widget.onOpenPostActions,
+          onOpenPollOptionActions: widget.onOpenPollOptionActions,
           onOpenPostLink: widget.onOpenPostLink,
           onOpenCommentAuthorProfile: widget.onOpenCommentAuthorProfile,
           onTogglePollOption: widget.onTogglePollOption,
@@ -719,6 +727,7 @@ class ThreadPostCard extends StatelessWidget {
     required this.palette,
     this.onOpenCommentAuthorProfile,
     this.onOpenPostActions,
+    this.onOpenPollOptionActions,
     this.interactionPolicy = const ThreadPostCardInteractionPolicy.full(),
     this.avatarFallbackPolicy = ForumAvatarFallbackPolicy.neutralSurface,
     this.renderContext,
@@ -752,6 +761,7 @@ class ThreadPostCard extends StatelessWidget {
   final ThreadDetailNativePalette palette;
   final ValueChanged<ThreadPostCommentEntry>? onOpenCommentAuthorProfile;
   final ValueChanged<ThreadPost>? onOpenPostActions;
+  final ThreadPollOptionActionCallback? onOpenPollOptionActions;
   final ThreadPostCardInteractionPolicy interactionPolicy;
   final ForumAvatarFallbackPolicy avatarFallbackPolicy;
   final ThreadPostRenderContext? renderContext;
@@ -909,6 +919,11 @@ class ThreadPostCard extends StatelessWidget {
               imageOwnerId: detailState?.tid ?? 'post:${post.pid}',
               imageReferer: resolvedImageReferer,
               poll: post.poll!,
+              onLongPressOption:
+                  interactionPolicy.allowPostActions &&
+                      onOpenPollOptionActions != null
+                  ? (option) => onOpenPollOptionActions!(post, option)
+                  : null,
               selectedOptionIds:
                   detailState?.selectedPollOptionIds ?? const <String>{},
               isSubmitting: detailState?.isPollVoteSubmitting ?? false,

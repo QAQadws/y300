@@ -554,6 +554,16 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage>
                             );
                           },
                           htmlImagePrecacheService: htmlFirstPrecacheService,
+                          onOpenPollOptionActions: (post, option) =>
+                              _openPostActions(
+                                args,
+                                state,
+                                controller,
+                                post,
+                                projection.findByPid(post.pid)?.displayPost ??
+                                    post,
+                                pollOption: option,
+                              ),
                           onTogglePollOption: controller.togglePollOption,
                           onSubmitPollVote: controller.submitPollVote,
                           onLoadAllRatings: controller.loadAllRatings,
@@ -862,29 +872,35 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage>
     ThreadDetailPageState state,
     ThreadDetailController controller,
     ThreadPost sourcePost,
-    ThreadPost displayPost,
-  ) async {
+    ThreadPost displayPost, {
+    ThreadPollOption? pollOption,
+  }) async {
     if (_postActionActive) return;
     _postActionActive = true;
     final invalidation = ref.read(nativePageCacheInvalidationServiceProvider);
     try {
-      final mutation = await ThreadPostActions(
-        context: context,
-        ref: ref,
-        selectionRenderPreparer: const DefaultForumHtmlRenderPreparer(
-          enablePlainTextLinks: true,
-        ),
-        target: ThreadPostActionContext(
-          tid: args.tid,
-          fid: state.fid,
-          subject: state.subject,
-          page: state.currentPage,
-          capabilities: state.capabilities,
-          sourceUri: Uri.tryParse(_threadUrlForCopy(state)),
-        ),
-        imageReferer: _imageRefererFor(state),
-        isCurrent: () => mounted && widget.tid == args.tid,
-      ).show(sourcePost: sourcePost, displayPost: displayPost);
+      final mutation =
+          await ThreadPostActions(
+            context: context,
+            ref: ref,
+            selectionRenderPreparer: const DefaultForumHtmlRenderPreparer(
+              enablePlainTextLinks: true,
+            ),
+            target: ThreadPostActionContext(
+              tid: args.tid,
+              fid: state.fid,
+              subject: state.subject,
+              page: state.currentPage,
+              capabilities: state.capabilities,
+              sourceUri: Uri.tryParse(_threadUrlForCopy(state)),
+            ),
+            imageReferer: _imageRefererFor(state),
+            isCurrent: () => mounted && widget.tid == args.tid,
+          ).show(
+            sourcePost: sourcePost,
+            displayPost: displayPost,
+            pollOption: pollOption,
+          );
       if (mutation == null) return;
       try {
         await invalidation.invalidateThread(args.tid);

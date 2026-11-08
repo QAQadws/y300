@@ -86,8 +86,12 @@ class ThreadPostActions {
   Future<ThreadPostMutation?> show({
     required ThreadPost sourcePost,
     required ThreadPost displayPost,
+    ThreadPollOption? pollOption,
   }) async {
     if (!active) return null;
+    // Keep the displayed text from the long press, including its conversion.
+    final optionText = pollOption?.label;
+    final canCopyOption = optionText?.trim().isNotEmpty == true;
     final editTarget = _editTarget(sourcePost);
     final action = await showModalBottomSheet<ThreadPostAction>(
       context: context,
@@ -95,10 +99,21 @@ class ThreadPostActions {
         post: sourcePost,
         editUri: editTarget?.editUri,
         capabilities: target.capabilities,
+        canCopyPollOption: canCopyOption,
       ),
     );
     if (!context.mounted || !isCurrent() || action == null) return null;
     switch (action) {
+      case ThreadPostAction.copyPollOption:
+        if (!canCopyOption) return null;
+        final l10n = AppLocalizations.of(context);
+        try {
+          await navigation.copyUrl(l10n.threadPollOptionText, optionText!);
+        } catch (_) {
+          if (context.mounted && isCurrent()) {
+            showTransientSnackBar(context, l10n.threadPollCopyOptionFailed);
+          }
+        }
       case ThreadPostAction.reply:
         return await reply(sourcePost) ? ThreadPostMutation.reply : null;
       case ThreadPostAction.rate:

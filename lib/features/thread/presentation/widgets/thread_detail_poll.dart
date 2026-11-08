@@ -16,6 +16,7 @@ class ThreadPollCard extends StatefulWidget {
     this.onExpansionChanged,
     this.imageOwnerId = 'poll',
     this.imageReferer,
+    this.onLongPressOption,
   });
 
   final ThreadPoll poll;
@@ -31,6 +32,7 @@ class ThreadPollCard extends StatefulWidget {
   final ValueChanged<bool>? onExpansionChanged;
   final String imageOwnerId;
   final String? imageReferer;
+  final ValueChanged<ThreadPollOption>? onLongPressOption;
 
   @override
   State<ThreadPollCard> createState() => _ThreadPollCardState();
@@ -99,6 +101,9 @@ class _ThreadPollCardState extends State<ThreadPollCard> {
                     selected: widget.selectedOptionIds.contains(option.id),
                     enabled: widget.poll.canVote && !widget.isSubmitting,
                     onTap: () => widget.onToggleOption(option),
+                    onLongPress: widget.onLongPressOption == null
+                        ? null
+                        : () => widget.onLongPressOption!(option),
                   ),
                 ],
                 if (statusText != null && statusText.isNotEmpty) ...[
@@ -333,6 +338,7 @@ class ThreadPollOptionTile extends StatelessWidget {
     required this.onTap,
     this.imageOwnerId = 'poll',
     this.imageReferer,
+    this.onLongPress,
   });
 
   final ThreadPollOption option;
@@ -344,6 +350,7 @@ class ThreadPollOptionTile extends StatelessWidget {
   final VoidCallback onTap;
   final String imageOwnerId;
   final String? imageReferer;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -437,20 +444,34 @@ class ThreadPollOptionTile extends StatelessWidget {
       ],
     );
     if (!showSelector) {
-      return Padding(
+      final tile = Padding(
         key: Key('thread-poll-option-${option.id}'),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         child: content,
+      );
+      if (onLongPress == null) return tile;
+      return Semantics(
+        onLongPressHint: AppLocalizations.of(context).threadPollOptionActions,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onLongPress: onLongPress,
+          child: tile,
+        ),
       );
     }
     return MergeSemantics(
       child: Semantics(
         checked: selected,
-        enabled: enabled,
+        // The context action remains available while vote submission is busy.
+        enabled: enabled || onLongPress != null,
+        onLongPressHint: onLongPress == null
+            ? null
+            : AppLocalizations.of(context).threadPollOptionActions,
         inMutuallyExclusiveGroup: !isMultipleChoice,
         child: TextButton(
           key: Key('thread-poll-option-${option.id}'),
           onPressed: enabled ? onTap : null,
+          onLongPress: onLongPress,
           style: TextButton.styleFrom(
             foregroundColor: palette.accent,
             backgroundColor: selected

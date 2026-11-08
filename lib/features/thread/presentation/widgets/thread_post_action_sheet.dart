@@ -4,6 +4,7 @@ import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/forum_content_action_sheet.dart';
 
 enum ThreadPostAction {
+  copyPollOption,
   edit,
   reply,
   rate,
@@ -19,11 +20,13 @@ class ThreadPostActionSheet extends StatelessWidget {
     required this.post,
     required this.editUri,
     required this.capabilities,
+    this.canCopyPollOption = false,
   });
 
   final ThreadPost post;
   final Uri? editUri;
   final ThreadDetailReadCapabilities? capabilities;
+  final bool canCopyPollOption;
 
   bool _supports(ThreadDetailCapability capability) {
     return capabilities?.supports(capability) ?? false;
@@ -35,6 +38,13 @@ class ThreadPostActionSheet extends StatelessWidget {
     return ForumContentActionSheet<ThreadPostAction>(
       key: const Key('thread-post-action-sheet'),
       actions: [
+        if (canCopyPollOption)
+          ForumContentAction(
+            key: const Key('thread-post-copy-poll-option-action'),
+            value: ThreadPostAction.copyPollOption,
+            icon: Icons.copy_outlined,
+            label: l10n.threadPollCopyOptionText,
+          ),
         if (editUri != null)
           ForumContentAction(
             key: const Key('thread-post-edit-action'),

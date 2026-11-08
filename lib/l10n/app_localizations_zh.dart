@@ -3226,6 +3226,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get threadPollVote => '投票';
 
   @override
+  String get threadPollCopyOptionText => '复制选项文字';
+
+  @override
+  String get threadPollOptionText => '选项文字';
+
+  @override
+  String get threadPollOptionActions => '显示选项操作';
+
+  @override
+  String get threadPollCopyOptionFailed => '选项文字复制失败，请重试';
+
+  @override
   String get threadPollMultipleChoice => '可多选';
 
   @override
@@ -8784,6 +8796,18 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get threadPollVote => '投票';
+
+  @override
+  String get threadPollCopyOptionText => '複製選項文字';
+
+  @override
+  String get threadPollOptionText => '選項文字';
+
+  @override
+  String get threadPollOptionActions => '顯示選項操作';
+
+  @override
+  String get threadPollCopyOptionFailed => '選項文字複製失敗，請重試';
 
   @override
   String get threadPollMultipleChoice => '可複選';

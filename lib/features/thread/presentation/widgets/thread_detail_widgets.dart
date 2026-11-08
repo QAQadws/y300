@@ -55,6 +55,11 @@ part 'thread_detail_loading.dart';
 part 'thread_detail_chunk_body.dart';
 part 'thread_detail_endpoint_navigation.dart';
 
+typedef ThreadPollOptionActionCallback = void Function(
+  ThreadPost post,
+  ThreadPollOption option,
+);
+
 class ThreadDetailContent extends ConsumerStatefulWidget {
   const ThreadDetailContent({
     super.key,
@@ -78,6 +83,7 @@ class ThreadDetailContent extends ConsumerStatefulWidget {
     required this.onOpenPostLink,
     this.onOpenPostImages,
     required this.onOpenPostActions,
+    this.onOpenPollOptionActions,
     this.htmlImagePrecacheService,
     this.onPostBuilt,
     this.onScrollStabilizerEvent,
@@ -111,6 +117,7 @@ class ThreadDetailContent extends ConsumerStatefulWidget {
   final void Function(ThreadPost post, ThreadImageOpenRequest request)?
   onOpenPostImages;
   final ValueChanged<ThreadPost> onOpenPostActions;
+  final ThreadPollOptionActionCallback? onOpenPollOptionActions;
   final ForumImagePrecacheService? htmlImagePrecacheService;
   final ValueChanged<int>? onPostBuilt;
 
@@ -896,6 +903,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
                 : null,
             enableSafeDisplayPlanning: _canChunkBodies,
             onOpenPostActions: widget.onOpenPostActions,
+            onOpenPollOptionActions: widget.onOpenPollOptionActions,
             onOpenCommentAuthorProfile: widget.onOpenCommentAuthorProfile,
             onTogglePollOption: widget.onTogglePollOption,
             onSubmitPollVote: widget.onSubmitPollVote,
@@ -999,6 +1007,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
             highlighted: entry.sourcePost!.pid == widget.highlightPostPid,
             imageReferer: widget.imageReferer,
             onOpenPostActions: widget.onOpenPostActions,
+            onOpenPollOptionActions: widget.onOpenPollOptionActions,
             onOpenPostLink: widget.onOpenPostLink,
             onOpenCommentAuthorProfile: widget.onOpenCommentAuthorProfile,
             onTogglePollOption: widget.onTogglePollOption,

@@ -4730,6 +4730,111 @@ void main() {
       );
     });
 
+    for (final canVote in [true, false]) {
+      testWidgets(
+        'poll option long press copies converted text, canVote=$canVote',
+        (tester) async {
+          final writes = <String>[];
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            (call) async {
+              if (call.method == 'Clipboard.setData') {
+                writes.add((call.arguments as Map)['text'] as String);
+              }
+              return null;
+            },
+          );
+          addTearDown(
+            () => tester.binding.defaultBinaryMessenger
+                .setMockMethodCallHandler(SystemChannels.platform, null),
+          );
+          final repository = _FakeThreadRepository(
+            (tid, page) async => ApiSuccess(
+              ThreadDetailData(
+                tid: tid,
+                fid: '33',
+                subject: 'Poll copy',
+                author: 'alice',
+                replies: 0,
+                views: 1,
+                currentPage: page,
+                perPage: 20,
+                posts: [
+                  ThreadPost(
+                    pid: 'poll-copy',
+                    author: 'alice',
+                    authorId: '1',
+                    message: '<p>软件内容</p>',
+                    number: 1,
+                    isFirst: true,
+                    dateline: 'today',
+                    poll: ThreadPoll(
+                      isMultipleChoice: false,
+                      canVote: canVote,
+                      summary: '',
+                      options: const [
+                        ThreadPollOption(
+                          id: '1',
+                          label: '软件区内容\n完整文字',
+                          voteCount: 8,
+                          percent: 25,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+          final command = _FakeThreadPollVoteCommand();
+          await tester.pumpWidget(
+            _buildTestApp(
+              repository,
+              pollVoteCommand: command,
+              additionalOverrides: [
+                appServerContentConversionModeProvider.overrideWithValue(
+                  TextConversionMode.toTraditional,
+                ),
+                textConverterProvider.overrideWith(
+                  (ref, mode) => _ThreadProjectionTestConverter(mode),
+                ),
+              ],
+            ),
+          );
+          await tester.pumpAndSettle();
+          final option = find.byKey(const Key('thread-poll-option-1'));
+          await tester.ensureVisible(option);
+          await tester.longPress(option);
+          await tester.pumpAndSettle();
+          final sheet = find.byKey(const Key('thread-post-action-sheet'));
+          expect(sheet, findsOneWidget);
+          final strings = AppLocalizations.of(tester.element(sheet));
+          expect(find.text(strings.threadPollCopyOptionText), findsOneWidget);
+          await tester.tap(
+            find.byKey(const Key('thread-post-copy-poll-option-action')),
+          );
+          await tester.pumpAndSettle();
+          expect(writes, ['軟體區內容\n完整文字']);
+          expect(command.called, isFalse);
+          await _longPressVisibleTop(
+            tester,
+            find.byKey(const Key('thread-post-header-poll-copy')),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const Key('thread-post-copy-poll-option-action')),
+            findsNothing,
+          );
+          await tester.tap(
+            find.byKey(const Key('thread-post-copy-all-action')),
+          );
+          await tester.pumpAndSettle();
+          expect(writes, ['軟體區內容\n完整文字', '軟體內容']);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+
     testWidgets('long pressing post body opens copy actions and copy page', (
       tester,
     ) async {

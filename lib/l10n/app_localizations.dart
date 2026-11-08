@@ -5391,6 +5391,30 @@ abstract class AppLocalizations {
   /// **'投票'**
   String get threadPollVote;
 
+  /// No description provided for @threadPollCopyOptionText.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制选项文字'**
+  String get threadPollCopyOptionText;
+
+  /// No description provided for @threadPollOptionText.
+  ///
+  /// In zh, this message translates to:
+  /// **'选项文字'**
+  String get threadPollOptionText;
+
+  /// No description provided for @threadPollOptionActions.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示选项操作'**
+  String get threadPollOptionActions;
+
+  /// No description provided for @threadPollCopyOptionFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'选项文字复制失败，请重试'**
+  String get threadPollCopyOptionFailed;
+
   /// No description provided for @threadPollMultipleChoice.
   ///
   /// In zh, this message translates to:
