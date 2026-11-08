@@ -481,6 +481,10 @@ final class ForumHtmlImageViewportHandle
 
   bool get observesVisibility => _coordinator.visibilityObserver != null;
 
+  /// Owner lifetime is independent of the last published admission mode.
+  bool get isActive =>
+      !_disposed && !_coordinator._disposed && _coordinator._active;
+
   void configureObservation(Object identity) {
     if (_observationIdentity == identity) return;
     _retireObservation();

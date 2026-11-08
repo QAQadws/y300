@@ -8,6 +8,82 @@ import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'render_test_support.dart';
 
 void main() {
+  testWidgets(
+    'disposing a viewport retires callbacks before the Widget unmounts',
+    (tester) async {
+      final host = _ImageHost(_Dimensions());
+      final viewport = ForumHtmlImageViewportCoordinator();
+      addTearDown(viewport.dispose);
+      await tester.pumpWidget(_host(host, viewport: viewport));
+      await _frames(tester);
+      final old = tester.widget<_DisplayedImage>(find.byType(_DisplayedImage));
+      viewport.dispose();
+      old.reportAll();
+      expect(host.blockSizes, isEmpty);
+      await tester.pumpWidget(const SizedBox());
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'viewport A-B-A retires display leases but preserves source hints',
+    (tester) async {
+      final dimensions = _Dimensions(deferred: true);
+      final host = _ImageHost(dimensions);
+      final first = ForumHtmlImageViewportCoordinator();
+      final second = ForumHtmlImageViewportCoordinator();
+      addTearDown(first.dispose);
+      addTearDown(second.dispose);
+      final retired = <_DisplayedImage>[];
+      for (final viewport in [first, second, first]) {
+        await tester.pumpWidget(
+          _host(host, viewport: viewport, htmlDimensions: false),
+        );
+        await _frames(tester);
+        retired.add(
+          tester.widget<_DisplayedImage>(find.byType(_DisplayedImage)),
+        );
+      }
+      for (final old in retired.take(2)) {
+        old.reportAll();
+      }
+      expect(host.blockSizes, isEmpty);
+      expect(dimensions.pending, hasLength(1));
+      dimensions.pending.single.complete(_wideDimensions);
+      await _frames(tester);
+      expect(host.blockSizes, [const Size(400, 200)]);
+      expect(
+        tester.getSize(find.byType(_DisplayedImage)).aspectRatio,
+        closeTo(2, 0.001),
+      );
+    },
+  );
+
+  testWidgets(
+    'retry retires displayed callbacks without discarding source hints',
+    (tester) async {
+      final dimensions = _Dimensions(deferred: true);
+      final host = _ImageHost(dimensions);
+      await tester.pumpWidget(_host(host));
+      await _frames(tester);
+      final old = tester.widget<_DisplayedImage>(find.byType(_DisplayedImage));
+      old.onRetry!();
+      await _frames(tester);
+      final current = tester.widget<_DisplayedImage>(
+        find.byType(_DisplayedImage),
+      );
+      expect(current.retryToken, old.retryToken + 1);
+      old.reportAll();
+      expect(host.blockSizes, isEmpty);
+      expect(dimensions.pending, hasLength(1));
+      dimensions.pending.single.complete(_wideDimensions);
+      await _frames(tester);
+      expect(host.blockSizes, [const Size(400, 200)]);
+      current.onResolved?.call(const Size(600, 300));
+      expect(host.blockSizes.last, const Size(600, 300));
+    },
+  );
+
   for (final reportedSize in [false, true]) {
     testWidgets(
       'a displayed smiley ignores late metadata: size=$reportedSize',
@@ -1078,6 +1154,8 @@ final class _ImageHost implements ForumHtmlImageHost {
     onResolved: onImageResolved,
     onFirstFrame: onFirstFrameRendered,
     onFailed: onImageFailed,
+    onRetry: onRetry,
+    retryToken: retryToken,
   );
 }
 
@@ -1236,12 +1314,16 @@ final class _DisplayedImage extends StatelessWidget {
     required this.onResolved,
     required this.onFirstFrame,
     required this.onFailed,
+    this.onRetry,
+    this.retryToken = 0,
   });
 
   final String url;
   final ValueChanged<Size>? onResolved;
   final VoidCallback? onFirstFrame;
   final VoidCallback? onFailed;
+  final VoidCallback? onRetry;
+  final int retryToken;
 
   void reportAll() {
     onResolved?.call(const Size(800, 400));

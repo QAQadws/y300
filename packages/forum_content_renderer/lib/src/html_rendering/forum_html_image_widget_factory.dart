@@ -17,6 +17,7 @@ import 'widgets/forum_html_image_paint_observer.dart';
 import '../services/forum_html_image_viewport_coordinator.dart';
 import '../services/forum_html_image_anchor_controller.dart';
 import '../services/forum_html_body_presentation.dart';
+import '../services/forum_html_image_binding.dart';
 
 typedef ForumHtmlImageFactoryBinding = ({
   ForumHtmlImageHost? host,
@@ -363,22 +364,11 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
   ForumHtmlImageLayout? _initialInlineLayout;
   Size? _intrinsicSize;
   bool _hasResolvedImageSize = false;
-  bool _firstFrameRendered = false;
-  bool _inlineDisplaySettled = false;
-  int _bindingRevision = 0;
-  int _callbackRevision = 0;
-  int _retryToken = 0;
-  ForumHtmlImageViewportHandle? _viewportHandle;
-  ForumHtmlImageViewportMode? _lastMode;
-  ForumHtmlImageViewportWork? _prefetchToken;
-  Object? _prefetchIdentity;
+  late final ForumHtmlImageBinding _binding;
+  ForumHtmlImageViewportHandle? get _viewportHandle => _binding.viewportHandle;
   Size _displaySize = Size.zero;
   bool _workConfigurationScheduled = false;
   bool _dimensionPromotionScheduled = false;
-  bool _dimensionRetryUsed = false;
-  int _dimensionLookupsPending = 0;
-  ForumHtmlImageDimensionPriority _dimensionPriority =
-      ForumHtmlImageDimensionPriority.background;
 
   ForumHtmlImageLayout get _layout =>
       _cachedLayout ?? _initialInlineLayout ?? widget.image.initialLayout;
@@ -399,49 +389,30 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
   void initState() {
     super.initState();
     _restoreInlineLayout();
-    _viewportHandle = widget.viewportCoordinator?.register(
+    _binding = ForumHtmlImageBinding(
+      host: widget.host,
+      image: widget.image,
+      viewport: widget.viewportCoordinator,
       observationIdentity: widget.observationIdentity,
     );
-    _loadDimensions();
+    unawaited(_loadDimensions());
   }
 
   @override
   void didUpdateWidget(covariant _ForumHtmlImageView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final coordinatorChanged = !identical(
-      oldWidget.viewportCoordinator,
-      widget.viewportCoordinator,
+    final bindingChanged = _binding.update(
+      host: widget.host,
+      image: widget.image,
+      viewport: widget.viewportCoordinator,
+      observationIdentity: widget.observationIdentity,
     );
-    if (coordinatorChanged) {
-      _viewportHandle?.dispose();
-      _viewportHandle = widget.viewportCoordinator?.register(
-        observationIdentity: widget.observationIdentity,
-      );
-      _lastMode = null;
-      _callbackRevision++;
-      _cancelPrefetch();
-    }
-    _viewportHandle?.configureObservation(widget.observationIdentity);
-    final bindingChanged =
-        oldWidget.image.identity != widget.image.identity ||
-        oldWidget.image.htmlSize != widget.image.htmlSize ||
-        oldWidget.image.isSticker != widget.image.isSticker ||
-        !identical(oldWidget.host, widget.host);
     if (bindingChanged) {
-      _bindingRevision++;
-      _callbackRevision++;
-      _viewportHandle?.reportLoadStarted();
-      _cancelPrefetch();
       _cachedLayout = null;
       _intrinsicSize = null;
       _hasResolvedImageSize = false;
-      _firstFrameRendered = false;
-      _inlineDisplaySettled = false;
       _restoreInlineLayout();
-      _dimensionRetryUsed = false;
-      _dimensionLookupsPending = 0;
-      _dimensionPriority = ForumHtmlImageDimensionPriority.background;
-      _loadDimensions();
+      unawaited(_loadDimensions());
     }
   }
 
@@ -458,18 +429,15 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
             valueListenable: handle,
             builder: (context, mode, child) {
               _scheduleDimensionPromotion();
-              if (_lastMode != mode) {
-                if (_lastMode?.keepsImageMounted != mode.keepsImageMounted) {
-                  _callbackRevision++;
-                  if (!mode.keepsImageMounted) _firstFrameRendered = false;
-                }
-                _lastMode = mode;
-              }
               if (mode == ForumHtmlImageViewportMode.prefetch ||
                   mode == ForumHtmlImageViewportMode.predecode) {
-                _schedulePrefetch();
+                _binding.prepareImage(
+                  context: context,
+                  displaySize: _displaySize,
+                  pixelRatio: MediaQuery.devicePixelRatioOf(context),
+                );
               } else {
-                _cancelPrefetch();
+                _binding.cancelPreparation();
               }
               return mode.keepsImageMounted
                   ? TickerMode(
@@ -504,27 +472,12 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
       // Read the current binding after layout, including any Host/viewport
       // replacement during this frame, rather than configuring a retired one.
       _displaySize = box.size;
-      final width = _displaySize.width;
-      handle.configureWork(
-        identity: (
-          widget.host,
-          widget.image.identity,
-          // Intrinsic-height recovery must not retire a width-bound frame.
-          width,
-          MediaQuery.devicePixelRatioOf(context),
-        ),
-        canPredecode:
-            widget.host is ForumHtmlImagePredecodeHost &&
-            width.isFinite &&
-            width > 0,
+      _binding.configureWork(
+        displaySize: _displaySize,
+        pixelRatio: MediaQuery.devicePixelRatioOf(context),
       );
     });
   }
-
-  bool _acceptCallback(int revision) =>
-      mounted &&
-      revision == _callbackRevision &&
-      (_viewportHandle == null || _viewportHandle!.value.keepsImageMounted);
 
   Widget _buildImage() {
     final image = _buildImageContent();
@@ -544,11 +497,7 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
     child: _clipMedia(
       _viewportHandle?.observesVisibility == true
           ? ForumHtmlImagePaintObserver(
-              onPaint: () {
-                if (_firstFrameRendered && _acceptCallback(_callbackRevision)) {
-                  _viewportHandle?.reportFramePainted();
-                }
-              },
+              onPaint: _binding.reportPaintedFrame,
               child: child,
             )
           : child,
@@ -556,23 +505,17 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
   );
 
   Widget _buildImageContent() {
-    final revision = _callbackRevision;
+    final lease = _binding.displayLease;
     final sticker = widget.image.isSticker;
     final size = _layout.displaySize;
     void firstFrameRendered() {
-      if (_acceptCallback(revision)) {
-        _firstFrameRendered = true;
-        _inlineDisplaySettled = true;
+      if (_binding.reportFirstFrame(lease)) {
         if (!sticker) _reportRenderedFrame();
       }
     }
 
     void failed() {
-      if (_acceptCallback(revision)) {
-        _firstFrameRendered = false;
-        _inlineDisplaySettled = true;
-        _viewportHandle?.reportImageFailed();
-      }
+      _binding.reportFailure(lease);
     }
 
     return widget.host.buildImage(
@@ -591,13 +534,13 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
       onRetry: sticker
           ? null
           : () {
-              if (_acceptCallback(revision)) _retryImage();
+              if (lease.isActive) _retryImage();
             },
       showDelayedLoadingIndicator: !sticker,
       onImageResolved: (size) {
-        if (!_acceptCallback(revision)) return;
+        if (!mounted || !lease.isActive) return;
         widget.onImageResolved?.call(size);
-        if (!_acceptCallback(revision)) return;
+        if (!mounted || !lease.isActive) return;
         if (sticker) {
           if (_validSize(size)) {
             _intrinsicSize = size;
@@ -607,7 +550,7 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
           return;
         }
         widget.host.onBlockImageResolved(widget.image, size);
-        if (!_acceptCallback(revision)) return;
+        if (!mounted || !lease.isActive) return;
         _intrinsicSize = _validSize(size) ? size : null;
         _hasResolvedImageSize = _intrinsicSize != null;
         _reportRenderedFrame();
@@ -616,12 +559,12 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
       onFirstFrameRendered: firstFrameRendered,
       onImageFailed: failed,
       waitForCacheWrite: !sticker,
-      retryToken: _retryToken,
+      retryToken: _binding.retryToken,
     );
   }
 
   void _reportRenderedFrame() {
-    if (!_firstFrameRendered || !_acceptCallback(_callbackRevision)) return;
+    if (!_binding.firstFrameRendered || !_binding.canDisplay) return;
     final host = widget.host;
     final size = _intrinsicSize;
     // An optional predecode may already have admitted this frame. Missing
@@ -635,134 +578,35 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
             maxDecodedBytes: _viewportHandle?.maxDecodedBytes ?? 0,
           )
         : null;
-    _viewportHandle?.reportFirstFrameRendered(canRetain: admission);
-  }
-
-  void _schedulePrefetch() {
-    final handle = _viewportHandle!;
-    final mode = handle.value;
-    final identity = (
-      widget.host,
-      widget.image.identity,
-      mode,
-      _displaySize.width,
-      MediaQuery.devicePixelRatioOf(context),
-    );
-    if (_prefetchIdentity == identity) return;
-    _cancelPrefetch();
-    final token = handle.tryBeginWork();
-    if (token == null) return;
-    _prefetchIdentity = identity;
-    _prefetchToken = token;
-    final host = widget.host;
-    final image = widget.image;
-    final displaySize = _displaySize;
-    final maxDecodedBytes = handle.maxDecodedBytes;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && token.isActive && _prefetchIdentity == identity) {
-        unawaited(_prefetch(host, image, token, displaySize, maxDecodedBytes));
-      } else {
-        token.complete(ForumHtmlImagePreparationOutcome.cancelled);
-      }
-    });
-  }
-
-  Future<void> _prefetch(
-    ForumHtmlImageHost host,
-    ForumHtmlDisplayImage image,
-    ForumHtmlImageViewportWork scope,
-    Size displaySize,
-    int maxDecodedBytes,
-  ) async {
-    var outcome = ForumHtmlImagePreparationOutcome.failed;
-    try {
-      if (scope.mode == ForumHtmlImageViewportMode.predecode &&
-          host is ForumHtmlImagePredecodeHost) {
-        outcome = await (host as ForumHtmlImagePredecodeHost).predecodeImage(
-          image: image,
-          context: context,
-          displaySize: displaySize,
-          scope: scope,
-          maxDecodedBytes: maxDecodedBytes,
-        );
-      } else {
-        await host.prefetchDisk(image, scope: scope);
-        outcome = ForumHtmlImagePreparationOutcome.diskOnly;
-      }
-    } catch (_) {
-      // Look-ahead is optional; display owns its failure and retry UI.
-    } finally {
-      scope.complete(outcome);
-    }
-  }
-
-  void _cancelPrefetch() {
-    _prefetchToken?.cancel();
-    _prefetchToken = null;
-    _prefetchIdentity = null;
+    _binding.reportRetainAdmission(admission);
   }
 
   @override
   void dispose() {
-    _bindingRevision++;
-    _callbackRevision++;
-    _cancelPrefetch();
-    _viewportHandle?.dispose();
+    _binding.dispose();
     super.dispose();
   }
 
   void _retryImage() {
     if (!mounted) return;
-    _callbackRevision++;
-    _firstFrameRendered = false;
-    _viewportHandle?.reportLoadStarted();
-    setState(() => _retryToken++);
+    setState(_binding.retry);
   }
 
   void _scheduleDimensionPromotion() {
     if (_dimensionPromotionScheduled ||
-        _viewportHandle == null ||
-        _viewportHandle!.value == ForumHtmlImageViewportMode.dormant ||
-        widget.host is! ForumHtmlImageDimensionPriorityHost ||
-        widget.image.isSticker ||
-        widget.image.htmlSize != null ||
+        !_binding.canPromoteDimensions ||
         _intrinsicSize != null ||
-        _cachedLayout != null ||
-        (_dimensionRetryUsed && _dimensionLookupsPending == 0)) {
+        _cachedLayout != null) {
       return;
     }
     _dimensionPromotionScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _dimensionPromotionScheduled = false;
-      if (!mounted ||
-          widget.host is! ForumHtmlImageDimensionPriorityHost ||
-          widget.image.isSticker ||
-          widget.image.htmlSize != null ||
-          _intrinsicSize != null ||
-          _cachedLayout != null) {
+      if (!mounted || _intrinsicSize != null || _cachedLayout != null) {
         return;
       }
-      // Read the current binding and window after layout. A pending lookup is
-      // joined/promoted without spending the one fresh missing-hint retry.
-      final priority = switch (_viewportHandle?.value) {
-        ForumHtmlImageViewportMode.display =>
-          ForumHtmlImageDimensionPriority.visible,
-        ForumHtmlImageViewportMode.retained ||
-        ForumHtmlImageViewportMode.prefetch ||
-        ForumHtmlImageViewportMode.predecode =>
-          ForumHtmlImageDimensionPriority.nearby,
-        _ => null,
-      };
+      final priority = _binding.takeDimensionPromotion();
       if (priority == null) return;
-      if (_dimensionLookupsPending > 0) {
-        if (priority.index <= _dimensionPriority.index) return;
-      } else {
-        if (_dimensionRetryUsed) return;
-        _dimensionRetryUsed = true;
-      }
-      if (priority.index > _dimensionPriority.index) {
-        _dimensionPriority = priority;
-      }
       unawaited(_loadDimensions(priority: priority));
     });
     WidgetsBinding.instance.ensureVisualUpdate();
@@ -776,48 +620,31 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
         (widget.image.isSticker && _initialInlineLayout != null)) {
       return;
     }
-    final revision = _bindingRevision;
     final image = widget.image;
     final host = widget.host;
-    _dimensionLookupsPending++;
-    ({Size size, ForumHtmlImageLayout layout})? dimensions;
-    try {
-      dimensions =
-          priority != null && host is ForumHtmlImageDimensionPriorityHost
-          ? await (host as ForumHtmlImageDimensionPriorityHost)
-                .loadDimensionsWithPriority(image, priority: priority)
-          : await host.loadDimensions(image);
-    } catch (_) {
-      // Cached dimensions are optional hints; a cache race must not stop display.
+    final result = await _binding.loadDimensions(priority: priority);
+    if (!mounted || !result.isCurrent) return;
+    final dimensions = result.dimensions;
+    if (dimensions == null) {
+      if (!_binding.hasPendingDimensions) _scheduleDimensionPromotion();
       return;
-    } finally {
-      if (mounted && revision == _bindingRevision) {
-        _dimensionLookupsPending--;
-        if (dimensions == null && _dimensionLookupsPending == 0) {
-          // A joined request can still be displaced or miss. Only the current
-          // viewport may request one fresh read; a second miss cannot loop.
-          _scheduleDimensionPromotion();
-        }
-      }
     }
     // Once a smiley is displayed, keep its natural inline layout. A late cache
     // hint must not resize it again; decoded sizes still seed the next mount.
-    if (!mounted ||
-        revision != _bindingRevision ||
-        dimensions == null ||
-        _hasResolvedImageSize ||
-        (image.isSticker && _inlineDisplaySettled)) {
+    if (_hasResolvedImageSize ||
+        (image.isSticker && _binding.inlineDisplaySettled)) {
       return;
     }
     if (image.isSticker && _validSize(dimensions.size)) {
       widget.rememberInlineSize?.call(dimensions.size);
+      if (!mounted || !result.isCurrent) return;
     }
     if (_intrinsicSize == dimensions.size &&
         _cachedLayout == dimensions.layout) {
       return;
     }
     if (!image.isSticker) host.onBlockImageResolved(image, dimensions.size);
-    if (!mounted || revision != _bindingRevision || _hasResolvedImageSize) {
+    if (!mounted || !result.isCurrent || _hasResolvedImageSize) {
       return;
     }
     _intrinsicSize = _validSize(dimensions.size) ? dimensions.size : null;
@@ -838,10 +665,10 @@ class _ForumHtmlImageViewState extends State<_ForumHtmlImageView> {
         final shift = _layoutShift(decoded: next, current: current);
         if (shift != null) widget.onImageLayoutShift?.call(shift);
       }
-      if (!mounted || revision != _bindingRevision || _hasResolvedImageSize) {
+      if (!mounted || !result.isCurrent || _hasResolvedImageSize) {
         return;
       }
-      setState(() => _cachedLayout = dimensions!.layout);
+      setState(() => _cachedLayout = dimensions.layout);
     }
   }
 
