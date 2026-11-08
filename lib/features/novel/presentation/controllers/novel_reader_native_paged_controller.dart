@@ -1052,6 +1052,11 @@ final class NovelReaderNativePagedController {
         demand: _demand!,
         parent: _lifetime,
         scheduler: _scheduler!,
+        // Batch more sequential book work between yields. View preparation
+        // retains its own smaller slice and demand still gates background work.
+        limits: const NovelReaderNativeSourceRunLimits(
+          frameBudget: Duration(milliseconds: 5),
+        ),
         onPublication: (prefix, token) => _publication(epoch, prefix, token),
       );
       _source = source;
