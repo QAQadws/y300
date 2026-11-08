@@ -34,6 +34,41 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   group('ForumHomeHtmlRepository', () {
+    test('includes the standalone campaign in projection and cached carousel', () async {
+      final fixture = _buildFixture();
+      const imagePath =
+          'data/attachment/freeaddon_banner/slide/202611/01/233241zihxiqrhiioexhfg.jpg';
+      const target = 'https://bbs.yamibo.com/forum-52-1.html';
+      fixture.network.homeHtml = _mobileHomeHtml.replaceFirst(
+        '<body id="forum">',
+        '<body id="forum"><div class="wp cl"><a href="$target" target="_black">'
+            '<img alt="2026年度萌战" src="$imagePath"></a></div>',
+      );
+      final loaded = await fixture.repository.getForumHomePayload();
+      final items = loaded.dataOrNull!.chromeData.carouselItems;
+      expect(items, hasLength(2));
+      expect(
+        items.first.imageUrl,
+        'https://bbs.yamibo.com/data/attachment/block/95/banner.jpg',
+      );
+      expect(items.first.aspectRatio, 3);
+      expect(items.last.imageUrl, 'https://bbs.yamibo.com/$imagePath');
+      expect(items.last.targetUrl, target);
+
+      fixture.network.failDocuments = true;
+      final cached = await fixture.repository.getForumHomePayload();
+      expect(cached.isSuccess, isTrue);
+      expect(
+        cached.dataOrNull!.chromeData.carouselItems.last.imageUrl,
+        items.last.imageUrl,
+      );
+      expect(
+        cached.dataOrNull!.chromeData.carouselItems.last.targetUrl,
+        target,
+      );
+      expect(fixture.network.documentRequests, 1);
+    });
+
     test(
       'projects one mobile HTML read and restores local dimensions',
       () async {

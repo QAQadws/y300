@@ -3,12 +3,15 @@ import 'dart:async';
 import 'package:carousel_slider/carousel_slider.dart';
 
 import 'package:flutter/material.dart';
+
 import '../../../test_support/localized_test_app.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' as riverpod_misc;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
 import 'package:y300/app/theme/app_theme.dart';
+import 'package:y300/app/navigation/forum_link_routes.dart';
 import 'package:y300/core/clipboard/clipboard_providers.dart';
 import 'package:y300/core/clipboard/clipboard_text_writer.dart';
 import 'package:y300/core/network/api_result.dart';
@@ -16,7 +19,9 @@ import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/core/network/yamibo_forum_source.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_snapshot.dart';
 import 'package:y300/core/network/yamibo/yamibo_session_store.dart';
+
 import '../../../support/forum_auth_test_support.dart';
+
 import 'package:y300/features/auth/application/auth_session_controller.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
@@ -33,10 +38,15 @@ import 'package:y300/features/forum/data/repositories/forum_home_repository.dart
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
 import 'package:y300/features/forum/data/services/forum_home_request_profile_resolver.dart';
 import 'package:y300/features/forum/presentation/forum_home_page.dart';
+import 'package:y300/features/forum/presentation/forum_display_page.dart';
 import 'package:y300/features/forum/presentation/forum_home_controller.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
+import 'package:y300/features/forum/presentation/webview/forum_webview_route_factory.dart';
+import 'package:y300/features/tags/presentation/yamibo_tag_thread_page.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_home_widgets.dart';
+
 import '../../../support/favorite_command_test_support.dart';
+
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/plain_text_batch_conversion_service.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
@@ -844,52 +854,55 @@ void main() {
       expect(observer.pushCount, pushCountBeforeTap + 1);
     });
 
-    testWidgets(
-      'copies an external carousel URL and reports success',
-      (tester) async {
-        final launcher = _FakeForumWebViewExternalLauncher();
-        final clipboard = _FakeClipboardTextWriter();
-        const targetUrl =
-            'https://www.yamibo.com/notice?ref=a%2Fb&value=two#part';
-        final repository = _FakeForumHomeRepository(
-          () async => forumHomeReadSuccess(
-            _loggedOutPayload(
-              carouselItems: const [
-                ForumHomeCarouselItem(
-                  imageUrl: 'https://bbs.yamibo.com/banner.jpg',
-                  targetUrl: targetUrl,
-                ),
-              ],
-            ),
-          ),
-        );
-
-        await tester.pumpWidget(
-          _buildTestApp(
-            repository,
-            launcher: launcher,
-            extraOverrides: [
-              clipboardTextWriterProvider.overrideWithValue(clipboard),
+    testWidgets('copies an external carousel URL and reports success', (
+      tester,
+    ) async {
+      final launcher = _FakeForumWebViewExternalLauncher();
+      final clipboard = _FakeClipboardTextWriter();
+      const targetUrl =
+          'https://www.yamibo.com/notice?ref=a%2Fb&value=two#part';
+      final repository = _FakeForumHomeRepository(
+        () async => forumHomeReadSuccess(
+          _loggedOutPayload(
+            carouselItems: const [
+              ForumHomeCarouselItem(
+                imageUrl: 'https://bbs.yamibo.com/banner.jpg',
+                targetUrl: targetUrl,
+              ),
             ],
           ),
-        );
-        await tester.pumpAndSettle();
-        final l10n = AppLocalizations.of(
-          tester.element(find.byType(ForumHomePage)),
-        );
+        ),
+      );
 
-        await tester.tap(find.byKey(const Key('forum-home-carousel-item-0')));
-        await tester.pump();
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          launcher: launcher,
+          extraOverrides: [
+            clipboardTextWriterProvider.overrideWithValue(clipboard),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(ForumHomePage)),
+      );
 
-        expect(clipboard.written, [targetUrl]);
-        expect(launcher.launchedUris, isEmpty);
-        expect(find.text(l10n.linkCopied), findsOneWidget);
-      },
-    );
+      await tester.tap(find.byKey(const Key('forum-home-carousel-item-0')));
+      await tester.pump();
 
-    testWidgets('reports an external carousel link copy failure', (tester) async {
+      expect(clipboard.written, [targetUrl]);
+      expect(launcher.launchedUris, isEmpty);
+      expect(find.text(l10n.linkCopied), findsOneWidget);
+    });
+
+    testWidgets('reports an external carousel link copy failure', (
+      tester,
+    ) async {
       final launcher = _FakeForumWebViewExternalLauncher();
-      final clipboard = _FakeClipboardTextWriter(error: StateError('clipboard'));
+      final clipboard = _FakeClipboardTextWriter(
+        error: StateError('clipboard'),
+      );
       final repository = _FakeForumHomeRepository(
         () async => forumHomeReadSuccess(
           _loggedOutPayload(
@@ -926,12 +939,78 @@ void main() {
       expect(find.text(l10n.linkCopied), findsNothing);
     });
 
-    testWidgets('preserves internal non-thread carousel navigation', (
+    for (final (targetUrl, pageNumber) in [
+      ('https://bbs.yamibo.com/forum-52-1.html', 1),
+      ('forum-52-3.html', 3),
+      ('forum.php?mod=forumdisplay&fid=52&page=4', 4),
+    ]) {
+      testWidgets('opens carousel forum natively with its page: $targetUrl', (
+        tester,
+      ) async {
+        final launcher = _FakeForumWebViewExternalLauncher();
+        final clipboard = _FakeClipboardTextWriter();
+        final webUris = <Uri>[];
+        Widget? nativePage;
+        final repository = _FakeForumHomeRepository(
+          () async => forumHomeReadSuccess(
+            _loggedOutPayload(
+              carouselItems: [
+                ForumHomeCarouselItem(
+                  imageUrl: 'https://bbs.yamibo.com/banner.jpg',
+                  targetUrl: targetUrl,
+                ),
+              ],
+            ),
+          ),
+        );
+        await tester.pumpWidget(
+          _buildTestApp(
+            repository,
+            launcher: launcher,
+            extraOverrides: [
+              clipboardTextWriterProvider.overrideWithValue(clipboard),
+              nativeForumLinkPageFactoryProvider.overrideWithValue((
+                destination, {
+                bool isActive = true,
+              }) {
+                nativePage = nativeForumLinkPage(
+                  destination,
+                  isActive: isActive,
+                );
+                return const Scaffold(key: Key('native-carousel-destination'));
+              }),
+              forumWebViewRouteFactoryProvider.overrideWithValue((config) {
+                webUris.add(config.initialUri);
+                return MaterialPageRoute<void>(
+                  builder: (_) => const Scaffold(),
+                );
+              }),
+            ],
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('forum-home-carousel-item-0')));
+        await tester.pumpAndSettle();
+        expect(nativePage, isA<ForumDisplayPage>());
+        expect((nativePage! as ForumDisplayPage).fid, '52');
+        expect((nativePage! as ForumDisplayPage).initialPage, pageNumber);
+        expect(
+          find.byKey(const Key('native-carousel-destination')),
+          findsOneWidget,
+        );
+        expect(webUris, isEmpty);
+        expect(launcher.launchedUris, isEmpty);
+        expect(clipboard.written, isEmpty);
+      });
+    }
+
+    testWidgets('opens supported non-thread carousel links natively', (
       tester,
     ) async {
       final launcher = _FakeForumWebViewExternalLauncher();
       final clipboard = _FakeClipboardTextWriter();
       const targetUrl = 'https://bbs.yamibo.com/misc.php?mod=tag&id=3';
+      Widget? nativePage;
       final repository = _FakeForumHomeRepository(
         () async => forumHomeReadSuccess(
           _loggedOutPayload(
@@ -951,6 +1030,13 @@ void main() {
           launcher: launcher,
           extraOverrides: [
             clipboardTextWriterProvider.overrideWithValue(clipboard),
+            nativeForumLinkPageFactoryProvider.overrideWithValue((
+              destination, {
+              bool isActive = true,
+            }) {
+              nativePage = nativeForumLinkPage(destination, isActive: isActive);
+              return const Scaffold();
+            }),
           ],
         ),
       );
@@ -959,8 +1045,52 @@ void main() {
       await tester.tap(find.byKey(const Key('forum-home-carousel-item-0')));
       await tester.pump();
 
-      expect(launcher.launchedUris, [Uri.parse(targetUrl)]);
+      expect(nativePage, isA<YamiboTagThreadPage>());
+      expect((nativePage! as YamiboTagThreadPage).tagId, '3');
+      expect(launcher.launchedUris, isEmpty);
       expect(clipboard.written, isEmpty);
+    });
+
+    testWidgets('keeps unsupported forum filters in an in-app WebView', (
+      tester,
+    ) async {
+      final launcher = _FakeForumWebViewExternalLauncher();
+      final opened = <Uri>[];
+      const target =
+          'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=52&page=3&filter=typeid&typeid=1';
+      final repository = _FakeForumHomeRepository(
+        () async => forumHomeReadSuccess(
+          _loggedOutPayload(
+            carouselItems: const [
+              ForumHomeCarouselItem(
+                imageUrl: 'https://bbs.yamibo.com/banner.jpg',
+                targetUrl: target,
+              ),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          launcher: launcher,
+          extraOverrides: [
+            forumWebViewRouteFactoryProvider.overrideWithValue((config) {
+              opened.add(config.initialUri);
+              return MaterialPageRoute<void>(
+                builder: (_) =>
+                    const Scaffold(key: Key('carousel-web-fallback')),
+              );
+            }),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('forum-home-carousel-item-0')));
+      await tester.pumpAndSettle();
+      expect(opened, [Uri.parse(target)]);
+      expect(find.byKey(const Key('carousel-web-fallback')), findsOneWidget);
+      expect(launcher.launchedUris, isEmpty);
     });
 
     testWidgets('suppresses carousel copy feedback after leaving the route', (

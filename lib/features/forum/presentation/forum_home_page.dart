@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:y300/core/clipboard/clipboard_providers.dart';
+import 'package:y300/app/navigation/forum_link_opener.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/auth/application/auth_session_controller.dart';
 import 'package:y300/features/auth/application/verified_session_owner.dart';
@@ -11,7 +11,6 @@ import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/favorites/data/providers/favorite_directory_providers.dart';
 import 'package:y300/features/forum/data/models/forum_home_chrome_models.dart';
 import 'package:y300/features/forum/data/services/forum_home_request_profile_resolver.dart';
-import 'package:y300/features/forum/domain/services/forum_webview_navigator.dart';
 import 'package:y300/features/forum/presentation/forum_display_page.dart';
 import 'package:y300/features/forum/presentation/forum_content_projection_providers.dart';
 import 'package:y300/features/forum/presentation/forum_home_content_projection.dart';
@@ -19,15 +18,13 @@ import 'package:y300/features/forum/presentation/forum_home_content_projector.da
 import 'package:y300/features/forum/presentation/forum_home_controller.dart';
 import 'package:y300/features/forum/presentation/forum_home_state.dart';
 import 'package:y300/features/forum/presentation/forum_text_resolver.dart';
-import 'package:y300/features/forum/presentation/webview/forum_webview_external_launcher.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_home_widgets.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_favorite_forum_picker.dart';
 import 'package:y300/features/search/presentation/forum_search_page.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
-import 'package:y300/features/thread/presentation/thread_detail_page.dart';
+import 'package:y300/features/thread/domain/services/thread_post_navigation_session.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/app_popup_menu.dart';
-import 'package:y300/shared/widgets/link_copy_feedback.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
 
@@ -400,11 +397,17 @@ class _ForumHomeContent extends ConsumerStatefulWidget {
 
 class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
   final Set<String> _collapsedSectionKeys = <String>{};
-  int _carouselCopyGeneration = 0;
+  final _carouselNavigation = ThreadPostNavigationSession();
+  int _carouselNavigationGeneration = 0;
 
   @override
   void didUpdateWidget(covariant _ForumHomeContent oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.isActive != widget.isActive ||
+        !identical(oldWidget.state.viewData, widget.state.viewData)) {
+      _carouselNavigationGeneration++;
+      _carouselNavigation.invalidate();
+    }
     final activeKeys = {
       for (final section in widget.projection.sections) _sectionKey(section),
     };
@@ -412,10 +415,17 @@ class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
   }
 
   @override
+  void dispose() {
+    _carouselNavigation.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     ref.listen(verifiedSessionOwnerProvider, (previous, next) {
       if (previous != next) {
-        _carouselCopyGeneration++;
+        _carouselNavigationGeneration++;
+        _carouselNavigation.invalidate();
       }
     });
     final l10n = AppLocalizations.of(context);
@@ -526,37 +536,22 @@ class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
     WidgetRef ref,
     ForumHomeCarouselItem item,
   ) async {
-    const parser = ForumReferenceResolver();
-    final normalized = parser.normalizeHref(item.targetUrl);
-    final tid = normalized == null ? null : parser.extractTid(normalized);
-    if (tid != null && tid.isNotEmpty) {
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => ThreadDetailPage(tid: tid)),
-      );
-      return;
-    }
-
-    final navigator = ref.read(forumWebViewNavigatorProvider);
-    final uri = navigator.resolve(item.targetUrl);
-    if (navigator.isManagedSite(uri)) {
-      await ref.read(forumWebViewExternalLauncherProvider).launch(uri);
-      return;
-    }
     final owner = ref.read(verifiedSessionOwnerProvider);
     final source = widget.state.viewData;
-    final generation = ++_carouselCopyGeneration;
-    await copyLinkWithFeedback(
-      context,
-      url: uri.toString(),
-      writeText: ref.read(clipboardTextWriterProvider).writeText,
-      isCurrent: () =>
-          mounted &&
-          widget.isActive &&
-          generation == _carouselCopyGeneration &&
-          identical(widget.state.viewData, source) &&
-          ref.read(verifiedSessionOwnerProvider) == owner &&
-          ModalRoute.of(context)?.isCurrent != false,
-    );
+    final generation = _carouselNavigationGeneration;
+    await ref
+        .read(forumLinkOpenerProvider)
+        .open(
+          context: context,
+          url: item.targetUrl,
+          session: _carouselNavigation,
+          isCurrent: () =>
+              mounted &&
+              widget.isActive &&
+              generation == _carouselNavigationGeneration &&
+              identical(widget.state.viewData, source) &&
+              ref.read(verifiedSessionOwnerProvider) == owner,
+        );
   }
 }
 

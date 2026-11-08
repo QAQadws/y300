@@ -76,17 +76,31 @@ final class ForumHomeHtmlParser {
         document;
     final result = <ForumHomeCarouselReference>[];
     final identities = <String>{};
-    for (final slide in root.querySelectorAll('.yami-swiper .swiper-slide')) {
-      final anchor = slide.querySelector('a');
+    void appendAnchor(html_dom.Element? anchor, {bool standalone = false}) {
       final image = anchor?.querySelector('img');
       final target = _resolve(anchor?.attributes['href'], sameSite: false);
       final imageUri = _resolve(image?.attributes['src'], sameSite: false);
-      if (target == null || imageUri == null) continue;
+      if (target == null || imageUri == null) return;
+      if (standalone &&
+          !imageUri.path.startsWith(
+            '/data/attachment/freeaddon_banner/slide/',
+          )) {
+        return;
+      }
       final identity = '${imageUri.toString()}|${target.toString()}';
-      if (!identities.add(identity)) continue;
+      if (!identities.add(identity)) return;
       result.add(
         ForumHomeCarouselReference(imageUri: imageUri, targetUri: target),
       );
+    }
+
+    for (final slide in root.querySelectorAll('.yami-swiper .swiper-slide')) {
+      appendAnchor(slide.querySelector('a'));
+    }
+    // Freeaddon campaign banners sit outside the swiper. Append them so the
+    // existing first slide continues to determine the shared carousel ratio.
+    for (final anchor in document.querySelectorAll('#forum > .wp.cl > a')) {
+      appendAnchor(anchor, standalone: true);
     }
     return result;
   }
