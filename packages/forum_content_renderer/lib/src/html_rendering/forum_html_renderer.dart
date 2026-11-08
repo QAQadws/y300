@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:html/dom.dart' as html_dom;
 import 'package:html/parser.dart' as html_parser;
@@ -96,10 +98,29 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
     imageAnchorRevision: widget.imageAnchorController?.bindingIdentity,
     sourceId: widget.preparedDocument.sequence.sourceId,
   ));
-  // fwfh retains its factory and cached custom widgets. Events read current
-  // values; folds listen for config updates without losing expansion state.
-  late final _configuration = ValueNotifier(widget);
+  // Cached custom widgets subscribe only to values that affect their output.
+  // A stable callback view lets nested bodies read current nullable handlers.
+  late final _foldLayout = ValueNotifier(_foldLayoutValue);
+  late final _collapseLabels = ValueNotifier(widget.labels);
+  late final _blockDecoration = ValueNotifier(widget.blockDecorator);
+  late final _foldUpdates = Listenable.merge([_foldLayout, _collapseLabels]);
+  late final _liveCallbacks = _CurrentRenderCallbacks(() => widget.callbacks);
+
+  _FoldLayoutValue get _foldLayoutValue => _FoldLayoutValue((
+    widget.options,
+    widget.textStyle,
+    widget.textAlign,
+    widget.theme.signature,
+    widget.bodyPresentation,
+    widget.buildAsync,
+    widget.enableCaching,
+    widget.blockSpacingMode,
+    widget.contentLayout,
+    widget.linkBaseUri,
+  ), widget.collapseExpansion);
   VoidCallback? _onReady;
+  HtmlWidget? _htmlBody;
+  Object? _htmlBodyIdentity;
 
   @override
   void initState() {
@@ -151,7 +172,9 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
         sourceId: widget.preparedDocument.sequence.sourceId,
       );
     }
-    _configuration.value = widget;
+    _foldLayout.value = _foldLayoutValue;
+    _collapseLabels.value = widget.labels;
+    _blockDecoration.value = widget.blockDecorator;
   }
 
   @override
@@ -182,66 +205,88 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
     final baseStyle = widget.textStyle ?? stylePolicy.baseTextStyle(context);
     Widget buildBody(VoidCallback? ready) {
       _onReady = ready;
-      final body = HtmlWidget(
+      final identity = (
         document.preparedHtml,
-        key: Key('forum-html-renderer-${widget.sourceId ?? 'anonymous'}'),
-        baseUrl: widget.linkBaseUri,
-        onErrorBuilder: (_, _, _) {
-          _onReady?.call();
-          return null;
-        },
-        buildAsync: widget.buildAsync,
-        customStylesBuilder: stylePolicy.customStylesFor,
-        customWidgetBuilder: (element) =>
-            _buildCustomWidget(element, stylePolicy, document, binding),
-        factoryBuilder: () => ForumHtmlImageWidgetFactory(
-          binding: binding,
-          decorateBlock: _decorateBlock,
-          blockDecorationEnabled: () => widget.blockDecorator != null,
-          bodyPresentationFor: () =>
-              _configuration.value.bodyPresentation ??
-              _inlineLayoutPresentation,
-          hasTrailingContentFor: () => _configuration.value.hasTrailingContent,
-          textAlignFor: () => _configuration.value.textAlign,
-          onBodyBuilt: () => _onReady?.call(),
-          onTapImageRequest: (request) {
-            final callback = widget.callbacks.onTapImage;
-            if (callback == null) return;
-            widget.callbacks.onInteraction?.call();
-            callback(request);
-          },
-          onImageLayoutShift: (shift) =>
-              widget.callbacks.onImageLayoutShift?.call(shift),
-          readableImageKeyPrefix: widget.sourceId == null
-              ? null
-              : 'thread-post-html-first-readable-image-${widget.sourceId}',
-        ),
-        enableCaching: widget.enableCaching,
-        renderMode: widget.renderMode,
-        rebuildTriggers: [
-          widget.options,
-          widget.textStyle,
-          widget.textAlign,
-          widget.theme.signature,
-          widget.blockSpacingMode,
-          widget.contentLayout,
-          widget.hasTrailingContent,
-          widget.linkBaseUri,
-          widget.blockDecorator != null,
-        ],
-        textStyle: baseStyle,
-        onTapUrl: (url) {
-          final callback = widget.callbacks.onTapUrl;
-          if (callback == null) return false;
-          widget.callbacks.onInteraction?.call();
-          return callback(url);
-        },
+        baseStyle,
+        widget.options,
+        widget.textStyle,
+        widget.textAlign,
+        widget.theme.signature,
+        widget.blockSpacingMode,
+        widget.contentLayout,
+        widget.hasTrailingContent,
+        widget.linkBaseUri,
+        widget.buildAsync,
+        widget.enableCaching,
+        widget.renderMode,
+        widget.sourceId,
+        widget.blockDecorator != null,
+        binding,
       );
+      // Keep the mounted HtmlWidget input stable too: fwfh's cached root
+      // placeholders otherwise rebuild even when no configuration was emitted.
+      if (_htmlBodyIdentity != identity) {
+        _htmlBodyIdentity = identity;
+        _htmlBody = HtmlWidget(
+          document.preparedHtml,
+          key: Key('forum-html-renderer-${widget.sourceId ?? 'anonymous'}'),
+          baseUrl: widget.linkBaseUri,
+          onErrorBuilder: (_, _, _) {
+            _onReady?.call();
+            return null;
+          },
+          buildAsync: widget.buildAsync,
+          customStylesBuilder: stylePolicy.customStylesFor,
+          customWidgetBuilder: (element) =>
+              _buildCustomWidget(element, stylePolicy, document, binding),
+          factoryBuilder: () => ForumHtmlImageWidgetFactory(
+            binding: binding,
+            decorateBlock: _decorateBlock,
+            blockDecorationEnabled: () => widget.blockDecorator != null,
+            bodyPresentationFor: () =>
+                widget.bodyPresentation ?? _inlineLayoutPresentation,
+            hasTrailingContentFor: () => widget.hasTrailingContent,
+            textAlignFor: () => widget.textAlign,
+            onBodyBuilt: () => _onReady?.call(),
+            onTapImageRequest: (request) {
+              final callback = widget.callbacks.onTapImage;
+              if (callback == null) return;
+              widget.callbacks.onInteraction?.call();
+              callback(request);
+            },
+            onImageLayoutShift: (shift) =>
+                widget.callbacks.onImageLayoutShift?.call(shift),
+            readableImageKeyPrefix: widget.sourceId == null
+                ? null
+                : 'thread-post-html-first-readable-image-${widget.sourceId}',
+          ),
+          enableCaching: widget.enableCaching,
+          renderMode: widget.renderMode,
+          rebuildTriggers: [
+            widget.options,
+            widget.textStyle,
+            widget.textAlign,
+            widget.theme.signature,
+            widget.blockSpacingMode,
+            widget.contentLayout,
+            widget.hasTrailingContent,
+            widget.linkBaseUri,
+            widget.blockDecorator != null,
+          ],
+          textStyle: baseStyle,
+          onTapUrl: (url) {
+            final callback = widget.callbacks.onTapUrl;
+            if (callback == null) return false;
+            widget.callbacks.onInteraction?.call();
+            return callback(url);
+          },
+        );
+      }
       // fwfh retains its factory and root properties. An alignment-only change
       // must invalidate inherited root properties without remounting the body.
       return DefaultTextStyle.merge(
         textAlign: widget.textAlign ?? TextAlign.start,
-        child: body,
+        child: _htmlBody!,
       );
     }
 
@@ -304,18 +349,18 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
     );
     return _decorateCustomBlock(
       element,
-      ValueListenableBuilder<ForumHtmlRenderer>(
-        valueListenable: _configuration,
-        builder: (context, configuration, _) => ForumCollapseBlock.lazyContent(
+      ListenableBuilder(
+        listenable: _foldUpdates,
+        builder: (context, _) => ForumCollapseBlock.lazyContent(
           titleHtml:
               titleHtml ??
-              const HtmlEscape().convert(configuration.labels.fallbackTitle),
+              const HtmlEscape().convert(widget.labels.fallbackTitle),
           contentHtmlBuilder: contentHtml.call,
-          labels: configuration.labels,
+          labels: widget.labels,
           initiallyExpanded:
-              configuration.collapseExpansion?[collapseId] ?? initiallyExpanded,
+              widget.collapseExpansion?[collapseId] ?? initiallyExpanded,
           onExpandedChanged: (expanded) =>
-              configuration.collapseExpansion?[collapseId] = expanded,
+              widget.collapseExpansion?[collapseId] = expanded,
           sourceId: collapseId,
           onInteraction: () => widget.callbacks.onInteraction?.call(),
           nestedRendererBuilder: (html, {required sourceId}) =>
@@ -323,20 +368,20 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
                 binding: binding,
                 child: ForumHtmlRenderer(
                   preparedDocument: document.copyWith(preparedHtml: html),
-                  theme: configuration.theme,
-                  options: configuration.options,
-                  textStyle: configuration.textStyle,
-                  textAlign: configuration.textAlign,
-                  labels: configuration.labels,
-                  callbacks: configuration.callbacks,
-                  collapseExpansion: configuration.collapseExpansion,
-                  bodyPresentation: configuration.bodyPresentation,
-                  buildAsync: configuration.buildAsync,
-                  enableCaching: configuration.enableCaching,
+                  theme: widget.theme,
+                  options: widget.options,
+                  textStyle: widget.textStyle,
+                  textAlign: widget.textAlign,
+                  labels: widget.labels,
+                  callbacks: _liveCallbacks,
+                  collapseExpansion: widget.collapseExpansion,
+                  bodyPresentation: widget.bodyPresentation,
+                  buildAsync: widget.buildAsync,
+                  enableCaching: widget.enableCaching,
                   sourceId: sourceId,
-                  blockSpacingMode: configuration.blockSpacingMode,
-                  contentLayout: configuration.contentLayout,
-                  linkBaseUri: configuration.linkBaseUri,
+                  blockSpacingMode: widget.blockSpacingMode,
+                  contentLayout: widget.contentLayout,
+                  linkBaseUri: widget.linkBaseUri,
                 ),
               ),
         ),
@@ -351,19 +396,20 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
       : _decorateBlock(child);
 
   Widget _decorateBlock(Widget child) =>
-      ValueListenableBuilder<ForumHtmlRenderer>(
-        valueListenable: _configuration,
+      ValueListenableBuilder<ForumHtmlBlockDecorator?>(
+        valueListenable: _blockDecoration,
         child: child,
-        builder: (context, configuration, retainedChild) =>
-            configuration.blockDecorator?.call(context, retainedChild!) ??
-            retainedChild!,
+        builder: (context, decorate, retainedChild) =>
+            decorate?.call(context, retainedChild!) ?? retainedChild!,
       );
 
   @override
   void dispose() {
     _inlineLayoutPresentation.dispose();
     _binding.dispose();
-    _configuration.dispose();
+    _foldLayout.dispose();
+    _collapseLabels.dispose();
+    _blockDecoration.dispose();
     super.dispose();
   }
 
@@ -400,6 +446,51 @@ class _ForumHtmlRendererState extends State<ForumHtmlRenderer> {
     }
     return hash.toRadixString(16).padLeft(8, '0');
   }
+}
+
+/// Expansion maps are mutable Host-owned state. Snapshot their values so a
+/// same-map edit is observed, while equal recreated layout values stay quiet.
+final class _FoldLayoutValue {
+  _FoldLayoutValue(this.layout, this.expansionOwner)
+    : expansion = Map<String, bool>.of(expansionOwner ?? const {});
+
+  final Object layout;
+  final Map<String, bool>? expansionOwner;
+  final Map<String, bool> expansion;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _FoldLayoutValue &&
+      layout == other.layout &&
+      identical(expansionOwner, other.expansionOwner) &&
+      mapEquals(expansion, other.expansion);
+
+  @override
+  int get hashCode => Object.hash(
+    layout,
+    identityHashCode(expansionOwner),
+    Object.hashAllUnordered(
+      expansion.entries.map((e) => Object.hash(e.key, e.value)),
+    ),
+  );
+}
+
+/// Keeps current handler nullability as well as dispatch. An absent URL
+/// handler must not start interaction tracking merely because it is nested.
+final class _CurrentRenderCallbacks extends ForumHtmlRenderCallbacks {
+  const _CurrentRenderCallbacks(this._current);
+  final ValueGetter<ForumHtmlRenderCallbacks> _current;
+
+  @override
+  VoidCallback? get onInteraction => _current().onInteraction;
+  @override
+  FutureOr<bool> Function(String url)? get onTapUrl => _current().onTapUrl;
+  @override
+  void Function(ForumHtmlImageRequest request)? get onTapImage =>
+      _current().onTapImage;
+  @override
+  void Function(ForumHtmlImageLayoutShift shift)? get onImageLayoutShift =>
+      _current().onImageLayoutShift;
 }
 
 // Each fwfh custom fragment owns this source: configuration updates share it,

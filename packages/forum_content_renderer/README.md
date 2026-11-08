@@ -38,6 +38,8 @@ Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `
 
 缓存命中时 callbacks 与 labels 可更新，图片点击启用/禁用不会替换图片状态或拦截无图片回调的链接。options、完整 theme signature 与布局值变化会使正文样式失效。ready 可重复报告，宿主应保持幂等。
 
+renderer 按变化用途发布配置：嵌套排版输入按值比较（主题使用完整 signature），折叠文案和装饰回调分别通知，图片继续通过独立 Host binding 更新。事件使用稳定的当前回调视图，保留 null 表示不处理的语义；只替换事件回调不会重建折叠正文或装饰器。相同排版输入在当前已挂载 State 内保留同一个 `HtmlWidget`，其缓存工厂通过当前状态读取事件、尾部标记及图片配置；该 Widget 不进入跨挂载／跨会话缓存。HTML、字号／文字样式、对齐、完整主题、段距／布局、baseUri、renderMode、构建／缓存模式或装饰能力变化仍替换对应输入。可写 `collapseExpansion` 的 owner 与值快照也参与折叠通知，同一个 Map 的外部编辑仍生效；文案变化保留有效展开状态，装饰回调替换只更新保留的正文 child。
+
 宿主可传入可写的 `collapseExpansion` Map 观察正文的有效折叠状态。renderer 为当前渲染的折叠补齐实际默认值，已有用户选择优先，嵌套折叠沿用同一状态容器。容器反映已渲染折叠，不是完整文档的预扫描结果，正文身份变化时由宿主管理其生命周期。宿主可将该状态纳入布局 revision，按实际可见布局重新测量几何；renderer 不决定章节是否已读，不要求展开折叠内容，也不区分目录与正文。未提供容器的消费者保持原行为。该能力不写入阅读记录或持久偏好。
 
 `ForumHtmlRenderer.imageAnchorController` 可注入正文级 `ForumHtmlImageAnchorController`，嵌套折叠共享根正文的 readable sequence。`revealImage` 按 index、cacheKey 与 URL 校验当前已挂载图片，使用宿主提供的 ScrollController 在至多三帧内对齐真实上沿。关闭折叠、缺失锚点、正文换绑、取消或销毁不猜测目标；不下载图片、不保存阅读进度，也不持有卸载后的正文树。宿主负责在覆盖正文的阅读器退出前调用、校验来源代次并在会话结束时 dispose；未提供 controller 的消费者保持原行为。
