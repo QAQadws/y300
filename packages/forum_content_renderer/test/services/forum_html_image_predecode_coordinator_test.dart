@@ -3,6 +3,25 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
 void main() {
+  testWidgets('a prepared frame enters without waiting behind cold images', (
+    tester,
+  ) async {
+    final fixture = await _Fixture.mount(tester, heights: [350, 20, 20, 250]);
+    fixture.settleVisible();
+    await tester.pump();
+    expect(fixture.mode(1), ForumHtmlImageViewportMode.predecode);
+    fixture.handles[1].beginWork().complete(
+      ForumHtmlImagePreparationOutcome.decoded,
+    );
+    // Move before the retained widget can report its first painted frame.
+    fixture.controller.jumpTo(350);
+    await tester.pump();
+
+    expect(fixture.mode(1), ForumHtmlImageViewportMode.display);
+    expect(fixture.mode(2), ForumHtmlImageViewportMode.display);
+    expect(fixture.mode(3), ForumHtmlImageViewportMode.display);
+  });
+
   testWidgets('visible work prioritizes the largest on-screen image area', (
     tester,
   ) async {

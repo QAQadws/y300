@@ -188,10 +188,12 @@ final class ForumHtmlImageViewportCoordinator {
       final handle = placement.handle;
       var mode = ForumHtmlImageViewportMode.dormant;
       if (placement.visible) {
-        if (handle._firstFrameSettled ||
-            waitingVisible < maxVisibleFirstFrames) {
+        // Decode admission belongs to the current binding/window. A prepared
+        // frame needs no cold-load slot, even before its first paint callback.
+        final ready = handle._firstFrameSettled || handle._decoded;
+        if (ready || waitingVisible < maxVisibleFirstFrames) {
           mode = ForumHtmlImageViewportMode.display;
-          if (!handle._firstFrameSettled) {
+          if (!ready) {
             waitingVisible += 1;
           }
         }
