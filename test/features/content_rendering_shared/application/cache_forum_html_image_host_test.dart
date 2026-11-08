@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/cache/data/services/image_cache_resource_handoff.dart';
 import 'package:y300/features/cache/domain/models/forum_image_dimensions.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -16,13 +17,87 @@ import '../../../test_support/localized_test_app.dart';
 import '../../thread/presentation/html_rendering/forum_html_test_theme.dart';
 
 void main() {
+  for (final mode in ['decoded', 'cancelled', 'diskOnly']) {
+    testWidgets('resource handoff stays with its active Host: $mode', (
+      tester,
+    ) async {
+      final service = _BoundedPrecache();
+      final base = CacheForumHtmlImageHost(dimensionIndex: _NoDimensions());
+      final host = base.forContent(
+        threadId: '100',
+        imagePrecacheService: service,
+      );
+      final replacement = base.forContent(
+        threadId: '100',
+        imagePrecacheService: service,
+      );
+      final image = host.resolveImage(
+        url: _source,
+        imageIndex: 0,
+        isSticker: false,
+      )!;
+      final handoff = ValidatedImageCacheResourceHandoff(
+        request: image.request,
+        result: const CachedImageResult(
+          success: true,
+          localPath: '/synthetic/file',
+        ),
+        isCurrent: () => true,
+        recordAccess: () {},
+      );
+      late BuildContext context;
+      await tester.pumpWidget(
+        LocalizedTestApp(
+          home: Builder(
+            builder: (value) {
+              context = value;
+              return const SizedBox();
+            },
+          ),
+        ),
+      );
+      final token = ForumHtmlImageWorkToken();
+      final operation = host.predecodeImage(
+        image: image,
+        context: context,
+        displaySize: const Size(200, 200),
+        scope: token,
+        maxDecodedBytes: 1000000,
+      );
+      if (mode == 'cancelled') token.cancel();
+      service.result.complete(
+        ForumImagePrecacheResult(
+          success: true,
+          decoded: mode != 'diskOnly',
+          handoff: handoff,
+        ),
+      );
+      await operation;
+      CachedLibraryImage display(
+        CacheForumHtmlImageHost owner, {
+        int retry = 0,
+      }) => owner.buildImage(
+        image: image,
+        fit: BoxFit.fitWidth,
+        placeholder: const SizedBox(),
+        retryToken: retry,
+      ) as CachedLibraryImage;
+      expect(display(replacement).resourceHandoff, isNull);
+      expect(display(host, retry: 1).resourceHandoff, isNull);
+      expect(
+        display(host).resourceHandoff,
+        mode == 'decoded' ? same(handoff) : isNull,
+      );
+      expect(display(host).resourceHandoff, isNull);
+    });
+  }
+
   test(
     'dimension priority maps to the optional App index without changing layout',
     () async {
       final index = _PrioritizedDimensions();
-      final host = CacheForumHtmlImageHost(
-        dimensionIndex: index,
-      ).forContent(threadId: '100');
+      final host = CacheForumHtmlImageHost(dimensionIndex: index)
+          .forContent(threadId: '100');
       final image = host.resolveImage(
         url: _source,
         imageIndex: 3,
@@ -48,9 +123,8 @@ void main() {
     'legacy dimension index remains usable by the priority-capable Host',
     () async {
       final index = _RecordingDimensions();
-      final host = CacheForumHtmlImageHost(
-        dimensionIndex: index,
-      ).forContent(threadId: '100');
+      final host = CacheForumHtmlImageHost(dimensionIndex: index)
+          .forContent(threadId: '100');
       final image = host.resolveImage(
         url: _source,
         imageIndex: 0,
@@ -67,9 +141,8 @@ void main() {
 
   test('display retention is bounded without starting disk or decode work', () {
     final service = _BoundedPrecache();
-    final host = CacheForumHtmlImageHost(
-      dimensionIndex: _NoDimensions(),
-    ).forContent(threadId: '100', imagePrecacheService: service);
+    final host = CacheForumHtmlImageHost(dimensionIndex: _NoDimensions())
+        .forContent(threadId: '100', imagePrecacheService: service);
     final image = host.resolveImage(
       url: _source,
       imageIndex: 0,
@@ -156,9 +229,8 @@ void main() {
       'bounded Host forwards target and rejects cancelled=$cancelled',
       (tester) async {
         final service = _BoundedPrecache();
-        final host = CacheForumHtmlImageHost(
-          dimensionIndex: _NoDimensions(),
-        ).forContent(threadId: '100', imagePrecacheService: service);
+        final host = CacheForumHtmlImageHost(dimensionIndex: _NoDimensions())
+            .forContent(threadId: '100', imagePrecacheService: service);
         late BuildContext context;
         await tester.pumpWidget(
           LocalizedTestApp(
@@ -261,25 +333,21 @@ void main() {
       expect(prepared.sequence.entries.single.cacheKey, thread.cacheKey);
       expect(blog.cacheKey, isNot(prepared.sequence.entries.single.cacheKey));
 
-      final blockWidget =
-          threadHost.buildImage(
-                image: thread,
-                fit: BoxFit.fitWidth,
-                placeholder: const SizedBox.shrink(),
-                waitForCacheWrite: true,
-                showDelayedLoadingIndicator: true,
-                onRetry: () {},
-              )
-              as CachedLibraryImage;
-      final stickerWidget =
-          blogHost.buildImage(
-                image: sticker,
-                fit: BoxFit.contain,
-                width: sticker.initialLayout.displaySize?.width,
-                height: sticker.initialLayout.displaySize?.height,
-                placeholder: const SizedBox.shrink(),
-              )
-              as CachedLibraryImage;
+      final blockWidget = threadHost.buildImage(
+        image: thread,
+        fit: BoxFit.fitWidth,
+        placeholder: const SizedBox.shrink(),
+        waitForCacheWrite: true,
+        showDelayedLoadingIndicator: true,
+        onRetry: () {},
+      ) as CachedLibraryImage;
+      final stickerWidget = blogHost.buildImage(
+        image: sticker,
+        fit: BoxFit.contain,
+        width: sticker.initialLayout.displaySize?.width,
+        height: sticker.initialLayout.displaySize?.height,
+        placeholder: const SizedBox.shrink(),
+      ) as CachedLibraryImage;
       expect(blockWidget.request, same(thread.request));
       expect(stickerWidget.request, same(sticker.request));
       expect(blockWidget.referer, referer);
@@ -307,9 +375,8 @@ void main() {
     'scoped disk work observes cancellation without starting decode',
     () async {
       final service = _ScopedDiskPrecache();
-      final host = CacheForumHtmlImageHost(
-        dimensionIndex: _NoDimensions(),
-      ).forContent(threadId: '100', imagePrecacheService: service);
+      final host = CacheForumHtmlImageHost(dimensionIndex: _NoDimensions())
+          .forContent(threadId: '100', imagePrecacheService: service);
       final image = host.resolveImage(
         url: _source,
         imageIndex: 0,
@@ -353,9 +420,8 @@ void main() {
         imageIndex: 0,
         isSticker: false,
       )!;
-      final replacement = cacheHost(
-        'https://images.example/b.jpg',
-      ).resolveImage(url: _source, imageIndex: 0, isSticker: false)!;
+      final replacement = cacheHost('https://images.example/b.jpg')
+          .resolveImage(url: _source, imageIndex: 0, isSticker: false)!;
       expect(first.sourceUrl, _source.toString());
       expect(first.request.sourceUrl, 'https://images.example/a.jpg');
       expect(first.cacheKey, replacement.cacheKey);

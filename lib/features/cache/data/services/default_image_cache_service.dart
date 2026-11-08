@@ -11,6 +11,7 @@ import 'package:y300/features/cache/data/services/image_cache_diagnostic_recorde
 import 'package:y300/features/cache/data/services/image_cache_access_recorder.dart';
 import 'package:y300/features/cache/data/services/image_cache_failure_backoff.dart';
 import 'package:y300/features/cache/data/services/image_cache_file_access.dart';
+import 'package:y300/features/cache/data/services/image_cache_resource_handoff.dart';
 import 'package:y300/features/cache/data/services/y300_forum_resource_file_service.dart';
 import 'package:y300/features/cache/domain/models/cache_capacity_models.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -91,9 +92,11 @@ class DefaultImageCacheService
   Future<CachedImageResult> revalidate(
     ImageCacheRequest request, {
     bool Function()? isCurrent,
-  }) async =>
-      await _revalidator?.revalidate(request, isCurrent: isCurrent) ??
-      CachedImageResult.failed;
+  }) async => (await _fileAccess.mutate(
+    () async =>
+        await _revalidator?.revalidate(request, isCurrent: isCurrent) ??
+        CachedImageResult.failed,
+  )).value;
 
   final ImageCacheRepository _repository;
   final Future<BaseCacheManager> _cacheManagerFuture;
@@ -128,6 +131,7 @@ class DefaultImageCacheService
 
   @override
   void allowRetry(ImageCacheRequest request) {
+    _fileAccess.invalidateResolutions();
     _syncFailureScope();
     _failureBackoff.remove(_failureIdentity(request));
     // A late failure that began before this retry must not restore its cooldown.
@@ -168,6 +172,7 @@ class DefaultImageCacheService
     int failureEpoch,
   ) async {
     final stopwatch = Stopwatch()..start();
+    final resolutionEpoch = _fileAccess.reusableEpoch;
     final cacheKey = request.cacheKey.trim();
     final sourceUrl =
         _urlResolver.resolve(request.sourceUrl) ?? request.sourceUrl.trim();
@@ -211,14 +216,19 @@ class DefaultImageCacheService
             ),
           );
           _failureBackoff.remove(identity);
-          return CachedImageResult(
-            success: true,
-            cacheKey: cacheKey,
-            localPath: file.path,
-            bytes: bytes,
-            fromCache: true,
-            width: existing?.width,
-            height: existing?.height,
+          return _withHandoff(
+            request,
+            CachedImageResult(
+              success: true,
+              cacheKey: cacheKey,
+              localPath: file.path,
+              bytes: bytes,
+              fromCache: true,
+              width: existing?.width,
+              height: existing?.height,
+            ),
+            resolutionEpoch,
+            failureEpoch,
           );
         }
       }
@@ -246,14 +256,19 @@ class DefaultImageCacheService
             ),
           );
           _failureBackoff.remove(identity);
-          return CachedImageResult(
-            success: true,
-            cacheKey: cacheKey,
-            localPath: cached.file.path,
-            bytes: bytes,
-            fromCache: true,
-            width: existing?.width,
-            height: existing?.height,
+          return _withHandoff(
+            request,
+            CachedImageResult(
+              success: true,
+              cacheKey: cacheKey,
+              localPath: cached.file.path,
+              bytes: bytes,
+              fromCache: true,
+              width: existing?.width,
+              height: existing?.height,
+            ),
+            resolutionEpoch,
+            failureEpoch,
           );
         }
       }
@@ -267,37 +282,45 @@ class DefaultImageCacheService
           ? const <String, String>{}
           : <String, String>{'Referer': referer};
       stage = ImageCacheDiagnosticStage.download;
-      final localPath = await _downloader.download(
-        cacheManager: cacheManager,
-        sourceUrl: sourceUrl,
-        cacheKey: cacheKey,
-        headers: headers.isEmpty ? null : headers,
-        force: sourceChanged,
-      );
-      stage = ImageCacheDiagnosticStage.fileInspection;
-      final bytes = await io.File(localPath).length();
-      stage = ImageCacheDiagnosticStage.indexWrite;
-      await _repository.upsert(
-        _recordFromRequest(
-          request,
+      final published = await _fileAccess.mutate(() async {
+        final localPath = await _downloader.download(
+          cacheManager: cacheManager,
           sourceUrl: sourceUrl,
+          cacheKey: cacheKey,
+          headers: headers.isEmpty ? null : headers,
+          force: sourceChanged,
+        );
+        stage = ImageCacheDiagnosticStage.fileInspection;
+        final bytes = await io.File(localPath).length();
+        stage = ImageCacheDiagnosticStage.indexWrite;
+        await _repository.upsert(
+          _recordFromRequest(
+            request,
+            sourceUrl: sourceUrl,
+            localPath: localPath,
+            bytes: bytes,
+            now: now,
+            createdAt: existing?.createdAt,
+            width: sourceChanged ? null : existing?.width,
+            height: sourceChanged ? null : existing?.height,
+          ),
+        );
+        _mutationReporter.reportMutation(CacheNamespace.image);
+        _failureBackoff.remove(identity);
+        return CachedImageResult(
+          success: true,
+          cacheKey: cacheKey,
           localPath: localPath,
           bytes: bytes,
-          now: now,
-          createdAt: existing?.createdAt,
           width: sourceChanged ? null : existing?.width,
           height: sourceChanged ? null : existing?.height,
-        ),
-      );
-      _mutationReporter.reportMutation(CacheNamespace.image);
-      _failureBackoff.remove(identity);
-      return CachedImageResult(
-        success: true,
-        cacheKey: cacheKey,
-        localPath: localPath,
-        bytes: bytes,
-        width: sourceChanged ? null : existing?.width,
-        height: sourceChanged ? null : existing?.height,
+        );
+      });
+      return _withHandoff(
+        request,
+        published.value,
+        published.epoch,
+        failureEpoch,
       );
     } catch (error) {
       _syncFailureScope();
@@ -316,6 +339,38 @@ class DefaultImageCacheService
       );
       return CachedImageResult.failed;
     }
+  }
+
+  CachedImageResult _withHandoff(
+    ImageCacheRequest request,
+    CachedImageResult result,
+    Object? epoch,
+    int failureEpoch,
+  ) {
+    final recorder = _accessRecorder;
+    if (epoch == null || recorder == null) return result;
+    bool current() {
+      _syncFailureScope();
+      return failureEpoch == _failureEpoch &&
+          identical(epoch, _fileAccess.reusableEpoch);
+    }
+
+    if (!current()) return result;
+    return CachedImageResult(
+      success: result.success,
+      cacheKey: result.cacheKey,
+      localPath: result.localPath,
+      bytes: result.bytes,
+      fromCache: result.fromCache,
+      width: result.width,
+      height: result.height,
+      handoff: ValidatedImageCacheResourceHandoff(
+        request: request,
+        result: result,
+        isCurrent: current,
+        recordAccess: () => recorder.record(request.cacheKey, DateTime.now()),
+      ),
+    );
   }
 
   @override
@@ -377,6 +432,7 @@ class DefaultImageCacheService
     required Object error,
     StackTrace? stackTrace,
   }) {
+    _fileAccess.invalidateResolutions();
     _reportFailure(
       request: request,
       stage: ImageCacheDiagnosticStage.decode,
@@ -506,6 +562,11 @@ class DefaultImageCacheService
 
   @override
   Future<CachedImageResult> copyProtectedLocalFile(
+    ImageCacheLocalCopyRequest request,
+  ) async =>
+      (await _fileAccess.mutate(() => _copyProtectedLocalFile(request))).value;
+
+  Future<CachedImageResult> _copyProtectedLocalFile(
     ImageCacheLocalCopyRequest request,
   ) async {
     final source = io.File(request.sourcePath);
@@ -723,6 +784,10 @@ class DefaultImageCacheService
   }
 
   Future<void> _deleteRecord(CachedImageRecord record) async {
+    await _fileAccess.mutate(() => _deleteRecordFiles(record));
+  }
+
+  Future<void> _deleteRecordFiles(CachedImageRecord record) async {
     final localPath = record.localPath?.trim();
     if (localPath != null && localPath.isNotEmpty) {
       final file = io.File(localPath);

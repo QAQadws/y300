@@ -11,6 +11,8 @@ import 'package:y300/features/cache/presentation/widgets/image_retry_placeholder
 import 'package:y300/features/content_rendering_shared/application/host/cache_forum_html_display_image.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 
+import 'forum_html_image_resource_handoffs.dart';
+
 final class CacheForumHtmlImageHost
     implements
         ForumHtmlImageHost,
@@ -36,6 +38,7 @@ final class CacheForumHtmlImageHost
     this.imageReferer,
     this.imagePrecacheService,
     this.fallbackAspectRatioFor,
+    ForumHtmlImageResourceHandoffs? handoffs,
     void Function(
       ForumImageLoadSpec spec,
       ImageCacheRequest request,
@@ -44,9 +47,11 @@ final class CacheForumHtmlImageHost
     onBlockImageResolved,
   }) : _dimensionIndex = dimensionIndex,
        _dimensionIndexFor = dimensionIndexFor,
+       _handoffs = handoffs,
        _onBlockImageResolved = onBlockImageResolved;
 
   final ForumImageDimensionIndex? _dimensionIndex;
+  final ForumHtmlImageResourceHandoffs? _handoffs;
   final ForumImageDimensionIndex Function()? _dimensionIndexFor;
   ForumImageDimensionIndex get dimensionIndex =>
       _dimensionIndex ?? _dimensionIndexFor!();
@@ -98,6 +103,7 @@ final class CacheForumHtmlImageHost
     onBlockImageResolved: onBlockImageResolved,
     imagePrecacheService: imagePrecacheService,
     imageReferer: imageReferer,
+    handoffs: ForumHtmlImageResourceHandoffs(),
   );
 
   @override
@@ -226,6 +232,10 @@ final class CacheForumHtmlImageHost
       return ForumHtmlImagePreparationOutcome.cancelled;
     }
     if (!result.success) return ForumHtmlImagePreparationOutcome.failed;
+    final handoff = result.handoff;
+    if (result.decoded && !image.isSticker && handoff != null) {
+      _handoffs?.offer(image.identity, handoff);
+    }
     return result.decoded
         ? ForumHtmlImagePreparationOutcome.decoded
         : ForumHtmlImagePreparationOutcome.diskOnly;
@@ -270,6 +280,7 @@ final class CacheForumHtmlImageHost
     int retryToken = 0,
   }) => CachedLibraryImage(
     request: (image as CacheForumHtmlDisplayImage).request,
+    resourceHandoff: retryToken == 0 ? _handoffs?.take(image.identity) : null,
     fit: fit,
     // Keep the readable top anchored while intrinsic height is recovered.
     // Centering also exposes subpixel gaps from integer downsample dimensions.
@@ -329,9 +340,8 @@ class _ForumHtmlImageErrorPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     alignment: Alignment.center,
-    color: Theme.of(
-      context,
-    ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.38),
+    color: Theme.of(context).colorScheme.surfaceContainerHighest
+        .withValues(alpha: 0.38),
     child: ImageRetryPlaceholder(
       onRetry: onRetry,
       retryButtonKey: ValueKey<String>('thread-post-image-retry-$cacheKey'),

@@ -13,6 +13,8 @@ import 'package:y300/features/cache/data/providers/image_cache_directory_provide
 import 'package:y300/features/cache/data/repositories/image_cache_repository.dart';
 import 'package:y300/features/cache/data/services/image_cache_diagnostic_recorder.dart';
 import 'package:y300/features/cache/data/services/image_cache_failure_backoff.dart';
+import 'package:y300/features/cache/data/services/image_cache_access_recorder.dart';
+import 'package:y300/features/cache/data/services/image_cache_file_access.dart';
 import 'package:y300/features/cache/data/services/y300_forum_resource_file_service.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
@@ -21,6 +23,64 @@ import 'package:y300/features/cache/domain/services/forum_image_request_resolver
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 
 void main() {
+  for (final retirement in ['access', 'clear', 'owner', 'retry', 'busy']) {
+    test(
+      'validated file handoff preserves LRU and retires on $retirement',
+      () async {
+        final file = await _temporaryFailureCacheImage();
+        final request = _missingImageRequest();
+        final repository = _MemoryImageCacheRepository()
+          ..records[request.cacheKey] = _cachedMissingImageRecord(
+            request,
+            file.path,
+          );
+        final recorder = BufferedImageCacheAccessRecorder(
+          repository: repository,
+        );
+        addTearDown(recorder.dispose);
+        final fileAccess = ImageCacheFileAccess();
+        Object owner = Object();
+        final service = DefaultImageCacheService(
+          repository: repository,
+          cacheManagerFuture: Future.value(_UnusedCacheManager()),
+          directoryResolver: const ImageCacheDirectoryResolver(),
+          accessRecorder: recorder,
+          fileAccess: fileAccess,
+          failureScopeFor: () => owner,
+        );
+        final result = await service.ensureCached(request);
+        expect(result.handoff, isNotNull);
+        final reads = repository.getByKeyCalls;
+        switch (retirement) {
+          case 'access':
+            expect(result.handoff!.take(request)?.localPath, file.path);
+            expect(result.handoff!.take(request), isNull);
+            expect(repository.getByKeyCalls, reads);
+            await recorder.flush();
+            expect(repository.touchCalls, 1);
+          case 'clear':
+            await service.clearUnprotected();
+            expect(result.handoff!.take(request), isNull);
+          case 'owner':
+            owner = Object();
+            expect(result.handoff!.take(request), isNull);
+          case 'retry':
+            service.allowRetry(request);
+            expect(result.handoff!.take(request), isNull);
+          case 'busy':
+            final release = Completer<void>();
+            final mutation = fileAccess.mutate(() => release.future);
+            expect(result.handoff!.take(request), isNull);
+            expect((await service.ensureCached(request)).handoff, isNull);
+            release.complete();
+            await mutation;
+            expect(result.handoff!.take(request), isNull);
+            expect((await service.ensureCached(request)).handoff, isNotNull);
+        }
+      },
+    );
+  }
+
   group('confirmed missing image cooldown', () {
     test(
       '45 sequential consumers produce one download and diagnostic',

@@ -5,9 +5,12 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
 import '../../../../test_support/localized_test_app.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/cache/data/services/image_cache_resource_handoff.dart';
 import 'package:y300/core/media/cover_aware_resize_image.dart';
 import 'package:y300/core/media/encoded_image_dimension_probe.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
@@ -17,6 +20,89 @@ import 'package:y300/features/cache/presentation/widgets/cached_library_image.da
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 
 void main() {
+  for (final state in ['ready', 'missing', 'corrupt', 'retired']) {
+    testWidgets(
+      'resource handoff displays or recovers through the cache: $state',
+      (tester) async {
+        final file = _createTempPng(tester);
+        final validBytes = await tester.runAsync(() async {
+          final recorder = ui.PictureRecorder();
+          Canvas(recorder).drawColor(Colors.blue, BlendMode.src);
+          final picture = recorder.endRecording();
+          final bitmap = await picture.toImage(1, 1);
+          final data = await bitmap.toByteData(format: ui.ImageByteFormat.png);
+          bitmap.dispose();
+          picture.dispose();
+          return data!.buffer.asUint8List();
+        });
+        file.writeAsBytesSync(validBytes!);
+        final badFile = io.File('${file.parent.path}/handoff.png');
+        if (state == 'corrupt') badFile.writeAsBytesSync([1, 2, 3]);
+        final cache = _ControlledImageCacheService();
+        cache.completeGetCached(
+          'thread-image',
+          CachedImageResult(
+            success: true,
+            cacheKey: 'thread-image',
+            localPath: file.path,
+            width: 1,
+            height: 1,
+          ),
+        );
+        final result = CachedImageResult(
+          success: true,
+          cacheKey: 'thread-image',
+          localPath: state == 'ready' || state == 'retired'
+              ? file.path
+              : badFile.path,
+          width: 1,
+          height: 1,
+        );
+        var accesses = 0;
+        var frames = 0;
+        var failures = 0;
+        final handoff = ValidatedImageCacheResourceHandoff(
+          request: _request('thread-image'),
+          result: result,
+          isCurrent: () => state != 'retired',
+          recordAccess: () => accesses++,
+        );
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [imageCacheServiceProvider.overrideWithValue(cache)],
+            child: LocalizedTestApp(
+              home: SizedBox.square(
+                dimension: 100,
+                child: CachedLibraryImage(
+                  request: _request('thread-image'),
+                  resourceHandoff: handoff,
+                  fit: BoxFit.contain,
+                  placeholder: const SizedBox(),
+                  onFirstFrameRendered: (_) => frames++,
+                  onImageFailed: () => failures++,
+                  remoteDisplayPolicy:
+                      CachedImageRemoteDisplayPolicy.afterCacheWrite,
+                ),
+              ),
+            ),
+          ),
+        );
+        for (var i = 0; i < 40 && frames == 0; i++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 3)),
+          );
+          await tester.pump();
+        }
+        expect(frames, 1);
+        expect(failures, 0);
+        expect(cache.getCachedCount('thread-image'), state == 'ready' ? 0 : 1);
+        expect(cache.ensureStarted('thread-image'), isFalse);
+        expect(accesses, state == 'retired' ? 0 : 1);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets('only a changed retry token lifts the current request cooldown', (
     tester,
   ) async {
@@ -1178,9 +1264,9 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.byKey(const Key('local-file-fallback')), findsNothing);
-        final provider =
-            _underlyingProvider(tester.widget<Image>(find.byType(Image)).image)
-                as FileImage;
+        final provider = _underlyingProvider(
+          tester.widget<Image>(find.byType(Image)).image,
+        ) as FileImage;
         expect(provider.file.path, newFile.path);
         expect(inspectedPaths, [oldFile.path, newFile.path]);
         expect(cacheService.decodeFailures, isEmpty);

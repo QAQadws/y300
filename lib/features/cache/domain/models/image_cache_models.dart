@@ -192,6 +192,7 @@ class CachedImageResult {
     this.fromCache = false,
     this.width,
     this.height,
+    this.handoff,
   });
 
   final bool success;
@@ -201,8 +202,17 @@ class CachedImageResult {
   final bool fromCache;
   final int? width;
   final int? height;
+  final ImageCacheResourceHandoff? handoff;
 
   static const CachedImageResult failed = CachedImageResult(success: false);
+}
+
+/// A short-lived, single-use handoff of an already validated file. It belongs
+/// to the App display flow, never to prepared documents or persistent records.
+abstract interface class ImageCacheResourceHandoff {
+  bool get isCurrent;
+  CachedImageResult? take(ImageCacheRequest request);
+  void invalidate();
 }
 
 class ImageCacheUsageGroup {

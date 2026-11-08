@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io' as io;
+
 import 'package:flutter/material.dart';
 import 'package:y300/core/media/image_display_provider.dart';
 import 'package:y300/core/media/encoded_image_dimension_probe.dart';
@@ -10,16 +11,17 @@ import 'package:y300/features/cache/domain/services/forum_image_precache_service
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 
-typedef ForumImageProviderBuilder =
-    ImageProvider Function({
-      required String localPath,
-      required BoxFit fit,
-      required Size? expectedDisplaySize,
-      required double devicePixelRatio,
-    });
+typedef ForumImageProviderBuilder = ImageProvider Function({
+  required String localPath,
+  required BoxFit fit,
+  required Size? expectedDisplaySize,
+  required double devicePixelRatio,
+});
 
-typedef ForumImagePrecacheInvoker =
-    Future<void> Function(ImageProvider provider, ImageConfiguration config);
+typedef ForumImagePrecacheInvoker = Future<void> Function(
+  ImageProvider provider,
+  ImageConfiguration config,
+);
 
 class DefaultForumImagePrecacheService
     implements
@@ -320,6 +322,7 @@ class DefaultForumImagePrecacheService
         cacheKey: request.cacheKey,
         localPath: result.localPath,
         failureReason: result.success ? null : 'disk_cache_failed',
+        handoff: result.handoff,
       );
     } catch (error) {
       return ForumImagePrecacheResult.failed(error, diskCacheAttempted: true);
@@ -347,6 +350,7 @@ class DefaultForumImagePrecacheService
         decodePrecacheAttempted: true,
         cacheKey: request.cacheKey,
         localPath: localPath,
+        handoff: disk.handoff,
       );
     } catch (error) {
       return ForumImagePrecacheResult.failed(

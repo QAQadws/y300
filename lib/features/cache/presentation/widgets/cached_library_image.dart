@@ -42,6 +42,7 @@ class CachedLibraryImage extends ConsumerStatefulWidget {
     this.fadeInDuration = Duration.zero,
     this.remoteDisplayPolicy = CachedImageRemoteDisplayPolicy.eager,
     this.retryToken = 0,
+    this.resourceHandoff,
   });
 
   final ImageCacheRequest? request;
@@ -85,6 +86,10 @@ class CachedLibraryImage extends ConsumerStatefulWidget {
   /// 并透传给 [LibraryCachedImage] 重建解码；失败可能出在其中任一段。
   final int retryToken;
 
+  /// Optional one-shot file validation from successful preparation. Rejected or
+  /// failed handoffs use the ordinary cache flow, including afterCacheWrite.
+  final ImageCacheResourceHandoff? resourceHandoff;
+
   @override
   ConsumerState<CachedLibraryImage> createState() => _CachedLibraryImageState();
 }
@@ -105,6 +110,9 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
   String? _cacheReadyLocalPath;
   String? _scheduledDimensionIdentity;
   int _generation = 0;
+  ImageCacheResourceHandoff? _resourceHandoff;
+  bool _handoffRecoveryScheduled = false;
+  int _localRecoveryEpoch = 0;
 
   @override
   void initState() {
@@ -168,6 +176,7 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
           : _cacheWriteFailed
           ? widget.errorPlaceholder ?? widget.placeholder
           : LibraryCachedImage(
+              key: ValueKey(_localRecoveryEpoch),
               localPath: _localPath,
               imageUrl: _allowRemoteFallback ? request?.sourceUrl : null,
               cacheKey: request?.cacheKey,
@@ -193,6 +202,9 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
                     generation,
                   ),
               onImageFailed: () => _handleImageFailed(generation),
+              onLocalFileMissing: _resourceHandoff == null
+                  ? null
+                  : () => _recoverHandoff(generation),
             ),
     );
   }
@@ -205,17 +217,35 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     if (generation != _generation || _useLocalFileFallback) {
       return;
     }
+    if (_resourceHandoff?.isCurrent == false) {
+      _recoverHandoff(generation);
+      return;
+    }
+    final handedOff = _resourceHandoff != null;
+    _resourceHandoff = null;
     _firstFrameRendered = true;
     if (source == LibraryImageFrameSource.remote) {
       _displayedRemoteImage = true;
     }
     _markDisplaySettled(generation);
     widget.onFirstFrameRendered?.call(source);
-    _scheduleDimensionProbe(request, generation);
+    if (handedOff) {
+      // A memory hit can report during build; geometry callbacks may update an
+      // ancestor renderer and must wait until that frame has finished.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_isActive(generation)) _scheduleDimensionProbe(request, generation);
+      });
+    } else {
+      _scheduleDimensionProbe(request, generation);
+    }
   }
 
   void _handleImageFailed(int generation) {
     if (generation != _generation || _useLocalFileFallback) {
+      return;
+    }
+    if (_resourceHandoff != null) {
+      _recoverHandoff(generation);
       return;
     }
     final cacheReadyLocalPath = _cacheReadyLocalPath?.trim();
@@ -254,6 +284,24 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     }
   }
 
+  void _recoverHandoff(int generation) {
+    if (!_isActive(generation) ||
+        _handoffRecoveryScheduled ||
+        _resourceHandoff == null) {
+      return;
+    }
+    _resourceHandoff!.invalidate();
+    _handoffRecoveryScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_isActive(generation)) return;
+      setState(() {
+        _localRecoveryEpoch++;
+        _restartCacheFlow(allowHandoff: false);
+      });
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
   void _markDisplaySettled(int generation) {
     if (generation != _generation || _displaySettled) {
       return;
@@ -286,8 +334,10 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     }
   }
 
-  void _restartCacheFlow() {
+  void _restartCacheFlow({bool allowHandoff = true}) {
     _generation += 1;
+    _resourceHandoff = null;
+    _handoffRecoveryScheduled = false;
     _localPath = null;
     _allowRemoteFallback = false;
     _displayedRemoteImage = false;
@@ -310,6 +360,27 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
     final request = widget.request;
     if (request == null) {
       return;
+    }
+    if (allowHandoff &&
+        widget.localFileFallbackPredicate == null &&
+        (preferredLocalPath == null || preferredLocalPath.isEmpty)) {
+      final handoff = widget.resourceHandoff;
+      final resolved = handoff?.take(request);
+      if (_hasUsableLocalPath(resolved)) {
+        _resourceHandoff = handoff;
+        _localPath = resolved!.localPath!.trim();
+        _dimensionLocalPath = _localPath;
+        _cacheReadyLocalPath = _localPath;
+        _knownImageWidth = resolved.width;
+        _knownImageHeight = resolved.height;
+        final generation = _generation;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_isActive(generation)) {
+            widget.onLocalPathResolved?.call(_localPath!);
+          }
+        });
+        return;
+      }
     }
     if (preferredLocalPath != null && preferredLocalPath.isNotEmpty) {
       if (widget.localFileFallbackPredicate == null) {

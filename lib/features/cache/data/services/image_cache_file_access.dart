@@ -5,6 +5,30 @@ import 'dart:async';
 final class ImageCacheFileAccess {
   final _readers = <String, int>{};
   final _deletions = <String, Completer<void>>{};
+  Object _resolutionEpoch = Object();
+  int _mutations = 0;
+
+  /// Conservative invalidation avoids retaining a per-file generation map.
+  Object? get reusableEpoch => _mutations == 0 ? _resolutionEpoch : null;
+
+  void invalidateResolutions() => _resolutionEpoch = Object();
+
+  Future<({T value, Object epoch})> mutate<T>(
+    Future<T> Function() action,
+  ) async {
+    _mutations++;
+    invalidateResolutions();
+    late T value;
+    try {
+      value = await action();
+    } finally {
+      _mutations--;
+      invalidateResolutions();
+    }
+    // Pair the completed result and epoch before yielding to its consumer.
+    // A concurrent mutation or a read begun during mutation cannot authorize reuse.
+    return (value: value, epoch: _resolutionEpoch);
+  }
 
   Future<T> protect<T>(String key, Future<T> Function() action) async {
     while (true) {
@@ -30,7 +54,7 @@ final class ImageCacheFileAccess {
     final completion = Completer<void>();
     _deletions[key] = completion;
     try {
-      await action();
+      await mutate(action);
       return true;
     } finally {
       _deletions.remove(key);

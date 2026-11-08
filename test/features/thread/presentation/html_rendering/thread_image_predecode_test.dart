@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/core/media/encoded_image_dimension_probe.dart';
 import 'package:y300/core/media/image_display_provider.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
+import 'package:y300/features/cache/data/services/image_cache_resource_handoff.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_dimension_index.dart';
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
@@ -262,9 +263,12 @@ void main() {
   });
 
   for (final scenario in [
-    (animated: false, highDpr: false),
-    (animated: true, highDpr: false),
-    (animated: false, highDpr: true),
+    (animated: false, highDpr: false, handoff: false),
+    (animated: true, highDpr: false, handoff: false),
+    (animated: false, highDpr: true, handoff: false),
+    (animated: false, highDpr: false, handoff: true),
+    (animated: true, highDpr: false, handoff: true),
+    (animated: false, highDpr: true, handoff: true),
   ]) {
     final animated = scenario.animated;
     final highDpr = scenario.highDpr;
@@ -279,7 +283,7 @@ void main() {
         ? const Size(1, 1)
         : const Size(400, 200);
     testWidgets(
-      'prepared ${highDpr ? 'high-DPR ' : ''}${animated ? 'GIF' : 'PNG'} keeps its rendered frame across viewport edges',
+      'prepared ${highDpr ? 'high-DPR ' : ''}${animated ? 'GIF' : 'PNG'} keeps its rendered frame across viewport edges, handoff=${scenario.handoff}',
       (tester) async {
         tester.view.devicePixelRatio = devicePixelRatio;
         addTearDown(tester.view.resetDevicePixelRatio);
@@ -306,7 +310,11 @@ void main() {
                   .path,
           ];
         });
-        final cache = _FileCache(paths!, intrinsicSize: intrinsicSize);
+        final cache = _FileCache(
+          paths!,
+          intrinsicSize: intrinsicSize,
+          handoff: scenario.handoff,
+        );
         final decodedKeys = <Object>[];
         final service = DefaultForumImagePrecacheService(
           imageCacheService: cache,
@@ -391,6 +399,16 @@ void main() {
         );
         expect(nextImage, findsOneWidget);
         expect(tester.widget<RawImage>(nextFrame).image, isNotNull);
+        if (scenario.handoff) {
+          final key = host
+              .resolveImage(
+                url: Uri.parse('https://example.invalid/1.$extension'),
+                imageIndex: 1,
+                isSticker: false,
+              )!
+              .cacheKey;
+          expect(cache.lookups[key] ?? 0, 0);
+        }
         if (highDpr) {
           expect(tester.widget<RawImage>(nextFrame).image!.width, 1344);
         }
@@ -709,16 +727,19 @@ class _FileCache implements ImageCacheService {
     required this.intrinsicSize,
     this.failRequests = false,
     this.waitForFile,
+    this.handoff = false,
   });
   final List<String> paths;
   final Size? intrinsicSize;
   final bool failRequests;
   final Future<void>? waitForFile;
+  final bool handoff;
   final records = <String, CachedImageResult>{};
+  final lookups = <String, int>{};
   @override
   Future<CachedImageResult> ensureCached(ImageCacheRequest request) async {
     await waitForFile;
-    return failRequests
+    final result = failRequests
         ? CachedImageResult.failed
         : records.putIfAbsent(
             request.cacheKey,
@@ -731,11 +752,29 @@ class _FileCache implements ImageCacheService {
               fromCache: true,
             ),
           );
+    if (!handoff || !result.success) return result;
+    return CachedImageResult(
+      success: result.success,
+      cacheKey: result.cacheKey,
+      localPath: result.localPath,
+      width: result.width,
+      height: result.height,
+      fromCache: result.fromCache,
+      handoff: ValidatedImageCacheResourceHandoff(
+        request: request,
+        result: result,
+        isCurrent: () => true,
+        recordAccess: () {},
+      ),
+    );
   }
 
   @override
-  Future<CachedImageResult?> getCached(String cacheKey) async =>
-      records[cacheKey];
+  Future<CachedImageResult?> getCached(String cacheKey) async {
+    lookups.update(cacheKey, (count) => count + 1, ifAbsent: () => 1);
+    return records[cacheKey];
+  }
+
   @override
   Future<CachedImageResult> copyProtectedLocalFile(
     ImageCacheLocalCopyRequest request,

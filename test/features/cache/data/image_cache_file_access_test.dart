@@ -4,6 +4,34 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/cache/data/services/image_cache_file_access.dart';
 
 void main() {
+  test(
+    'overlapping and failed mutations retire resolution epochs until idle',
+    () async {
+      final access = ImageCacheFileAccess();
+      final original = access.reusableEpoch;
+      final first = Completer<int>();
+      final second = Completer<int>();
+      final a = access.mutate(() => first.future);
+      final b = access.mutate(() => second.future);
+      expect(access.reusableEpoch, isNull);
+      first.complete(1);
+      final publishedA = await a;
+      expect(publishedA.value, 1);
+      expect(access.reusableEpoch, isNull);
+      second.complete(2);
+      final publishedB = await b;
+      expect(access.reusableEpoch, same(publishedB.epoch));
+      expect(access.reusableEpoch, isNot(same(original)));
+      expect(access.reusableEpoch, isNot(same(publishedA.epoch)));
+      await expectLater(
+        access.mutate<void>(() async => throw StateError('write')),
+        throwsStateError,
+      );
+      expect(access.reusableEpoch, isNotNull);
+      expect(access.reusableEpoch, isNot(same(publishedB.epoch)));
+    },
+  );
+
   test('publication waits for an active deletion of the same key', () async {
     final access = ImageCacheFileAccess();
     final started = Completer<void>();

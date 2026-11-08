@@ -41,6 +41,7 @@ class LibraryCachedImage extends ConsumerStatefulWidget {
     this.onFirstFrameRendered,
     this.onImageFailed,
     this.onLocalImageDecodeFailed,
+    this.onLocalFileMissing,
     this.fadeInDuration = Duration.zero,
     this.retryToken = 0,
   });
@@ -67,6 +68,7 @@ class LibraryCachedImage extends ConsumerStatefulWidget {
   final VoidCallback? onImageFailed;
   final void Function(Object error, StackTrace? stackTrace)?
   onLocalImageDecodeFailed;
+  final VoidCallback? onLocalFileMissing;
 
   /// Duration used to cross-fade the placeholder into an asynchronously
   /// decoded first frame. Synchronous image-cache hits remain immediate.
@@ -303,6 +305,7 @@ class _LibraryCachedImageState extends ConsumerState<LibraryCachedImage> {
     if (!mounted || generation != _localFailureGeneration) return;
     if (!exists) {
       setState(() => _missingLocalPath = file.path);
+      widget.onLocalFileMissing?.call();
     } else {
       _reportLocalDecodeFailure(identity, error, stackTrace);
       _markImageFailed(identity);

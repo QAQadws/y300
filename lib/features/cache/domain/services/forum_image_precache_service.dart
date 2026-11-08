@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
+import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 
 abstract interface class ForumImagePrecacheService {
   Future<ForumImagePrecacheResult> ensureDiskCached(ForumImageLoadSpec spec);
@@ -77,6 +78,7 @@ class ForumImagePrecacheResult {
     this.localPath,
     this.error,
     this.failureReason,
+    this.handoff,
   });
 
   final bool success;
@@ -88,6 +90,7 @@ class ForumImagePrecacheResult {
   final String? localPath;
   final Object? error;
   final String? failureReason;
+  final ImageCacheResourceHandoff? handoff;
 
   static ForumImagePrecacheResult failed(
     Object error, {
