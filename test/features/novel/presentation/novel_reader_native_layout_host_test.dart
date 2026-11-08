@@ -260,6 +260,19 @@ Future<void> _unmount(WidgetTester tester, _Reader reader) async {
   expect(tester.takeException(), isNull);
 }
 
+_Reader _coldNavigationReader() {
+  final text = List.filled(20, 'abcdefghijklmnopqrst').join();
+  // A single cached paragraph can deliver any of its pages without a frame.
+  // Distinct distant paragraphs exceed this LRU and exercise the cold wait.
+  return _Reader(
+    html: List.generate(
+      10,
+      (index) => '<p>$index${text.substring(1)}</p>',
+    ).join(),
+    maxParagraphEntries: 3,
+  );
+}
+
 Future<List<int>> _canvasPixel(WidgetTester tester, {int? x, int? y}) async {
   final boundary = tester.renderObject<RenderRepaintBoundary>(
     find.byKey(_canvasKey),
@@ -834,8 +847,9 @@ void main() {
   testWidgets(
     'canvas paint neither extends a target deadline nor retries its failure',
     (tester) async {
-      final reader = _Reader();
+      final reader = _coldNavigationReader();
       var held = false;
+      var heldWaits = 0;
       final gate = Completer<void>();
       addTearDown(() {
         if (!gate.isCompleted) gate.complete();
@@ -843,6 +857,7 @@ void main() {
       final scheduler = NovelReaderNativeWorkScheduler(
         nextFrame: () async {
           if (held) {
+            heldWaits++;
             await gate.future;
           } else {
             await WidgetsBinding.instance.endOfFrame;
@@ -867,8 +882,11 @@ void main() {
       final controller = reader.statuses.last.controller!;
       final reports = reader.positions.length;
       held = true;
-      expect(controller.requestPage(8), true);
+      expect(controller.requestPage(70), true);
       await tester.pump(const Duration(seconds: 3));
+      expect(heldWaits, greaterThan(0));
+      expect(controller.readyTarget, isNull);
+      expect(controller.hasPendingNavigation, isTrue);
       await _show(
         tester,
         reader,
@@ -2140,7 +2158,7 @@ void main() {
     testWidgets(
       'latest $first replacement owns the single navigation lane and removing older input cannot cancel it',
       (tester) async {
-        final reader = _Reader();
+        final reader = _coldNavigationReader();
         var held = false;
         final gate = Completer<void>();
         final scheduler = NovelReaderNativeWorkScheduler(
@@ -2159,7 +2177,7 @@ void main() {
           requestId: 1,
           episodeId: reader.episodeId,
           paginationKey: before.paginationKey,
-          pageIndex: 7,
+          pageIndex: 70,
         );
         final navigation = NovelReaderAnchorNavigationRequest(
           requestId: 1,
@@ -2174,6 +2192,8 @@ void main() {
           anchorNavigation: first == 'anchor' ? navigation : null,
         );
         await tester.pumpAndSettle();
+        expect(reader.statuses.last.controller!.hasPendingNavigation, isTrue);
+        expect(reader.statuses.last.controller!.readyTarget, isNull);
         await _show(
           tester,
           reader,
@@ -2182,6 +2202,8 @@ void main() {
           anchorNavigation: navigation,
         );
         await tester.pumpAndSettle();
+        expect(reader.statuses.last.controller!.hasPendingNavigation, isTrue);
+        expect(reader.statuses.last.controller!.readyTarget, isNull);
         // Remove the older input while the newer request is still waiting.
         await _show(
           tester,
@@ -2210,7 +2232,7 @@ void main() {
           expect(reader.seekResults, [
             (seek, NovelReaderNavigationOutcome.arrived),
           ]);
-          expect(reader.positions.last.pageIndex, 7);
+          expect(reader.positions.last.pageIndex, 70);
         }
         expect(reader.positions, hasLength(2));
         expect(reader.service.calls, 1);
@@ -2423,7 +2445,7 @@ void main() {
   testWidgets(
     'owner replacement suppresses obsolete seek callbacks and late preparation',
     (tester) async {
-      final old = _Reader();
+      final old = _coldNavigationReader();
       var held = false;
       final gate = Completer<void>();
       final scheduler = NovelReaderNativeWorkScheduler(
@@ -2442,10 +2464,12 @@ void main() {
         requestId: 1,
         episodeId: old.episodeId,
         paginationKey: old.positions.last.paginationKey,
-        pageIndex: 7,
+        pageIndex: 70,
       );
       await _show(tester, old, scheduler: scheduler, seek: seek);
       await tester.pumpAndSettle();
+      expect(old.statuses.last.controller!.hasPendingNavigation, isTrue);
+      expect(old.statuses.last.controller!.readyTarget, isNull);
       final next = _Reader(episodeId: 'next');
       await _show(tester, next);
       await tester.pumpAndSettle();
@@ -2555,7 +2579,7 @@ void main() {
     testWidgets(
       '$replacement retires a pending page seek and rejects its late completion',
       (tester) async {
-        final reader = _Reader();
+        final reader = _coldNavigationReader();
         var held = false;
         final gate = Completer<void>();
         final scheduler = NovelReaderNativeWorkScheduler(
@@ -2574,18 +2598,20 @@ void main() {
           requestId: 1,
           episodeId: reader.episodeId,
           paginationKey: before.paginationKey,
-          pageIndex: 7,
+          pageIndex: 70,
         );
         final second = NovelReaderPageSeekRequest(
           requestId: 2,
           episodeId: reader.episodeId,
           paginationKey: before.paginationKey,
-          pageIndex: 6,
+          pageIndex: 60,
         );
         held = true;
         await _show(tester, reader, scheduler: scheduler, seek: first);
         await tester.pumpAndSettle();
         expect(reader.seekResults, isEmpty);
+        expect(reader.statuses.last.controller!.hasPendingNavigation, isTrue);
+        expect(reader.statuses.last.controller!.readyTarget, isNull);
         switch (replacement) {
           case 'seek':
             await _show(tester, reader, scheduler: scheduler, seek: second);
@@ -2600,7 +2626,7 @@ void main() {
               active: false,
             );
           case 'other-navigation':
-            reader.statuses.last.controller!.requestPage(5);
+            reader.statuses.last.controller!.requestPage(50);
         }
         await tester.pumpAndSettle();
         expect(reader.seekResults, [
@@ -2611,13 +2637,13 @@ void main() {
         gate.complete();
         await tester.pumpAndSettle();
         if (replacement == 'seek') {
-          expect(reader.positions.last.pageIndex, 6);
+          expect(reader.positions.last.pageIndex, 60);
           expect(reader.seekResults.last, (
             second,
             NovelReaderPageSeekOutcome.arrived,
           ));
         } else if (replacement == 'other-navigation') {
-          expect(reader.positions.last.pageIndex, 5);
+          expect(reader.positions.last.pageIndex, 50);
           expect(reader.seekResults, hasLength(1));
         } else {
           expect(reader.positions, [before]);
