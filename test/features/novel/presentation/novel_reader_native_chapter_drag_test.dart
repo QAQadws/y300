@@ -481,19 +481,26 @@ void main() {
     'EOF cannot arm a gesture that started with an incomplete prefix',
     (tester) async {
       final idle = Completer<void>();
+      var waitingForIdle = false;
       final reader = _Reader(
-        html: '<p>${List.filled(12, 'abcdefghijklmnopqrst').join()}</p>',
-        idle: () => idle.future,
+        // Keep a tail beyond the first source batch. A short chapter can
+        // otherwise reach EOF before background work needs to wait for idle.
+        html: '<p>${List.filled(90, 'abcdefghijklmnopqrst').join()}</p>',
+        idle: () {
+          waitingForIdle = true;
+          return idle.future;
+        },
       );
       await tester.pumpWidget(reader.widget());
       for (
         var attempt = 0;
-        attempt < 50 && reader.positions.isEmpty;
+        attempt < 50 && (reader.positions.isEmpty || !waitingForIdle);
         attempt++
       ) {
         await tester.pump(const Duration(milliseconds: 1));
       }
       expect(reader.positions, hasLength(1));
+      expect(waitingForIdle, isTrue);
       expect(reader.controller.snapshot!.isComplete, isFalse);
       final gesture = await _pull(tester, 80);
       idle.complete();
