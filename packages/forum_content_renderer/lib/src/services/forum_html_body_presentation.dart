@@ -117,12 +117,21 @@ class _BodyMeasurement extends SingleChildRenderObjectWidget {
 
   @override
   void updateRenderObject(BuildContext context, _BodyMeasurementBox box) {
+    final layoutChanged =
+        !identical(box.presentation, presentation) ||
+        box.sourceId != sourceId ||
+        box.revision != revision ||
+        box._lastReady != isReady() ||
+        box._lastActive != presentation.isActive;
     box
       ..presentation = presentation
       ..sourceId = sourceId
       ..revision = revision
-      ..isReady = isReady
-      ..markNeedsLayout();
+      ..isReady = isReady;
+    // Callback/configuration rebuilds do not change geometry. Real child size
+    // changes already invalidate layout; readiness/owner changes must also
+    // release a restored placeholder height when the child stays identical.
+    if (layoutChanged) box.markNeedsLayout();
   }
 }
 
@@ -138,16 +147,20 @@ class _BodyMeasurementBox extends RenderProxyBox {
   String sourceId;
   Object revision;
   bool Function() isReady;
+  bool? _lastReady;
+  bool? _lastActive;
 
   @override
   void performLayout() {
     super.performLayout();
+    final ready = _lastReady = isReady();
+    _lastActive = presentation.isActive;
     final layoutRevision = (
       revision,
       constraints.maxWidth,
       presentation.expansionRevision,
     );
-    if (isReady()) {
+    if (ready) {
       presentation.recordLayout(sourceId, layoutRevision, size.height);
     } else {
       final height = presentation.heightFor(sourceId, layoutRevision);
