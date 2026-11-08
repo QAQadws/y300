@@ -52,6 +52,43 @@ List<ForumBodyTextFlowUnit> _drain(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('long Discuz BR text keeps bounded shared inputs without losing text', () {
+    final lines = [
+      for (var i = 0; i < 600; i++) 'line$i-${'reading ' * 6}tail',
+    ];
+    final document = _document(
+      '<div>${[for (var i = 0; i < lines.length; i++) '<span style="color:${i.isEven ? '#a00000' : '#0000a0'}">${lines[i]}</span>'].join('<br>')}</div>',
+    );
+    final cursor = _cursor(document);
+    addTearDown(cursor.close);
+    final paragraphs = _drain(cursor, budget: 64)
+        .whereType<ForumBodyTextFlowParagraph>()
+        .where(
+          (part) => part.window != ForumBodyParagraphWindow.terminalEmptyLine,
+        )
+        .toList();
+    expect(lines.join('\n').length, greaterThan(16384));
+    expect(
+      paragraphs.map((part) => part.content.projection.text).join(),
+      lines.join('\n'),
+    );
+    expect(
+      paragraphs.every((part) => part.identity == document.identity),
+      isTrue,
+    );
+    expect(
+      paragraphs.every((part) => part.content.projection.text.length < 128),
+      isTrue,
+    );
+    expect(
+      paragraphs.fold<int>(
+        0,
+        (count, part) => count + part.content.runs.length,
+      ),
+      greaterThan(512),
+    );
+  });
+
   test(
     'source indent cleanup keeps exact graphemes and restores reader indent',
     () {
