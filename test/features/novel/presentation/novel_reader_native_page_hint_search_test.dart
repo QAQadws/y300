@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:html_pagination_core/html_pagination_core.dart';
+import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_page_hint_search.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_native_page_view_job.dart';
@@ -163,57 +163,28 @@ void main() {
     }
   });
 
-  test(
-    'orphan annotation restores its real source beyond the font strut',
-    () async {
-      final fixture = NativeReaderTestFixture(
-        '<p>aa</p><p><ruby><rt>xy</rt></ruby></p>',
-        width: 20,
-        height: 15,
-      );
-      final target = _anchor(fixture, 1, node: 'node-1');
-      final builds = fixture.cache.layoutBuildCount;
-      final hints = _collect(_search(fixture, target));
-      expect(hints.map((hint) => hint.pageIndex), [1]);
-      expect(fixture.cache.layoutBuildCount, builds);
-      final view = await NovelReaderNativePageViewJob(
-        session: fixture.session,
-        anchors: fixture.anchors,
-        pageIndex: 1,
-        parent: fixture.parent,
-        scheduler: NovelReaderNativeWorkScheduler(nextFrame: () async {}),
-      ).run();
-      try {
-        expect(view.coverage.locate(target), isNotNull);
-        expect(view.coverage.points, isNotEmpty);
-        expect(
-          view.coverage.points.every((point) => point.sourceRune >= 2),
-          isTrue,
-        );
-        expect(view.coverage.hasClippedGlyphs, isFalse);
-      } finally {
-        view.close();
-      }
-      expect(fixture.session.activeIssuedLeases, 0);
-      expect(fixture.cache.activeLeases, 0);
-    },
-  );
-
-  for (final base in ['', 'A']) {
+  for (final (prefix, base, annotations, offset, width) in [
+    ('aa', '', '<rt>xy</rt>', 1, 20.0),
+    ('a', '', '<rt>xy</rt><rt>zw</rt>', 3, 10.0),
+    ('a', 'A', '<rt>xy</rt><rt>zw</rt>', 4, 10.0),
+  ]) {
     test(
-      'consecutive RT restores only on its actual visible page (base=$base)',
+      'unpaired RT preserves source without inventing visible anchor proof (base=$base, annotations=$annotations)',
       () async {
         final fixture = NativeReaderTestFixture(
-          '<p>a</p><p><ruby>$base<rt>xy</rt><rt>zw</rt></ruby></p>',
-          width: 10,
+          '<p>$prefix</p><p><ruby>$base$annotations</ruby></p>',
+          width: width,
           height: 15,
         );
-        final target = _anchor(fixture, base.length + 3, node: 'node-1');
+        final target = _anchor(fixture, offset, node: 'node-1');
+        // The semantic/raw source still contains the omitted annotation. It
+        // cannot become a restore hint or exact visible coverage on any page.
+        expect(fixture.anchors.sourceCandidates(target), isNotEmpty);
         final builds = fixture.cache.layoutBuildCount;
         final hints = _collect(_search(fixture, target));
-        expect(hints.map((hint) => hint.pageIndex), [2]);
+        expect(hints, isEmpty);
         expect(fixture.cache.layoutBuildCount, builds);
-        for (final page in [1, 2]) {
+        for (var page = 0; page < fixture.session.snapshot.length; page++) {
           final view = await NovelReaderNativePageViewJob(
             session: fixture.session,
             anchors: fixture.anchors,
@@ -222,8 +193,16 @@ void main() {
             scheduler: NovelReaderNativeWorkScheduler(nextFrame: () async {}),
           ).run();
           try {
-            expect(view.coverage.locate(target) != null, page == 2);
+            expect(view.coverage.locate(target), isNull);
+            if (base.isNotEmpty) {
+              expect(
+                view.coverage.locate(_anchor(fixture, 0, node: 'node-1')) !=
+                    null,
+                page == fixture.session.snapshot.length - 1,
+              );
+            }
             expect(view.coverage.hasClippedGlyphs, isFalse);
+            expect(fixture.cache.layoutBuildCount, builds);
           } finally {
             view.close();
           }
