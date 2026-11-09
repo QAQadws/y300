@@ -3,18 +3,9 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart'
     as forum;
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/yamibo_forum_client_provider.dart';
+import 'package:y300/features/thread/domain/models/thread_post_rating_details.dart';
 
-final class ThreadPostRatingDetails {
-  const ThreadPostRatingDetails({
-    required this.participantCount,
-    required this.totalScoreText,
-    required this.ratings,
-  });
-
-  final int participantCount;
-  final String totalScoreText;
-  final List<forum.ThreadPostRating> ratings;
-}
+export 'package:y300/features/thread/domain/models/thread_post_rating_details.dart';
 
 abstract interface class ThreadPostRatingsRepository {
   Future<ApiResult<ThreadPostRatingDetails>> loadAll(String viewAllUrl);
