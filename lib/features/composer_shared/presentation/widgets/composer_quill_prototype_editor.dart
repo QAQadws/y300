@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -10,10 +9,9 @@ import 'package:y300/features/composer_shared/domain/models/composer_insertion_m
 import 'package:y300/features/composer_shared/domain/models/sticker_models.dart';
 import 'package:forum_markup_core/forum_markup_core.dart';
 import 'package:y300/features/composer_shared/domain/services/composer_attachment_preview_resolvers.dart';
-import 'package:y300/features/composer_shared/presentation/quill/composer_quill_attach_token_promoter.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_bbcode_codec.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_collapse_editor_models.dart';
-import 'package:y300/features/composer_shared/presentation/quill/composer_quill_collapse_format_sanitizer.dart';
+import 'package:y300/features/composer_shared/presentation/quill/composer_quill_document_sync_coordinator.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_collapse_insertion_service.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_embeds.dart';
 import 'package:y300/features/composer_shared/presentation/quill/composer_quill_sticker_embed_builder.dart';
@@ -240,9 +238,6 @@ class _ComposerQuillEditorSurfaceState
     extends State<ComposerQuillEditorSurface> {
   static const _codec = ComposerQuillBbCodeCodec();
   static const _selectionAdapter = ComposerQuillSelectionAdapter();
-  static const _attachTokenPromoter = ComposerQuillAttachTokenPromoter();
-  static const _collapseFormatSanitizer =
-      ComposerQuillCollapseFormatSanitizer();
   static const _collapseInsertionService =
       ComposerQuillCollapseInsertionService();
 
@@ -250,15 +245,10 @@ class _ComposerQuillEditorSurfaceState
   late final bool _ownsController;
   late final FocusNode _focusNode;
   late final ScrollController _scrollController;
-  String _bbCodeText = '';
-  bool _isApplyingExternalBbCode = false;
-  bool _isPromotingAttachTokens = false;
-  bool _hasScheduledAttachTokenPromotion = false;
-  bool _isSanitizingCollapseFormats = false;
-  bool _hasScheduledCollapseFormatSanitization = false;
-  int _documentGeneration = 0;
+  late final ComposerQuillDocumentSyncCoordinator _documentSync;
+  String get _bbCodeText => _documentSync.bbCode;
+  int get _documentGeneration => _documentSync.documentGeneration;
   int _nextCollapseId = 0;
-  String? _ignoredExternalDocumentEncoding;
   ComposerQuillToolPanel? _activePanel;
   Key? _activeExtraPanelKey;
   double _lastKeyboardHeight = 0;
@@ -290,11 +280,17 @@ class _ComposerQuillEditorSurfaceState
     _focusNode = FocusNode();
     _focusNode.addListener(_handleEditorFocusChanged);
     _scrollController = ScrollController();
-    _controller.addListener(_handleDocumentChanged);
-    _bbCodeText = widget.bbCode ?? _codec.encodeDocument(_controller.document);
-    // 外部直接塞进来的文档也可能带着字面 attach 代码。
-    _scheduleAttachTokenPromotion();
-    _scheduleCollapseFormatSanitization();
+    _documentSync = ComposerQuillDocumentSyncCoordinator(
+      controller: _controller,
+      bbCode: widget.bbCode,
+      scheduleAfterFrame: (callback) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => callback());
+      },
+      onBbCodeChanged: (value) {
+        widget.onBbCodeChanged?.call(value);
+        if (mounted) setState(() {});
+      },
+    );
   }
 
   String _initialBbCode() {
@@ -304,7 +300,7 @@ class _ComposerQuillEditorSurfaceState
   @override
   void dispose() {
     _activeCollapseHost?.invalidate();
-    _controller.removeListener(_handleDocumentChanged);
+    _documentSync.close();
     if (_ownsController) {
       _controller.dispose();
     }
@@ -1083,140 +1079,17 @@ class _ComposerQuillEditorSurfaceState
     });
   }
 
-  void _handleDocumentChanged() {
-    if (_isApplyingExternalBbCode) {
-      return;
-    }
-    // 必须在下面的编码比较之前调度：剪切图片后原样打回 attach 代码时，
-    // 编码结果与剪切前完全相同，会命中 `next == _bbCodeText` 的提前返回，
-    // 但文档结构确实从 embed 退化成了纯文本。
-    if (!_isPromotingAttachTokens) {
-      _scheduleAttachTokenPromotion();
-    }
-    if (!_isSanitizingCollapseFormats) {
-      _scheduleCollapseFormatSanitization();
-    }
-    final next = _codec.encodeDocument(_controller.document);
-    final ignoredEncoding = _ignoredExternalDocumentEncoding;
-    if (ignoredEncoding != null) {
-      if (next == ignoredEncoding) {
-        return;
-      }
-      _ignoredExternalDocumentEncoding = null;
-    }
-    if (next == _bbCodeText) {
-      return;
-    }
-    _bbCodeText = next;
-    widget.onBbCodeChanged?.call(next);
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
-  /// 把手打/粘贴出来的合法 attach 代码归一成图片节点。
-  ///
-  /// 放到帧末执行：避免在 Quill 的变更通知里回写文档，也让输入法组词先落定。
-  void _scheduleAttachTokenPromotion() {
-    if (_hasScheduledAttachTokenPromotion) {
-      return;
-    }
-    _hasScheduledAttachTokenPromotion = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _hasScheduledAttachTokenPromotion = false;
-      if (!mounted) {
-        return;
-      }
-      _promoteAttachTokens();
-    });
-  }
-
-  void _promoteAttachTokens() {
-    final promotion = _attachTokenPromoter.buildPromotion(_controller.document);
-    if (promotion == null) {
-      return;
-    }
-    _isPromotingAttachTokens = true;
-    try {
-      // compose 会用 Delta.transformPosition 把光标从被替换掉的字面文本
-      // 迁移到 embed 之后，因此传入当前 selection 即可。
-      _controller.compose(promotion, _controller.selection, ChangeSource.local);
-    } finally {
-      _isPromotingAttachTokens = false;
-    }
-  }
-
-  /// Collapse is an atomic BBCode block, so Quill selection formatting must
-  /// not remain attached to either the embed or its line terminator.
-  void _scheduleCollapseFormatSanitization() {
-    if (_hasScheduledCollapseFormatSanitization) {
-      return;
-    }
-    _hasScheduledCollapseFormatSanitization = true;
-    final generation = _documentGeneration;
-    scheduleMicrotask(() {
-      _hasScheduledCollapseFormatSanitization = false;
-      if (!mounted || generation != _documentGeneration) {
-        return;
-      }
-      final sanitization = _collapseFormatSanitizer.buildSanitization(
-        _controller.document,
-      );
-      if (sanitization == null) {
-        return;
-      }
-      _isSanitizingCollapseFormats = true;
-      try {
-        _controller.compose(
-          sanitization,
-          _controller.selection,
-          ChangeSource.local,
-        );
-      } finally {
-        _isSanitizingCollapseFormats = false;
-      }
-    });
-  }
-
   void _syncExternalBbCode() {
     final external = widget.bbCode;
     if (external == null || external == _bbCodeText) {
       return;
     }
     _resetTransientInteractionState();
-    final document = _codec.decodeDocument(external);
-    TextSelection? selection;
-    final mutation = widget.lastMessageMutation;
-    if (mutation != null && mutation.revision == widget.messageRevision) {
-      selection = _selectionAdapter.toQuillSelection(
-        source: external,
-        document: document,
-        selection: mutation.resultSelection,
-      );
-    }
-    _applyExternalDocument(document, external, selection: selection);
-  }
-
-  void _applyExternalDocument(
-    Document document,
-    String bbCode, {
-    TextSelection? selection,
-  }) {
-    _isApplyingExternalBbCode = true;
-    _ignoredExternalDocumentEncoding = _codec.encodeDocument(document);
-    try {
-      _controller.document = document;
-      final offset = document.length <= 0 ? 0 : document.length - 1;
-      _controller.updateSelection(
-        selection ?? TextSelection.collapsed(offset: offset),
-        ChangeSource.local,
-      );
-      _bbCodeText = bbCode;
-    } finally {
-      _isApplyingExternalBbCode = false;
-    }
-    _documentGeneration += 1;
-    _scheduleCollapseFormatSanitization();
+    _documentSync.applyExternalBbCode(
+      external,
+      messageRevision: widget.messageRevision,
+      mutation: widget.lastMessageMutation,
+    );
     setState(() {});
   }
 
