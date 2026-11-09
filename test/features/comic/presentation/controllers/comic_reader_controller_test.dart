@@ -1,4 +1,3 @@
-import 'package:y300/features/comic/domain/services/comic_download_service.dart';
 import 'dart:async';
 import 'dart:io' as io;
 
@@ -21,6 +20,7 @@ import 'package:y300/features/comic/domain/services/comic_episode_sequence.dart'
 import 'package:y300/features/comic/domain/services/comic_reader_feature_flags.dart';
 import 'package:y300/features/comic/domain/services/comic_reading_state_writer.dart';
 import 'package:y300/features/comic/domain/services/comic_reader_service.dart';
+import 'package:y300/features/comic/domain/services/comic_download_service.dart';
 import 'package:y300/features/comic/data/providers/comic_reader_service_providers.dart';
 import 'package:y300/features/comic/presentation/controllers/comic_reader_controller.dart';
 import 'package:y300/features/comic/presentation/comic_presentation_models.dart';
@@ -30,6 +30,103 @@ import 'package:y300/features/library_shared/domain/models/library_cover_asset.d
 import 'package:y300/features/storage/domain/download_storage_models.dart';
 
 void main() {
+  test('provider rebuild creates a fresh image recovery owner', () async {
+    final fixture = _ImageRecoveryFixture();
+    await fixture.load();
+    await fixture.controller.prepareImageRetry(
+      expectedEpisodeId: 'yamibo:100:101',
+    );
+    fixture.container.invalidate(
+      comicReaderControllerProvider(_ImageRecoveryFixture.args),
+    );
+    await fixture.load();
+    await fixture.controller.prepareImageRetry(
+      expectedEpisodeId: 'yamibo:100:101',
+    );
+    expect(fixture.service.fetchEpisodeImagesCalls, ['101', '101']);
+  });
+
+  for (final retirement in ['refresh', 'A-B-A', 'dispose']) {
+    test('pending automatic retry is retired by $retirement', () async {
+      final fixture = _ImageRecoveryFixture();
+      await fixture.load();
+      final probe = Completer<ComicEpisodeImagesFetchResult>();
+      fixture.service.fetchCompleter = probe;
+      await fixture.controller.onImageDisplayFailed(
+        imageIndex: 0,
+        imageUrl: 'https://img.test/101-1.jpg',
+      );
+      fixture.service.fetchCompleter = null;
+      switch (retirement) {
+        case 'refresh':
+          fixture.service.fetchResultBuilder = (_) => ComicEpisodeImagesFetched(
+            fixture.value.images.map((image) => image.imageUrl).toList(),
+          );
+          await fixture.controller.refreshCurrentEpisode();
+        case 'A-B-A':
+          await fixture.controller.openEpisode(episodeId: 'yamibo:100:102');
+          await fixture.controller.openEpisode(episodeId: 'yamibo:100:101');
+        case 'dispose':
+          fixture.dispose();
+      }
+      final before = retirement == 'dispose' ? null : fixture.value;
+      final replacements = fixture.repository.replaceEpisodeImagesCallCount;
+      probe.complete(
+        const ComicEpisodeImagesFetched(['https://img.test/ignored.jpg']),
+      );
+      await Future<void>.delayed(Duration.zero);
+      if (before != null) {
+        expect(fixture.value, same(before));
+        expect(fixture.value.images.first.retryRevision, 0);
+      }
+      expect(fixture.repository.replaceEpisodeImagesCallCount, replacements);
+    });
+  }
+
+  for (final callback in ['failure', 'resolution']) {
+    test(
+      'refresh retires a $callback callback waiting on cache metadata',
+      () async {
+        final fixture = _ImageRecoveryFixture();
+        await fixture.load();
+        final gate = Completer<void>();
+        final probe = Completer<ComicEpisodeImagesFetchResult>();
+        late Future<void> pending;
+        if (callback == 'failure') {
+          fixture.repository.cacheStatusWriteGate = gate;
+          fixture.service.fetchCompleter = probe;
+          pending = fixture.controller.onImageDisplayFailed(
+            imageIndex: 0,
+            imageUrl: 'https://img.test/101-1.jpg',
+          );
+        } else {
+          fixture.repository.metadataWriteGate = gate;
+          pending = fixture.controller.onImageResolved(
+            imageIndex: 0,
+            imageUrl: 'https://img.test/101-1.jpg',
+            width: 777,
+            height: 1111,
+          );
+        }
+        await Future<void>.delayed(Duration.zero);
+        fixture.service.fetchCompleter = null;
+        fixture.service.fetchResultBuilder = (_) => ComicEpisodeImagesFetched(
+          fixture.value.images.map((image) => image.imageUrl).toList(),
+        );
+        await fixture.controller.refreshCurrentEpisode();
+        final refreshed = fixture.value;
+        gate.complete();
+        await pending;
+        if (callback == 'failure') {
+          probe.complete(const ComicEpisodeImagesFetched([]));
+        }
+        await Future<void>.delayed(Duration.zero);
+        expect(fixture.value, same(refreshed));
+        expect(fixture.value.images.first.failed, isFalse);
+      },
+    );
+  }
+
   setUp(() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
@@ -1603,6 +1700,51 @@ void main() {
   });
 }
 
+class _ImageRecoveryFixture {
+  _ImageRecoveryFixture() {
+    container = ProviderContainer(
+      overrides: [
+        comicRepositoryProvider.overrideWithValue(repository),
+        comicReadingStateWriterProvider.overrideWithValue(
+          _ReadingStateWriterSpy(repository),
+        ),
+        comicReaderServiceProvider.overrideWith((ref) async => service),
+        comicDownloadServiceProvider.overrideWithValue(
+          _NoopComicDownloadService(),
+        ),
+        imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+      ],
+    );
+    final subscription = container.listen(
+      comicReaderControllerProvider(args),
+      (_, _) {},
+    );
+    _closeSubscription = subscription.close;
+    addTearDown(dispose);
+  }
+  static const args = ComicReaderArgs(
+    comicId: 'yamibo:100',
+    episodeId: 'yamibo:100:101',
+  );
+  final repository = _ReaderRepoForControllerTest();
+  final service = _ReaderServiceSpy();
+  late final ProviderContainer container;
+  late final void Function() _closeSubscription;
+  bool _disposed = false;
+  ComicReaderController get controller =>
+      container.read(comicReaderControllerProvider(args).notifier);
+  ComicReaderViewState get value =>
+      container.read(comicReaderControllerProvider(args)).requireValue;
+  Future<ComicReaderViewState> load() =>
+      container.read(comicReaderControllerProvider(args).future);
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _closeSubscription();
+    container.dispose();
+  }
+}
+
 class _NoopComicDownloadService implements ComicDownloadService {
   @override
   Future<void> deleteEpisodeDownload({
@@ -1926,6 +2068,8 @@ class _ReaderRepoForControllerTest
   final List<_ProgressWrite> progressWrites = <_ProgressWrite>[];
   final List<_CacheStatusWrite> cacheStatusWrites = <_CacheStatusWrite>[];
   final List<_ImageMetadataWrite> imageMetadataWrites = <_ImageMetadataWrite>[];
+  Completer<void>? cacheStatusWriteGate;
+  Completer<void>? metadataWriteGate;
 
   /// 追踪每个 episode 通过 [saveEpisodeImages] 持久化的 URL，做断言用。
   final Map<String, List<String>> savedImageUrlsByEpisode =
@@ -2231,6 +2375,7 @@ class _ReaderRepoForControllerTest
         cacheLocalPath: cacheLocalPath,
       ),
     );
+    await cacheStatusWriteGate?.future;
   }
 
   @override
@@ -2255,6 +2400,7 @@ class _ReaderRepoForControllerTest
         height: height,
       ),
     );
+    await metadataWriteGate?.future;
   }
 
   @override

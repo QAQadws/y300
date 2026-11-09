@@ -22,6 +22,9 @@ const _pureNovelCoordinators = <String>{
   '${_novelApplicationRoot}novel_reader_display_preferences_coordinator.dart',
   '${_novelApplicationRoot}novel_reader_vertical_session_coordinator.dart',
 };
+const _comicRoot = 'lib/features/comic/';
+const _comicImageRecovery =
+    '${_comicRoot}presentation/services/comic_reader_image_recovery_coordinator.dart';
 
 void main() {
   test(
@@ -40,6 +43,7 @@ void main() {
       for (final path in <String>{
         ..._internalImageCoordinators,
         ..._pureNovelCoordinators,
+        _comicImageRecovery,
       }) {
         expect(File(path).existsSync(), isTrue, reason: path);
       }
@@ -107,6 +111,40 @@ import 'package:y300/features/reader_shared/domain/image_session/reader_image_se
     },
   );
 
+  test('comic image recovery stays pure and private to comic', () {
+    expect(
+      _violations(_comicImageRecovery, '''
+import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:ui';
+import '../../data/new_repository.dart';
+import '../controllers/comic_reader_controller.dart';
+import 'package:y300/app/theme/app_theme.dart';
+import 'package:y300/features/reader_shared/domain/image_session/reader_image_session.dart';
+'''),
+      hasLength(7),
+    );
+    expect(
+      _violations(_comicImageRecovery, '''
+import 'dart:async';
+import '../../domain/services/comic_reader_service.dart';
+'''),
+      isEmpty,
+    );
+    expect(
+      _violations('lib/features/thread/presentation/new_reader.dart', '''
+import 'package:y300/features/comic/presentation/services/comic_reader_image_recovery_coordinator.dart';
+'''),
+      hasLength(1),
+    );
+    expect(
+      _violations('${_comicRoot}presentation/controllers/new_reader.dart', '''
+import '../services/comic_reader_image_recovery_coordinator.dart';
+'''),
+      isEmpty,
+    );
+  });
+
   test(
     'pure novel coordination rejects adapters without restricting application hosts',
     () {
@@ -155,9 +193,13 @@ bool _forbidden(String source, String target) {
       (!source.startsWith(_readerRoot) || source == _publicEngine)) {
     return true;
   }
+  if (target == _comicImageRecovery && !source.startsWith(_comicRoot)) {
+    return true;
+  }
   final imageCoordinator = _internalImageCoordinators.contains(source);
   final novelCoordinator = _pureNovelCoordinators.contains(source);
-  if (!imageCoordinator && !novelCoordinator) return false;
+  final comicCoordinator = source == _comicImageRecovery;
+  if (!imageCoordinator && !novelCoordinator && !comicCoordinator) return false;
   if (target.startsWith('package:flutter') ||
       target == 'dart:ui' ||
       target.startsWith('lib/app/') ||
@@ -166,6 +208,12 @@ bool _forbidden(String source, String target) {
     return true;
   }
   if (novelCoordinator) return target.contains('/presentation/');
+  if (comicCoordinator) {
+    return (target.startsWith('lib/features/') &&
+            !target.startsWith(_comicRoot)) ||
+        (target.startsWith('${_comicRoot}presentation/') &&
+            target != _comicImageRecovery);
+  }
   return (target.startsWith('lib/features/') &&
           !target.startsWith(_readerRoot)) ||
       (target.startsWith('${_readerRoot}presentation/') &&
