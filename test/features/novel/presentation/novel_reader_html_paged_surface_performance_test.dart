@@ -931,6 +931,61 @@ void main() {
     }
   });
 
+  testWidgets(
+    'replacing waiting policy keeps the run and restarts its target budget',
+    (tester) async {
+      final coordinator = _BudgetPaginationCoordinator();
+      final host = _BudgetSurfaceHost(coordinator);
+      _disposeBudgetHost(tester, coordinator);
+      await _pumpBudgetHost(tester, host);
+      await tester.pump(const Duration(milliseconds: 30));
+      host.waitPolicyOverride = const NovelReaderPaginationPerformancePolicy(
+        targetPageWait: Duration(milliseconds: 100),
+      );
+      await tester.pumpWidget(host.build());
+      await tester.pump(const Duration(milliseconds: 70));
+      expect(coordinator.attempts, hasLength(1));
+      expect(
+        find.byKey(const Key('novel-reader-pagination-failure')),
+        findsNothing,
+      );
+      await tester.pump(const Duration(milliseconds: 31));
+      await tester.pump();
+      expect(
+        find.byKey(const Key('novel-reader-pagination-failure')),
+        findsOneWidget,
+      );
+      expect(host.positions, isEmpty);
+      expect(host.scrollChoices, 0);
+    },
+  );
+
+  for (final waiting in ['target', 'background']) {
+    testWidgets(
+      'unmount retires $waiting waiting and late publication callbacks',
+      (tester) async {
+        final coordinator = _BudgetPaginationCoordinator();
+        final host = _BudgetSurfaceHost(coordinator);
+        _disposeBudgetHost(tester, coordinator);
+        await _pumpBudgetHost(tester, host);
+        coordinator.emit(0, pageCount: 1);
+        await tester.pump();
+        await tester.pump();
+        if (waiting == 'target') expect(host.navigation.turnNext(), isTrue);
+        final reports = host.positions.length;
+        await tester.pumpWidget(const SizedBox.shrink());
+        final cancellations = coordinator.cancelPendingCount;
+        coordinator.emit(0, pageCount: 3, isComplete: true);
+        coordinator.fail(0);
+        await tester.pump(const Duration(seconds: 3));
+        expect(coordinator.cancelPendingCount, cancellations);
+        expect(host.positions, hasLength(reports));
+        expect(host.scrollChoices, 0);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets('target timeout is recoverable and retry rejects old results', (
     tester,
   ) async {
@@ -2069,6 +2124,7 @@ final class _BudgetSurfaceHost {
   final Duration targetPageWait;
   final Duration backgroundIdle;
   final bool enforceBudgets;
+  NovelReaderPaginationPerformancePolicy? waitPolicyOverride;
   final NovelReaderHtmlPreparationService? preparationService;
   var preferences = NovelReaderPreferences.defaults().copyWith(
     flowMode: NovelReaderFlowMode.pagedLtr,
@@ -2142,11 +2198,13 @@ final class _BudgetSurfaceHost {
           paginationBoundaryCache: boundaryCache,
           preparedChapterCache: preparedCache,
           diagnosticsSink: diagnosticsSink,
-          performancePolicy: NovelReaderPaginationPerformancePolicy(
-            targetPageWait: targetPageWait,
-            backgroundIdle: backgroundIdle,
-            enforceBudgets: enforceBudgets,
-          ),
+          performancePolicy:
+              waitPolicyOverride ??
+              NovelReaderPaginationPerformancePolicy(
+                targetPageWait: targetPageWait,
+                backgroundIdle: backgroundIdle,
+                enforceBudgets: enforceBudgets,
+              ),
           onPositionChanged: positions.add,
           onImagesReadyChanged: imagesReady.add,
           onScrollActivityChanged: scrollActivity.add,

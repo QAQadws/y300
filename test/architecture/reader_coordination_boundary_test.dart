@@ -22,6 +22,10 @@ const _pureNovelCoordinators = <String>{
   '${_novelApplicationRoot}novel_reader_display_preferences_coordinator.dart',
   '${_novelApplicationRoot}novel_reader_vertical_session_coordinator.dart',
 };
+const _novelPagedWait =
+    'lib/features/novel/presentation/services/novel_reader_paged_wait_coordinator.dart';
+const _novelWaitPolicy =
+    'lib/features/novel/presentation/services/novel_reader_pagination_performance_policy.dart';
 const _comicRoot = 'lib/features/comic/';
 const _comicImageRecovery =
     '${_comicRoot}presentation/services/comic_reader_image_recovery_coordinator.dart';
@@ -43,6 +47,7 @@ void main() {
       for (final path in <String>{
         ..._internalImageCoordinators,
         ..._pureNovelCoordinators,
+        _novelPagedWait,
         _comicImageRecovery,
       }) {
         expect(File(path).existsSync(), isTrue, reason: path);
@@ -107,6 +112,38 @@ import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
 import 'package:y300/features/reader_shared/domain/image_session/reader_image_session.dart';
 '''),
         isEmpty,
+      );
+    },
+  );
+
+  test(
+    'novel paged waiting cannot depend on rendering, anchors or persistence',
+    () {
+      expect(
+        _violations(_novelPagedWait, '''
+import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:ui';
+import '../widgets/novel_reader_html_paged_surface.dart';
+import '../../domain/models/novel_reader_marks.dart';
+import '../../data/models/novel_models.dart';
+import 'novel_reader_pagination_restore_policy.dart';
+import 'package:y300/core/preferences/preference_store.dart';
+'''),
+        hasLength(8),
+      );
+      expect(
+        _violations(_novelPagedWait, '''
+import 'dart:async';
+import 'novel_reader_pagination_performance_policy.dart';
+'''),
+        isEmpty,
+      );
+      expect(
+        _violations('lib/features/thread/presentation/new_page.dart', '''
+import 'package:y300/features/novel/presentation/services/novel_reader_paged_wait_coordinator.dart';
+'''),
+        hasLength(1),
       );
     },
   );
@@ -189,6 +226,12 @@ List<String> _violations(String source, String contents) => [
 ];
 
 bool _forbidden(String source, String target) {
+  if (target == _novelPagedWait && !source.startsWith('lib/features/novel/')) {
+    return true;
+  }
+  if (source == _novelPagedWait) {
+    return target != 'dart:async' && target != _novelWaitPolicy;
+  }
   if (_internalImageCoordinators.contains(target) &&
       (!source.startsWith(_readerRoot) || source == _publicEngine)) {
     return true;

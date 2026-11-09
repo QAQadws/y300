@@ -33,6 +33,7 @@ import 'package:y300/features/novel/presentation/services/novel_reader_paginatio
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_demand.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_measure_adapter.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_performance_policy.dart';
+import 'package:y300/features/novel/presentation/services/novel_reader_paged_wait_coordinator.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_prepared_chapter_cache.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_restore_policy.dart';
 import 'package:y300/features/novel/presentation/services/novel_reader_pagination_render_environment.dart';
@@ -234,11 +235,9 @@ class _NovelReaderHtmlPagedSurfaceState
   StreamSubscription<NovelReaderPaginationProgress>? _planSubscription;
   NovelReaderPaginationProgress? _latestProgress;
   NovelReaderPaginationPlan? _retryPrefix;
-  int _attemptPublishedPageCount = 0;
   Object? _requestError;
   int _requestGeneration = 0;
-  bool _hasReadablePage = false;
-  bool _targetReady = false;
+  late final NovelReaderPagedWaitCoordinator _wait;
   int _displayInitialPage = 0;
   bool _displayRestoreReadOnly = false;
   NovelReaderPaginationPosition? _visiblePosition;
@@ -257,23 +256,28 @@ class _NovelReaderHtmlPagedSurfaceState
   Duration? _firstPageDuration;
   Duration? _firstPublishedPageDuration;
   Duration? _firstVisibleFrameDuration;
-  Timer? _targetWaitTimer;
-  Timer? _backgroundIdleTimer;
-  bool _planCompleted = false;
   int _cancelledPlanCount = 0;
   int? _appliedChapterEntryRequestId;
   Object? _reportedContentReadyIdentity;
   Object? _reportedContentTerminalIdentity;
   final NovelReaderPaginationDemand _workDemand = NovelReaderPaginationDemand();
-  bool _restoreTargetPending = true;
-  int _demandPageIndex = 0;
-  int? _pendingForwardPage;
   NovelReaderTextAnchor? _conversionRestoreAnchor;
   NovelReaderPaginationKey? _sameProjectionRestoreLayoutKey;
+
+  bool get _hasReadablePage => _wait.hasReadablePage;
+  bool get _targetReady => _wait.targetReady;
+  bool get _planCompleted => _wait.planCompleted;
+  bool get _restoreTargetPending => _wait.restoreTargetPending;
+  int get _demandPageIndex => _wait.demandPageIndex;
+  int? get _pendingForwardPage => _wait.pendingForwardPage;
 
   @override
   void initState() {
     super.initState();
+    _wait = NovelReaderPagedWaitCoordinator(
+      policy: widget.performancePolicy,
+      onTimeout: _onWaitTimeout,
+    );
     _workDemand.addListener(_onWorkDeferralChanged);
     _ensurePreparationFuture();
   }
@@ -291,7 +295,7 @@ class _NovelReaderHtmlPagedSurfaceState
       _startTargetWaitTimer();
     }
     if (oldWidget.performancePolicy != widget.performancePolicy) {
-      _cancelPerformanceTimers();
+      _wait.updatePolicy(widget.performancePolicy);
       if (_requestError == null) {
         if (_targetReady) {
           _ensureBackgroundIdleTimer();
@@ -303,11 +307,7 @@ class _NovelReaderHtmlPagedSurfaceState
     if (_navigationIdentity(oldWidget) != _navigationIdentity(widget)) {
       _conversionRestoreGeneration++;
       _conversionRestoreAnchor = null;
-      _pendingForwardPage = null;
-      _restoreTargetPending = true;
-      _targetReady = false;
-      _backgroundIdleTimer?.cancel();
-      _backgroundIdleTimer = null;
+      _wait.beginNavigation();
       if (_requestError != null && _planKey != null) {
         _retryPlan();
       } else {
@@ -327,6 +327,7 @@ class _NovelReaderHtmlPagedSurfaceState
     _workDemand.removeListener(_onWorkDeferralChanged);
     _cancelPerformanceTimers();
     _cancelPendingPagination();
+    _wait.close();
     _workDemand.dispose();
     _ownedCache?.dispose();
     _ownedMeasureCache?.dispose();
@@ -562,22 +563,14 @@ class _NovelReaderHtmlPagedSurfaceState
                       navigationIsPending ||
                       entryIsPending ||
                       resolvedPage == null;
-                  if ((!_hasReadablePage || _restoreTargetPending) &&
-                      resolvedPage != null) {
-                    _demandPageIndex = resolvedPage;
-                  }
-                  _restoreTargetPending = restoreTargetIsPending;
-                  if (isPlanComplete &&
-                      _pendingForwardPage != null &&
-                      _pendingForwardPage! >= plan.pageCount) {
-                    // A provisional edge is not permission to turn a chapter.
-                    _pendingForwardPage = null;
-                  }
-                  final forwardTargetIsPending =
-                      _pendingForwardPage != null &&
-                      _pendingForwardPage! >= plan.pageCount;
+                  _wait.resolveRestoreTarget(
+                    pending: restoreTargetIsPending,
+                    resolvedPage: resolvedPage,
+                    pageCount: plan.pageCount,
+                    isComplete: isPlanComplete,
+                  );
                   final targetIsPending =
-                      restoreTargetIsPending || forwardTargetIsPending;
+                      restoreTargetIsPending || _wait.forwardTargetPending;
                   _syncWorkDemand();
                   if (targetIsPending && !_hasReadablePage) {
                     if (_requestError != null) {
@@ -617,10 +610,7 @@ class _NovelReaderHtmlPagedSurfaceState
                           !startsAtBeginning &&
                           restoreResolution!.isReadOnlyCompatibilityRestore;
                     }
-                    _hasReadablePage = true;
-                    _targetReady = true;
-                    _targetWaitTimer?.cancel();
-                    _targetWaitTimer = null;
+                    _wait.markTargetReadable();
                     _firstPageDuration ??= _layoutStopwatch?.elapsed;
                     _scheduleContentReady(key);
                     _ensureBackgroundIdleTimer();
@@ -636,7 +626,7 @@ class _NovelReaderHtmlPagedSurfaceState
                     isComplete: isPlanComplete,
                   );
                   if (isPlanComplete) {
-                    _planCompleted = true;
+                    _wait.markPlanComplete();
                     _scheduleUnavailableNavigationIfNeeded(
                       plan: plan,
                       requestedPage: requestedPage,
@@ -669,7 +659,7 @@ class _NovelReaderHtmlPagedSurfaceState
                           readingAuthorityIdentity:
                               widget.readingAuthorityIdentity,
                           targetPage: requestedPage,
-                          pendingForwardPage: _pendingForwardPage,
+                          pendingForwardRequest: _wait.pendingForwardRequest,
                           onRequestPendingForwardPage: (target) =>
                               mounted &&
                               _requestGeneration == requestGeneration &&
@@ -744,7 +734,7 @@ class _NovelReaderHtmlPagedSurfaceState
                                 _conversionRestoreGeneration++;
                                 _conversionRestoreAnchor = null;
                               }
-                              _demandPageIndex = position.pageIndex;
+                              _wait.setVisiblePage(position.pageIndex);
                               _syncWorkDemand();
                               widget.onConversionPositionChanged?.call(
                                 NovelReaderConversionPosition(
@@ -863,8 +853,7 @@ class _NovelReaderHtmlPagedSurfaceState
       chapter: prepared,
       key: key,
     );
-    _planCompleted = false;
-    _attemptPublishedPageCount = 0;
+    _wait.startPlan();
     _planSubscription = _planStream!.listen(
       (progress) {
         if (!mounted ||
@@ -887,13 +876,10 @@ class _NovelReaderHtmlPagedSurfaceState
         }
         // Replay can make steady progress before it covers the retained view.
         // Count new sealed pages in this attempt, not repeated metric events.
-        if (!progress.isComplete &&
-            progress.plan.pageCount > _attemptPublishedPageCount) {
-          _attemptPublishedPageCount = progress.plan.pageCount;
-          _backgroundIdleTimer?.cancel();
-          _backgroundIdleTimer = null;
-          _ensureBackgroundIdleTimer();
-        }
+        _wait.recordPublication(
+          progress.plan.pageCount,
+          isComplete: progress.isComplete,
+        );
         final previous = _latestProgress;
         // A retry replays from the start. Keep the readable view until the
         // replay covers its entire prefix; never splice incompatible pages.
@@ -924,11 +910,11 @@ class _NovelReaderHtmlPagedSurfaceState
         _retryPrefix = null;
         setState(() {
           _latestProgress = progress;
-          _planCompleted = progress.isComplete;
+          _wait.acceptProgress(
+            progress.plan.pageCount,
+            isComplete: progress.isComplete,
+          );
         });
-        if (progress.isComplete) {
-          _cancelPerformanceTimers();
-        }
       },
       onError: (Object error, StackTrace stack) {
         if (mounted &&
@@ -1189,24 +1175,21 @@ class _NovelReaderHtmlPagedSurfaceState
     message: AppLocalizations.of(context).novelPagedWaitingForPage,
   );
 
-  void _startTargetWaitTimer() {
-    _targetWaitTimer?.cancel();
-    _targetWaitTimer = null;
-    if (!widget.performancePolicy.enforceBudgets) return;
-    final generation = _requestGeneration;
-    final navigation = _navigationIdentity(widget);
-    _targetWaitTimer = Timer(widget.performancePolicy.targetPageWait, () {
-      if (mounted &&
-          _requestGeneration == generation &&
-          _navigationIdentity(widget) == navigation &&
-          !_targetReady) {
-        _pausePagination(
-          const NovelReaderPaginationException(
-            code: 'targetPageWaitExceeded',
-            message: 'The requested page is not available within the waiting budget.',
-          ),
-        );
-      }
+  void _startTargetWaitTimer() => _wait.startTargetWait();
+
+  void _onWaitTimeout(NovelReaderPagedWaitFailure failure) {
+    _pausePagination(switch (failure) {
+      NovelReaderPagedWaitFailure.targetPage =>
+        const NovelReaderPaginationException(
+          code: 'targetPageWaitExceeded',
+          message:
+              'The requested page is not available within the waiting budget.',
+        ),
+      NovelReaderPagedWaitFailure.backgroundIdle =>
+        const NovelReaderPaginationException(
+          code: 'backgroundPaginationIdle',
+          message: 'Background pagination stopped publishing readable pages.',
+        ),
     });
   }
 
@@ -1226,10 +1209,7 @@ class _NovelReaderHtmlPagedSurfaceState
         entry?.edge == NovelReaderChapterEdge.end;
     final pending = _pendingForwardPage;
     _workDemand.update(
-      targetPending:
-          _restoreTargetPending ||
-          (pending != null &&
-              pending >= (_latestProgress?.plan.pageCount ?? 0)),
+      targetPending: _wait.targetPending,
       pageIndex: pending ?? _demandPageIndex,
       // Once a readable target exists, remaining pages yield to Flutter idle;
       // a saved percentage must not keep the whole chapter in foreground work.
@@ -1238,106 +1218,58 @@ class _NovelReaderHtmlPagedSurfaceState
   }
 
   void _onWorkDeferralChanged() {
-    if (!mounted) {
-      return;
-    }
-    if (_workDemand.isDeferring) {
-      _backgroundIdleTimer?.cancel();
-      _backgroundIdleTimer = null;
-    } else {
-      // This can run synchronously from build; only timers change here.
-      _ensureBackgroundIdleTimer();
-    }
+    if (mounted) _wait.setDeferring(_workDemand.isDeferring);
   }
 
   bool _requestPendingForwardPage(int target) {
-    if (_pendingForwardPage != null ||
-        !_hasReadablePage ||
-        _requestError != null ||
-        (_planCompleted && target >= (_latestProgress?.plan.pageCount ?? 0))) {
+    if (_requestError != null || !_wait.requestForwardPage(target)) {
       return false;
     }
-    setState(() {
-      _pendingForwardPage = target;
-      _targetReady = false;
-    });
-    _backgroundIdleTimer?.cancel();
-    _backgroundIdleTimer = null;
-    _startTargetWaitTimer();
+    setState(() {});
     _syncWorkDemand();
     return true;
   }
 
-  bool _consumePendingForwardPage(int target) {
-    if (_pendingForwardPage != target ||
-        _requestError != null ||
-        target >= (_latestProgress?.plan.pageCount ?? 0)) {
+  bool _consumePendingForwardPage(NovelReaderPendingPageRequest request) {
+    if (_requestError != null ||
+        !_wait.consumeForwardPage(
+          request,
+          visiblePageIndex: _visiblePosition?.pageIndex,
+        )) {
       return false;
     }
-    _cancelPendingForwardPage();
+    _syncWorkDemand();
+    _ensureBackgroundIdleTimer();
+    setState(() {});
     return true;
   }
 
   void _cancelPendingForwardPage({bool rebuild = true}) {
-    if (_pendingForwardPage == null) {
+    if (!_wait.cancelForwardPage(
+      visiblePageIndex: _visiblePosition?.pageIndex,
+    )) {
       return;
-    }
-    _pendingForwardPage = null;
-    _demandPageIndex = _visiblePosition?.pageIndex ?? _demandPageIndex;
-    _targetReady = !_restoreTargetPending;
-    if (_targetReady) {
-      _targetWaitTimer?.cancel();
-      _targetWaitTimer = null;
     }
     _syncWorkDemand();
     _ensureBackgroundIdleTimer();
-    if (rebuild) {
-      setState(() {});
-    }
+    if (rebuild) setState(() {});
   }
 
-  void _ensureBackgroundIdleTimer() {
-    if (!_targetReady ||
-        _planCompleted ||
-        _planSubscription == null ||
-        _workDemand.isDeferring ||
-        _requestError != null ||
-        _backgroundIdleTimer != null ||
-        !widget.performancePolicy.enforceBudgets) {
-      return;
-    }
-    final generation = _requestGeneration;
-    _backgroundIdleTimer = Timer(widget.performancePolicy.backgroundIdle, () {
-      if (mounted && _requestGeneration == generation && !_planCompleted) {
-        _pausePagination(
-          const NovelReaderPaginationException(
-            code: 'backgroundPaginationIdle',
-            message: 'Background pagination stopped publishing readable pages.',
-          ),
-        );
-      }
-    });
-  }
+  void _ensureBackgroundIdleTimer() => _wait.ensureBackgroundWait();
 
   void _pausePagination(Object error) {
     if (!mounted || _requestError != null) return;
     // Invalidate before cancellation can deliver a late error or completion.
     _requestGeneration += 1;
-    _cancelPerformanceTimers();
+    _wait.pause();
     unawaited(_planSubscription?.cancel());
     _planSubscription = null;
-    _pendingForwardPage = null;
     _coordinator?.cancelPending();
     if (_planStream != null && !_planCompleted) _cancelledPlanCount += 1;
     setState(() => _requestError = error);
   }
 
-  void _cancelPerformanceTimers() {
-    _targetWaitTimer?.cancel();
-    _backgroundIdleTimer?.cancel();
-    _targetWaitTimer = null;
-    _backgroundIdleTimer = null;
-  }
+  void _cancelPerformanceTimers() => _wait.cancelTimers();
 
   void _cancelPendingPagination({bool retainProgress = false}) {
     _requestGeneration += 1;
@@ -1345,24 +1277,20 @@ class _NovelReaderHtmlPagedSurfaceState
     _visibleFrameStopwatch?.stop();
     unawaited(_planSubscription?.cancel());
     _planSubscription = null;
-    _pendingForwardPage = null;
     if (_planStream != null && !_planCompleted && _requestError == null) {
       _cancelledPlanCount += 1;
     }
+    // Retire waiting state before stream cancellation can release idle work.
+    _wait.resetRequest(retainReadable: retainProgress);
     _coordinator?.cancelPending();
-    _planCompleted = false;
     _planStream = null;
     _requestError = null;
     if (!retainProgress) {
       _latestProgress = null;
       _retryPrefix = null;
-      _hasReadablePage = false;
-      _targetReady = false;
       _visiblePosition = null;
       _displayInitialPage = 0;
       _displayRestoreReadOnly = false;
-      _restoreTargetPending = true;
-      _demandPageIndex = 0;
     }
     _syncWorkDemand();
   }
@@ -1678,7 +1606,7 @@ class _NovelReaderPagedPageView extends StatefulWidget {
     this.navigationController,
     this.readingAuthorityIdentity,
     this.targetPage,
-    this.pendingForwardPage,
+    this.pendingForwardRequest,
     required this.onRequestPendingForwardPage,
     required this.onConsumePendingForwardPage,
     required this.onCancelPendingForwardPage,
@@ -1721,9 +1649,11 @@ class _NovelReaderPagedPageView extends StatefulWidget {
   final NovelReaderPagedNavigationController? navigationController;
   final Object? readingAuthorityIdentity;
   final int? targetPage;
-  final int? pendingForwardPage;
+  final NovelReaderPendingPageRequest? pendingForwardRequest;
+  int? get pendingForwardPage => pendingForwardRequest?.pageIndex;
   final bool Function(int target) onRequestPendingForwardPage;
-  final bool Function(int target) onConsumePendingForwardPage;
+  final bool Function(NovelReaderPendingPageRequest request)
+  onConsumePendingForwardPage;
   final VoidCallback onCancelPendingForwardPage;
   final bool reverse;
   final NovelReaderPageEffect pageEffect;
@@ -1915,15 +1845,16 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
   }
 
   void _schedulePendingForwardPage() {
-    final target = widget.pendingForwardPage;
-    if (target == null || target >= widget.plan.pageCount) {
+    final request = widget.pendingForwardRequest;
+    if (request == null || request.pageIndex >= widget.plan.pageCount) {
       return;
     }
+    final target = request.pageIndex;
     final generation = widget.requestGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted ||
           widget.requestGeneration != generation ||
-          widget.pendingForwardPage != target ||
+          !identical(widget.pendingForwardRequest, request) ||
           !_pageController.hasClients ||
           _userDragInProgress ||
           _tapTurnAnimationInFlight ||
@@ -1936,7 +1867,7 @@ class _NovelReaderPagedPageViewState extends State<_NovelReaderPagedPageView> {
       }
       // Atomically claim the Surface intent. Repeated builds cannot animate it
       // twice, and claiming alone does not report or confirm a reading position.
-      if (widget.onConsumePendingForwardPage(target)) {
+      if (widget.onConsumePendingForwardPage(request)) {
         _tapTurnAnimationInFlight = true;
         unawaited(_animateTapTurnToPage(target, confirmOnArrival: true));
       }
