@@ -24,6 +24,49 @@ import '../test_support/post_edit_test_support.dart';
 
 void main() {
   testWidgets(
+    'partial attachment success offers proof without enabling another POST',
+    (tester) async {
+      final target = buildPostEditTarget();
+      final args = PostEditComposerArgs(
+        target: target,
+        preparation: buildPostEditPreparation(target: target),
+      );
+      final command = _PartialEditCommand();
+      await tester.pumpWidget(
+        _buildApp(args: args, command: command, results: []),
+      );
+      await _openEditor(tester);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(PostEditComposerPage)),
+      );
+      container
+          .read(postEditComposerControllerProvider(args).notifier)
+          .updateMessage('partial test body');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('post-edit-save-button')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('post-edit-partial-success-banner')),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<IconButton>(find.byKey(const Key('post-edit-save-button')))
+            .onPressed,
+        isNull,
+      );
+      final retry = find.byKey(const Key('post-edit-partial-success-retry'));
+      await tester.ensureVisible(retry);
+      await tester.tap(retry);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('post-edit-submit-unconfirmed-banner')),
+        findsOneWidget,
+      );
+      expect(command.calls, 1);
+    },
+  );
+  testWidgets(
     'more restores old permission, enables permission-only saving and returns a specific warning',
     (tester) async {
       final results = <Object?>[];
@@ -563,6 +606,26 @@ class _UnusedEditCommand implements ThreadPostEditCommand {
         kind: DataCommandFailureKind.validation,
         retryPolicy: DataCommandRetryPolicy.never,
         diagnosticMessage: 'not_used',
+      ),
+    );
+  }
+}
+
+class _PartialEditCommand implements ThreadPostEditCommand {
+  int calls = 0;
+  @override
+  ThreadPostEditCapabilities get capabilities => buildPostEditCapabilities();
+  @override
+  Future<DataCommandResult<ThreadPostEditReceipt>> execute(
+    ThreadPostEditSubmission submission,
+  ) async {
+    calls++;
+    return const DataCommandOutcomeUnknown(
+      DataCommandFailure(
+        kind: DataCommandFailureKind.unknown,
+        retryPolicy: DataCommandRetryPolicy.never,
+        diagnosticMessage: 'test attachment uncertainty',
+        code: 'post_edit_attachment_state_unconfirmed',
       ),
     );
   }

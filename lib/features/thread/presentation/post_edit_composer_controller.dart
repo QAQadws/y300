@@ -12,14 +12,14 @@ import 'package:y300/features/composer_shared/presentation/controllers/composer_
 import 'package:y300/features/composer_shared/presentation/controllers/composer_state_patch.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_submission_outcome.dart';
 import 'package:y300/features/thread/data/providers/post_edit_providers.dart';
+import 'package:y300/features/thread/application/post_edit_submission_coordinator.dart';
 import 'package:y300/features/thread/domain/models/post_edit_composer_models.dart';
 import 'package:y300/features/thread/domain/models/post_edit_diagnostic_models.dart';
 import 'package:y300/features/thread/domain/models/post_edit_models.dart';
 import 'package:y300/features/thread/domain/models/post_edit_submit_models.dart';
+import 'package:y300/features/thread/domain/models/post_edit_submission_attempt.dart';
 import 'package:y300/features/thread/domain/services/post_edit_attachment_session_resolver.dart';
-import 'package:y300/features/thread/domain/services/post_edit_message_canonicalizer.dart';
 import 'package:y300/features/thread/domain/services/post_edit_submission_mapper.dart';
-import 'package:y300/features/thread/domain/services/post_edit_submit_verification_service.dart';
 import 'package:y300/features/thread/presentation/post_edit_composer_state.dart';
 
 final postEditComposerControllerProvider = AsyncNotifierProvider.autoDispose
@@ -36,21 +36,13 @@ final class PostEditComposerController
   final PostEditComposerArgs _args;
   final PostEditSubmissionMapper _submissionMapper =
       const PostEditSubmissionMapper();
-  final PostEditSubmitVerificationService _verificationService =
-      const PostEditSubmitVerificationService();
   final ComposerSubmissionFailureClassifier _failureClassifier =
       const ComposerSubmissionFailureClassifier();
-  final PostEditMessageCanonicalizer _messageCanonicalizer =
-      const PostEditMessageCanonicalizer();
   int _prepareGeneration = 0;
   int _webReconcileGeneration = 0;
-  int _submitGeneration = 0;
+  PostEditSubmissionCoordinator? _submissions;
   final Map<String, int> _deleteGenerationByAid = <String, int>{};
   ThreadReadAccessEvidence? lastReadAccessEvidence;
-  int? _lastUncertainReadAccess;
-  String? _lastUncertainSubmitSubject;
-  String? _lastUncertainSubmitMessage;
-  List<String> _lastUncertainSubmitAttachNewAids = const <String>[];
 
   @override
   bool get draftsEnabled => false;
@@ -69,10 +61,22 @@ final class PostEditComposerController
 
   @override
   void onAfterBuild(PostEditComposerState initial) {
+    _submissions?.close();
+    final submissions = _submissions = PostEditSubmissionCoordinator(
+      executeCommand: (request) =>
+          ref.read(threadPostEditCommandProvider).execute(request),
+      loadPreparation: (request) =>
+          ref.read(threadPostEditPreparationRepositoryProvider).load(request),
+      beginPreparation: () => ++_prepareGeneration,
+      isPreparationCurrent: (request) =>
+          request == _prepareGeneration && _ownsTarget(initial.target),
+      onDiagnostic: (reason, operation) =>
+          _recordDiagnostic(reason, operation: operation),
+    );
     ref.onDispose(() {
+      submissions.close();
       _prepareGeneration += 1;
       _webReconcileGeneration += 1;
-      _submitGeneration += 1;
       for (final aid in _deleteGenerationByAid.keys.toList()) {
         _deleteGenerationByAid[aid] = _nextGeneration(
           _deleteGenerationByAid[aid],
@@ -103,18 +107,15 @@ final class PostEditComposerController
     PostEditComposerState current,
     ComposerStatePatch patch,
   ) {
-    if (patch.message != null || patch.imageAttachments != null) {
+    final localMutation =
+        patch.message != null ||
+        patch.imageAttachments != null ||
+        patch.useSignature != null;
+    if (localMutation) {
       // A local edit invalidates a pending server read. A response based on
       // the previous message must never replace the current editor state.
       _webReconcileGeneration += 1;
-      if (current.isSubmitting ||
-          current.submitState != PostEditSubmitState.idle) {
-        _submitGeneration += 1;
-      }
-    }
-    if (patch.message != null) {
-      _lastUncertainSubmitMessage = null;
-      _lastUncertainSubmitAttachNewAids = const <String>[];
+      _submissions?.invalidate();
     }
     final uploaded =
         patch.imageAttachments?.any(
@@ -147,6 +148,12 @@ final class PostEditComposerController
       draftAttachmentVerification: patch.draftAttachmentVerification,
       clearLastSubmitOutcome: patch.message != null,
       serverMutationPossible: serverMutationPossible,
+      submitState: localMutation && _hasPendingSubmission(current)
+          ? PostEditSubmitState.unconfirmed
+          : null,
+      submitBlocked: localMutation && _hasPendingSubmission(current)
+          ? true
+          : null,
     );
   }
 
@@ -156,19 +163,17 @@ final class PostEditComposerController
       return;
     }
     _webReconcileGeneration += 1;
-    if (current.isSubmitting ||
-        current.submitState != PostEditSubmitState.idle) {
-      _submitGeneration += 1;
-    }
-    _lastUncertainSubmitSubject = null;
-    _lastUncertainSubmitMessage = null;
-    _lastUncertainSubmitAttachNewAids = const <String>[];
+    _submissions?.invalidate();
     setStateValue(
       current.copyWith(
         subject: value,
         restoredDraft: false,
         clearFailure: true,
         clearLastSubmitOutcome: true,
+        submitState: _hasPendingSubmission(current)
+            ? PostEditSubmitState.unconfirmed
+            : null,
+        submitBlocked: _hasPendingSubmission(current) ? true : null,
       ),
     );
   }
@@ -208,6 +213,7 @@ final class PostEditComposerController
 
   @override
   PostEditComposerState resetToBaseline(PostEditComposerState value) {
+    _submissions?.invalidate();
     return value.copyWith(
       message: value.snapshot.message,
       subject: value.snapshot.subject,
@@ -268,12 +274,25 @@ final class PostEditComposerController
     required List<String> uploadedAids,
   }) async {
     lastReadAccessEvidence = null;
-    final generation = ++_submitGeneration;
-    if (!_isCurrentSubmitGeneration(generation)) {
-      _recordDiagnostic(
-        PostEditContractReasonCode.staleGeneration,
-        operation: 'submit',
-      );
+    final projection = _submissionMapper.map(
+      message: state.message,
+      localAttachments: state.imageAttachments,
+      attachmentSession: state.attachmentSession,
+      now: DateTime.now(),
+    );
+    final request = _submissions?.submit(
+      PostEditSubmissionAttempt(
+        preparation: state.snapshot,
+        subject: state.subject,
+        message: state.message,
+        useSignature: state.useSignature,
+        minimumReadAccess: state.minimumReadAccess,
+        newImageAttachmentIds: projection.newAttachmentAids,
+        removedImageAttachmentIds: state.attachmentSession.deletedAidTombstones
+            .toList(growable: false),
+      ),
+    );
+    if (request == null) {
       return _failureOutcome(ComposerSubmissionFailureCode.unknown);
     }
     setStateValue(
@@ -283,299 +302,89 @@ final class PostEditComposerController
         clearFailure: true,
       ),
     );
-    return _submitWithRetry(
-      this.state.value ?? latestState ?? state,
-      generation: generation,
-      formHashRetried: false,
-    );
+    return _applySubmissionResolution(state, await request);
   }
 
-  Future<ComposerSubmissionOutcome> _submitWithRetry(
-    PostEditComposerState current, {
-    required int generation,
-    required bool formHashRetried,
-  }) async {
-    final projection = _submissionMapper.map(
-      message: current.message,
-      localAttachments: current.imageAttachments,
-      attachmentSession: current.attachmentSession,
-      now: DateTime.now(),
-    );
-
-    if (!_isCurrentSubmitGeneration(generation)) {
-      _recordDiagnostic(
-        PostEditContractReasonCode.staleGeneration,
-        operation: 'submit',
-      );
-      return _failureOutcome(ComposerSubmissionFailureCode.unknown);
-    }
-    final result = await ref
-        .read(threadPostEditCommandProvider)
-        .execute(
-          ThreadPostEditSubmission(
-            preparation: current.snapshot,
-            subject: current.subject,
-            message: current.message,
-            useSignature: current.useSignature,
-            minimumReadAccess:
-                current.minimumReadAccess ==
-                    current.snapshot.readAccess.currentValue
-                ? null
-                : current.minimumReadAccess,
-            newImageAttachmentIds: projection.newAttachmentAids,
-            removedImageAttachmentIds: current
-                .attachmentSession
-                .deletedAidTombstones
-                .toList(growable: false),
-          ),
-        );
-    if (!_isCurrentSubmitGeneration(generation)) {
-      _recordDiagnostic(
-        PostEditContractReasonCode.staleGeneration,
-        operation: 'submit',
-      );
-      return _failureOutcome(ComposerSubmissionFailureCode.unknown);
-    }
-    switch (result) {
-      case DataCommandApplied<ThreadPostEditReceipt>(:final receipt):
-        lastReadAccessEvidence = receipt.readAccess;
-        return _confirmSuccess(current, generation: generation);
-      case DataCommandRejected<ThreadPostEditReceipt>(:final failure):
-        if (failure.kind == DataCommandFailureKind.staleFormhash) {
-          if (formHashRetried) {
-            return _markUnconfirmed(
-              current,
-              generation: generation,
-              detail: 'formhash_retry_exhausted',
-            );
-          }
-          return _refreshFormHashAndRetry(current, generation: generation);
-        }
-        return _failFromCommandFailure(
-          current,
-          generation: generation,
-          failure: failure,
-        );
-      case DataCommandNotSent<ThreadPostEditReceipt>(:final failure):
-        return _failFromCommandFailure(
-          current,
-          generation: generation,
-          failure: failure,
-        );
-      case DataCommandOutcomeUnknown<ThreadPostEditReceipt>(:final failure):
-        _lastUncertainReadAccess = current.minimumReadAccess;
-        _lastUncertainSubmitMessage = current.message;
-        _lastUncertainSubmitSubject = current.subject;
-        _lastUncertainSubmitAttachNewAids = projection.newAttachmentAids;
-        if (failure.code == 'post_edit_attachment_state_unconfirmed') {
-          return _markPartialSuccess(
-            current,
-            generation: generation,
-            snapshot: null,
-          );
-        }
-        return _markUnconfirmed(
-          current,
-          generation: generation,
-          detail: failure.code,
-        );
-      case DataCommandUnsupported<ThreadPostEditReceipt>(:final failure):
-        return _markUnconfirmed(
-          current,
-          generation: generation,
-          detail: failure.code,
-          nativeSupported: false,
-        );
-    }
-  }
-
-  Future<ComposerSubmissionOutcome> _refreshFormHashAndRetry(
-    PostEditComposerState current, {
-    required int generation,
-  }) async {
-    final prepareGeneration = ++_prepareGeneration;
-    final preparation = await ref
-        .read(threadPostEditPreparationRepositoryProvider)
-        .load(
-          ThreadPostEditPreparationRequest(
-            target: current.target.toClientTarget(),
-          ),
-        );
-    if (!_isCurrentSubmitGeneration(generation) ||
-        !_isCurrentPrepareGeneration(prepareGeneration, current.target)) {
-      _recordDiagnostic(
-        PostEditContractReasonCode.staleGeneration,
-        operation: 'formhash_refresh',
-      );
-      return _failureOutcome(ComposerSubmissionFailureCode.unknown);
-    }
-    if (preparation
-        case DataReadFailure<
-              ThreadPostEditPreparation,
-              ThreadPostEditCapabilities
-            >()) {
-      _recordDiagnostic(
-        PostEditContractReasonCode.readbackFailure,
-        operation: 'formhash_refresh',
-      );
-      return _markUnconfirmed(
-        current,
-        generation: generation,
-        detail: 'formhash_refresh_failed',
-      );
-    }
-    final snapshot =
-        (preparation
-                as DataReadSuccess<
-                  ThreadPostEditPreparation,
-                  ThreadPostEditCapabilities
-                >)
-            .data;
-    if (snapshot.revision != current.baselineFingerprint) {
-      return _markConflict(current, snapshot: snapshot, generation: generation);
-    }
-    final refreshed = _replaceSnapshotKeepingLocal(current, snapshot);
-    setStateValue(refreshed);
-    return _submitWithRetry(
-      refreshed,
-      generation: generation,
-      formHashRetried: true,
-    );
-  }
-
-  /// Retries only the verification GET for an uncertain result. It never
-  /// resubmits the multipart payload.
+  /// A user-requested proof read never repeats the uncertain command.
   Future<void> retrySubmitVerification() async {
     final current = state.value ?? latestState;
-    final subject = _lastUncertainSubmitSubject;
-    final message = _lastUncertainSubmitMessage;
-    if (current == null || subject == null || message == null) {
-      await reconcileWebViewReturn();
+    final submissions = _submissions;
+    if (current == null || submissions == null) return;
+    if (current.submitState == PostEditSubmitState.verifying &&
+        submissions.isRunning) {
       return;
     }
-    final generation = ++_submitGeneration;
-    await _verifyReadback(
-      current,
-      attachNewAids: _lastUncertainSubmitAttachNewAids,
-      generation: generation,
-      submittedSubject: subject,
-      submittedMessage: message,
-      submittedReadAccess: _lastUncertainReadAccess,
-    );
-  }
-
-  Future<ComposerSubmissionOutcome> _verifyReadback(
-    PostEditComposerState current, {
-    required List<String> attachNewAids,
-    required int generation,
-    String? submittedSubject,
-    String? submittedMessage,
-    int? submittedReadAccess,
-  }) async {
-    final prepareGeneration = ++_prepareGeneration;
-    if (!_isCurrentSubmitGeneration(generation) ||
-        !_isCurrentPrepareGeneration(prepareGeneration, current.target)) {
-      _recordDiagnostic(
-        PostEditContractReasonCode.staleGeneration,
-        operation: 'submit_verification',
-      );
-      return _failureOutcome(ComposerSubmissionFailureCode.unknown);
+    final request = submissions.verifyUncertain();
+    if (request == null) {
+      if (!submissions.isRunning) await reconcileWebViewReturn();
+      return;
     }
     setStateValue(current.copyWith(submitState: PostEditSubmitState.verifying));
-    final readback = await ref
-        .read(threadPostEditPreparationRepositoryProvider)
-        .load(
-          ThreadPostEditPreparationRequest(
-            target: current.target.toClientTarget(),
-          ),
-        );
-    if (!_isCurrentSubmitGeneration(generation) ||
-        !_isCurrentPrepareGeneration(prepareGeneration, current.target)) {
-      _recordDiagnostic(
-        PostEditContractReasonCode.staleGeneration,
-        operation: 'submit_verification',
-      );
+    _applySubmissionResolution(current, await request);
+  }
+
+  ComposerSubmissionOutcome _applySubmissionResolution(
+    PostEditComposerState current,
+    PostEditSubmissionResolution result,
+  ) {
+    final operation = result.operation;
+    if (result.kind == PostEditSubmissionResolutionKind.superseded ||
+        !_isCurrentSubmission(operation)) {
       return _failureOutcome(ComposerSubmissionFailureCode.unknown);
     }
-    if (readback
-        case DataReadFailure<
-              ThreadPostEditPreparation,
-              ThreadPostEditCapabilities
-            >()) {
-      _recordDiagnostic(
-        PostEditContractReasonCode.readbackFailure,
-        operation: 'submit_verification',
-      );
-      return _markUnconfirmed(
-        current,
-        generation: generation,
-        detail: 'submit_verification_failed',
-      );
-    }
-    final snapshot =
-        (readback
-                as DataReadSuccess<
-                  ThreadPostEditPreparation,
-                  ThreadPostEditCapabilities
-                >)
-            .data;
-    final verification = _verificationService.verify(
-      before: current.snapshot,
-      after: snapshot,
-      submittedSubject: submittedSubject ?? current.subject,
-      submittedMessage: submittedMessage ?? current.message,
-      submittedReadAccess: submittedReadAccess ?? current.minimumReadAccess,
-      attachNewAids: attachNewAids,
+    final prepared = identical(current.snapshot, result.attempt.preparation)
+        ? current
+        : _replaceSnapshotKeepingLocal(current, result.attempt.preparation);
+    return switch (result.kind) {
+      PostEditSubmissionResolutionKind.applied => _acceptAppliedSubmission(
+        prepared,
+        result,
+      ),
+      PostEditSubmissionResolutionKind.rejected => _failFromCommandFailure(
+        prepared,
+        operation: operation,
+        failure: result.failure!,
+      ),
+      PostEditSubmissionResolutionKind.unconfirmed => _markUnconfirmed(
+        prepared,
+        operation: operation,
+        detail: result.detail,
+        nativeSupported: result.nativeSupported,
+      ),
+      PostEditSubmissionResolutionKind.partialSuccess => _markPartialSuccess(
+        prepared,
+        operation: operation,
+        snapshot: result.snapshot,
+      ),
+      PostEditSubmissionResolutionKind.conflict => _markConflict(
+        prepared,
+        operation: operation,
+        snapshot: result.snapshot!,
+      ),
+      PostEditSubmissionResolutionKind.superseded => _failureOutcome(
+        ComposerSubmissionFailureCode.unknown,
+      ),
+    };
+  }
+
+  ComposerSubmissionOutcome _acceptAppliedSubmission(
+    PostEditComposerState current,
+    PostEditSubmissionResolution result,
+  ) {
+    lastReadAccessEvidence = result.readAccess;
+    return _confirmSuccess(
+      current,
+      operation: result.operation,
+      snapshot: result.snapshot,
     );
-    switch (verification.kind) {
-      case PostEditSubmitResponseKind.confirmedSuccess:
-        return _confirmSuccess(
-          current,
-          generation: generation,
-          snapshot: snapshot,
-        );
-      case PostEditSubmitResponseKind.partialSuccess:
-        return _markPartialSuccess(
-          current,
-          generation: generation,
-          snapshot: snapshot,
-        );
-      case PostEditSubmitResponseKind.ambiguous:
-        if (snapshot.revision != current.baselineFingerprint &&
-            (_messageCanonicalizer.canonicalize(snapshot.message) !=
-                    _messageCanonicalizer.canonicalize(current.message) ||
-                snapshot.subject.trim() != current.subject.trim() ||
-                snapshot.readAccess.currentValue !=
-                    current.minimumReadAccess)) {
-          return _markConflict(
-            current,
-            snapshot: snapshot,
-            generation: generation,
-          );
-        }
-        return _markUnconfirmed(
-          current,
-          generation: generation,
-          detail: verification.detail,
-        );
-      case PostEditSubmitResponseKind.businessFailure:
-      case PostEditSubmitResponseKind.authenticationFailure:
-      case PostEditSubmitResponseKind.permissionFailure:
-      case PostEditSubmitResponseKind.formExpired:
-        return _markUnconfirmed(
-          current,
-          generation: generation,
-          detail: verification.detail,
-        );
-    }
   }
 
   ComposerSubmissionOutcome _confirmSuccess(
     PostEditComposerState current, {
-    required int generation,
+    required PostEditSubmissionOperation operation,
     ThreadPostEditPreparation? snapshot,
   }) {
-    if (!_isCurrentSubmitGeneration(generation)) {
+    if (!_isCurrentSubmission(operation)) {
       _recordDiagnostic(
         PostEditContractReasonCode.staleGeneration,
         operation: 'submit_success',
@@ -593,18 +402,15 @@ final class PostEditComposerController
         serverMutationPossible: true,
       ),
     );
-    _lastUncertainSubmitMessage = null;
-    _lastUncertainSubmitSubject = null;
-    _lastUncertainSubmitAttachNewAids = const <String>[];
     return const ComposerSubmissionOutcome.success();
   }
 
-  Future<ComposerSubmissionOutcome> _markPartialSuccess(
+  ComposerSubmissionOutcome _markPartialSuccess(
     PostEditComposerState current, {
-    required int generation,
+    required PostEditSubmissionOperation operation,
     required ThreadPostEditPreparation? snapshot,
-  }) async {
-    if (!_isCurrentSubmitGeneration(generation)) {
+  }) {
+    if (!_isCurrentSubmission(operation)) {
       _recordDiagnostic(
         PostEditContractReasonCode.staleGeneration,
         operation: 'submit_partial',
@@ -619,7 +425,7 @@ final class PostEditComposerController
         submitState: PostEditSubmitState.partialSuccess,
         lastSubmitOutcome: PostEditSubmitResponseKind.partialSuccess,
         serverMutationPossible: true,
-        submitBlocked: false,
+        submitBlocked: true,
       ),
     );
     return _failureOutcome(
@@ -628,12 +434,12 @@ final class PostEditComposerController
     );
   }
 
-  Future<ComposerSubmissionOutcome> _markConflict(
+  ComposerSubmissionOutcome _markConflict(
     PostEditComposerState current, {
     required ThreadPostEditPreparation snapshot,
-    required int generation,
-  }) async {
-    if (!_isCurrentSubmitGeneration(generation)) {
+    required PostEditSubmissionOperation operation,
+  }) {
+    if (!_isCurrentSubmission(operation)) {
       _recordDiagnostic(
         PostEditContractReasonCode.staleGeneration,
         operation: 'submit_conflict',
@@ -659,13 +465,13 @@ final class PostEditComposerController
     );
   }
 
-  Future<ComposerSubmissionOutcome> _markUnconfirmed(
+  ComposerSubmissionOutcome _markUnconfirmed(
     PostEditComposerState current, {
-    required int generation,
+    required PostEditSubmissionOperation operation,
     String? detail,
     bool? nativeSupported,
-  }) async {
-    if (!_isCurrentSubmitGeneration(generation)) {
+  }) {
+    if (!_isCurrentSubmission(operation)) {
       _recordDiagnostic(
         PostEditContractReasonCode.staleGeneration,
         operation: 'submit_unconfirmed',
@@ -693,13 +499,13 @@ final class PostEditComposerController
 
   ComposerSubmissionOutcome _failAndKeepState(
     PostEditComposerState current, {
-    required int generation,
+    required PostEditSubmissionOperation operation,
     required PostEditSubmitResponseKind kind,
     required ComposerSubmissionFailureCode code,
     String? detail,
     bool blockSubmit = false,
   }) {
-    if (_isCurrentSubmitGeneration(generation)) {
+    if (_isCurrentSubmission(operation)) {
       setStateValue(
         current.copyWith(
           submitState: PostEditSubmitState.idle,
@@ -713,7 +519,7 @@ final class PostEditComposerController
 
   ComposerSubmissionOutcome _failFromCommandFailure(
     PostEditComposerState current, {
-    required int generation,
+    required PostEditSubmissionOperation operation,
     required DataCommandFailure failure,
   }) {
     final classified = _failureClassifier.classifyCommand(
@@ -727,7 +533,7 @@ final class PostEditComposerController
         classified.code == ComposerSubmissionFailureCode.permissionDenied;
     return _failAndKeepState(
       current,
-      generation: generation,
+      operation: operation,
       kind: authentication
           ? PostEditSubmitResponseKind.authenticationFailure
           : permission
@@ -752,9 +558,12 @@ final class PostEditComposerController
     );
   }
 
-  bool _isCurrentSubmitGeneration(int generation) {
-    return generation == _submitGeneration;
-  }
+  bool _isCurrentSubmission(PostEditSubmissionOperation operation) =>
+      _submissions?.accepts(operation) ?? false;
+
+  bool _hasPendingSubmission(PostEditComposerState value) =>
+      value.submitState == PostEditSubmitState.submitting ||
+      value.submitState == PostEditSubmitState.verifying;
 
   bool _isCurrentPrepareGeneration(int generation, PostEditTarget target) {
     return generation == _prepareGeneration && _ownsTarget(target);
@@ -860,12 +669,17 @@ final class PostEditComposerController
     if (current == null) {
       return;
     }
+    _submissions?.invalidate();
     final webGeneration = ++_webReconcileGeneration;
     final prepareGeneration = ++_prepareGeneration;
     setStateValue(
       current.copyWith(
         webReturnVerificationState:
             PostEditWebReturnVerificationState.verifying,
+        submitState: _hasPendingSubmission(current)
+            ? PostEditSubmitState.unconfirmed
+            : null,
+        submitBlocked: _hasPendingSubmission(current) ? true : null,
       ),
     );
     final result = await ref
@@ -959,6 +773,7 @@ final class PostEditComposerController
     if (current == null || conflict == null) {
       return;
     }
+    _submissions?.invalidate();
     _webReconcileGeneration += 1;
     _prepareGeneration += 1;
     setStateValue(
@@ -991,6 +806,7 @@ final class PostEditComposerController
     if (current == null || conflict == null) {
       return;
     }
+    _submissions?.invalidate();
     _webReconcileGeneration += 1;
     _prepareGeneration += 1;
     final localSession = conflict.localAttachmentSession.copyWith(
@@ -1049,6 +865,7 @@ final class PostEditComposerController
     }
 
     final operation = _nextGeneration(_deleteGenerationByAid[normalizedAid]);
+    _submissions?.invalidate();
     _deleteGenerationByAid[normalizedAid] = operation;
     setStateValue(
       current.copyWith(
@@ -1061,6 +878,10 @@ final class PostEditComposerController
         clearLastAttachmentDeleteOutcome: true,
         attachmentVerificationUnconfirmed: false,
         serverMutationPossible: true,
+        submitState: _hasPendingSubmission(current)
+            ? PostEditSubmitState.unconfirmed
+            : null,
+        submitBlocked: _hasPendingSubmission(current) ? true : null,
       ),
     );
     final result = await ref

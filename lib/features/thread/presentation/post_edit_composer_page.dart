@@ -184,7 +184,8 @@ class _PostEditComposerPageState extends ConsumerState<PostEditComposerPage> {
             onUseServerVersion: controller.useServerVersion,
             onKeepLocalVersion: controller.keepLocalVersion,
             onRetryVerification: () {
-              return state?.submitState == PostEditSubmitState.unconfirmed
+              return state?.submitState == PostEditSubmitState.unconfirmed ||
+                      state?.submitState == PostEditSubmitState.partialSuccess
                   ? controller.retrySubmitVerification()
                   : controller.reconcileWebViewReturn();
             },
@@ -456,11 +457,17 @@ class _PostEditComposerBody extends StatelessWidget {
           key: const Key('post-edit-submit-progress-banner'),
           text: l10n.postEditSubmitInProgress,
         ),
-      if (state.submitState == PostEditSubmitState.partialSuccess)
+      if (state.submitState == PostEditSubmitState.partialSuccess) ...[
         ComposerStatusBanner.info(
           key: const Key('post-edit-partial-success-banner'),
           text: l10n.postEditPartialSuccess,
         ),
+        TextButton(
+          key: const Key('post-edit-partial-success-retry'),
+          onPressed: onRetryVerification,
+          child: Text(l10n.postEditRetryVerification),
+        ),
+      ],
       if (state.submitState == PostEditSubmitState.unconfirmed)
         ComposerStatusBanner.error(
           key: const Key('post-edit-submit-unconfirmed-banner'),

@@ -17,6 +17,7 @@ import 'package:y300/features/thread/presentation/post_edit_composer_state.dart'
 import '../test_support/post_edit_test_support.dart';
 
 void main() {
+  _submissionLifecycleCases();
   test(
     'formhash refresh detects a permission-only server conflict before retrying',
     () async {
@@ -306,6 +307,313 @@ void main() {
   );
 }
 
+// These exercise the public controller so submission orchestration cannot
+// silently bypass the shared composer lifecycle when it is extracted.
+void _submissionLifecycleCases() {
+  test('local input during an in-flight command remains unconfirmed after its late result', () async {
+    final repository = _DelayedPreparationRepository();
+    final command = _DelayedEditCommand();
+    final args = _args(_preparation(message: 'before', revision: 'before'));
+    final container = _buildContainer(repository, command: command);
+    addTearDown(container.dispose);
+    final subscription = _keepAlive(container, args);
+    addTearDown(subscription.close);
+    await container.read(postEditComposerControllerProvider(args).future);
+    final controller = container.read(
+      postEditComposerControllerProvider(args).notifier,
+    );
+    controller.updateMessage('submitted');
+    final submit = controller.submit();
+    await _drain();
+    controller.updateMessage('new local input');
+    command.reply.complete(
+      const DataCommandOutcomeUnknown(
+        DataCommandFailure(
+          kind: DataCommandFailureKind.unknown,
+          retryPolicy: DataCommandRetryPolicy.never,
+          diagnosticMessage: 'test uncertain',
+        ),
+      ),
+    );
+    await submit;
+    final state = container
+        .read(postEditComposerControllerProvider(args))
+        .value!;
+    expect(state.message, 'new local input');
+    expect(state.isSubmitting, isFalse);
+    expect(state.submitState, PostEditSubmitState.unconfirmed);
+    expect(state.submitBlocked, isTrue);
+    expect(repository.loadRequests, isEmpty);
+  });
+
+  test('attachment deletion retires old submit proof and preserves the deletion tombstone', () async {
+    final repository = _DelayedPreparationRepository();
+    final command = _IndeterminateEditCommand();
+    final args = _args(
+      _preparation(
+        message: 'before',
+        revision: 'before',
+        images: [_image('1')],
+      ),
+    );
+    final container = _buildContainer(repository, command: command);
+    addTearDown(container.dispose);
+    final subscription = _keepAlive(container, args);
+    addTearDown(subscription.close);
+    await container.read(postEditComposerControllerProvider(args).future);
+    final controller = container.read(
+      postEditComposerControllerProvider(args).notifier,
+    );
+    controller.updateMessage('submitted');
+    await controller.submit();
+    final proof = controller.retrySubmitVerification();
+    await _drain();
+    final deletion = controller.deleteImage('1');
+    await _drain();
+    repository.completeLoad(
+      1,
+      _success(_preparation(message: 'before', revision: 'deleted')),
+    );
+    await deletion;
+    repository.completeLoad(
+      0,
+      _success(
+        _preparation(
+          message: 'submitted',
+          revision: 'old-proof',
+          images: [_image('1')],
+        ),
+      ),
+    );
+    await proof;
+    final state = container
+        .read(postEditComposerControllerProvider(args))
+        .value!;
+    expect(state.snapshot.revision, 'deleted');
+    expect(state.attachmentSession.deletedAidTombstones, contains('1'));
+    expect(state.attachmentSession.existingImagesByAid, isEmpty);
+    expect(state.submitState, PostEditSubmitState.unconfirmed);
+    expect(command.calls, 1);
+  });
+  test('rebuilding an editor retires its pending command without clearing new input', () async {
+    final repository = _DelayedPreparationRepository();
+    final command = _DelayedEditCommand();
+    final args = _args(_preparation(message: 'before', revision: 'before'));
+    final container = _buildContainer(repository, command: command);
+    addTearDown(container.dispose);
+    final subscription = _keepAlive(container, args);
+    addTearDown(subscription.close);
+    final provider = postEditComposerControllerProvider(args);
+    await container.read(provider.future);
+    final oldController = container.read(provider.notifier);
+    oldController.updateMessage('old submission');
+    final submit = oldController.submit();
+    await _drain();
+    container.invalidate(provider);
+    await container.read(provider.future);
+    container.read(provider.notifier).updateMessage('new editor input');
+    command.reply.complete(
+      const DataCommandOutcomeUnknown(
+        DataCommandFailure(
+          kind: DataCommandFailureKind.unknown,
+          retryPolicy: DataCommandRetryPolicy.never,
+          diagnosticMessage: 'test uncertain',
+        ),
+      ),
+    );
+    await submit;
+    final state = container.read(provider).value!;
+    expect(state.message, 'new editor input');
+    expect(state.submitState, PostEditSubmitState.idle);
+    expect(state.submitBlocked, isFalse);
+    expect(repository.loadRequests, isEmpty);
+  });
+
+  test(
+    'dispose during form refresh cannot resend or access a retired provider',
+    () async {
+      final repository = _DelayedPreparationRepository();
+      final command = _IndeterminateEditCommand(staleFormhash: true);
+      final args = _args(_preparation(message: 'before', revision: 'before'));
+      final container = _buildContainer(repository, command: command);
+      final subscription = _keepAlive(container, args);
+      await container.read(postEditComposerControllerProvider(args).future);
+      final controller = container.read(
+        postEditComposerControllerProvider(args).notifier,
+      );
+      controller.updateMessage('submitted');
+      final submit = controller.submit();
+      await _drain();
+      expect(repository.loadRequests, hasLength(1));
+      subscription.close();
+      container.dispose();
+      repository.completeLoad(
+        0,
+        _success(_preparation(message: 'before', revision: 'before')),
+      );
+      await expectLater(submit, completes);
+      expect(command.calls, 1);
+    },
+  );
+
+  test('WebView readback supersedes pending submit proof without losing current conflict', () async {
+    final repository = _DelayedPreparationRepository();
+    final command = _IndeterminateEditCommand();
+    final args = _args(_preparation(message: 'before', revision: 'before'));
+    final container = _buildContainer(repository, command: command);
+    addTearDown(container.dispose);
+    final subscription = _keepAlive(container, args);
+    addTearDown(subscription.close);
+    await container.read(postEditComposerControllerProvider(args).future);
+    final controller = container.read(
+      postEditComposerControllerProvider(args).notifier,
+    );
+    controller.updateMessage('submitted');
+    await controller.submit();
+    final proof = controller.retrySubmitVerification();
+    await _drain();
+    final webReturn = controller.reconcileWebViewReturn();
+    await _drain();
+    repository.completeLoad(
+      1,
+      _success(_preparation(message: 'web server version', revision: 'web')),
+    );
+    await webReturn;
+    repository.completeLoad(
+      0,
+      _success(_preparation(message: 'submitted', revision: 'old-proof')),
+    );
+    await proof;
+    final state = container
+        .read(postEditComposerControllerProvider(args))
+        .value!;
+    expect(state.snapshot.revision, 'web');
+    expect(state.pendingConflict, isNotNull);
+    expect(state.message, 'submitted');
+    expect(state.submitState, PostEditSubmitState.unconfirmed);
+    expect(state.submitBlocked, isTrue);
+    expect(command.calls, 1);
+  });
+  test(
+    'signature edit retires a pending uncertain-result verification',
+    () async {
+      final repository = _DelayedPreparationRepository();
+      final command = _IndeterminateEditCommand();
+      final args = _args(_preparation(message: 'before', revision: 'before'));
+      final container = _buildContainer(repository, command: command);
+      addTearDown(container.dispose);
+      final subscription = _keepAlive(container, args);
+      addTearDown(subscription.close);
+      await container.read(postEditComposerControllerProvider(args).future);
+      final controller = container.read(
+        postEditComposerControllerProvider(args).notifier,
+      );
+      controller.updateMessage('submitted');
+      await controller.submit();
+      final verification = controller.retrySubmitVerification();
+      await _drain();
+      controller.toggleUseSignature(false);
+      repository.completeLoad(
+        0,
+        _success(_preparation(message: 'submitted', revision: 'after')),
+      );
+      await verification;
+      final state = container
+          .read(postEditComposerControllerProvider(args))
+          .value!;
+      expect(state.useSignature, isFalse);
+      expect(state.submitState, PostEditSubmitState.unconfirmed);
+      expect(state.submitBlocked, isTrue);
+      expect(command.calls, 1);
+    },
+  );
+
+  test('repeated verification requests share one readback', () async {
+    final repository = _DelayedPreparationRepository();
+    final command = _IndeterminateEditCommand();
+    final args = _args(_preparation(message: 'before', revision: 'before'));
+    final container = _buildContainer(repository, command: command);
+    addTearDown(container.dispose);
+    final subscription = _keepAlive(container, args);
+    addTearDown(subscription.close);
+    await container.read(postEditComposerControllerProvider(args).future);
+    final controller = container.read(
+      postEditComposerControllerProvider(args).notifier,
+    );
+    controller.updateMessage('submitted');
+    await controller.submit();
+    final first = controller.retrySubmitVerification();
+    final second = controller.retrySubmitVerification();
+    await _drain();
+    expect(repository.loadRequests, hasLength(1));
+    repository.completeLoad(
+      0,
+      _success(_preparation(message: 'submitted', revision: 'after')),
+    );
+    await Future.wait([first, second]);
+    expect(command.calls, 1);
+  });
+
+  test(
+    'unexpected command exception keeps the edit unconfirmed and blocks resend',
+    () async {
+      final repository = _DelayedPreparationRepository();
+      final command = _IndeterminateEditCommand(throwsOnExecute: true);
+      final args = _args(_preparation(message: 'before', revision: 'before'));
+      final container = _buildContainer(repository, command: command);
+      addTearDown(container.dispose);
+      final subscription = _keepAlive(container, args);
+      addTearDown(subscription.close);
+      await container.read(postEditComposerControllerProvider(args).future);
+      final controller = container.read(
+        postEditComposerControllerProvider(args).notifier,
+      );
+      controller.updateMessage('submitted');
+      await expectLater(controller.submit(), completes);
+      final state = container
+          .read(postEditComposerControllerProvider(args))
+          .value!;
+      expect(state.isSubmitting, isFalse);
+      expect(state.submitBlocked, isTrue);
+      expect(state.submitState, PostEditSubmitState.unconfirmed);
+      expect(state.message, 'submitted');
+      await controller.submit();
+      expect(command.calls, 1);
+    },
+  );
+
+  test('unexpected verification exception releases the verifying state without another POST', () async {
+    final repository = _DelayedPreparationRepository();
+    final command = _IndeterminateEditCommand();
+    final args = _args(_preparation(message: 'before', revision: 'before'));
+    final container = _buildContainer(repository, command: command);
+    addTearDown(container.dispose);
+    final subscription = _keepAlive(container, args);
+    addTearDown(subscription.close);
+    await container.read(postEditComposerControllerProvider(args).future);
+    final controller = container.read(
+      postEditComposerControllerProvider(args).notifier,
+    );
+    controller.updateMessage('submitted');
+    await controller.submit();
+    final verification = expectLater(
+      controller.retrySubmitVerification(),
+      completes,
+    );
+    await _drain();
+    repository.loadRequests.single.completeError(
+      StateError('sensitive-error-payload'),
+    );
+    await verification;
+    final state = container
+        .read(postEditComposerControllerProvider(args))
+        .value!;
+    expect(state.submitState, PostEditSubmitState.unconfirmed);
+    expect(state.submitBlocked, isTrue);
+    expect(command.calls, 1);
+  });
+}
+
 ProviderContainer _buildContainer(
   _DelayedPreparationRepository repository, {
   ThreadPostEditCommand? command,
@@ -456,8 +764,12 @@ class _NoopUploadCoordinator implements ComposerImageUploadCoordinator {
 }
 
 class _IndeterminateEditCommand implements ThreadPostEditCommand {
-  _IndeterminateEditCommand({this.staleFormhash = false});
+  _IndeterminateEditCommand({
+    this.staleFormhash = false,
+    this.throwsOnExecute = false,
+  });
   final bool staleFormhash;
+  final bool throwsOnExecute;
   int calls = 0;
   @override
   ThreadPostEditCapabilities get capabilities => buildPostEditCapabilities();
@@ -466,6 +778,7 @@ class _IndeterminateEditCommand implements ThreadPostEditCommand {
     ThreadPostEditSubmission submission,
   ) async {
     calls++;
+    if (throwsOnExecute) throw StateError('sensitive-error-payload');
     if (staleFormhash) {
       return const DataCommandRejected(
         DataCommandFailure(
@@ -485,4 +798,14 @@ class _IndeterminateEditCommand implements ThreadPostEditCommand {
       ),
     );
   }
+}
+
+class _DelayedEditCommand implements ThreadPostEditCommand {
+  final reply = Completer<DataCommandResult<ThreadPostEditReceipt>>();
+  @override
+  ThreadPostEditCapabilities get capabilities => buildPostEditCapabilities();
+  @override
+  Future<DataCommandResult<ThreadPostEditReceipt>> execute(
+    ThreadPostEditSubmission submission,
+  ) => reply.future;
 }
