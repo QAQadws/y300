@@ -79,10 +79,37 @@ class UnifiedDetailPage extends StatefulWidget {
   onFirstContentPresented;
 
   @override
-  State<UnifiedDetailPage> createState() => _UnifiedDetailPageState();
+  State<UnifiedDetailPage> createState() => _UnifiedDetailPageHostState();
 }
 
-class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
+class _UnifiedDetailPageHostState extends State<UnifiedDetailPage> {
+  final _presentationGuard = RouteContentPresentationGuard();
+
+  @override
+  Widget build(BuildContext context) => _UnifiedDetailPageContent(
+    // Retire every callback together when the work or adapter owner changes.
+    key: ValueKey((ObjectKey(widget.adapter), widget.workId)),
+    configuration: widget,
+    presentationGuard: _presentationGuard,
+  );
+}
+
+class _UnifiedDetailPageContent extends StatefulWidget {
+  const _UnifiedDetailPageContent({
+    super.key,
+    required this.configuration,
+    required this.presentationGuard,
+  });
+
+  final UnifiedDetailPage configuration;
+  final RouteContentPresentationGuard presentationGuard;
+
+  @override
+  State<_UnifiedDetailPageContent> createState() => _UnifiedDetailPageState();
+}
+
+class _UnifiedDetailPageState extends State<_UnifiedDetailPageContent> {
+  UnifiedDetailPage get _page => widget.configuration;
   // 阈值适当降低，确保常见拖动距离能稳定触发折叠标题显示。
   static const double _collapsedTitleRevealOffset = 120;
   static const double _chapterDownloadIconSize = 28;
@@ -93,16 +120,15 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   bool _introExpanded = false;
   bool _showCollapsedTitle = false;
   int _lastHandledRefreshSignalSequence = 0;
-  final Set<String> _downloadingEpisodeIds = <String>{};
-  final Set<String> _readingStateMutationEpisodeIds = <String>{};
-  bool _isResettingWorkReading = false;
-  Future<void>? _refreshInFlight;
+  bool get _isResettingWorkReading => _controller.isResettingWorkReading;
+  // The controller coalesces work; this slot coalesces route callbacks/toasts.
+  Future<void>? _refreshFeedbackInFlight;
   Listenable? _chapterDownloadActivityListenable;
-  final RouteContentPresentationGuard _contentPresentationGuard =
-      RouteContentPresentationGuard();
+  RouteContentPresentationGuard get _contentPresentationGuard =>
+      widget.presentationGuard;
 
   DetailChapterDownloadAdapter? get _downloadAdapter {
-    final adapter = widget.adapter;
+    final adapter = _page.adapter;
     return adapter is DetailChapterDownloadAdapter
         ? adapter as DetailChapterDownloadAdapter
         : null;
@@ -116,14 +142,14 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   bool get _showsBulkDownloadActions => false;
 
   DetailChapterDownloadActivityAdapter? get _downloadActivityAdapter {
-    final adapter = widget.adapter;
+    final adapter = _page.adapter;
     return adapter is DetailChapterDownloadActivityAdapter
         ? adapter as DetailChapterDownloadActivityAdapter
         : null;
   }
 
   DetailChapterReadStateAdapter? get _readStateAdapter {
-    final adapter = widget.adapter;
+    final adapter = _page.adapter;
     return adapter is DetailChapterReadStateAdapter
         ? adapter as DetailChapterReadStateAdapter
         : null;
@@ -131,17 +157,17 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
 
   bool get _supportsChapterReadState => _readStateAdapter != null;
 
-  bool get _supportsFullRefresh => widget.adapter is DetailFullRefreshAdapter;
+  bool get _supportsFullRefresh => _page.adapter is DetailFullRefreshAdapter;
 
   DetailWorkReadingResetAdapter? get _workReadingResetAdapter {
-    final adapter = widget.adapter;
+    final adapter = _page.adapter;
     return adapter is DetailWorkReadingResetAdapter
         ? adapter as DetailWorkReadingResetAdapter
         : null;
   }
 
   DetailChapterManagementAdapter? get _chapterManagementAdapter {
-    final adapter = widget.adapter;
+    final adapter = _page.adapter;
     return adapter is DetailChapterManagementAdapter
         ? adapter as DetailChapterManagementAdapter
         : null;
@@ -151,14 +177,15 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   void initState() {
     super.initState();
     _controller = UnifiedDetailController(
-      adapter: widget.adapter,
-      workId: widget.workId,
+      adapter: _page.adapter,
+      workId: _page.workId,
     );
     _scrollController = ScrollController()..addListener(_handleScroll);
-    widget.shelfRefreshBus?.signal.addListener(_handleShelfRefreshSignal);
+    _page.shelfRefreshBus?.signal.addListener(_handleShelfRefreshSignal);
     _bindChapterDownloadActivity();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
       await _controller.initialize();
       if (!mounted) {
         return;
@@ -170,7 +197,8 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
 
   @override
   void dispose() {
-    widget.shelfRefreshBus?.signal.removeListener(_handleShelfRefreshSignal);
+    _controller.close();
+    _page.shelfRefreshBus?.signal.removeListener(_handleShelfRefreshSignal);
     _chapterDownloadActivityListenable?.removeListener(
       _handleChapterDownloadActivityChanged,
     );
@@ -181,16 +209,16 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   }
 
   @override
-  void didUpdateWidget(covariant UnifiedDetailPage oldWidget) {
+  void didUpdateWidget(covariant _UnifiedDetailPageContent oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.shelfRefreshBus, widget.shelfRefreshBus)) {
-      oldWidget.shelfRefreshBus?.signal.removeListener(
+    if (!identical(
+      oldWidget.configuration.shelfRefreshBus,
+      _page.shelfRefreshBus,
+    )) {
+      oldWidget.configuration.shelfRefreshBus?.signal.removeListener(
         _handleShelfRefreshSignal,
       );
-      widget.shelfRefreshBus?.signal.addListener(_handleShelfRefreshSignal);
-    }
-    if (!identical(oldWidget.adapter, widget.adapter)) {
-      _bindChapterDownloadActivity();
+      _page.shelfRefreshBus?.signal.addListener(_handleShelfRefreshSignal);
     }
   }
 
@@ -213,11 +241,11 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   }
 
   bool _isChapterDownloading(String episodeId) {
-    if (_downloadingEpisodeIds.contains(episodeId)) {
+    if (_controller.isChapterDownloadPending(episodeId)) {
       return true;
     }
     return _downloadActivityAdapter?.isChapterDownloadActive(
-          workId: widget.workId,
+          workId: _page.workId,
           episodeId: episodeId,
         ) ??
         false;
@@ -233,14 +261,14 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   }
 
   void _handleShelfRefreshSignal() {
-    final signal = widget.shelfRefreshBus?.signal.value;
+    final signal = _page.shelfRefreshBus?.signal.value;
     if (signal == null ||
         signal.sequence <= _lastHandledRefreshSignalSequence ||
-        !signal.modules.contains(widget.adapter.moduleKey)) {
+        !signal.modules.contains(_page.adapter.moduleKey)) {
       return;
     }
     final workId = signal.workId?.trim();
-    if (workId == null || workId.isEmpty || workId != widget.workId) {
+    if (workId == null || workId.isEmpty || workId != _page.workId) {
       return;
     }
     _lastHandledRefreshSignalSequence = signal.sequence;
@@ -256,10 +284,10 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   }
 
   void _scheduleFirstContentPresented() {
-    if (widget.onFirstContentPresented == null) {
+    if (_page.onFirstContentPresented == null) {
       return;
     }
-    final routeWorkId = widget.workId;
+    final routeWorkId = _page.workId;
     final state = _controller.state;
     final header = state.header;
     if (header == null || state.isLoading || state.errorMessage != null) {
@@ -268,14 +296,14 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     final chapters = List<LibraryChapterItem>.unmodifiable(state.chapters);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted || widget.workId != routeWorkId) {
+      if (!mounted || _page.workId != routeWorkId) {
         return;
       }
       if (!_contentPresentationGuard.tryCommit(routeWorkId)) {
         return;
       }
       try {
-        await widget.onFirstContentPresented?.call(header, chapters);
+        await _page.onFirstContentPresented?.call(header, chapters);
       } catch (error, stackTrace) {
         debugPrint(
           '[UnifiedDetailPage][first_content_callback_failure] '
@@ -336,7 +364,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                       ? ''
                       : LibraryShelfTextResolver.workTitle(
                           l10n,
-                          widget.adapter.moduleKey,
+                          _page.adapter.moduleKey,
                           header.title,
                           header.workId,
                         ),
@@ -376,13 +404,13 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                       value: 'change-category',
                       label: l10n.libraryDetailChangeCategory,
                     ),
-                    if (widget.adapter is DetailMetadataEditor)
+                    if (_page.adapter is DetailMetadataEditor)
                       AppPopupMenuItem<String>(
                         key: const Key('unified-detail-edit-metadata'),
                         value: 'edit-metadata',
                         label: l10n.libraryDetailEditMetadata,
                       ),
-                    if (widget.adapter is DetailCatalogEditor)
+                    if (_page.adapter is DetailCatalogEditor)
                       AppPopupMenuItem<String>(
                         key: const Key('unified-detail-configure-catalog'),
                         value: 'configure-catalog',
@@ -441,22 +469,22 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                     SliverToBoxAdapter(
                       child: UnifiedDetailHeaderSection(
                         header: header,
-                        moduleKey: widget.adapter.moduleKey,
+                        moduleKey: _page.adapter.moduleKey,
                         topInset: topInset,
                         palette: detailPalette,
-                        imageReferer: widget.imageReferer,
+                        imageReferer: _page.imageReferer,
                         onToggleShelf: () => _showMoveCategorySheet(),
                         onRefresh: _refreshAndShowFeedback,
                         onRefreshLongPress: _supportsFullRefresh
                             ? () => _refreshAndShowFeedback(full: true)
                             : null,
                         onOpenThread: () async {
-                          final target = await widget.adapter
-                              .getThreadRouteTarget(workId: widget.workId);
+                          final target = await _page.adapter
+                              .getThreadRouteTarget(workId: _page.workId);
                           if (!context.mounted || target == null) {
                             return;
                           }
-                          await widget.onOpenThread(context, target);
+                          await _page.onOpenThread(context, target);
                         },
                       ),
                     ),
@@ -489,14 +517,14 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                         sourceTypeId: header.sourceTypeId,
                       ),
                     ),
-                  if (widget.chapterStatus != null)
-                    SliverToBoxAdapter(child: widget.chapterStatus),
+                  if (_page.chapterStatus != null)
+                    SliverToBoxAdapter(child: _page.chapterStatus),
                   SliverToBoxAdapter(
                     child: UnifiedDetailChapterToolbar(
                       chapterCount: state.chapters.length,
                       filterSummary: _chapterFilterSummary(state.filters),
                       hasActiveFilter: _hasActiveChapterFilter(state.filters),
-                      modeControl: widget.chapterModeControl,
+                      modeControl: _page.chapterModeControl,
                     ),
                   ),
                   SliverList.builder(
@@ -519,11 +547,8 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                         onToggleReadState: _supportsChapterReadState
                             ? () => _toggleChapterReadingState(chapter)
                             : null,
-                        readStateMutationLocked:
-                            _isResettingWorkReading ||
-                            _readingStateMutationEpisodeIds.contains(
-                              chapter.episodeId,
-                            ),
+                        readStateMutationLocked: _controller
+                            .isChapterReadingStateLocked(chapter.episodeId),
                         onToggleDownload: _supportsChapterDownloads
                             ? () => _toggleChapterDownload(chapter)
                             : null,
@@ -537,14 +562,14 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
             ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
-          final target = await widget.adapter.getReaderRouteTarget(
-            workId: widget.workId,
+          final target = await _page.adapter.getReaderRouteTarget(
+            workId: _page.workId,
             preferContinue: true,
           );
           if (!context.mounted || target == null) {
             return;
           }
-          final handler = widget.onContinue ?? widget.onOpenReader;
+          final handler = _page.onContinue ?? _page.onOpenReader;
           await handler(context, target);
           if (!context.mounted) {
             return;
@@ -561,15 +586,15 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   }
 
   Future<void> _openChapter(LibraryChapterItem chapter) async {
-    final customHandler = widget.onOpenChapter;
+    final customHandler = _page.onOpenChapter;
     if (customHandler != null) {
       await customHandler(context, chapter);
     } else {
       final target = ReaderRouteTarget(
-        workId: widget.workId,
+        workId: _page.workId,
         episodeId: chapter.episodeId,
       );
-      await widget.onOpenReader(context, target);
+      await _page.onOpenReader(context, target);
     }
     if (!mounted) {
       return;
@@ -587,10 +612,11 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
 
     if (chapter.isDownloaded) {
       try {
-        await _controller.deleteChapterDownload(episodeId: chapter.episodeId);
-        if (mounted) {
-          setState(() {});
-        }
+        final operation = _controller.deleteChapterDownload(
+          episodeId: chapter.episodeId,
+        );
+        setState(() {});
+        await operation;
       } catch (error) {
         if (mounted) {
           final l10n = AppLocalizations.of(context);
@@ -600,18 +626,19 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
             ),
           );
         }
+      } finally {
+        if (mounted) setState(() {});
       }
       return;
     }
 
-    setState(() {
-      _downloadingEpisodeIds.add(chapter.episodeId);
-    });
     try {
-      await _controller.markChapterDownloaded(
+      final operation = _controller.markChapterDownloaded(
         episodeId: chapter.episodeId,
         isDownloaded: true,
       );
+      setState(() {});
+      await operation;
     } catch (error) {
       if (mounted) {
         final l10n = AppLocalizations.of(context);
@@ -623,26 +650,22 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
       }
     } finally {
       if (mounted) {
-        setState(() {
-          _downloadingEpisodeIds.remove(chapter.episodeId);
-        });
+        setState(() {});
       }
     }
   }
 
   Future<void> _toggleChapterReadingState(LibraryChapterItem chapter) async {
-    if (_isResettingWorkReading ||
-        _readingStateMutationEpisodeIds.contains(chapter.episodeId)) {
+    if (_controller.isChapterReadingStateLocked(chapter.episodeId)) {
       return;
     }
-    setState(() {
-      _readingStateMutationEpisodeIds.add(chapter.episodeId);
-    });
     try {
-      await _controller.toggleChapterReadingState(
+      final operation = _controller.toggleChapterReadingState(
         episodeId: chapter.episodeId,
         isCurrentlyRead: chapter.isRead,
       );
+      setState(() {});
+      await operation;
     } catch (_) {
       if (mounted) {
         _showDetailSnackBar(
@@ -651,9 +674,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
       }
     } finally {
       if (mounted) {
-        setState(() {
-          _readingStateMutationEpisodeIds.remove(chapter.episodeId);
-        });
+        setState(() {});
       }
     }
   }
@@ -691,11 +712,11 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     }
     try {
       if (value == 'download-unread') {
-        await downloadAdapter.downloadUnread(workId: widget.workId);
+        await downloadAdapter.downloadUnread(workId: _page.workId);
         return;
       }
       if (value == 'download-all') {
-        await downloadAdapter.downloadAll(workId: widget.workId);
+        await downloadAdapter.downloadAll(workId: _page.workId);
       }
     } catch (error) {
       if (mounted) {
@@ -891,7 +912,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (widget.onOpenChapterFromBeginning != null)
+                if (_page.onOpenChapterFromBeginning != null)
                   ListTile(
                     key: ValueKey<String>(
                       'unified-detail-chapter-start-action-${chapter.episodeId}',
@@ -900,10 +921,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                     title: Text(l10n.libraryDetailStartFromBeginning),
                     onTap: () async {
                       Navigator.of(sheetContext).pop();
-                      await widget.onOpenChapterFromBeginning!(
-                        context,
-                        chapter,
-                      );
+                      await _page.onOpenChapterFromBeginning!(context, chapter);
                       if (!mounted) return;
                       await _controller.reload();
                       if (mounted) setState(() {});
@@ -996,7 +1014,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
       useSafeArea: true,
       builder: (sheetContext) {
         return UnifiedDetailChapterManagementSheet(
-          workId: widget.workId,
+          workId: _page.workId,
           adapter: adapter,
           onChanged: () => changed = true,
         );
@@ -1041,11 +1059,10 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     if (confirmed != true || !mounted) {
       return;
     }
-    setState(() {
-      _isResettingWorkReading = true;
-    });
     try {
-      await _controller.resetWorkReadingState();
+      final operation = _controller.resetWorkReadingState();
+      setState(() {});
+      await operation;
     } catch (_) {
       if (mounted) {
         _showDetailSnackBar(
@@ -1054,9 +1071,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
       }
     } finally {
       if (mounted) {
-        setState(() {
-          _isResettingWorkReading = false;
-        });
+        setState(() {});
       }
     }
   }
@@ -1096,17 +1111,17 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   }
 
   Future<void> _refreshAndShowFeedback({bool full = false}) {
-    final active = _refreshInFlight;
+    final active = _refreshFeedbackInFlight;
     if (active != null) {
       return active;
     }
     late final Future<void> guardedRun;
     guardedRun = _performRefreshAndShowFeedback(full: full).whenComplete(() {
-      if (identical(_refreshInFlight, guardedRun)) {
-        _refreshInFlight = null;
+      if (identical(_refreshFeedbackInFlight, guardedRun)) {
+        _refreshFeedbackInFlight = null;
       }
     });
-    _refreshInFlight = guardedRun;
+    _refreshFeedbackInFlight = guardedRun;
     return guardedRun;
   }
 
@@ -1115,7 +1130,8 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
       final result = full
           ? await _controller.refreshFully()
           : await _controller.refresh();
-      await widget.onRefreshCompleted?.call(result);
+      if (!mounted) return;
+      await _page.onRefreshCompleted?.call(result);
       if (!mounted) {
         return;
       }
@@ -1160,8 +1176,8 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   }
 
   Future<void> _showEditMetadataSheet() async {
-    final editor = widget.adapter is DetailMetadataEditor
-        ? widget.adapter as DetailMetadataEditor
+    final editor = _page.adapter is DetailMetadataEditor
+        ? _page.adapter as DetailMetadataEditor
         : null;
     final header = _controller.state.header;
     if (editor == null || header == null) {
@@ -1226,7 +1242,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                 customSearchTitle,
               }) async {
                 await editor.updateCustomMetadata(
-                  workId: widget.workId,
+                  workId: _page.workId,
                   customTitle: customTitle,
                   customAuthor: customAuthor,
                   customTranslationGroup: customTranslationGroup,
@@ -1244,8 +1260,8 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   }
 
   Future<void> _showCatalogConfigurationSheet() async {
-    final editor = widget.adapter is DetailCatalogEditor
-        ? widget.adapter as DetailCatalogEditor
+    final editor = _page.adapter is DetailCatalogEditor
+        ? _page.adapter as DetailCatalogEditor
         : null;
     if (editor == null) {
       return;
@@ -1254,7 +1270,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     late final DetailCatalogConfiguration configuration;
     try {
       configuration = await editor.loadCatalogConfiguration(
-        workId: widget.workId,
+        workId: _page.workId,
       );
     } catch (error) {
       if (mounted) {
@@ -1280,7 +1296,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
           sourceCatalogUrl: configuration.sourceCatalogUrl,
           onSave: (catalogUrl) async {
             final outcome = await editor.updateCatalogOverride(
-              workId: widget.workId,
+              workId: _page.workId,
               catalogUrl: catalogUrl,
             );
             if (outcome.code == DetailCatalogUpdateOutcomeCode.saved) {
@@ -1298,7 +1314,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
 
   /// 是否支持自定义封面编辑：adapter 实现合同且外壳注入了图片选择器。
   bool get _supportsCoverEditing =>
-      widget.adapter is DetailCoverEditor && widget.pickCoverImage != null;
+      _page.adapter is DetailCoverEditor && _page.pickCoverImage != null;
 
   bool get _canRemoveCover {
     final editor = _coverEditor;
@@ -1306,14 +1322,14 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     return editor != null && header != null && editor.canRemoveCover(header);
   }
 
-  DetailCoverEditor? get _coverEditor => widget.adapter is DetailCoverEditor
-      ? widget.adapter as DetailCoverEditor
+  DetailCoverEditor? get _coverEditor => _page.adapter is DetailCoverEditor
+      ? _page.adapter as DetailCoverEditor
       : null;
 
   /// 自定义封面：选图 → 焦点选区 → 落盘保存 → 刷新。
   Future<void> _handleSetCustomCover() async {
     final editor = _coverEditor;
-    final pick = widget.pickCoverImage;
+    final pick = _page.pickCoverImage;
     if (editor == null || pick == null) {
       return;
     }
@@ -1330,7 +1346,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
     }
     try {
       await editor.setCustomCoverFromLocalFile(
-        workId: widget.workId,
+        workId: _page.workId,
         sourceLocalPath: sourcePath,
         focusX: focus.x,
         focusY: focus.y,
@@ -1361,7 +1377,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
       return;
     }
     try {
-      await editor.removeCustomCover(workId: widget.workId);
+      await editor.removeCustomCover(workId: _page.workId);
     } catch (error) {
       if (!mounted) {
         return;
@@ -1383,7 +1399,7 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
   }
 
   Future<void> _showMoveCategorySheet() async {
-    final categories = await widget.adapter.loadCategories();
+    final categories = await _page.adapter.loadCategories();
     if (!mounted) {
       return;
     }
@@ -1403,8 +1419,8 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
                       ),
                     ),
                     onTap: () async {
-                      await widget.adapter.moveWorkToCategory(
-                        workId: widget.workId,
+                      await _page.adapter.moveWorkToCategory(
+                        workId: _page.workId,
                         toCategoryId: item.categoryId,
                       );
                       if (!mounted || !sheetContext.mounted) {
@@ -1442,8 +1458,8 @@ class _UnifiedDetailPageState extends State<UnifiedDetailPage> {
             ),
             FilledButton(
               onPressed: () async {
-                await widget.adapter.updateIntro(
-                  workId: widget.workId,
+                await _page.adapter.updateIntro(
+                  workId: _page.workId,
                   intro: inputController.text.trim(),
                 );
                 await _controller.reload();

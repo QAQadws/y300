@@ -2,6 +2,7 @@ import 'package:y300/features/library_shared/domain/contracts/detail_module_adap
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
+import 'package:y300/features/library_shared/presentation/services/unified_detail_operation_coordinator.dart';
 
 /// 统一详情页状态。
 class UnifiedDetailState {
@@ -65,7 +66,7 @@ class UnifiedDetailState {
   }
 }
 
-/// 统一详情页控制器（Phase 4）。
+/// Owns result acceptance and operation admission for one detail surface.
 class UnifiedDetailController {
   UnifiedDetailController({
     required DetailModuleAdapter adapter,
@@ -76,9 +77,35 @@ class UnifiedDetailController {
 
   final DetailModuleAdapter _adapter;
   final String _workId;
+  final _operations = UnifiedDetailOperationCoordinator();
+  _DetailLoadRequest? _headerRequest;
+  _DetailLoadRequest? _chapterRequest;
+  Future<DetailRefreshResult>? _refreshInFlight;
+  String? _headerError;
+  String? _chapterError;
+  bool _closed = false;
 
   UnifiedDetailState _state;
   UnifiedDetailState get state => _state;
+
+  bool get isResettingWorkReading => _operations.isResettingReading;
+
+  bool isChapterDownloadPending(String episodeId) =>
+      _operations.isPending(UnifiedDetailOperationKind.download, episodeId);
+
+  bool isChapterReadingStateLocked(String episodeId) =>
+      isResettingWorkReading ||
+      _operations.isPending(UnifiedDetailOperationKind.readingState, episodeId);
+
+  void close() {
+    if (_closed) return;
+    _closed = true;
+    _headerRequest = null;
+    _chapterRequest = null;
+    _refreshInFlight = null;
+    _operations.close();
+    _state = _state.copyWith(isLoading: false, isRefreshing: false);
+  }
 
   Future<void> initialize() async {
     await _load();
@@ -89,21 +116,37 @@ class UnifiedDetailController {
     await _load();
   }
 
-  Future<DetailRefreshResult> refresh() async {
+  Future<DetailRefreshResult> refresh() {
     return _runRefresh(() => _adapter.refreshWork(workId: _workId));
   }
 
-  Future<DetailRefreshResult> refreshFully() async {
-    final adapter = _fullRefreshAdapter;
-    if (adapter == null) {
-      throw UnsupportedError('fullRefresh');
-    }
-    return _runRefresh(() => adapter.refreshWorkFully(workId: _workId));
+  Future<DetailRefreshResult> refreshFully() {
+    return _runRefresh(() {
+      final adapter = _fullRefreshAdapter;
+      if (adapter == null) throw UnsupportedError('fullRefresh');
+      return adapter.refreshWorkFully(workId: _workId);
+    });
   }
 
   Future<DetailRefreshResult> _runRefresh(
     Future<DetailRefreshResult> Function() action,
+  ) {
+    if (_closed) return Future.value(DetailRefreshResult.skipped);
+    final active = _refreshInFlight;
+    if (active != null) return active;
+    late final Future<DetailRefreshResult> request;
+    request = _performRefresh(action).whenComplete(() {
+      if (identical(_refreshInFlight, request)) _refreshInFlight = null;
+    });
+    _refreshInFlight = request;
+    return request;
+  }
+
+  Future<DetailRefreshResult> _performRefresh(
+    Future<DetailRefreshResult> Function() action,
   ) async {
+    _headerError = null;
+    _chapterError = null;
     _state = _state.copyWith(
       isRefreshing: true,
       clearError: true,
@@ -112,13 +155,14 @@ class UnifiedDetailController {
     late final DetailRefreshResult result;
     try {
       result = await action();
+      if (_closed) return result;
       if (result.shouldReload) {
         await _load();
       }
-      _state = _state.copyWith(lastRefreshResult: result);
+      if (!_closed) _state = _state.copyWith(lastRefreshResult: result);
       return result;
     } finally {
-      _state = _state.copyWith(isRefreshing: false);
+      if (!_closed) _state = _state.copyWith(isRefreshing: false);
     }
   }
 
@@ -126,11 +170,13 @@ class UnifiedDetailController {
     required LibraryFilterSet filters,
     required LibraryChapterSortOption sortOption,
   }) async {
+    if (_closed) return;
     _state = _state.copyWith(filters: filters, chapterSortOption: sortOption);
     await _loadChaptersOnly();
   }
 
   Future<void> updateFilters(LibraryFilterSet filters) async {
+    if (_closed) return;
     _state = _state.copyWith(filters: filters);
     await _loadChaptersOnly();
   }
@@ -139,72 +185,109 @@ class UnifiedDetailController {
     required String episodeId,
     required bool isCurrentlyRead,
   }) async {
+    if (_closed) return;
     final readStateAdapter = _readStateAdapter;
     if (readStateAdapter == null) {
       throw UnsupportedError('chapterReadState');
     }
-    if (isCurrentlyRead) {
-      await readStateAdapter.resetChapterReadingState(
-        workId: _workId,
-        episodeId: episodeId,
-      );
-    } else {
-      await readStateAdapter.markChapterRead(
-        workId: _workId,
-        episodeId: episodeId,
-        isRead: true,
-      );
-    }
-    await _loadChaptersOnly();
+    await _runChapterOperation(
+      UnifiedDetailOperationKind.readingState,
+      episodeId,
+      () => isCurrentlyRead
+          ? readStateAdapter.resetChapterReadingState(
+              workId: _workId,
+              episodeId: episodeId,
+            )
+          : readStateAdapter.markChapterRead(
+              workId: _workId,
+              episodeId: episodeId,
+              isRead: true,
+            ),
+    );
   }
 
   Future<void> markChapterBookmarked({
     required String episodeId,
     required bool isBookmarked,
   }) async {
-    await _adapter.markChapterBookmarked(
-      workId: _workId,
-      episodeId: episodeId,
-      isBookmarked: isBookmarked,
+    await _runChapterOperation(
+      UnifiedDetailOperationKind.bookmark,
+      episodeId,
+      () => _adapter.markChapterBookmarked(
+        workId: _workId,
+        episodeId: episodeId,
+        isBookmarked: isBookmarked,
+      ),
     );
-    await _loadChaptersOnly();
   }
 
   Future<void> markChapterDownloaded({
     required String episodeId,
     required bool isDownloaded,
   }) async {
+    if (_closed) return;
     final downloadAdapter = _downloadAdapter;
     if (downloadAdapter == null) {
       throw UnsupportedError('chapterDownload');
     }
-    await downloadAdapter.markChapterDownloaded(
-      workId: _workId,
-      episodeId: episodeId,
-      isDownloaded: isDownloaded,
+    await _runChapterOperation(
+      UnifiedDetailOperationKind.download,
+      episodeId,
+      () => downloadAdapter.markChapterDownloaded(
+        workId: _workId,
+        episodeId: episodeId,
+        isDownloaded: isDownloaded,
+      ),
     );
-    await _loadChaptersOnly();
   }
 
   Future<void> resetWorkReadingState() async {
+    if (_closed) return;
     final resetAdapter = _workReadingResetAdapter;
     if (resetAdapter == null) {
       throw UnsupportedError('workReadingReset');
     }
-    await resetAdapter.resetWorkReadingState(workId: _workId);
-    await _loadChaptersOnly();
+    final request = _operations.beginReadingReset();
+    if (request == null) return;
+    try {
+      await request.predecessorsSettled;
+      if (!_operations.owns(request)) return;
+      await resetAdapter.resetWorkReadingState(workId: _workId);
+      if (_operations.owns(request)) await _loadChaptersOnly();
+    } finally {
+      _operations.finish(request);
+    }
   }
 
   Future<void> deleteChapterDownload({required String episodeId}) async {
+    if (_closed) return;
     final downloadAdapter = _downloadAdapter;
     if (downloadAdapter == null) {
       throw UnsupportedError('chapterDownload');
     }
-    await downloadAdapter.deleteChapterDownload(
-      workId: _workId,
-      episodeId: episodeId,
+    await _runChapterOperation(
+      UnifiedDetailOperationKind.download,
+      episodeId,
+      () => downloadAdapter.deleteChapterDownload(
+        workId: _workId,
+        episodeId: episodeId,
+      ),
     );
-    await _loadChaptersOnly();
+  }
+
+  Future<void> _runChapterOperation(
+    UnifiedDetailOperationKind kind,
+    String episodeId,
+    Future<void> Function() action,
+  ) async {
+    final request = _operations.beginChapter(kind, episodeId);
+    if (request == null) return;
+    try {
+      await action();
+      if (_operations.owns(request)) await _loadChaptersOnly();
+    } finally {
+      _operations.finish(request);
+    }
   }
 
   DetailChapterDownloadAdapter? get _downloadAdapter {
@@ -236,35 +319,98 @@ class UnifiedDetailController {
   }
 
   Future<void> _load() async {
+    if (_closed) return;
+    final request = _newLoadRequest(includesHeader: true);
+    _headerError = null;
+    _chapterError = null;
+    _headerRequest = request;
+    _chapterRequest = request;
     _state = _state.copyWith(isLoading: true, clearError: true);
     try {
       final header = await _adapter.loadHeader(workId: _workId);
-      final chapters = await _adapter.loadChapters(
-        workId: _workId,
-        filters: _state.filters,
-        sortOption: _state.chapterSortOption,
-      );
+      if (_closed || !identical(_headerRequest, request)) return;
+      _headerRequest = null;
+      _headerError = null;
+      // Header and chapter ownership are independent: a newer filter may have
+      // already supplied chapters while this header was still being read.
       _state = _state.copyWith(
-        isLoading: false,
         header: header,
-        chapters: chapters,
-        clearError: true,
+        isLoading: _isLoading,
+        errorMessage: _chapterError,
+        clearError: _chapterError == null,
       );
+      if (identical(_chapterRequest, request)) await _readChapters(request);
     } catch (error) {
-      _state = _state.copyWith(isLoading: false, errorMessage: '$error');
+      if (_closed || !identical(_headerRequest, request)) return;
+      _headerRequest = null;
+      if (identical(_chapterRequest, request)) _chapterRequest = null;
+      _headerError = '$error';
+      _state = _state.copyWith(
+        isLoading: _isLoading,
+        errorMessage: _headerError,
+      );
     }
   }
 
   Future<void> _loadChaptersOnly() async {
-    try {
-      final chapters = await _adapter.loadChapters(
-        workId: _workId,
+    if (_closed) return;
+    final request = _newLoadRequest(includesHeader: false);
+    _chapterRequest = request;
+    _chapterError = null;
+    _state = _state.copyWith(
+      isLoading: _isLoading,
+      errorMessage: _headerError,
+      clearError: _headerError == null,
+    );
+    await _readChapters(request);
+  }
+
+  bool get _isLoading =>
+      _headerRequest != null || _chapterRequest?.includesHeader == true;
+
+  _DetailLoadRequest _newLoadRequest({required bool includesHeader}) =>
+      _DetailLoadRequest(
+        includesHeader: includesHeader,
         filters: _state.filters,
         sortOption: _state.chapterSortOption,
       );
-      _state = _state.copyWith(chapters: chapters, clearError: true);
+
+  Future<void> _readChapters(_DetailLoadRequest request) async {
+    try {
+      final chapters = await _adapter.loadChapters(
+        workId: _workId,
+        filters: request.filters,
+        sortOption: request.sortOption,
+      );
+      if (_closed || !identical(_chapterRequest, request)) return;
+      _chapterRequest = null;
+      _chapterError = null;
+      _state = _state.copyWith(
+        chapters: chapters,
+        isLoading: _isLoading,
+        errorMessage: _headerError,
+        clearError: _headerError == null,
+      );
     } catch (error) {
-      _state = _state.copyWith(errorMessage: '$error');
+      if (_closed || !identical(_chapterRequest, request)) return;
+      _chapterRequest = null;
+      _chapterError = '$error';
+      _state = _state.copyWith(
+        isLoading: _isLoading,
+        errorMessage: _headerError ?? _chapterError,
+      );
     }
   }
+}
+
+final class _DetailLoadRequest {
+  _DetailLoadRequest({
+    required this.includesHeader,
+    required this.filters,
+    required this.sortOption,
+  });
+
+  final bool includesHeader;
+  final LibraryFilterSet filters;
+  final LibraryChapterSortOption sortOption;
 }

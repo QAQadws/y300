@@ -34,6 +34,22 @@ import 'package:y300/l10n/app_localizations.dart';
 
 const _progressDiagnostics = NovelReaderProgressDiagnostics();
 
+// Hydration and open-mode updates retain the current detail controller owner.
+final _novelDetailAdapterProvider = Provider.autoDispose<NovelDetailAdapter>((
+  ref,
+) {
+  return NovelDetailAdapter(
+    ref.watch(novelRepositoryProvider),
+    coverStore: ref.watch(libraryCoverStoreProvider),
+    stateRepository: ref.watch(libraryStateRepositoryProvider),
+    readingStateRepository: ref.watch(novelReadingStateRepositoryProvider),
+    mutationBarrier: ref.watch(novelReadingMutationBarrierProvider),
+    sourceStateRepository: ref.watch(novelSourceStateRepositoryProvider),
+    chapterUpdateServiceFactory: () =>
+        ref.read(novelChapterUpdateServiceProvider),
+  );
+});
+
 /// 小说详情页：统一详情页薄壳、首次章节水合与双打开模式入口。
 class NovelDetailPage extends ConsumerStatefulWidget {
   const NovelDetailPage({super.key, required this.novelId});
@@ -91,16 +107,7 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
     final openModeState = ref.watch(novelChapterOpenModeControllerProvider);
     final historyRecorder = ref.watch(historyVisitRecorderProvider);
     final openMode = openModeState.value ?? NovelChapterOpenMode.reader;
-    final adapter = NovelDetailAdapter(
-      ref.watch(novelRepositoryProvider),
-      coverStore: ref.watch(libraryCoverStoreProvider),
-      stateRepository: ref.watch(libraryStateRepositoryProvider),
-      readingStateRepository: ref.watch(novelReadingStateRepositoryProvider),
-      mutationBarrier: ref.watch(novelReadingMutationBarrierProvider),
-      sourceStateRepository: ref.watch(novelSourceStateRepositoryProvider),
-      chapterUpdateServiceFactory: () =>
-          ref.read(novelChapterUpdateServiceProvider),
-    );
+    final adapter = ref.watch(_novelDetailAdapterProvider);
     final hydrationPanel = hydration.when<Widget?>(
       data: (value) => value.isReady
           ? null

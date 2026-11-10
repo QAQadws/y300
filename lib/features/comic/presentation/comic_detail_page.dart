@@ -24,6 +24,28 @@ import 'package:y300/features/library_shared/domain/services/library_shelf_refre
 import 'package:y300/features/library_shared/presentation/pages/unified_detail_page.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
 
+// Keep the adapter owner stable across presentation-only parent rebuilds.
+final _comicDetailAdapterProvider = Provider.autoDispose<ComicDetailAdapter>((
+  ref,
+) {
+  return ComicDetailAdapter(
+    ref.watch(comicRepositoryProvider),
+    refreshService: ref.watch(comicEpisodeRefreshServiceProvider),
+    searchQueue: ref.watch(comicSearchRefreshQueueServiceProvider),
+    firstEpisodeCoverService: ref.watch(comicFirstEpisodeCoverServiceProvider),
+    refreshOutcomeApplier: ref.watch(comicRefreshOutcomeApplierProvider),
+    downloadService: ref.watch(comicDownloadServiceProvider),
+    downloadQueue: ref.watch(comicDownloadQueueProvider),
+    coverStore: ref.watch(libraryCoverStoreProvider),
+    bulkDownloadUseCase: ref.watch(bulkDownloadUseCaseProvider),
+    incrementalDiscovery: ref.watch(comicIncrementalEpisodeDiscoveryProvider),
+    discoveryService: ref.watch(comicEpisodeDiscoveryServiceProvider),
+    featureFlags: ref.watch(comicReaderFeatureFlagsProvider),
+    titleAnalyzer: ref.watch(comicTitleAnalyzerProvider),
+    stateRepository: ref.watch(libraryStateRepositoryProvider),
+  );
+});
+
 /// 漫画详情页（Phase 4）：统一详情页薄壳接入。
 class ComicDetailPage extends ConsumerWidget {
   const ComicDetailPage({super.key, required this.comicId});
@@ -32,26 +54,8 @@ class ComicDetailPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final searchQueue = ref.watch(comicSearchRefreshQueueServiceProvider);
     final historyRecorder = ref.watch(historyVisitRecorderProvider);
-    final adapter = ComicDetailAdapter(
-      ref.watch(comicRepositoryProvider),
-      refreshService: ref.watch(comicEpisodeRefreshServiceProvider),
-      searchQueue: searchQueue,
-      firstEpisodeCoverService: ref.watch(
-        comicFirstEpisodeCoverServiceProvider,
-      ),
-      refreshOutcomeApplier: ref.watch(comicRefreshOutcomeApplierProvider),
-      downloadService: ref.watch(comicDownloadServiceProvider),
-      downloadQueue: ref.watch(comicDownloadQueueProvider),
-      coverStore: ref.watch(libraryCoverStoreProvider),
-      bulkDownloadUseCase: ref.watch(bulkDownloadUseCaseProvider),
-      incrementalDiscovery: ref.watch(comicIncrementalEpisodeDiscoveryProvider),
-      discoveryService: ref.watch(comicEpisodeDiscoveryServiceProvider),
-      featureFlags: ref.watch(comicReaderFeatureFlagsProvider),
-      titleAnalyzer: ref.watch(comicTitleAnalyzerProvider),
-      stateRepository: ref.watch(libraryStateRepositoryProvider),
-    );
+    final adapter = ref.watch(_comicDetailAdapterProvider);
     return UnifiedDetailPage(
       adapter: adapter,
       workId: comicId,
