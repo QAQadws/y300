@@ -25,6 +25,50 @@ void main() {
     });
   });
 
+  testWidgets('same-frame extent changes accumulate above the viewport', (
+    tester,
+  ) async {
+    final active = ValueNotifier(_Capability());
+    addTearDown(active.dispose);
+    await tester.pumpWidget(_host(active));
+    await tester.pumpAndSettle();
+    final scroll = _scroll(tester)..jumpTo(2600);
+    await tester.pumpAndSettle();
+    final view = tester.widget<ContinuousImageReaderView>(
+      find.byType(ContinuousImageReaderView),
+    );
+    view.onExtentResolved(_extent('first', 800));
+    view.onExtentResolved(_extent('first', 800, index: 1));
+    active.value = _Capability(knownHeights: const {0: 125, 1: 150});
+    view.onExtentResolved(_extent('first', 1000));
+    view.onExtentResolved(_extent('first', 1200, index: 1));
+    await tester.pumpAndSettle();
+    expect(scroll.offset, closeTo(3200, 0.5));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'frame-delayed compensation preserves movement since measurement',
+    (tester) async {
+      final active = ValueNotifier(_Capability());
+      addTearDown(active.dispose);
+      await tester.pumpWidget(_host(active));
+      await tester.pumpAndSettle();
+      final scroll = _scroll(tester)..jumpTo(2000);
+      await tester.pumpAndSettle();
+      final view = tester.widget<ContinuousImageReaderView>(
+        find.byType(ContinuousImageReaderView),
+      );
+      view.onExtentResolved(_extent('first', 800));
+      active.value = _Capability(knownHeights: const {0: 125});
+      view.onExtentResolved(_extent('first', 1000));
+      scroll.jumpTo(2300);
+      await tester.pumpAndSettle();
+      expect(scroll.offset, closeTo(2500, 0.5));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   for (final imageCount in [1, 2, 20]) {
     for (final fromTail in [false, true]) {
       testWidgets(
@@ -71,6 +115,65 @@ void main() {
         },
       );
     }
+  }
+
+  testWidgets(
+    'one layout combines page spacing and decoded height without double compensation',
+    (tester) async {
+      final active = ValueNotifier(_Capability());
+      addTearDown(active.dispose);
+      await tester.pumpWidget(_host(active));
+      await tester.pumpAndSettle();
+      final scroll = _scroll(tester)..jumpTo(1500);
+      await tester.pumpAndSettle();
+      final before = tester
+          .getTopLeft(find.byKey(const Key('image-first-1')))
+          .dy;
+      final view = tester.widget<ContinuousImageReaderView>(
+        find.byType(ContinuousImageReaderView),
+      );
+      view.onExtentResolved(_extent('first', 800));
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ImageReaderEngine)),
+      );
+      active.value = _Capability(knownHeights: const {0: 125});
+      await container
+          .read(readerPreferencesControllerProvider.notifier)
+          .setPageSpacing(24);
+      await tester.pumpAndSettle();
+      expect(scroll.offset, closeTo(1724, 0.5));
+      expect(
+        tester.getTopLeft(find.byKey(const Key('image-first-1'))).dy,
+        closeTo(before, 0.5),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final sameOwner in [false, true]) {
+    testWidgets(
+      'queued extent correction retires on ${sameOwner ? 'revision' : 'owner'} replacement',
+      (tester) async {
+        final active = ValueNotifier(_Capability());
+        addTearDown(active.dispose);
+        await tester.pumpWidget(_host(active));
+        await tester.pumpAndSettle();
+        _scroll(tester).jumpTo(1500);
+        await tester.pumpAndSettle();
+        final view = tester.widget<ContinuousImageReaderView>(
+          find.byType(ContinuousImageReaderView),
+        );
+        view.onExtentResolved(_extent('first', 800));
+        view.onExtentResolved(_extent('first', 1000));
+        active.value = _Capability(
+          owner: sameOwner ? 'first' : 'next',
+          revision: 1,
+        );
+        await tester.pumpAndSettle();
+        expect(_scroll(tester).offset, 0);
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 
   testWidgets(
@@ -290,11 +393,11 @@ void main() {
 ScrollController _scroll(WidgetTester tester) =>
     tester.widget<ListView>(find.byKey(const Key('session-list'))).controller!;
 
-ContinuousImageExtent _extent(String owner, double height) =>
+ContinuousImageExtent _extent(String owner, double height, {int index = 0}) =>
     ContinuousImageExtent(
       ownerId: owner,
-      itemId: '$owner-0',
-      index: 0,
+      itemId: '$owner-$index',
+      index: index,
       mainAxisExtent: height,
       crossAxisExtent: 800,
       aspectRatio: 800 / height,
@@ -348,6 +451,7 @@ class _Capability extends ReaderCapability {
     this.offset,
     this.tail,
     this.hasNext = false,
+    this.knownHeights = const {},
   });
   final String owner;
   final int revision;
@@ -356,6 +460,7 @@ class _Capability extends ReaderCapability {
   final double? offset;
   final _Tail? tail;
   final bool hasNext;
+  final Map<int, int> knownHeights;
   final visible = <int>[];
   final progress = <int>[];
   final dimensions = <int, ValueChanged<Size>>{};
@@ -379,7 +484,7 @@ class _Capability extends ReaderCapability {
         index: index,
         sourceKind: ContinuousImageSourceKind.threadImageReader,
         knownWidth: 100,
-        knownHeight: 100,
+        knownHeight: knownHeights[index] ?? 100,
       ),
     ),
   );

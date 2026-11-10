@@ -25,6 +25,7 @@ import 'package:y300/features/reader_shared/presentation/engine/reader_seek_coor
 import 'package:y300/features/reader_shared/presentation/engine/reader_tail_surface.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_tail_action_controller.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_vertical_position_driver.dart';
+import 'package:y300/features/reader_shared/presentation/engine/reader_vertical_compensation_coordinator.dart';
 import 'package:y300/features/reader_shared/presentation/engine/reader_zoomable_image.dart';
 import 'package:y300/features/reader_shared/presentation/reader_preferences/reader_preferences_provider.dart';
 import 'package:y300/features/reader_shared/presentation/reader_text_resolver.dart';
@@ -132,12 +133,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   ContinuousImageLayoutIndex? _verticalLayoutIndex;
   List<ContinuousImageItem>? _indexedItems;
   double? _indexedWidth;
-  double _pendingScrollCompensationDelta = 0;
-  double _pendingPageSpacingCompensationDelta = 0;
-  String? _verticalSpacingOwnerId;
-  double? _appliedVerticalPageSpacing;
-  int _verticalSpacingCompensationGeneration = 0;
-  ScrollPosition? _observedScrollPosition;
+  final _verticalCompensation = ReaderVerticalCompensationCoordinator();
 
   ReaderCapability get _capability => widget.capability;
 
@@ -175,15 +171,13 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
 
   @override
   void dispose() {
+    _verticalCompensation.close();
     _readerSession.close();
     _restoreCoordinator.close();
     _seekCoordinator.close();
     if (!_exitFlushed) {
       unawaited(_capability.onExit());
     }
-    _observedScrollPosition?.isScrollingNotifier.removeListener(
-      _onScrollActivityChanged,
-    );
     _scrollController
       ..removeListener(_onVerticalScroll)
       ..removeListener(_tailActionController.schedule)
@@ -220,6 +214,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     _diagnosticMode = preferences.readerMode;
 
     if (content.isEmpty) {
+      _verticalCompensation.deactivate();
       return Scaffold(
         body: Center(child: Text(AppLocalizations.of(context).readerNoImages)),
       );
@@ -320,23 +315,29 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     ReaderPreferences preferences,
     ReaderEngineContext engineContext,
   ) {
+    final session = _readerSession.current!;
+    final scrollController = _scrollController;
+    _verticalCompensation.bind(
+      session: session,
+      controller: scrollController,
+      // Explicit seek/restore owns its own layout corrections while active.
+      isCurrent: () =>
+          _isCurrentVerticalSessionToken(session, scrollController) &&
+          !_isSliderCommitInFlight &&
+          !(_positionState?.needsInitialRestore ?? true),
+    );
     final pageSpacing = preferences.pageSpacing.clamp(0.0, 48.0).toDouble();
     final items = _applyVerticalPageSpacing(
       _applyResolvedVerticalDimensions(content.items),
       pageSpacing,
     );
-    _scheduleVerticalPageSpacingCompensation(
-      ownerId: content.ownerId,
-      pageSpacing: pageSpacing,
-    );
+    _scheduleVerticalPageSpacingCompensation(pageSpacing: pageSpacing);
     _latestItems = items;
     _syncVerticalItemAnchors(items);
     final verticalTrailing = _buildVerticalTrailingSpec(engineContext);
-    final session = _readerSession.current;
-    final scrollController = _scrollController;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_isCurrentVerticalSessionToken(session, scrollController)) {
-        _syncScrollPositionActivityListener();
+        _verticalCompensation.syncPosition();
         if (_verticalViewportPrimedGeneration != _readerSessionGeneration) {
           // A ListView may build cached rows without scrolling. Resolve the
           // initial viewport here so only the actual reading position is
@@ -388,7 +389,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   }
 
   Widget _buildPaged(ReaderContent content, ReaderPreferences preferences) {
-    _resetVerticalPageSpacingTracking();
+    _verticalCompensation.deactivate();
     final items = content.items;
     final tail = _tailSurface;
     final pageController = _pageController;
@@ -486,92 +487,23 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
         : items;
   }
 
-  void _scheduleVerticalPageSpacingCompensation({
-    required String ownerId,
-    required double pageSpacing,
-  }) {
-    final previousOwnerId = _verticalSpacingOwnerId;
-    final previousSpacing = _appliedVerticalPageSpacing;
-    _verticalSpacingOwnerId = ownerId;
-    _appliedVerticalPageSpacing = pageSpacing;
-
-    if (previousOwnerId != ownerId || previousSpacing == null) {
-      _verticalSpacingCompensationGeneration += 1;
-      return;
-    }
-    if ((previousSpacing - pageSpacing).abs() < 0.001) {
-      return;
-    }
-
-    final generation = ++_verticalSpacingCompensationGeneration;
-    if (!_scrollController.hasClients || _latestItems.isEmpty) {
-      return;
-    }
-    final anchorIndex = _lastKnownIndex
-        .clamp(0, _latestItems.length - 1)
-        .toInt();
-    // Capture the old render-tree anchor before this build publishes the new
-    // gaps. Comparing the same stable item after layout also preserves the
-    // reader's intra-image offset when several slider changes are coalesced.
-    final oldAnchorOffset =
-        _resolveExactVerticalOffset(anchorIndex) ??
-        _estimateVerticalOffset(anchorIndex);
-    if (oldAnchorOffset == null || !oldAnchorOffset.isFinite) {
-      return;
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted ||
-          generation != _verticalSpacingCompensationGeneration ||
-          _verticalSpacingOwnerId != ownerId ||
-          _lastOwnerId != ownerId ||
-          _diagnosticMode != ReaderModePreference.vertical ||
-          !_scrollController.hasClients ||
-          anchorIndex >= _latestItems.length) {
-        return;
-      }
-      final newAnchorOffset =
-          _resolveExactVerticalOffset(anchorIndex) ??
-          _estimateVerticalOffset(anchorIndex);
-      if (newAnchorOffset == null || !newAnchorOffset.isFinite) {
-        return;
-      }
-      _applyVerticalPageSpacingCompensation(newAnchorOffset - oldAnchorOffset);
-    });
-  }
-
-  void _applyVerticalPageSpacingCompensation(double delta) {
-    if (!delta.isFinite ||
-        delta.abs() <= 0.5 ||
-        !_scrollController.hasClients) {
-      return;
-    }
-    _syncScrollPositionActivityListener();
-    final position = _scrollController.position;
-    if (position.isScrollingNotifier.value ||
-        _viewportTracker.directionFromPosition(position) !=
-            ContinuousImageScrollDirection.idle) {
-      _pendingPageSpacingCompensationDelta += delta;
-      return;
-    }
-    final targetOffset = (position.pixels + delta)
-        .clamp(position.minScrollExtent, position.maxScrollExtent)
-        .toDouble();
-    if ((targetOffset - position.pixels).abs() > 0.5) {
-      _scrollController.jumpTo(targetOffset);
-    }
-  }
-
-  void _resetVerticalPageSpacingTracking() {
-    if (_verticalSpacingOwnerId == null &&
-        _appliedVerticalPageSpacing == null &&
-        _pendingPageSpacingCompensationDelta == 0) {
-      return;
-    }
-    _verticalSpacingOwnerId = null;
-    _appliedVerticalPageSpacing = null;
-    _pendingPageSpacingCompensationDelta = 0;
-    _verticalSpacingCompensationGeneration += 1;
+  void _scheduleVerticalPageSpacingCompensation({required double pageSpacing}) {
+    final anchorIndex = _latestItems.isEmpty
+        ? null
+        : _lastKnownIndex.clamp(0, _latestItems.length - 1).toInt();
+    final anchorId = anchorIndex == null ? null : _latestItems[anchorIndex].id;
+    _verticalCompensation.updatePageSpacing(
+      pageSpacing: pageSpacing,
+      readAnchorOffset: () {
+        if (anchorIndex == null ||
+            anchorIndex >= _latestItems.length ||
+            _latestItems[anchorIndex].id != anchorId) {
+          return null;
+        }
+        return _resolveExactVerticalOffset(anchorIndex) ??
+            _estimateVerticalOffset(anchorIndex);
+      },
+    );
   }
 
   Widget _buildImage(
@@ -1097,10 +1029,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
   void _syncScrollControllerIfNeeded() {
     if (_scrollControllerSessionGeneration == _readerSessionGeneration) return;
     final previous = _scrollController;
-    _observedScrollPosition?.isScrollingNotifier.removeListener(
-      _onScrollActivityChanged,
-    );
-    _observedScrollPosition = null;
+    _verticalCompensation.deactivate();
     previous
       ..removeListener(_onVerticalScroll)
       ..removeListener(_tailActionController.schedule);
@@ -1158,8 +1087,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
         );
         _positionState = refreshedPosition;
         _latestItems = const <ContinuousImageItem>[];
-        _pendingScrollCompensationDelta = 0;
-        _resetVerticalPageSpacingTracking();
+        _verticalCompensation.deactivate();
         _resolvedDimensionsByItemId.clear();
         _reportedVisibleImageIndexes.clear();
         _reportedTailSurfaceKeys.clear();
@@ -1203,8 +1131,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       revision: content.sessionRevision,
     );
     _latestItems = const <ContinuousImageItem>[];
-    _pendingScrollCompensationDelta = 0;
-    _resetVerticalPageSpacingTracking();
+    _verticalCompensation.deactivate();
     _reportedVisibleImageIndexes.clear();
     _reportedTailSurfaceKeys.clear();
     _reportedAdvanceSurfaceKeys.clear();
@@ -1354,6 +1281,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     }
 
     final targetOffset = _capability.initialVerticalScrollOffset;
+    _verticalCompensation.cancelPending();
     var result = 'noStoredOffset';
     ReaderVerticalSeekResult? verticalSeek;
     if (_scrollController.offset == 0 &&
@@ -1609,8 +1537,8 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
       return;
     }
     _verticalViewportPrimedGeneration = _readerSessionGeneration;
-    _syncScrollPositionActivityListener();
-    _applyPendingScrollCompensationIfIdle();
+    _verticalCompensation.syncPosition();
+    _verticalCompensation.flushIfIdle();
     _hideReaderMenuForContentMotion();
     _pulsePageIndicator();
     final position = _scrollController.position;
@@ -1667,7 +1595,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     if (previous?.mainAxisExtent != extent.mainAxisExtent) {
       _verticalLayoutIndex = null;
     }
-    _applyScrollCompensationPlan(plan);
+    _verticalCompensation.applyPlan(plan);
   }
 
   ContinuousImageLayoutIndex _verticalLayoutFor(double width) {
@@ -1699,7 +1627,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     if (!_scrollController.hasClients || _latestItems.isEmpty) {
       return ContinuousImageScrollCompensationPlan.none('noScrollContext');
     }
-    _syncScrollPositionActivityListener();
+    _verticalCompensation.syncPosition();
     final position = _scrollController.position;
     return _anchorCoordinator.planForExtentChange(
       previousExtent: previous,
@@ -1717,82 +1645,6 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
         isScrollActivityInProgress: position.isScrollingNotifier.value,
       ),
     );
-  }
-
-  void _applyScrollCompensationPlan(
-    ContinuousImageScrollCompensationPlan plan,
-  ) {
-    if (!plan.shouldCompensate || !_scrollController.hasClients) {
-      return;
-    }
-    if (plan.shouldApplyImmediately) {
-      final sessionGeneration = _readerSessionGeneration;
-      final scrollController = _scrollController;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!_isCurrentVerticalSession(sessionGeneration, scrollController) ||
-            !scrollController.hasClients) {
-          return;
-        }
-        final position = _scrollController.position;
-        if (position.isScrollingNotifier.value ||
-            _viewportTracker.directionFromPosition(position) !=
-                ContinuousImageScrollDirection.idle) {
-          _pendingScrollCompensationDelta += plan.delta;
-          _syncScrollPositionActivityListener();
-          return;
-        }
-        final targetOffset = plan.targetOffset
-            .clamp(position.minScrollExtent, position.maxScrollExtent)
-            .toDouble();
-        _scrollController.jumpTo(targetOffset);
-      });
-      return;
-    }
-    _pendingScrollCompensationDelta += plan.delta;
-    _syncScrollPositionActivityListener();
-  }
-
-  void _syncScrollPositionActivityListener() {
-    if (!_scrollController.hasClients) {
-      return;
-    }
-    final position = _scrollController.position;
-    if (identical(_observedScrollPosition, position)) {
-      return;
-    }
-    _observedScrollPosition?.isScrollingNotifier.removeListener(
-      _onScrollActivityChanged,
-    );
-    _observedScrollPosition = position
-      ..isScrollingNotifier.addListener(_onScrollActivityChanged);
-  }
-
-  void _onScrollActivityChanged() {
-    _applyPendingScrollCompensationIfIdle();
-  }
-
-  void _applyPendingScrollCompensationIfIdle() {
-    if ((_pendingScrollCompensationDelta == 0 &&
-            _pendingPageSpacingCompensationDelta == 0) ||
-        !_scrollController.hasClients) {
-      return;
-    }
-    final position = _scrollController.position;
-    if (position.isScrollingNotifier.value ||
-        _viewportTracker.directionFromPosition(position) !=
-            ContinuousImageScrollDirection.idle) {
-      return;
-    }
-    final delta =
-        _pendingScrollCompensationDelta + _pendingPageSpacingCompensationDelta;
-    _pendingScrollCompensationDelta = 0;
-    _pendingPageSpacingCompensationDelta = 0;
-    final targetOffset = (position.pixels + delta)
-        .clamp(position.minScrollExtent, position.maxScrollExtent)
-        .toDouble();
-    if ((targetOffset - position.pixels).abs() > 0.5) {
-      _scrollController.jumpTo(targetOffset);
-    }
   }
 
   void _reportActualImageVisible({
@@ -2069,6 +1921,7 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
           _diagnosticMode == preferences.readerMode,
     );
     if (request == null) return;
+    _verticalCompensation.cancelPending();
     _restoreCoordinator.invalidate();
     final previousIndex = _lastKnownIndex;
     final seekGeneration = request.generation;
