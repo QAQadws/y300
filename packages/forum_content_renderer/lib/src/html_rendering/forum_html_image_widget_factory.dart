@@ -12,6 +12,8 @@ import 'forum_html_prepared_render_document.dart';
 import 'forum_html_render_callbacks.dart';
 import 'forum_html_block_decorator.dart';
 import 'forum_html_paragraph_metrics.dart';
+import 'forum_html_inline_background_plan.dart';
+import 'widgets/forum_html_inline_background.dart';
 import 'widgets/forum_html_block_image_frame.dart';
 import 'widgets/forum_html_image_paint_observer.dart';
 import '../services/forum_html_image_viewport_coordinator.dart';
@@ -90,7 +92,11 @@ class ForumHtmlImageWidgetFactory extends WidgetFactory {
     InheritedProperties resolved,
     InlineSpan text,
   ) {
-    var child = super.buildText(tree, resolved, text);
+    final background = ForumHtmlInlineBackgroundPlan.prepare(text);
+    var child = super.buildText(tree, resolved, background?.text ?? text);
+    if (child != null && background != null) {
+      child = ForumHtmlInlineBackground(plan: background, child: child);
+    }
     final decorate = decorateBlock;
     if (child == null ||
         decorate == null ||
