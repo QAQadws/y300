@@ -216,6 +216,17 @@ currently verified by Y300:
 | Thread creation and reply preparation/commands | Mobile HTML creation preparation, desktop HTML post-reply preparation, Discuz v4 commands |
 | Thread poll-vote command | Discuz `pollvote version=2` API |
 
+The HTML home adapter keeps the explicit swiper slides first, then appends
+standalone campaign image links in DOM order. Candidates are direct `#forum`
+children before the forum directory, using the legacy `wp cl` wrapper or an
+explicit `home-campaign-banner` class. Only direct image-only links qualify;
+page chrome, elements with a `hidden` attribute, nested content, homepage self-links, navigation
+and fragment-only targets are excluded. Recognition does not depend on image
+upload directories, campaign names or probed dimensions. Existing HTTP(S)
+resolution and external-target behavior remain unchanged. Entries are
+deduplicated by their resolved image and target pair, preserving the original
+first slide and Host aspect-ratio behavior.
+
 `ForumReferenceResolver.resolveBlogDetailReference` locally identifies supported
 same-site blog articles without requesting data or resolving the viewer. It
 delegates to the existing blog read-reference parser and returns a

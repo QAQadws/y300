@@ -34,6 +34,42 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   group('ForumHomeHtmlRepository', () {
+    test('includes the album Moe banner in projection and cached carousel', () async {
+      final fixture = _buildFixture();
+      const imageUrl =
+          'https://bbs.yamibo.com/data/attachment/album/202611/15/150552n3ubkcl75ghlagr9.jpg';
+      const target = 'https://bbs.yamibo.com/thread-579051-1-1.html';
+      fixture.network.homeHtml = _mobileHomeHtml.replaceFirst(
+        '<body id="forum">',
+        '<body id="forum"><div class="wp cl"><a href="$target" target="_black">'
+            '<img alt="2026年度萌战" src="$imageUrl" '
+            'style="width:100%;height:100%;margin:0px;border:0px solid #CDCDCD;"></a></div>',
+      );
+      final loaded = await fixture.repository.getForumHomePayload();
+      final items = loaded.dataOrNull!.chromeData.carouselItems;
+      expect(items, hasLength(2));
+      expect(
+        items.first.imageUrl,
+        'https://bbs.yamibo.com/data/attachment/block/95/banner.jpg',
+      );
+      expect(items.first.aspectRatio, 3);
+      expect(items.last.imageUrl, imageUrl);
+      expect(items.last.targetUrl, target);
+
+      fixture.network.failDocuments = true;
+      final cached = await fixture.repository.getForumHomePayload();
+      expect(cached.isSuccess, isTrue);
+      expect(
+        cached.dataOrNull!.chromeData.carouselItems.last.imageUrl,
+        imageUrl,
+      );
+      expect(
+        cached.dataOrNull!.chromeData.carouselItems.last.targetUrl,
+        target,
+      );
+      expect(fixture.network.documentRequests, 1);
+    });
+
     test('includes the standalone campaign in projection and cached carousel', () async {
       final fixture = _buildFixture();
       const imagePath =

@@ -78,13 +78,12 @@ final class ForumHomeHtmlParser {
     final identities = <String>{};
     void appendAnchor(html_dom.Element? anchor, {bool standalone = false}) {
       final image = anchor?.querySelector('img');
-      final target = _resolve(anchor?.attributes['href'], sameSite: false);
+      final rawTarget = anchor?.attributes['href']?.trim();
+      final target = _resolve(rawTarget, sameSite: false);
       final imageUri = _resolve(image?.attributes['src'], sameSite: false);
       if (target == null || imageUri == null) return;
       if (standalone &&
-          !imageUri.path.startsWith(
-            '/data/attachment/freeaddon_banner/slide/',
-          )) {
+          (rawTarget?.startsWith('#') == true || _isNavigationTarget(target))) {
         return;
       }
       final identity = '${imageUri.toString()}|${target.toString()}';
@@ -97,12 +96,67 @@ final class ForumHomeHtmlParser {
     for (final slide in root.querySelectorAll('.yami-swiper .swiper-slide')) {
       appendAnchor(slide.querySelector('a'));
     }
-    // Freeaddon campaign banners sit outside the swiper. Append them so the
+    // Standalone campaigns are identified by page position and structure,
+    // independently of where their images were uploaded. Append them so the
     // existing first slide continues to determine the shared carousel ratio.
-    for (final anchor in document.querySelectorAll('#forum > .wp.cl > a')) {
+    for (final anchor in _standaloneBannerAnchors(document)) {
       appendAnchor(anchor, standalone: true);
     }
     return result;
+  }
+
+  Iterable<html_dom.Element> _standaloneBannerAnchors(
+    html_dom.Document document,
+  ) sync* {
+    final forum = document.querySelector('#forum');
+    if (forum == null) return;
+    for (final container in forum.children) {
+      // Never collect banners from the directory, content below it or footer.
+      if (container.classes.contains('forumlist') ||
+          container.querySelector('.forumlist') != null) {
+        break;
+      }
+      final classes = container.classes;
+      if (!(classes.contains('home-campaign-banner') ||
+              (classes.contains('wp') && classes.contains('cl'))) ||
+          container.attributes.containsKey('hidden') ||
+          const {'header', 'footer', 'nav'}.contains(container.localName) ||
+          classes.any(
+            const {'header', 'footer', 'foot', 'nav', 'float-menu'}.contains,
+          ) ||
+          _clean(container.text).isNotEmpty) {
+        continue;
+      }
+      // Direct image-only links distinguish a banner strip from arbitrary
+      // nested widgets, captions and navigation. Comments/whitespace are fine.
+      final anchors = container.children;
+      if (anchors.isNotEmpty && anchors.every(_isImageLink)) {
+        for (final anchor in anchors) {
+          if (!anchor.attributes.containsKey('hidden') &&
+              !anchor.children.single.attributes.containsKey('hidden')) {
+            yield anchor;
+          }
+        }
+      }
+    }
+  }
+
+  bool _isImageLink(html_dom.Element anchor) =>
+      anchor.localName == 'a' &&
+      anchor.children.length == 1 &&
+      anchor.children.single.localName == 'img';
+
+  bool _isNavigationTarget(Uri target) {
+    if (!_resolver.isSameSite(target)) return false;
+    return switch (target.path) {
+      '' || '/' || '/index.php' || '/search.php' || '/member.php' => true,
+      '/forum.php' => const {
+        null,
+        '',
+        'index',
+      }.contains(target.queryParameters['mod']),
+      _ => false,
+    };
   }
 
   List<ForumDirectoryForum> _forums(html_dom.Element section) {
