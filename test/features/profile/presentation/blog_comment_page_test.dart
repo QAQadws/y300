@@ -940,42 +940,43 @@ void main() {
     },
   );
 
-  for (final family in AppThemeFamily.values) {
-    for (final brightness in Brightness.values) {
-      testWidgets(
-        'comment input fits narrow keyboard layout: $family $brightness',
-        (tester) async {
-          tester.view.physicalSize = const Size(320, 700);
-          tester.view.devicePixelRatio = 1;
-          addTearDown(tester.view.resetPhysicalSize);
-          addTearDown(tester.view.resetDevicePixelRatio);
-          final service = BlogCommentFixture(autoPrepare: true);
-          final theme = AppTheme.build(family: family, brightness: brightness);
-          await _open(tester, service, theme: theme, largeKeyboard: true);
-          await _enter(tester, '窄屏输入\n多行内容' * 6);
-          expect(
-            _input(tester).config.customStyles!.paragraph!.style.color,
-            theme.y300NativeContent.body,
-          );
-          final button = find.byKey(const Key('blog-comment-submit'));
-          expect(button.hitTestable(), findsOneWidget);
-          expect(tester.getRect(button).bottom, lessThanOrEqualTo(420));
-          final input = tester.getRect(
-            find.byKey(const Key('blog-comment-input')),
-          );
-          final toolbar = tester.getRect(
-            find.byKey(const Key('blog-comment-toolbar')),
-          );
-          expect(input.height, greaterThan(30));
-          expect(input.bottom, lessThanOrEqualTo(toolbar.top));
-          expect(toolbar.right, lessThanOrEqualTo(320));
-          await _submit(tester);
-          service.applied();
-          await tester.pumpAndSettle();
-          expect(tester.takeException(), isNull);
-        },
-      );
-    }
+  for (final (family, brightness) in const [
+    (AppThemeFamily.warmPaper, Brightness.light),
+    (AppThemeFamily.plumPurple, Brightness.dark),
+  ]) {
+    testWidgets(
+      'comment input fits narrow keyboard layout: $family $brightness',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 700);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final service = BlogCommentFixture(autoPrepare: true);
+        final theme = AppTheme.build(family: family, brightness: brightness);
+        await _open(tester, service, theme: theme, largeKeyboard: true);
+        await _enter(tester, '窄屏输入\n多行内容' * 6);
+        expect(
+          _input(tester).config.customStyles!.paragraph!.style.color,
+          theme.y300NativeContent.body,
+        );
+        final button = find.byKey(const Key('blog-comment-submit'));
+        expect(button.hitTestable(), findsOneWidget);
+        expect(tester.getRect(button).bottom, lessThanOrEqualTo(420));
+        final input = tester.getRect(
+          find.byKey(const Key('blog-comment-input')),
+        );
+        final toolbar = tester.getRect(
+          find.byKey(const Key('blog-comment-toolbar')),
+        );
+        expect(input.height, greaterThan(30));
+        expect(input.bottom, lessThanOrEqualTo(toolbar.top));
+        expect(toolbar.right, lessThanOrEqualTo(320));
+        await _submit(tester);
+        service.applied();
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 }
 

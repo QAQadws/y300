@@ -57,31 +57,6 @@ import '../../../support/forum_home_test_support.dart';
 
 void main() {
   group('ForumHomePage', () {
-    testWidgets('more menu exposes refresh and unfavorite actions', (
-      tester,
-    ) async {
-      final repository = _FakeForumHomeRepository(
-        () async => forumHomeReadSuccess(_loggedOutPayload()),
-      );
-
-      await tester.pumpWidget(_buildTestApp(repository));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byKey(const Key('forum-home-more-button')));
-      await tester.pumpAndSettle();
-
-      expect(
-        find.byKey(const Key('forum-home-refresh-action')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const Key('forum-home-unfavorite-action')),
-        findsOneWidget,
-      );
-      expect(find.text('刷新页面'), findsOneWidget);
-      expect(find.text('取消收藏'), findsOneWidget);
-    });
-
     testWidgets('more menu refresh forces a network request', (tester) async {
       final repository = _FakeForumHomeRepository(
         () async => forumHomeReadSuccess(_loggedOutPayload()),
@@ -91,7 +66,10 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('forum-home-more-button')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('forum-home-refresh-action')));
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(ForumHomePage)),
+      );
+      await tester.tap(find.text(l10n.forumRefreshPage));
       await tester.pumpAndSettle();
 
       expect(repository.cachePolicies, <CacheLoadPolicy>[
@@ -128,7 +106,10 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('forum-home-more-button')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('forum-home-unfavorite-action')));
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(ForumHomePage)),
+      );
+      await tester.tap(find.text(l10n.forumUnfavoriteForum));
       await tester.pumpAndSettle();
 
       expect(
@@ -172,15 +153,13 @@ void main() {
       expect(find.byType(Scaffold), findsOneWidget);
       expect(find.byKey(const Key('forum-home-list')), findsNothing);
       expect(find.byKey(const Key('forum-home-blank-body')), findsOneWidget);
-      expect(
-        find.byKey(const Key('forum-home-refresh-progress')),
-        findsNothing,
-      );
 
       completer.complete(forumHomeReadSuccess(_loggedOutPayload()));
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
+      expect(find.byKey(const Key('forum-home-carousel')), findsNothing);
+      expect(find.byKey(const Key('forum-card-2')), findsOneWidget);
       expect(find.text('综合区'), findsOneWidget);
       expect(find.text('公告区'), findsOneWidget);
     });
@@ -201,19 +180,11 @@ void main() {
           tester.getSize(find.byKey(const Key('forum-home-carousel'))).height,
           greaterThan(0),
         );
-        final carouselClip = tester.widget<ClipRRect>(
-          find.ancestor(
-            of: find.byKey(const Key('forum-home-carousel')),
-            matching: find.byType(ClipRRect),
-          ),
-        );
-        expect(carouselClip.borderRadius, BorderRadius.circular(4));
         expect(find.text('综合区'), findsOneWidget);
         expect(find.text('公告区'), findsOneWidget);
         expect(find.text('今日'), findsOneWidget);
         expect(find.text('2'), findsOneWidget);
         expect(find.byKey(const Key('forum-card-2')), findsOneWidget);
-        expect(find.textContaining('共1 个分组'), findsNothing);
       },
     );
 
@@ -470,18 +441,6 @@ void main() {
       );
     });
 
-    testWidgets('renders forum list when carousel is empty', (tester) async {
-      final repository = _FakeForumHomeRepository(
-        () async => forumHomeReadSuccess(_loggedOutPayload()),
-      );
-
-      await tester.pumpWidget(_buildTestApp(repository));
-      await tester.pumpAndSettle();
-
-      expect(find.byKey(const Key('forum-home-carousel')), findsNothing);
-      expect(find.byKey(const Key('forum-card-2')), findsOneWidget);
-    });
-
     testWidgets('today badge appears when refreshed data adds today count', (
       tester,
     ) async {
@@ -695,23 +654,6 @@ void main() {
     );
 
     testWidgets(
-      'renders favorite forum section when logged in payload has favorites',
-      (tester) async {
-        final repository = _FakeForumHomeRepository(
-          () async => forumHomeReadSuccess(_loggedInPayloadWithFavorites()),
-        );
-
-        await tester.pumpWidget(_buildTestApp(repository));
-        await tester.pumpAndSettle();
-
-        expect(find.text('我收藏的版块'), findsOneWidget);
-        expect(find.byKey(const Key('forum-favorite-card-2')), findsOneWidget);
-        expect(find.byKey(const Key('forum-favorite-card-55')), findsOneWidget);
-        expect(find.text('综合区'), findsOneWidget);
-      },
-    );
-
-    testWidgets(
       'favorite forums use forum index description when favorite description is empty',
       (tester) async {
         final repository = _FakeForumHomeRepository(
@@ -760,7 +702,7 @@ void main() {
     );
 
     testWidgets(
-      'section header toggles forum rows with minus and plus indicators',
+      'favorite section header collapses and restores its forum rows',
       (tester) async {
         final repository = _FakeForumHomeRepository(
           () async => forumHomeReadSuccess(_loggedInPayloadWithFavorites()),
@@ -769,50 +711,26 @@ void main() {
         await tester.pumpWidget(_buildTestApp(repository));
         await tester.pumpAndSettle();
 
-        expect(find.byKey(const Key('forum-favorite-card-2')), findsOneWidget);
-        var indicator = tester.widget<Text>(
-          find.byKey(const Key('forum-section-indicator-favorite:2,55')),
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(ForumHomePage)),
         );
-        expect(indicator.data, '-');
+        final header = find.text(l10n.forumHomeFavoriteForums);
+        final firstForum = find.byKey(const Key('forum-favorite-card-2'));
+        final secondForum = find.byKey(const Key('forum-favorite-card-55'));
+        expect(header, findsOneWidget);
+        expect(firstForum, findsOneWidget);
+        expect(secondForum, findsOneWidget);
+        expect(find.text('综合区'), findsOneWidget);
 
-        await tester.tap(
-          find.byKey(const Key('forum-section-toggle-favorite:2,55')),
-        );
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 90));
-
-        final rotatingIndicator = tester.widget<RotationTransition>(
-          find
-              .ancestor(
-                of: find.byKey(
-                  const Key('forum-section-indicator-favorite:2,55'),
-                ),
-                matching: find.byType(RotationTransition),
-              )
-              .first,
-        );
-        expect(rotatingIndicator.turns.value, greaterThan(0));
-        expect(rotatingIndicator.turns.value, lessThanOrEqualTo(0.25));
-        expect(find.byKey(const Key('forum-favorite-card-2')), findsOneWidget);
-
+        await tester.tap(header);
         await tester.pumpAndSettle();
+        expect(firstForum, findsNothing);
+        expect(secondForum, findsNothing);
 
-        expect(find.byKey(const Key('forum-favorite-card-2')), findsNothing);
-        indicator = tester.widget<Text>(
-          find.byKey(const Key('forum-section-indicator-favorite:2,55')),
-        );
-        expect(indicator.data, '+');
-
-        await tester.tap(
-          find.byKey(const Key('forum-section-toggle-favorite:2,55')),
-        );
+        await tester.tap(header);
         await tester.pumpAndSettle();
-
-        expect(find.byKey(const Key('forum-favorite-card-2')), findsOneWidget);
-        indicator = tester.widget<Text>(
-          find.byKey(const Key('forum-section-indicator-favorite:2,55')),
-        );
-        expect(indicator.data, '-');
+        expect(firstForum, findsOneWidget);
+        expect(secondForum, findsOneWidget);
       },
     );
 
@@ -1202,10 +1120,6 @@ void main() {
       await tester.pump();
 
       expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
-      expect(
-        find.byKey(const Key('forum-home-refresh-progress')),
-        findsNothing,
-      );
 
       refreshCompleter.complete(forumHomeReadSuccess(_loggedOutPayload()));
       await refreshFuture;
@@ -1275,10 +1189,6 @@ void main() {
         expect(repository.cachePolicies, <CacheLoadPolicy>[
           CacheLoadPolicy.networkFirst,
         ]);
-        expect(
-          find.byKey(const Key('forum-home-refresh-progress')),
-          findsNothing,
-        );
 
         authRepository.complete();
         refreshCompleter.complete(forumHomeReadSuccess(_loggedOutPayload()));

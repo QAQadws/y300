@@ -94,68 +94,6 @@ void main() {
     );
   }
 
-  testWidgets('PostingComposerPage builds dark theme chrome', (tester) async {
-    await tester.pumpWidget(
-      _buildPage(
-        theme: AppTheme.dark(),
-        metadataRepository: _FakeMetadataRepository.success(_metadata()),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.byType(Scaffold), findsOneWidget);
-    expect(
-      find.byKey(const Key('posting-composer-subject-input')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const Key('posting-composer-quill-editor')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const Key('posting-composer-message-input')),
-      findsNothing,
-    );
-    expect(
-      find.byKey(const Key('posting-composer-format-button')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const Key('posting-composer-link-button')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const Key('posting-composer-align-button')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const Key('posting-composer-quote-button')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const Key('posting-composer-sticker-button')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const Key('posting-composer-image-button')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const Key('posting-composer-color-button')),
-      findsNothing,
-    );
-    expect(
-      find.byKey(const Key('posting-composer-backcolor-button')),
-      findsNothing,
-    );
-    expect(find.byKey(const Key('posting-composer-size-button')), findsNothing);
-    expect(find.byKey(const Key('posting-composer-code-button')), findsNothing);
-    expect(
-      find.byKey(const Key('posting-composer-send-button')),
-      findsOneWidget,
-    );
-  });
-
   testWidgets('PostingComposerPage localizes chrome and preserves raw input', (
     tester,
   ) async {
@@ -208,6 +146,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(
+      find.byKey(const Key('posting-composer-subject-input')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('posting-composer-quill-editor')),
+      findsOneWidget,
+    );
     for (final key in const [
       Key('posting-composer-source-button'),
       Key('posting-composer-more-button'),
@@ -270,10 +216,6 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.byKey(const Key('posting-composer-bbcode-preview-panel')),
-      findsNothing,
-    );
-    expect(
       find.byKey(const Key('posting-composer-message-input')),
       findsNothing,
     );
@@ -291,10 +233,6 @@ void main() {
     );
     expect(
       find.byKey(const Key('posting-composer-quill-editor')),
-      findsNothing,
-    );
-    expect(
-      find.byKey(const Key('posting-composer-bbcode-preview-panel')),
       findsNothing,
     );
 

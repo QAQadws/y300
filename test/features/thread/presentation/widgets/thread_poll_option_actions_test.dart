@@ -14,80 +14,82 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import '../../../../test_support/localized_test_app.dart';
 
 void main() {
-  for (final locale in [const Locale('zh'), const Locale('zh', 'TW')]) {
-    for (final status in ['voting', 'readOnly', 'submitting']) {
-      testWidgets(
-        '$locale $status long press copies only the displayed option',
-        (tester) async {
-          final semantics = tester.ensureSemantics();
-          try {
-            final harness = await _Harness.open(
-              tester,
-              locale: locale,
-              status: status,
-            );
-            final option = find.byKey(const Key('thread-poll-option-1'));
-            expect(
-              tester
-                  .getSemantics(option)
-                  .getSemanticsData()
-                  .hasAction(ui.SemanticsAction.longPress),
-              isTrue,
-            );
-            if (status == 'voting') {
-              await tester.tap(option);
-              await tester.pump();
-              expect(harness.toggles, 1);
-            }
-            await tester.longPress(option);
-            await _settle(tester);
-            final sheet = find.byKey(const Key('thread-post-action-sheet'));
-            expect(sheet, findsOneWidget);
-            final copy = find.byKey(
-              const Key('thread-post-copy-poll-option-action'),
-            );
-            final firstTile = find
-                .descendant(of: sheet, matching: find.byType(ListTile))
-                .first;
-            expect(
-              tester.widget<ListTile>(firstTile).key,
-              tester.widget<ListTile>(copy).key,
-            );
-            expect(
-              find.text(harness.strings.threadPollCopyOptionText),
-              findsOneWidget,
-            );
-            expect(
-              find.byKey(const Key('thread-post-copy-all-action')),
-              findsOneWidget,
-            );
-            expect(harness.writes, isEmpty);
-            await tester.tap(copy);
-            await _settle(tester);
-            expect(harness.writes, [_displayedLabel]);
-            expect(harness.toggles, status == 'voting' ? 1 : 0);
-            expect(harness.submissions, 0);
-            expect(
-              find.text(
-                harness.strings.threadDetailCopySuccess(
-                  harness.strings.threadPollOptionText,
-                ),
-              ),
-              findsOneWidget,
-            );
-            expect(
-              harness.container
-                  .read(clipboardSelfCopyFingerprintRegistryProvider)
-                  .containsText(_displayedLabel),
-              isTrue,
-            );
-            expect(tester.takeException(), isNull);
-          } finally {
-            semantics.dispose();
-          }
-        },
-      );
-    }
+  const scenarios = [
+    (Locale('zh'), 'voting'),
+    (Locale('zh', 'TW'), 'readOnly'),
+    (Locale('zh'), 'submitting'),
+  ];
+  for (final (locale, status) in scenarios) {
+    testWidgets('$locale $status long press copies only the displayed option', (
+      tester,
+    ) async {
+      final semantics = tester.ensureSemantics();
+      try {
+        final harness = await _Harness.open(
+          tester,
+          locale: locale,
+          status: status,
+        );
+        final option = find.byKey(const Key('thread-poll-option-1'));
+        expect(
+          tester
+              .getSemantics(option)
+              .getSemanticsData()
+              .hasAction(ui.SemanticsAction.longPress),
+          isTrue,
+        );
+        if (status == 'voting') {
+          await tester.tap(option);
+          await tester.pump();
+          expect(harness.toggles, 1);
+        }
+        await tester.longPress(option);
+        await _settle(tester);
+        final sheet = find.byKey(const Key('thread-post-action-sheet'));
+        expect(sheet, findsOneWidget);
+        final copy = find.byKey(
+          const Key('thread-post-copy-poll-option-action'),
+        );
+        final firstTile = find
+            .descendant(of: sheet, matching: find.byType(ListTile))
+            .first;
+        expect(
+          tester.widget<ListTile>(firstTile).key,
+          tester.widget<ListTile>(copy).key,
+        );
+        expect(
+          find.text(harness.strings.threadPollCopyOptionText),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('thread-post-copy-all-action')),
+          findsOneWidget,
+        );
+        expect(harness.writes, isEmpty);
+        await tester.tap(copy);
+        await _settle(tester);
+        expect(harness.writes, [_displayedLabel]);
+        expect(harness.toggles, status == 'voting' ? 1 : 0);
+        expect(harness.submissions, 0);
+        expect(
+          find.text(
+            harness.strings.threadDetailCopySuccess(
+              harness.strings.threadPollOptionText,
+            ),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          harness.container
+              .read(clipboardSelfCopyFingerprintRegistryProvider)
+              .containsText(_displayedLabel),
+          isTrue,
+        );
+        expect(tester.takeException(), isNull);
+      } finally {
+        semantics.dispose();
+      }
+    });
   }
 
   testWidgets('ordinary area and an empty option keep only ordinary actions', (

@@ -20,36 +20,34 @@ const _present = ForumMessageAttentionState.present;
 const _unknown = ForumMessageAttentionState.unknown;
 
 void main() {
-  for (final locale in AppLocalizations.supportedLocales) {
-    for (final sample in [
-      (name: 'messages', messages: _present, notifications: _absent),
-      (name: 'notifications', messages: _absent, notifications: _present),
-      (name: 'both', messages: _present, notifications: _present),
-      (name: 'neither', messages: _absent, notifications: _absent),
-    ]) {
-      testWidgets('${sample.name} tab attention and semantics in $locale', (
+  for (final sample in [
+    (name: 'messages', messages: _present, notifications: _absent),
+    (name: 'notifications', messages: _absent, notifications: _present),
+    (name: 'both', messages: _present, notifications: _present),
+    (name: 'neither', messages: _absent, notifications: _absent),
+  ]) {
+    testWidgets('${sample.name} tab attention and semantics', (tester) async {
+      final harness = _Harness();
+      harness.accept(
+        messages: sample.messages,
+        notifications: sample.notifications,
+      );
+      await harness.pump(tester);
+      harness.repository.reads.single.result.complete(messageTestPage([]));
+      await tester.pumpAndSettle();
+
+      _expectDots(
         tester,
-      ) async {
-        final harness = _Harness();
-        harness.accept(
-          messages: sample.messages,
-          notifications: sample.notifications,
-        );
-        await harness.pump(tester, locale: locale);
-        harness.repository.reads.single.result.complete(messageTestPage([]));
-        await tester.pumpAndSettle();
+        messages: sample.messages == _present,
+        notifications: sample.notifications == _present,
+      );
+      // Showing category hints must not read the unvisited notification tab.
+      expect(harness.repository.notificationReads, isEmpty);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
-        _expectDots(
-          tester,
-          messages: sample.messages == _present,
-          notifications: sample.notifications == _present,
-        );
-        // Showing category hints must not read the unvisited notification tab.
-        expect(harness.repository.notificationReads, isEmpty);
-        expect(tester.takeException(), isNull);
-      });
-    }
-
+  for (final locale in AppLocalizations.supportedLocales) {
     testWidgets('narrow scaled tabs keep labels stable in $locale', (
       tester,
     ) async {

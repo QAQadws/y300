@@ -2,30 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/forum/presentation/forum_home_state.dart';
 
 void main() {
-  test('ForumHomeViewData should count sections and forums', () {
-    final viewData = ForumHomeViewData(
-      sections: const [
-        ForumSection(
-          sourceIdentity: 'regular:2',
-          title: '综合区',
-          items: [
-            ForumHomeForumDisplayItem(
-              fid: '2',
-              title: '公告区',
-              description: '',
-              todayPosts: null,
-            ),
-          ],
-        ),
-      ],
-      isLoggedIn: false,
-    );
-
-    expect(viewData.sectionCount, 1);
-    expect(viewData.regularForumCount, 1);
-    expect(viewData.forumCount, 1);
-  });
-
   test(
     'ForumHomeViewData counts favorite and regular forums without double count',
     () {

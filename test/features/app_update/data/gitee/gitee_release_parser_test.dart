@@ -98,24 +98,15 @@ void main() {
   });
 
   group('GiteeReleaseParser protocol rejection', () {
-    for (final tag in <String>[
-      '0.0.1',
-      'v0.0',
-      'v00.0.1',
-      'v0.0.1+4',
-      'v0.0.1-beta',
-      'v 0.0.1',
-    ]) {
-      test('rejects non-canonical tag $tag', () async {
-        final payload = await loadGiteeLatestReleaseV001Fixture();
-        payload['tag_name'] = tag;
+    test('maps a non-canonical tag to an invalid tag failure', () async {
+      final payload = await loadGiteeLatestReleaseV001Fixture();
+      payload['tag_name'] = '0.0.1';
 
-        expect(
-          _failureCode(parser.parse(payload)),
-          AppUpdateFailureCode.invalidTag,
-        );
-      });
-    }
+      expect(
+        _failureCode(parser.parse(payload)),
+        AppUpdateFailureCode.invalidTag,
+      );
+    });
 
     test('rejects a prerelease', () async {
       final payload = await loadGiteeLatestReleaseV001Fixture();

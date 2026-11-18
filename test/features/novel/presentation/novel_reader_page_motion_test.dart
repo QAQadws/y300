@@ -38,9 +38,17 @@ void main() {
     }
   });
 
-  for (final direction in TextDirection.values) {
-    for (final reverse in [false, true]) {
-      for (final effect in NovelReaderPageEffect.values) {
+  for (final effect in NovelReaderPageEffect.values) {
+    // Cover checks both inputs to physical direction. The other effects use
+    // the resulting direction, and fade blends identically on either side.
+    final directions = effect == NovelReaderPageEffect.cover
+        ? TextDirection.values
+        : [TextDirection.ltr];
+    final reversals = effect == NovelReaderPageEffect.fade
+        ? [false]
+        : [false, true];
+    for (final direction in directions) {
+      for (final reverse in reversals) {
         testWidgets(
           '$effect paints layered pages in $direction reverse=$reverse without relayout',
           (tester) async {

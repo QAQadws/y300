@@ -18,6 +18,11 @@ import '../../../../test_support/localized_test_app.dart';
 // Screenshot exports opt in; regression runs do not depend on local fonts.
 const _output = String.fromEnvironment('POLL_VISUAL_OUTPUT');
 const _font = String.fromEnvironment('POLL_VISUAL_FONT');
+const _regressionThemes = {
+  (AppThemeFamily.warmPaper, Brightness.light),
+  (AppThemeFamily.moonWhite, Brightness.dark),
+  (AppThemeFamily.plumPurple, Brightness.light),
+};
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -443,6 +448,10 @@ void main() {
 
   for (final family in AppThemeFamily.values) {
     for (final brightness in Brightness.values) {
+      if (_output.isEmpty &&
+          !_regressionThemes.contains((family, brightness))) {
+        continue;
+      }
       testWidgets(
         '${family.name} ${brightness.name} handles narrow large text',
         (tester) async {

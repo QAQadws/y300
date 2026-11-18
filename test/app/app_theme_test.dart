@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import '../test_support/localized_test_app.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -53,6 +52,13 @@ void main() {
     expect(theme.useMaterial3, isTrue);
     expect(theme.colorScheme.brightness, Brightness.dark);
     expect(theme.brightness, Brightness.dark);
+    expect(theme.scaffoldBackgroundColor, palette.scaffoldBackground);
+    expect(theme.appBarTheme.backgroundColor, palette.appBarBackground);
+    expect(theme.appBarTheme.foregroundColor, palette.appBarForeground);
+    expect(
+      theme.navigationBarTheme.backgroundColor,
+      palette.navigationBarBackground,
+    );
     expect(
       theme.scaffoldBackgroundColor,
       isNot(AppThemeTokens.scaffoldBackground),
@@ -67,36 +73,8 @@ void main() {
     );
     _expectColorSchemeMatchesPalette(theme.colorScheme, palette);
     _expectComponentThemesMatchScheme(theme);
+    expect(theme.colorScheme.surfaceContainer, isNot(Colors.white));
     expect(theme.extension<Y300ThemeExtension>(), isNotNull);
-  });
-
-  test('AppThemePalette.light preserves the shell baseline tokens', () {
-    final palette = AppThemePalette.light();
-
-    expect(palette.brightness, Brightness.light);
-    expect(palette.seedColor, AppThemeTokens.seedColor);
-    expect(palette.scaffoldBackground, AppThemeTokens.scaffoldBackground);
-    expect(palette.appBarBackground, AppThemeTokens.appBarBackground);
-    expect(palette.appBarForeground, AppThemeTokens.appBarForeground);
-    expect(
-      palette.navigationBarBackground,
-      AppThemeTokens.navigationBarBackground,
-    );
-  });
-
-  test('AppThemePalette.dark exposes dark shell colors', () {
-    final palette = AppThemePalette.dark();
-
-    expect(palette.brightness, Brightness.dark);
-    expect(
-      palette.scaffoldBackground,
-      isNot(AppThemeTokens.scaffoldBackground),
-    );
-    expect(palette.appBarBackground, isNot(AppThemeTokens.appBarBackground));
-    expect(
-      palette.navigationBarBackground,
-      isNot(AppThemeTokens.navigationBarBackground),
-    );
   });
 
   test('warm paper native semantic colors preserve the legacy light UI', () {
@@ -251,28 +229,6 @@ void main() {
     },
   );
 
-  test('AppTheme.dark component themes avoid light default surfaces', () {
-    final theme = AppTheme.dark();
-    final scheme = theme.colorScheme;
-
-    expect(theme.popupMenuTheme.color, scheme.surfaceContainer);
-    expect(
-      theme.bottomSheetTheme.modalBackgroundColor,
-      scheme.surfaceContainer,
-    );
-    expect(
-      theme.sliderTheme.inactiveTrackColor,
-      scheme.surfaceContainerHighest,
-    );
-    expect(theme.sliderTheme.trackHeight, 4);
-    expect(theme.sliderTheme.overlayColor, Colors.transparent);
-    expect(theme.sliderTheme.overlayShape, SliderComponentShape.noOverlay);
-    expect(theme.sliderTheme.showValueIndicator, ShowValueIndicator.never);
-    expect(theme.inputDecorationTheme.fillColor, scheme.surfaceContainer);
-    expect(theme.popupMenuTheme.color, isNot(Colors.white));
-    expect(theme.bottomSheetTheme.modalBackgroundColor, isNot(Colors.white));
-  });
-
   testWidgets('Y300App wires AppTheme into MaterialApp with saved theme mode', (
     tester,
   ) async {
@@ -388,40 +344,6 @@ void main() {
       materialApp.theme!.extension<Y300ThemeExtension>()!.nativeContent.card,
       const Color(0xFFFFF8FA),
     );
-  });
-
-  testWidgets('AppTheme.dark builds common Material controls', (tester) async {
-    await tester.pumpWidget(
-      LocalizedTestApp(
-        theme: AppTheme.dark(),
-        home: Scaffold(
-          body: Column(
-            children: [
-              PopupMenuButton<String>(
-                itemBuilder: (context) => const [
-                  PopupMenuItem<String>(value: 'refresh', child: Text('刷新')),
-                ],
-              ),
-              SegmentedButton<int>(
-                segments: const [
-                  ButtonSegment<int>(value: 0, label: Text('A')),
-                  ButtonSegment<int>(value: 1, label: Text('B')),
-                ],
-                selected: const {0},
-                onSelectionChanged: (_) {},
-              ),
-              Slider(value: 0.5, onChanged: (_) {}),
-              const TextField(decoration: InputDecoration(labelText: '搜索')),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    expect(find.byType(PopupMenuButton<String>), findsOneWidget);
-    expect(find.byType(SegmentedButton<int>), findsOneWidget);
-    expect(find.byType(Slider), findsOneWidget);
-    expect(find.byType(TextField), findsOneWidget);
   });
 
   testWidgets('Y300App falls back to light while settings load', (

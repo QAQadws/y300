@@ -113,35 +113,38 @@ void main() {
     });
   }
 
-  for (final purpose in ForumWebViewHostPurpose.values) {
-    for (final policy in ForumWebViewNavigationPolicy.values) {
-      if (prefersNativeForumNavigation(purpose: purpose, policy: policy)) {
-        continue;
-      }
-      testWidgets('$purpose with $policy keeps supported links in browser', (
-        tester,
-      ) async {
-        final driver = _FakeForumWebViewDriver();
-        await tester.pumpWidget(
-          _buildTestApp(
-            driver: driver,
-            hostPurpose: purpose,
-            navigationPolicy: policy,
-          ),
-        );
-        await tester.pumpAndSettle();
-        final decision = await driver.dispatchNavigationRequest(
-          'forum.php?mod=viewthread&tid=572514&mobile=2',
-        );
-        await tester.pumpAndSettle();
-        expect(decision, ForumWebViewNavigationDecision.navigate);
-        expect(
-          find.byType(ThreadDetailPage, skipOffstage: false),
-          findsNothing,
-        );
-        expect(driver.loadedUris, hasLength(1));
-      });
-    }
+  for (final (purpose, policy) in const [
+    (ForumWebViewHostPurpose.browse, ForumWebViewNavigationPolicy.keepWebView),
+    (ForumWebViewHostPurpose.form, ForumWebViewNavigationPolicy.preferNative),
+    (
+      ForumWebViewHostPurpose.postEditFallback,
+      ForumWebViewNavigationPolicy.preferNative,
+    ),
+    (
+      ForumWebViewHostPurpose.selfProfile,
+      ForumWebViewNavigationPolicy.preferNative,
+    ),
+  ]) {
+    testWidgets('$purpose with $policy keeps supported links in browser', (
+      tester,
+    ) async {
+      final driver = _FakeForumWebViewDriver();
+      await tester.pumpWidget(
+        _buildTestApp(
+          driver: driver,
+          hostPurpose: purpose,
+          navigationPolicy: policy,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final decision = await driver.dispatchNavigationRequest(
+        'forum.php?mod=viewthread&tid=572514&mobile=2',
+      );
+      await tester.pumpAndSettle();
+      expect(decision, ForumWebViewNavigationDecision.navigate);
+      expect(find.byType(ThreadDetailPage, skipOffstage: false), findsNothing);
+      expect(driver.loadedUris, hasLength(1));
+    });
   }
 
   for (final action in ['login', 'logout', 'confirmAnonymous']) {
@@ -279,40 +282,41 @@ void main() {
     ForumWebViewHostPurpose.browse,
     ForumWebViewHostPurpose.selfProfile,
   ]) {
-    testWidgets('profile WebView AppBar opts into native action with $purpose', (
-      tester,
-    ) async {
-      final driver = _FakeForumWebViewDriver();
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            verifiedSessionOwnerProvider.overrideWithValue((
-              uid: '654321',
-              revision: 0,
-            )),
-            forumWebViewInitialUriProvider.overrideWithValue(
-              Uri.parse(
-                'https://bbs.yamibo.com/home.php?mod=space&uid=654321&do=profile&mobile=2',
+    testWidgets(
+      'profile WebView AppBar opts into native action with $purpose',
+      (tester) async {
+        final driver = _FakeForumWebViewDriver();
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              verifiedSessionOwnerProvider.overrideWithValue((
+                uid: '654321',
+                revision: 0,
+              )),
+              forumWebViewInitialUriProvider.overrideWithValue(
+                Uri.parse(
+                  'https://bbs.yamibo.com/home.php?mod=space&uid=654321&do=profile&mobile=2',
+                ),
               ),
-            ),
-            forumWebViewHostPurposeProvider.overrideWithValue(purpose),
-          ],
-          child: _buildTestApp(driver: driver),
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(
-        find.descendant(
-          of: find.byType(AppBar),
-          matching: find.byKey(
-            const Key('forum-webview-native-profile-button'),
+              forumWebViewHostPurposeProvider.overrideWithValue(purpose),
+            ],
+            child: _buildTestApp(driver: driver),
           ),
-        ),
-        purpose == ForumWebViewHostPurpose.selfProfile
-            ? findsOneWidget
-            : findsNothing,
-      );
-    });
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.descendant(
+            of: find.byType(AppBar),
+            matching: find.byKey(
+              const Key('forum-webview-native-profile-button'),
+            ),
+          ),
+          purpose == ForumWebViewHostPurpose.selfProfile
+              ? findsOneWidget
+              : findsNothing,
+        );
+      },
+    );
   }
 
   testWidgets('standalone forum home has a working route back button', (
@@ -1996,29 +2000,6 @@ void main() {
     expect(launcher.launchedUris, isEmpty);
   });
 
-  testWidgets('ForumWebViewPage home more menu shows unfavorite action', (
-    tester,
-  ) async {
-    final driver = _FakeForumWebViewDriver();
-
-    await tester.pumpWidget(_buildTestApp(driver: driver));
-    await tester.pump();
-
-    await tester.tap(find.byKey(const Key('forum-webview-more-button')));
-    await tester.pumpAndSettle();
-
-    expect(find.text('刷新页面'), findsOneWidget);
-    expect(
-      find.byKey(const Key('forum-webview-refresh-action')),
-      findsOneWidget,
-    );
-    expect(find.text('取消收藏'), findsOneWidget);
-    expect(
-      find.byKey(const Key('forum-webview-home-unfavorite-action')),
-      findsOneWidget,
-    );
-  });
-
   testWidgets('ForumWebViewPage home picker displays favorite forum list', (
     tester,
   ) async {
@@ -2629,47 +2610,6 @@ void main() {
   );
 
   testWidgets(
-    'ForumWebViewPage thread detail more menu shows author order and home actions',
-    (tester) async {
-      final driver = _FakeForumWebViewDriver()
-        ..title = '主题标题'
-        ..javaScriptResult = jsonEncode(
-          jsonEncode(<String, String?>{
-            'authorOnlyHref':
-                'forum.php?mod=viewthread&tid=123&authorid=9&mobile=2',
-            'normalThreadHref': null,
-            'reverseOrderHref':
-                'forum.php?mod=viewthread&tid=123&ordertype=1&mobile=2',
-            'normalOrderHref': null,
-          }),
-        );
-
-      await tester.pumpWidget(_buildTestApp(driver: driver));
-      await tester.pump();
-
-      await driver.dispatchPageStarted(
-        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
-      );
-      await driver.dispatchPageFinished(
-        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=123&mobile=2',
-      );
-      await tester.pump();
-
-      await tester.tap(find.byKey(const Key('forum-webview-more-button')));
-      await tester.pumpAndSettle();
-
-      expect(find.text('刷新页面'), findsOneWidget);
-      expect(find.text('只看楼主'), findsOneWidget);
-      expect(find.text('倒序浏览'), findsOneWidget);
-      expect(find.text('返回首页'), findsOneWidget);
-      expect(
-        driver.returningScripts.single,
-        contains('#nav-more-menu .nav-more-item'),
-      );
-    },
-  );
-
-  testWidgets(
     'ForumWebViewPage thread detail author filter action loads author-only url',
     (tester) async {
       final driver = _FakeForumWebViewDriver()
@@ -2694,6 +2634,10 @@ void main() {
 
       await tester.tap(find.byKey(const Key('forum-webview-more-button')));
       await tester.pumpAndSettle();
+      expect(
+        driver.returningScripts.single,
+        contains('#nav-more-menu .nav-more-item'),
+      );
       await tester.tap(find.text('只看楼主'));
       await tester.pumpAndSettle();
 

@@ -43,6 +43,12 @@ import '../support/message_avatar_test_cache.dart';
 const _output = String.fromEnvironment('MESSAGE_VISUAL_OUTPUT');
 const _font = String.fromEnvironment('MESSAGE_VISUAL_FONT');
 
+const _regressionThemes = {
+  (AppThemeFamily.warmPaper, Brightness.light),
+  (AppThemeFamily.moonWhite, Brightness.dark),
+  (AppThemeFamily.plumPurple, Brightness.light),
+};
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() async {
@@ -60,6 +66,12 @@ void main() {
 
   for (final family in AppThemeFamily.values) {
     for (final brightness in Brightness.values) {
+      // Review exports sample every palette. The full interaction workflow
+      // only needs representative light and dark themes in ordinary CI.
+      if (_output.isEmpty &&
+          !_regressionThemes.contains((family, brightness))) {
+        continue;
+      }
       testWidgets(
         '${family.name} ${brightness.name} uses native message surfaces throughout',
         (tester) async {

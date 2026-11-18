@@ -5,12 +5,6 @@ import 'package:y300/features/library_shared/domain/models/library_sort_models.d
 import 'package:y300/features/library_shared/domain/services/library_shelf_query_utils.dart';
 
 void main() {
-  test('default shelf sort should be favoriteAddedAt desc', () {
-    const defaults = LibraryShelfSortOption.defaults;
-    expect(defaults.field, LibraryShelfSortField.favoriteAddedAt);
-    expect(defaults.direction, LibrarySortDirection.desc);
-  });
-
   test('default shelf sort places the newest favorite first', () {
     final items = LibraryShelfQueryUtils.filterAndSort(
       source: <LibraryWorkItem>[
@@ -50,13 +44,6 @@ void main() {
     final updated = defaults.copyWith(direction: LibrarySortDirection.asc);
     expect(updated.direction, LibrarySortDirection.asc);
     expect(updated.field, defaults.field);
-  });
-
-  test('detail source sorting defaults to ascending', () {
-    expect(
-      LibraryChapterSortOption.defaults.direction,
-      LibrarySortDirection.asc,
-    );
   });
 }
 

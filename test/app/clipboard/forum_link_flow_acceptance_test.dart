@@ -109,6 +109,8 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    // The shared route tests cover every suffix. Exercise each real entry
+    // with the article and representative comment destinations here.
     for (final scenario
         in <
           ({
@@ -118,6 +120,7 @@ void main() {
             String? cid,
             bool last,
             bool focus,
+            _Entry? via,
           })
         >[
           (
@@ -127,6 +130,7 @@ void main() {
             cid: null,
             last: false,
             focus: false,
+            via: null,
           ),
           (
             name: 'comment page',
@@ -135,6 +139,7 @@ void main() {
             cid: null,
             last: false,
             focus: false,
+            via: _Entry.plainText,
           ),
           (
             name: 'specific comment',
@@ -143,6 +148,7 @@ void main() {
             cid: '31',
             last: false,
             focus: true,
+            via: _Entry.clipboard,
           ),
           (
             name: 'last comment page',
@@ -151,6 +157,7 @@ void main() {
             cid: null,
             last: true,
             focus: true,
+            via: _Entry.selectedText,
           ),
           (
             name: 'comment section',
@@ -159,6 +166,7 @@ void main() {
             cid: null,
             last: false,
             focus: true,
+            via: _Entry.plainText,
           ),
           (
             name: 'comment anchor',
@@ -167,8 +175,10 @@ void main() {
             cid: '31',
             last: false,
             focus: true,
+            via: _Entry.clipboard,
           ),
         ]) {
+      if (scenario.via != null && scenario.via != entry) continue;
       testWidgets('${entry.name} opens native blog ${scenario.name}', (
         tester,
       ) async {

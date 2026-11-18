@@ -51,6 +51,17 @@ const _font = String.fromEnvironment('BLOG_VISUAL_FONT');
 const _smileyRoot = String.fromEnvironment('BLOG_VISUAL_SMILIES');
 const _capture = Key('blog-visual-capture');
 
+const _draftRegressionLayouts = {
+  (AppThemeFamily.warmPaper, Brightness.light, false),
+  (AppThemeFamily.warmPaper, Brightness.dark, true),
+};
+
+const _readingRegressionLayouts = {
+  (AppThemeFamily.warmPaper, Brightness.light, false),
+  (AppThemeFamily.moonWhite, Brightness.light, true),
+  (AppThemeFamily.plumPurple, Brightness.dark, true),
+};
+
 void main() {
   setUpAll(() async {
     if (_output.isEmpty) return;
@@ -69,62 +80,74 @@ void main() {
       for (final compact in [false, true]) {
         final name =
             '${family.name}-${brightness.name}-${compact ? 'large' : 'normal'}';
-        testWidgets('$name draft recovery and reset fit the viewport', (
-          tester,
-        ) async {
-          final host = _Host(
-            AppTheme.build(family: family, brightness: brightness),
-            compact,
-          );
-          host.drafts.values['101'] = BlogDraftSnapshot(
-            accountId: '101',
-            updatedAt: DateTime(2020),
-            subject: '尚未确认发布的日志草稿',
-            bodyHtml: '<p><b>保留格式与正文</b></p>',
-            pendingSubmission: true,
-            visibility: UserBlogVisibility.passwordProtected,
-          );
-          await host.pump(
+        final layout = (family, brightness, compact);
+        // Screenshot exports keep every combination. Draft behavior also has
+        // dedicated coverage in blog_editor_page_test.dart.
+        if (_output.isNotEmpty || _draftRegressionLayouts.contains(layout)) {
+          testWidgets('$name draft recovery and reset fit the viewport', (
             tester,
-            const BlogEditorPage(
-              target: UserBlogTarget(
-                actorUserId: '101',
-                ownerUserId: '101',
-                action: UserBlogAction.create,
+          ) async {
+            final host = _Host(
+              AppTheme.build(family: family, brightness: brightness),
+              compact,
+            );
+            host.drafts.values['101'] = BlogDraftSnapshot(
+              accountId: '101',
+              updatedAt: DateTime(2020),
+              subject: '尚未确认发布的日志草稿',
+              bodyHtml: '<p><b>保留格式与正文</b></p>',
+              pendingSubmission: true,
+              visibility: UserBlogVisibility.passwordProtected,
+            );
+            await host.pump(
+              tester,
+              const BlogEditorPage(
+                target: UserBlogTarget(
+                  actorUserId: '101',
+                  ownerUserId: '101',
+                  action: UserBlogAction.create,
+                ),
               ),
-            ),
-          );
-          expect(
-            tester
-                .widget<IconButton>(find.byKey(const Key('blog-editor-submit')))
-                .onPressed,
-            isNull,
-          );
-          await tester.ensureVisible(
-            find.byKey(const Key('blog-draft-resume')),
-          );
-          await tester.pumpAndSettle();
-          await _save(tester, '$name-draft-pending');
-          await tester.tap(find.byKey(const Key('blog-editor-settings')));
-          await tester.pumpAndSettle();
-          final reset = find.byKey(const Key('blog-draft-reset'));
-          await tester.ensureVisible(reset);
-          await tester.pumpAndSettle();
-          expect(reset.hitTestable(), findsOneWidget);
-          expect(
-            tester.widget<BottomSheet>(find.byType(BottomSheet)).showDragHandle,
-            isFalse,
-          );
-          await _save(tester, '$name-draft-settings');
-          await tester.tap(reset);
-          await tester.pumpAndSettle();
-          await _save(tester, '$name-draft-reset');
-          await tester.tap(find.byKey(const Key('blog-draft-reset-confirm')));
-          await tester.pumpAndSettle();
-          expect(host.drafts.values, isEmpty);
-          expect(tester.takeException(), isNull);
-          await tester.pumpWidget(const SizedBox.shrink());
-        });
+            );
+            expect(
+              tester
+                  .widget<IconButton>(
+                    find.byKey(const Key('blog-editor-submit')),
+                  )
+                  .onPressed,
+              isNull,
+            );
+            await tester.ensureVisible(
+              find.byKey(const Key('blog-draft-resume')),
+            );
+            await tester.pumpAndSettle();
+            await _save(tester, '$name-draft-pending');
+            await tester.tap(find.byKey(const Key('blog-editor-settings')));
+            await tester.pumpAndSettle();
+            final reset = find.byKey(const Key('blog-draft-reset'));
+            await tester.ensureVisible(reset);
+            await tester.pumpAndSettle();
+            expect(reset.hitTestable(), findsOneWidget);
+            expect(
+              tester
+                  .widget<BottomSheet>(find.byType(BottomSheet))
+                  .showDragHandle,
+              isFalse,
+            );
+            await _save(tester, '$name-draft-settings');
+            await tester.tap(reset);
+            await tester.pumpAndSettle();
+            await _save(tester, '$name-draft-reset');
+            await tester.tap(find.byKey(const Key('blog-draft-reset-confirm')));
+            await tester.pumpAndSettle();
+            expect(host.drafts.values, isEmpty);
+            expect(tester.takeException(), isNull);
+            await tester.pumpWidget(const SizedBox.shrink());
+          });
+        }
+        if (_output.isEmpty && !_readingRegressionLayouts.contains(layout)) {
+          continue;
+        }
         testWidgets('$name keeps reading surfaces, links and inputs usable', (
           tester,
         ) async {

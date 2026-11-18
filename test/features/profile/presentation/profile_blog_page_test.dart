@@ -28,73 +28,72 @@ import '../test_support/profile_repository_fixture.dart';
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  for (final source in ['list', 'detail', 'comment']) {
-    for (final avatar in [false, true]) {
-      testWidgets(
-        '$source ${avatar ? 'avatar' : 'name'} opens the source author and preserves the article on return',
-        (tester) async {
-          final profiles = ProfileRepositoryFixture();
-          final directory = _FakeBlogDirectoryRepository();
-          final details = _FakeBlogDetailRepository(commentAuthorId: '909');
-          await tester.pumpWidget(
-            ProviderScope(
-              overrides: [
-                blogAccountIdProvider.overrideWithValue('101'),
-                verifiedSessionOwnerProvider.overrideWithValue((
-                  uid: '101',
-                  revision: 0,
-                )),
-                forumUserProfileRepositoryProvider.overrideWithValue(profiles),
-                userBlogDirectoryRepositoryProvider.overrideWithValue(
-                  directory,
-                ),
-                userBlogDetailRepositoryProvider.overrideWithValue(details),
-                forumImageRefererProvider.overrideWithValue(
-                  'https://example.test/',
-                ),
-              ],
-              child: const LocalizedTestApp(home: ProfileBlogPage()),
-            ),
-          );
+  for (final (source, avatar) in const [
+    ('list', false),
+    ('detail', true),
+    ('comment', false),
+  ]) {
+    testWidgets(
+      '$source ${avatar ? 'avatar' : 'name'} opens the source author and preserves the article on return',
+      (tester) async {
+        final profiles = ProfileRepositoryFixture();
+        final directory = _FakeBlogDirectoryRepository();
+        final details = _FakeBlogDetailRepository(commentAuthorId: '909');
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              blogAccountIdProvider.overrideWithValue('101'),
+              verifiedSessionOwnerProvider.overrideWithValue((
+                uid: '101',
+                revision: 0,
+              )),
+              forumUserProfileRepositoryProvider.overrideWithValue(profiles),
+              userBlogDirectoryRepositoryProvider.overrideWithValue(directory),
+              userBlogDetailRepositoryProvider.overrideWithValue(details),
+              forumImageRefererProvider.overrideWithValue(
+                'https://example.test/',
+              ),
+            ],
+            child: const LocalizedTestApp(home: ProfileBlogPage()),
+          ),
+        );
+        await tester.pumpAndSettle();
+        if (source != 'list') {
+          await tester.tap(find.byKey(const Key('profile-blog-item-117558')));
           await tester.pumpAndSettle();
-          if (source != 'list') {
-            await tester.tap(find.byKey(const Key('profile-blog-item-117558')));
-            await tester.pumpAndSettle();
-          }
-          final author = source == 'comment' ? '909' : '257582';
-          final target = avatar
-              ? find
-                    .descendant(
-                      of: find.byWidgetPredicate(
-                        (widget) =>
-                            widget is ProfileUserLink &&
-                            widget.userId == author,
-                      ),
-                      matching: find.byType(ForumCachedAvatar),
-                    )
-                    .first
-              : find.byKey(
-                  Key(switch (source) {
-                    'list' => 'blog-list-author-117558',
-                    'detail' => 'blog-detail-author',
-                    _ => 'blog-comment-author-646846',
-                  }),
-                );
-          await tester.ensureVisible(target);
-          await tester.pumpAndSettle();
-          expect(profiles.queries, isEmpty);
-          await tester.tap(target);
-          await tester.pumpAndSettle();
-          expect(find.byType(UserProfilePage), findsOneWidget);
-          expect(profiles.queries.single.userId, author);
-          await tester.tap(find.byType(BackButton));
-          await tester.pumpAndSettle();
-          expect(directory.queries, hasLength(1));
-          expect(details.queries, hasLength(source == 'list' ? 0 : 1));
-          expect(tester.takeException(), isNull);
-        },
-      );
-    }
+        }
+        final author = source == 'comment' ? '909' : '257582';
+        final target = avatar
+            ? find
+                  .descendant(
+                    of: find.byWidgetPredicate(
+                      (widget) =>
+                          widget is ProfileUserLink && widget.userId == author,
+                    ),
+                    matching: find.byType(ForumCachedAvatar),
+                  )
+                  .first
+            : find.byKey(
+                Key(switch (source) {
+                  'list' => 'blog-list-author-117558',
+                  'detail' => 'blog-detail-author',
+                  _ => 'blog-comment-author-646846',
+                }),
+              );
+        await tester.ensureVisible(target);
+        await tester.pumpAndSettle();
+        expect(profiles.queries, isEmpty);
+        await tester.tap(target);
+        await tester.pumpAndSettle();
+        expect(find.byType(UserProfilePage), findsOneWidget);
+        expect(profiles.queries.single.userId, author);
+        await tester.tap(find.byType(BackButton));
+        await tester.pumpAndSettle();
+        expect(directory.queries, hasLength(1));
+        expect(details.queries, hasLength(source == 'list' ? 0 : 1));
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 
   testWidgets(
@@ -232,103 +231,100 @@ void main() {
     );
   }
 
-  for (final fromDetail in [false, true]) {
-    for (final action in blogManagementActions) {
-      for (final applied in [false, true]) {
-        testWidgets(
-          '$action from ${fromDetail ? 'detail' : 'list'} updates only when applied=$applied',
-          (tester) async {
-            final directory = _FakeBlogDirectoryRepository(
-              blogActions: {action},
-            );
-            final details = _FakeBlogDetailRepository(blogActions: {action});
-            final operations = BlogOperationFixture(autoPrepare: true);
-            await tester.pumpWidget(
-              ProviderScope(
-                overrides: [
-                  blogAccountIdProvider.overrideWithValue('257582'),
-                  userBlogDirectoryRepositoryProvider.overrideWithValue(
-                    directory,
-                  ),
-                  userBlogDetailRepositoryProvider.overrideWithValue(details),
-                  userBlogOperationsProvider.overrideWithValue(operations),
-                  forumImageRefererProvider.overrideWithValue(
-                    'https://example.test/',
-                  ),
-                ],
-                child: const LocalizedTestApp(home: ProfileBlogPage()),
+  // A confirmed deletion changes route state differently from pinning.
+  // Both entry routes also exercise an unconfirmed write.
+  for (final (fromDetail, action, applied) in const [
+    (false, UserBlogAction.delete, true),
+    (true, UserBlogAction.delete, true),
+    (false, UserBlogAction.pin, true),
+    (true, UserBlogAction.unpin, true),
+    (false, UserBlogAction.unpin, false),
+    (true, UserBlogAction.pin, false),
+  ]) {
+    testWidgets(
+      '$action from ${fromDetail ? 'detail' : 'list'} updates only when applied=$applied',
+      (tester) async {
+        final directory = _FakeBlogDirectoryRepository(blogActions: {action});
+        final details = _FakeBlogDetailRepository(blogActions: {action});
+        final operations = BlogOperationFixture(autoPrepare: true);
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              blogAccountIdProvider.overrideWithValue('257582'),
+              userBlogDirectoryRepositoryProvider.overrideWithValue(directory),
+              userBlogDetailRepositoryProvider.overrideWithValue(details),
+              userBlogOperationsProvider.overrideWithValue(operations),
+              forumImageRefererProvider.overrideWithValue(
+                'https://example.test/',
               ),
-            );
-            await tester.pumpAndSettle();
-            final l10n = AppLocalizations.of(
-              tester.element(find.byType(ProfileBlogPage)),
-            );
-            if (fromDetail) {
-              await tester.tap(
-                find.byKey(const Key('profile-blog-item-117558')),
-              );
-              await tester.pumpAndSettle();
-            }
-            if (fromDetail) {
-              await tester.longPress(find.byKey(const Key('blog-detail-card')));
-            } else {
-              await tester.tap(
-                find.byKey(const Key('blog-list-actions-117558')),
-              );
-            }
-            await tester.pumpAndSettle();
-            for (final other in blogManagementActions.where(
-              (other) => other != action,
-            )) {
-              expect(find.text(blogActionLabel(l10n, other)), findsNothing);
-            }
-            await tester.tap(find.text(blogActionLabel(l10n, action)));
-            await tester.pumpAndSettle();
-            expect(find.byType(BlogActionPage), findsOneWidget);
-            expect(operations.preparations.single.target.blogId, '117558');
-            expect(operations.preparations.single.target.ownerUserId, '257582');
-            expect(operations.submissions, isEmpty);
-            await tester.tap(find.byKey(const Key('blog-action-submit')));
-            await tester.pump();
-            expect(directory.queries, hasLength(1));
-            expect(details.queries, hasLength(fromDetail ? 1 : 0));
-            if (applied) {
-              directory.removed = action == UserBlogAction.delete;
-              operations.applied();
-            } else {
-              operations.submissions.last.result.complete(
-                const DataCommandOutcomeUnknown(blogActionWriteFailure),
-              );
-            }
-            await tester.pumpAndSettle();
-            if (!applied) {
-              expect(find.byType(BlogActionPage), findsOneWidget);
-              expect(find.byKey(const Key('blog-action-retry')), findsNothing);
-              await tester.tap(find.byType(BackButton));
-              await tester.pumpAndSettle();
-            }
-            if (fromDetail && !(applied && action == UserBlogAction.delete)) {
-              expect(find.byType(ProfileBlogDetailPage), findsOneWidget);
-              expect(details.queries, hasLength(applied ? 2 : 1));
-              await tester.tap(find.byType(BackButton));
-              await tester.pumpAndSettle();
-            }
-            expect(find.byType(ProfileBlogPage), findsOneWidget);
-            expect(directory.queries, hasLength(applied ? 2 : 1));
-            if (applied) {
-              expect(directory.policies.last, CacheLoadPolicy.networkFirst);
-            }
-            if (applied && action == UserBlogAction.delete) {
-              expect(
-                find.byKey(const Key('profile-blog-item-117558')),
-                findsNothing,
-              );
-            }
-            expect(tester.takeException(), isNull);
-          },
+            ],
+            child: const LocalizedTestApp(home: ProfileBlogPage()),
+          ),
         );
-      }
-    }
+        await tester.pumpAndSettle();
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(ProfileBlogPage)),
+        );
+        if (fromDetail) {
+          await tester.tap(find.byKey(const Key('profile-blog-item-117558')));
+          await tester.pumpAndSettle();
+        }
+        if (fromDetail) {
+          await tester.longPress(find.byKey(const Key('blog-detail-card')));
+        } else {
+          await tester.tap(find.byKey(const Key('blog-list-actions-117558')));
+        }
+        await tester.pumpAndSettle();
+        for (final other in blogManagementActions.where(
+          (other) => other != action,
+        )) {
+          expect(find.text(blogActionLabel(l10n, other)), findsNothing);
+        }
+        await tester.tap(find.text(blogActionLabel(l10n, action)));
+        await tester.pumpAndSettle();
+        expect(find.byType(BlogActionPage), findsOneWidget);
+        expect(operations.preparations.single.target.blogId, '117558');
+        expect(operations.preparations.single.target.ownerUserId, '257582');
+        expect(operations.submissions, isEmpty);
+        await tester.tap(find.byKey(const Key('blog-action-submit')));
+        await tester.pump();
+        expect(directory.queries, hasLength(1));
+        expect(details.queries, hasLength(fromDetail ? 1 : 0));
+        if (applied) {
+          directory.removed = action == UserBlogAction.delete;
+          operations.applied();
+        } else {
+          operations.submissions.last.result.complete(
+            const DataCommandOutcomeUnknown(blogActionWriteFailure),
+          );
+        }
+        await tester.pumpAndSettle();
+        if (!applied) {
+          expect(find.byType(BlogActionPage), findsOneWidget);
+          expect(find.byKey(const Key('blog-action-retry')), findsNothing);
+          await tester.tap(find.byType(BackButton));
+          await tester.pumpAndSettle();
+        }
+        if (fromDetail && !(applied && action == UserBlogAction.delete)) {
+          expect(find.byType(ProfileBlogDetailPage), findsOneWidget);
+          expect(details.queries, hasLength(applied ? 2 : 1));
+          await tester.tap(find.byType(BackButton));
+          await tester.pumpAndSettle();
+        }
+        expect(find.byType(ProfileBlogPage), findsOneWidget);
+        expect(directory.queries, hasLength(applied ? 2 : 1));
+        if (applied) {
+          expect(directory.policies.last, CacheLoadPolicy.networkFirst);
+        }
+        if (applied && action == UserBlogAction.delete) {
+          expect(
+            find.byKey(const Key('profile-blog-item-117558')),
+            findsNothing,
+          );
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 
   for (final action in UserBlogCommentAction.values) {

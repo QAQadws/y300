@@ -41,43 +41,37 @@ import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 void main() {
-  for (final mode in [
-    NovelReaderFlowMode.pagedLtr,
-    NovelReaderFlowMode.pagedRtl,
+  for (final (mode, effect) in [
+    (NovelReaderFlowMode.pagedLtr, NovelReaderPageEffect.fade),
+    (NovelReaderFlowMode.pagedRtl, NovelReaderPageEffect.cover),
   ]) {
-    for (final effect in [
-      NovelReaderPageEffect.fade,
-      NovelReaderPageEffect.cover,
-    ]) {
-      testWidgets(
-        '$effect carries each page indicator through a turn in $mode',
-        (tester) async {
-          final coordinator = _BudgetPaginationCoordinator();
-          final host = _BudgetSurfaceHost(coordinator, enforceBudgets: false)
-            ..preferences = NovelReaderPreferences.defaults().copyWith(
-              flowMode: mode,
-              pageEffect: effect,
-            );
-          _disposeBudgetHost(tester, coordinator);
-          await _pumpBudgetHost(tester, host);
-          coordinator.emit(0, pageCount: 3, isComplete: true);
-          await tester.pumpAndSettle();
-          final finder = find.byKey(const Key('novel-reader-paged-page-view'));
-          final l10n = AppLocalizations.of(tester.element(finder));
-          final controller = tester.widget<PageView>(finder).controller!;
-          controller.jumpTo(controller.position.viewportDimension * .25);
-          await tester.pump();
-          expect(find.text(l10n.novelPageIndicator(1, '3')), findsOneWidget);
-          expect(find.text(l10n.novelPageIndicator(2, '3')), findsOneWidget);
-          controller.jumpToPage(1);
-          await tester.pumpAndSettle();
-          expect(find.text(l10n.novelPageIndicator(2, '3')), findsOneWidget);
-          expect(host.positions.last.pageIndex, 1);
-          expect(coordinator.attempts, hasLength(1));
-          expect(tester.takeException(), isNull);
-        },
-      );
-    }
+    testWidgets('$effect carries each page indicator through a turn in $mode', (
+      tester,
+    ) async {
+      final coordinator = _BudgetPaginationCoordinator();
+      final host = _BudgetSurfaceHost(coordinator, enforceBudgets: false)
+        ..preferences = NovelReaderPreferences.defaults().copyWith(
+          flowMode: mode,
+          pageEffect: effect,
+        );
+      _disposeBudgetHost(tester, coordinator);
+      await _pumpBudgetHost(tester, host);
+      coordinator.emit(0, pageCount: 3, isComplete: true);
+      await tester.pumpAndSettle();
+      final finder = find.byKey(const Key('novel-reader-paged-page-view'));
+      final l10n = AppLocalizations.of(tester.element(finder));
+      final controller = tester.widget<PageView>(finder).controller!;
+      controller.jumpTo(controller.position.viewportDimension * .25);
+      await tester.pump();
+      expect(find.text(l10n.novelPageIndicator(1, '3')), findsOneWidget);
+      expect(find.text(l10n.novelPageIndicator(2, '3')), findsOneWidget);
+      controller.jumpToPage(1);
+      await tester.pumpAndSettle();
+      expect(find.text(l10n.novelPageIndicator(2, '3')), findsOneWidget);
+      expect(host.positions.last.pageIndex, 1);
+      expect(coordinator.attempts, hasLength(1));
+      expect(tester.takeException(), isNull);
+    });
   }
 
   for (final mode in [

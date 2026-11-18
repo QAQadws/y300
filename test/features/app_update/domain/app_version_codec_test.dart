@@ -29,6 +29,7 @@ void main() {
       'v01.0.0',
       'v1.0.0-beta',
       'v1.0.0+5',
+      'v 1.0.0',
     ]) {
       expect(codec.parseReleaseTag(tag), isNull, reason: tag);
     }

@@ -48,29 +48,30 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
-  for (final purpose in ForumWebViewHostPurpose.values) {
-    for (final policy in ForumWebViewNavigationPolicy.values) {
-      if (prefersNativeForumNavigation(purpose: purpose, policy: policy)) {
-        continue;
-      }
-      testWidgets('initial thread retains browser for $purpose/$policy', (
-        tester,
-      ) async {
-        final container = ProviderContainer();
-        addTearDown(container.dispose);
-        final route = container.read(forumWebViewRouteFactoryProvider)(
-          ForumWebViewLaunchConfig(
-            initialUri: Uri.parse(
-              'https://bbs.yamibo.com/thread-572514-1-1.html',
-            ),
-            purpose: purpose,
-            navigationPolicy: policy,
+  for (final (purpose, policy) in const [
+    (ForumWebViewHostPurpose.browse, ForumWebViewNavigationPolicy.keepWebView),
+    (
+      ForumWebViewHostPurpose.postEditFallback,
+      ForumWebViewNavigationPolicy.preferNative,
+    ),
+  ]) {
+    testWidgets('initial thread retains browser for $purpose/$policy', (
+      tester,
+    ) async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final route = container.read(forumWebViewRouteFactoryProvider)(
+        ForumWebViewLaunchConfig(
+          initialUri: Uri.parse(
+            'https://bbs.yamibo.com/thread-572514-1-1.html',
           ),
-        );
-        expect(await _inspectRouteBuilder(tester, route), isA<ProviderScope>());
-        expect(tester.takeException(), isNull);
-      });
-    }
+          purpose: purpose,
+          navigationPolicy: policy,
+        ),
+      );
+      expect(await _inspectRouteBuilder(tester, route), isA<ProviderScope>());
+      expect(tester.takeException(), isNull);
+    });
   }
   const friendCases = [
     (query: '', scope: ForumFriendFeedScope.friends, page: 1),

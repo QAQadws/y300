@@ -20,145 +20,146 @@ const _bottomInset = 34.0;
 void main() {
   // Use the actual ScaffoldMessenger and production navigation shape without
   // starting a runtime or calling any clipboard/platform adapter.
-  for (final locale in AppLocalizations.supportedLocales) {
-    for (final kind in ForumClipboardLinkKind.values) {
-      for (final brightness in Brightness.values) {
-        for (final width in [280.0, 360.0]) {
-          for (final scale in [1.0, 2.0]) {
-            testWidgets(
-              '${locale.toLanguageTag()} ${kind.name} ${brightness.name} '
-              '${width.toInt()}px ${scale}x snackbar is accessible and nonmodal',
-              (tester) async {
-                await tester.binding.setSurfaceSize(Size(width, 900));
-                addTearDown(() => tester.binding.setSurfaceSize(null));
-                final semantics = tester.ensureSemantics();
-                try {
-                  final fixture = _NoticeFixture(
-                    locale: locale,
-                    kind: kind,
-                    brightness: brightness,
-                    textScale: scale,
-                  );
-                  await tester.pumpWidget(fixture.build());
-                  await tester.pumpAndSettle();
-                  final bodyBefore = tester.getRect(find.byKey(_bodyKey));
-                  final navigationBefore = tester.getRect(
-                    find.byKey(_navigationKey),
-                  );
-                  final controller = fixture.show(tester);
-                  await tester.pumpAndSettle();
+  // Stress every localized label in the tightest layout. The regular
+  // layout gets one representative per brightness.
+  final layouts = [
+    for (final locale in AppLocalizations.supportedLocales)
+      for (final kind in ForumClipboardLinkKind.values)
+        for (final brightness in Brightness.values)
+          (
+            locale: locale,
+            kind: kind,
+            brightness: brightness,
+            width: 280.0,
+            scale: 2.0,
+          ),
+    (
+      locale: const Locale('zh'),
+      kind: ForumClipboardLinkKind.thread,
+      brightness: Brightness.light,
+      width: 360.0,
+      scale: 1.0,
+    ),
+    (
+      locale: const Locale('zh', 'TW'),
+      kind: ForumClipboardLinkKind.blog,
+      brightness: Brightness.dark,
+      width: 360.0,
+      scale: 1.0,
+    ),
+  ];
 
-                  final context = tester.element(find.byKey(_noticeKey));
-                  final l10n = AppLocalizations.of(context);
-                  final label = _kindLabel(l10n, kind);
-                  expect(Localizations.localeOf(context), locale);
-                  expect(find.text(label), findsOneWidget);
-                  expect(find.text(l10n.clipboardLinkOpen), findsOneWidget);
-                  expect(fixture.visibleCalls, 1);
-                  expect(
-                    find.bySemanticsLabel(RegExp(r'https?://')),
-                    findsNothing,
-                  );
-                  expect(
-                    find.textContaining('https://bbs.yamibo.com'),
-                    findsNothing,
-                  );
-                  expect(
-                    find.descendant(
-                      of: find.byType(SnackBar),
-                      matching: find.byType(ModalBarrier),
-                    ),
-                    findsNothing,
-                  );
+  for (final (:locale, :kind, :brightness, :width, :scale) in layouts) {
+    testWidgets('${locale.toLanguageTag()} ${kind.name} ${brightness.name} '
+        '${width.toInt()}px ${scale}x snackbar is accessible and nonmodal', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(Size(width, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final semantics = tester.ensureSemantics();
+      try {
+        final fixture = _NoticeFixture(
+          locale: locale,
+          kind: kind,
+          brightness: brightness,
+          textScale: scale,
+        );
+        await tester.pumpWidget(fixture.build());
+        await tester.pumpAndSettle();
+        final bodyBefore = tester.getRect(find.byKey(_bodyKey));
+        final navigationBefore = tester.getRect(find.byKey(_navigationKey));
+        final controller = fixture.show(tester);
+        await tester.pumpAndSettle();
 
-                  final snackBar = tester.widget<SnackBar>(
-                    find.byType(SnackBar),
-                  );
-                  expect(snackBar.behavior, SnackBarBehavior.floating);
-                  expect(snackBar.duration, const Duration(seconds: 6));
-                  expect(snackBar.persist, isFalse);
-                  expect(snackBar.showCloseIcon, isFalse);
-                  expect(
-                    find.descendant(
-                      of: find.byType(SnackBar),
-                      matching: find.byType(IconButton),
-                    ),
-                    findsNothing,
-                  );
-                  final announcement = tester.getSemantics(
-                    find.descendant(
-                      of: find.byType(SnackBar),
-                      matching: find.byWidgetPredicate(
-                        (widget) =>
-                            widget is Semantics &&
-                            widget.properties.liveRegion == true,
-                      ),
-                    ),
-                  );
-                  expect(announcement.flagsCollection.isLiveRegion, isTrue);
-                  expect(find.bySemanticsLabel(label), findsOneWidget);
-                  _expectAccessibleAction(
-                    tester,
-                    find.byKey(_openKey),
-                    l10n.clipboardLinkOpen,
-                  );
+        final context = tester.element(find.byKey(_noticeKey));
+        final l10n = AppLocalizations.of(context);
+        final label = _kindLabel(l10n, kind);
+        expect(Localizations.localeOf(context), locale);
+        expect(find.text(label), findsOneWidget);
+        expect(find.text(l10n.clipboardLinkOpen), findsOneWidget);
+        expect(fixture.visibleCalls, 1);
+        expect(find.bySemanticsLabel(RegExp(r'https?://')), findsNothing);
+        expect(find.textContaining('https://bbs.yamibo.com'), findsNothing);
+        expect(
+          find.descendant(
+            of: find.byType(SnackBar),
+            matching: find.byType(ModalBarrier),
+          ),
+          findsNothing,
+        );
 
-                  final notice = tester.getRect(find.byType(SnackBar));
-                  final navigation = tester.getRect(find.byKey(_navigationKey));
-                  expect(notice.left, greaterThanOrEqualTo(0));
-                  expect(notice.right, lessThanOrEqualTo(width));
-                  expect(notice.bottom, lessThanOrEqualTo(navigation.top));
-                  expect(tester.getRect(find.byKey(_bodyKey)), bodyBefore);
-                  expect(navigation, navigationBefore);
-                  expect(navigation.bottom, 900);
-                  final more = find.byKey(
-                    _destinationKey(MainShellDestination.more),
-                  );
-                  expect(
-                    tester.getRect(more).bottom,
-                    lessThanOrEqualTo(900 - _bottomInset),
-                  );
-                  expect(tester.takeException(), isNull);
+        final snackBar = tester.widget<SnackBar>(find.byType(SnackBar));
+        expect(snackBar.behavior, SnackBarBehavior.floating);
+        expect(snackBar.duration, const Duration(seconds: 6));
+        expect(snackBar.persist, isFalse);
+        expect(snackBar.showCloseIcon, isFalse);
+        expect(
+          find.descendant(
+            of: find.byType(SnackBar),
+            matching: find.byType(IconButton),
+          ),
+          findsNothing,
+        );
+        final announcement = tester.getSemantics(
+          find.descendant(
+            of: find.byType(SnackBar),
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is Semantics && widget.properties.liveRegion == true,
+            ),
+          ),
+        );
+        expect(announcement.flagsCollection.isLiveRegion, isTrue);
+        expect(find.bySemanticsLabel(label), findsOneWidget);
+        _expectAccessibleAction(
+          tester,
+          find.byKey(_openKey),
+          l10n.clipboardLinkOpen,
+        );
 
-                  await tester.tap(find.byKey(_bodyActionKey));
-                  await tester.tap(more);
-                  await tester.pumpAndSettle();
-                  expect(fixture.bodyActions, 1);
-                  expect(fixture.selected, fixture.destinations.length - 1);
-                  expect(find.byKey(_noticeKey), findsOneWidget);
-                  expect(fixture.opens, 0);
+        final notice = tester.getRect(find.byType(SnackBar));
+        final navigation = tester.getRect(find.byKey(_navigationKey));
+        expect(notice.left, greaterThanOrEqualTo(0));
+        expect(notice.right, lessThanOrEqualTo(width));
+        expect(notice.bottom, lessThanOrEqualTo(navigation.top));
+        expect(tester.getRect(find.byKey(_bodyKey)), bodyBefore);
+        expect(navigation, navigationBefore);
+        expect(navigation.bottom, 900);
+        final more = find.byKey(_destinationKey(MainShellDestination.more));
+        expect(
+          tester.getRect(more).bottom,
+          lessThanOrEqualTo(900 - _bottomInset),
+        );
+        expect(tester.takeException(), isNull);
 
-                  await tester.tap(find.byKey(_openKey));
-                  await tester.pumpAndSettle();
-                  expect(fixture.opens, 1);
-                  expect(await controller.closed, SnackBarClosedReason.action);
-                  expect(find.byKey(_noticeKey), findsNothing);
+        await tester.tap(find.byKey(_bodyActionKey));
+        await tester.tap(more);
+        await tester.pumpAndSettle();
+        expect(fixture.bodyActions, 1);
+        expect(fixture.selected, fixture.destinations.length - 1);
+        expect(find.byKey(_noticeKey), findsOneWidget);
+        expect(fixture.opens, 0);
 
-                  final dismissed = fixture.show(tester);
-                  await tester.pumpAndSettle();
-                  await tester.drag(
-                    find.byKey(_noticeKey),
-                    const Offset(0, 240),
-                  );
-                  await tester.pumpAndSettle();
-                  expect(await dismissed.closed, SnackBarClosedReason.swipe);
-                  expect(fixture.opens, 1);
-                  expect(find.byKey(_noticeKey), findsNothing);
-                  expect(tester.getRect(find.byKey(_bodyKey)), bodyBefore);
-                  expect(
-                    tester.getRect(find.byKey(_navigationKey)),
-                    navigationBefore,
-                  );
-                  expect(tester.takeException(), isNull);
-                } finally {
-                  semantics.dispose();
-                }
-              },
-            );
-          }
-        }
+        await tester.tap(find.byKey(_openKey));
+        await tester.pumpAndSettle();
+        expect(fixture.opens, 1);
+        expect(await controller.closed, SnackBarClosedReason.action);
+        expect(find.byKey(_noticeKey), findsNothing);
+
+        final dismissed = fixture.show(tester);
+        await tester.pumpAndSettle();
+        await tester.drag(find.byKey(_noticeKey), const Offset(0, 240));
+        await tester.pumpAndSettle();
+        expect(await dismissed.closed, SnackBarClosedReason.swipe);
+        expect(fixture.opens, 1);
+        expect(find.byKey(_noticeKey), findsNothing);
+        expect(tester.getRect(find.byKey(_bodyKey)), bodyBefore);
+        expect(tester.getRect(find.byKey(_navigationKey)), navigationBefore);
+        expect(tester.takeException(), isNull);
+      } finally {
+        semantics.dispose();
       }
-    }
+    });
   }
 
   for (final accessibleNavigation in [false, true]) {

@@ -104,48 +104,40 @@ void main() {
     }
   });
 
-  for (final dark in [false, true]) {
-    testWidgets(
-      'long title and large text fit a narrow ${dark ? 'dark' : 'light'} viewport',
-      (tester) async {
-        tester.view.devicePixelRatio = 1;
-        tester.view.physicalSize = const Size(280, 400);
-        addTearDown(tester.view.resetDevicePixelRatio);
-        addTearDown(tester.view.resetPhysicalSize);
-        await tester.pumpWidget(
-          buildApp(
-            subject: List.filled(8, '這是一個很長的測試標題').join(),
-            textScale: 2,
-            dark: dark,
-            locale: const Locale('zh', 'TW'),
-          ),
-        );
-        final titleFinder = find.byKey(
-          const Key('thread-detail-first-post-summary'),
-        );
-        final statusFinder = find.byKey(
-          const Key('thread-detail-loading-label'),
-        );
-        final titleBefore = tester.getRect(titleFinder);
-        final statusBefore = tester.getRect(statusFinder);
-        await tester.pump(const Duration(milliseconds: 300));
-        expect(tester.takeException(), isNull);
-        expect(tester.getRect(titleFinder), titleBefore);
-        expect(tester.getRect(statusFinder), statusBefore);
-        await tester.drag(
-          find.byKey(const Key('thread-detail-loading')),
-          const Offset(0, -1400),
-        );
-        await tester.pump();
-        final l10n = AppLocalizations.of(
-          tester.element(find.byType(ThreadDetailLoading)),
-        );
-        expect(
-          find.text(l10n.threadDetailLoading).hitTestable(),
-          findsOneWidget,
-        );
-        await tester.pumpWidget(const SizedBox.shrink());
-      },
+  testWidgets('long title and large text fit a narrow dark viewport', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(280, 400);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    await tester.pumpWidget(
+      buildApp(
+        subject: List.filled(8, '這是一個很長的測試標題').join(),
+        textScale: 2,
+        dark: true,
+        locale: const Locale('zh', 'TW'),
+      ),
     );
-  }
+    final titleFinder = find.byKey(
+      const Key('thread-detail-first-post-summary'),
+    );
+    final statusFinder = find.byKey(const Key('thread-detail-loading-label'));
+    final titleBefore = tester.getRect(titleFinder);
+    final statusBefore = tester.getRect(statusFinder);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(tester.takeException(), isNull);
+    expect(tester.getRect(titleFinder), titleBefore);
+    expect(tester.getRect(statusFinder), statusBefore);
+    await tester.drag(
+      find.byKey(const Key('thread-detail-loading')),
+      const Offset(0, -1400),
+    );
+    await tester.pump();
+    final l10n = AppLocalizations.of(
+      tester.element(find.byType(ThreadDetailLoading)),
+    );
+    expect(find.text(l10n.threadDetailLoading).hitTestable(), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }

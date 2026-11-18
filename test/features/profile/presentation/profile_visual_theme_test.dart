@@ -30,6 +30,17 @@ const _output = String.fromEnvironment('PROFILE_VISUAL_OUTPUT');
 const _font = String.fromEnvironment('PROFILE_VISUAL_FONT');
 const _capture = Key('profile-visual-capture');
 
+// Keep both identities and text sizes without replaying the layout assertions
+// for every combination. Screenshot exports still use the full matrix.
+const _regressionLayouts = {
+  (AppThemeFamily.warmPaper, Brightness.light): (self: true, large: false),
+  (AppThemeFamily.warmPaper, Brightness.dark): (self: false, large: true),
+  (AppThemeFamily.moonWhite, Brightness.light): (self: false, large: true),
+  (AppThemeFamily.moonWhite, Brightness.dark): (self: true, large: true),
+  (AppThemeFamily.plumPurple, Brightness.light): (self: true, large: false),
+  (AppThemeFamily.plumPurple, Brightness.dark): (self: false, large: false),
+};
+
 final _ownerSource = StateProvider<VerifiedSessionOwner>(
   (ref) => (uid: '101', revision: 1),
 );
@@ -52,6 +63,11 @@ void main() {
     for (final brightness in Brightness.values) {
       for (final self in [false, true]) {
         for (final large in [false, true]) {
+          if (_output.isEmpty &&
+              _regressionLayouts[(family, brightness)] !=
+                  (self: self, large: large)) {
+            continue;
+          }
           final name =
               '${family.name}-${brightness.name}-${self ? 'self' : 'public'}-${large ? 'large' : 'normal'}';
           testWidgets('$name shows a bounded identity skeleton while loading', (

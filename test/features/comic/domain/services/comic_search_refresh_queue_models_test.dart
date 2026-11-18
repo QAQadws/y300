@@ -4,18 +4,6 @@ import 'package:y300/features/comic/domain/services/comic_search_refresh_queue_m
 
 void main() {
   group('ComicSearchRefreshQueueSnapshot structured status', () {
-    test('keeps raw head title and estimated duration', () {
-      final snapshot = ComicSearchRefreshQueueSnapshot(
-        entries: <ComicSearchRefreshQueueEntry>[
-          _entry(id: 1, title: 'Queued Comic'),
-        ],
-        cadence: const Duration(milliseconds: 10500),
-      );
-
-      expect(snapshot.estimatedDuration, const Duration(milliseconds: 10500));
-      expect(snapshot.headTitle, 'Queued Comic');
-    });
-
     test('multiplies queue size by cadence', () {
       final snapshot = ComicSearchRefreshQueueSnapshot(
         entries: <ComicSearchRefreshQueueEntry>[

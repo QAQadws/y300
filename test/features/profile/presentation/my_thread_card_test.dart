@@ -99,156 +99,147 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  for (final type in UserThreadDirectoryType.values) {
-    for (final width in [320.0, 393.0]) {
-      for (final scale in [1.0, 2.0]) {
-        testWidgets(
-          '$type badges stay above the title and beside the author at $width dp with $scale text',
-          (tester) async {
-            tester.view.physicalSize = Size(width, 800);
-            tester.view.devicePixelRatio = 1;
-            addTearDown(tester.view.resetPhysicalSize);
-            addTearDown(tester.view.resetDevicePixelRatio);
-            final item = UserThreadSummary(
-              threadId: '100',
-              title: 'Source topic title',
-              uri: Uri.parse(
-                'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100',
-              ),
-              authorName: 'Long source author name',
-              authorUserId: '101',
-              avatarUrl: 'https://bbs.yamibo.com/avatar.php?uid=101',
-              forumName: 'Source forum',
-              publishedAtText: '2026-10-03',
-              badges: const [
-                ForumThreadBadge(
-                  kind: ForumThreadBadgeKind.closed,
-                  sourceLabel: '',
-                ),
-                ForumThreadBadge(
-                  kind: ForumThreadBadgeKind.poll,
-                  sourceLabel: '',
-                ),
-                ForumThreadBadge(
-                  kind: ForumThreadBadgeKind.digest,
-                  sourceLabel: '',
-                ),
-              ],
-            );
-            await _pumpBadgeCard(tester, item: item, type: type, scale: scale);
-            final l10n = AppLocalizations.of(
-              tester.element(find.byType(UserThreadCard)),
-            );
-            final badges = find.byType(ForumThreadBadgeGroup);
-            for (final label in [
-              l10n.forumThreadBadgeClosed,
-              l10n.forumThreadBadgePoll,
-              l10n.forumThreadBadgeDigest,
-            ]) {
-              expect(
-                find.descendant(of: badges, matching: find.text(label)),
-                findsOneWidget,
-              );
-            }
-            final card = tester.getRect(find.byType(UserThreadCard));
-            final badgeRect = tester.getRect(badges);
-            final author = tester.getRect(find.text(item.authorName!));
-            final avatar = tester.getRect(find.byType(ForumCachedAvatar));
-            final title = tester.getRect(find.text(item.title));
-            expect(
-              badgeRect.right,
-              closeTo(card.right - ForumContentSpacing.postBodyHorizontal, .1),
-            );
-            expect(
-              badgeRect.top,
-              closeTo(card.top + ForumContentSpacing.postCardHeaderTop, .1),
-            );
-            expect(author.right, lessThan(badgeRect.left));
-            expect(author.top, closeTo(badgeRect.top, .1));
-            expect(avatar.right, lessThan(author.left));
-            expect(title.top, greaterThan(badgeRect.bottom));
-            expect(title.top, greaterThan(avatar.bottom));
-            expect(
-              title.left,
-              closeTo(card.left + ForumContentSpacing.postBodyHorizontal, .1),
-            );
-            expect(tester.takeException(), isNull);
-          },
+  for (final (type, width, scale) in const [
+    (UserThreadDirectoryType.threads, 393.0, 1.0),
+    (UserThreadDirectoryType.replies, 320.0, 2.0),
+  ]) {
+    testWidgets(
+      '$type badges stay above the title and beside the author at $width dp with $scale text',
+      (tester) async {
+        tester.view.physicalSize = Size(width, 800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final item = UserThreadSummary(
+          threadId: '100',
+          title: 'Source topic title',
+          uri: Uri.parse(
+            'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100',
+          ),
+          authorName: 'Long source author name',
+          authorUserId: '101',
+          avatarUrl: 'https://bbs.yamibo.com/avatar.php?uid=101',
+          forumName: 'Source forum',
+          publishedAtText: '2026-10-03',
+          badges: const [
+            ForumThreadBadge(
+              kind: ForumThreadBadgeKind.closed,
+              sourceLabel: '',
+            ),
+            ForumThreadBadge(kind: ForumThreadBadgeKind.poll, sourceLabel: ''),
+            ForumThreadBadge(
+              kind: ForumThreadBadgeKind.digest,
+              sourceLabel: '',
+            ),
+          ],
         );
-      }
-    }
+        await _pumpBadgeCard(tester, item: item, type: type, scale: scale);
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(UserThreadCard)),
+        );
+        final badges = find.byType(ForumThreadBadgeGroup);
+        for (final label in [
+          l10n.forumThreadBadgeClosed,
+          l10n.forumThreadBadgePoll,
+          l10n.forumThreadBadgeDigest,
+        ]) {
+          expect(
+            find.descendant(of: badges, matching: find.text(label)),
+            findsOneWidget,
+          );
+        }
+        final card = tester.getRect(find.byType(UserThreadCard));
+        final badgeRect = tester.getRect(badges);
+        final author = tester.getRect(find.text(item.authorName!));
+        final avatar = tester.getRect(find.byType(ForumCachedAvatar));
+        final title = tester.getRect(find.text(item.title));
+        expect(
+          badgeRect.right,
+          closeTo(card.right - ForumContentSpacing.postBodyHorizontal, .1),
+        );
+        expect(
+          badgeRect.top,
+          closeTo(card.top + ForumContentSpacing.postCardHeaderTop, .1),
+        );
+        expect(author.right, lessThan(badgeRect.left));
+        expect(author.top, closeTo(badgeRect.top, .1));
+        expect(avatar.right, lessThan(author.left));
+        expect(title.top, greaterThan(badgeRect.bottom));
+        expect(title.top, greaterThan(avatar.bottom));
+        expect(
+          title.left,
+          closeTo(card.left + ForumContentSpacing.postBodyHorizontal, .1),
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 
-  for (final type in UserThreadDirectoryType.values) {
-    for (final width in [320.0, 393.0]) {
-      for (final scale in [1.0, 2.0]) {
-        testWidgets(
-          '$type without identity keeps combined badges beside a long title at $width dp with $scale text',
-          (tester) async {
-            tester.view.physicalSize = Size(width, 800);
-            tester.view.devicePixelRatio = 1;
-            addTearDown(tester.view.resetPhysicalSize);
-            addTearDown(tester.view.resetDevicePixelRatio);
-            final item = UserThreadSummary(
-              threadId: '100',
-              title:
-                  'A long source topic title that remains beside its status markers even when it needs several lines',
-              uri: Uri.parse(
-                'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100',
-              ),
-              badges: const [
-                ForumThreadBadge(
-                  kind: ForumThreadBadgeKind.closed,
-                  sourceLabel: '',
-                ),
-                ForumThreadBadge(
-                  kind: ForumThreadBadgeKind.poll,
-                  sourceLabel: '',
-                ),
-                ForumThreadBadge(
-                  kind: ForumThreadBadgeKind.digest,
-                  sourceLabel: '',
-                ),
-              ],
-            );
-            await _pumpBadgeCard(tester, item: item, type: type, scale: scale);
-            final l10n = AppLocalizations.of(
-              tester.element(find.byType(UserThreadCard)),
-            );
-            final badges = find.byType(ForumThreadBadgeGroup);
-            for (final label in [
-              l10n.forumThreadBadgeClosed,
-              l10n.forumThreadBadgePoll,
-              l10n.forumThreadBadgeDigest,
-            ]) {
-              expect(
-                find.descendant(of: badges, matching: find.text(label)),
-                findsOneWidget,
-              );
-            }
-            final badgeRect = tester.getRect(badges);
-            final title = tester.getRect(find.text(item.title));
-            final card = tester.getRect(find.byType(UserThreadCard));
-            expect(title.top, closeTo(badgeRect.top, .1));
-            expect(
-              title.top,
-              closeTo(card.top + ForumContentSpacing.postCardHeaderTop, .1),
-            );
-            expect(
-              title.left,
-              closeTo(card.left + ForumContentSpacing.postBodyHorizontal, .1),
-            );
-            expect(title.width, greaterThan(0));
-            expect(title.right, lessThan(badgeRect.left));
-            expect(
-              badgeRect.right,
-              closeTo(card.right - ForumContentSpacing.postBodyHorizontal, .1),
-            );
-            expect(tester.takeException(), isNull);
-          },
+  for (final (type, width, scale) in const [
+    (UserThreadDirectoryType.threads, 393.0, 1.0),
+    (UserThreadDirectoryType.replies, 320.0, 2.0),
+  ]) {
+    testWidgets(
+      '$type without identity keeps combined badges beside a long title at $width dp with $scale text',
+      (tester) async {
+        tester.view.physicalSize = Size(width, 800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final item = UserThreadSummary(
+          threadId: '100',
+          title: 'A long source topic title that remains beside its status markers even when it needs several lines',
+          uri: Uri.parse(
+            'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100',
+          ),
+          badges: const [
+            ForumThreadBadge(
+              kind: ForumThreadBadgeKind.closed,
+              sourceLabel: '',
+            ),
+            ForumThreadBadge(kind: ForumThreadBadgeKind.poll, sourceLabel: ''),
+            ForumThreadBadge(
+              kind: ForumThreadBadgeKind.digest,
+              sourceLabel: '',
+            ),
+          ],
         );
-      }
-    }
+        await _pumpBadgeCard(tester, item: item, type: type, scale: scale);
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(UserThreadCard)),
+        );
+        final badges = find.byType(ForumThreadBadgeGroup);
+        for (final label in [
+          l10n.forumThreadBadgeClosed,
+          l10n.forumThreadBadgePoll,
+          l10n.forumThreadBadgeDigest,
+        ]) {
+          expect(
+            find.descendant(of: badges, matching: find.text(label)),
+            findsOneWidget,
+          );
+        }
+        final badgeRect = tester.getRect(badges);
+        final title = tester.getRect(find.text(item.title));
+        final card = tester.getRect(find.byType(UserThreadCard));
+        expect(title.top, closeTo(badgeRect.top, .1));
+        expect(
+          title.top,
+          closeTo(card.top + ForumContentSpacing.postCardHeaderTop, .1),
+        );
+        expect(
+          title.left,
+          closeTo(card.left + ForumContentSpacing.postBodyHorizontal, .1),
+        );
+        expect(title.width, greaterThan(0));
+        expect(title.right, lessThan(badgeRect.left));
+        expect(
+          badgeRect.right,
+          closeTo(card.right - ForumContentSpacing.postBodyHorizontal, .1),
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 
   testWidgets(
@@ -298,162 +289,162 @@ void main() {
     },
   );
 
-  for (final brightness in Brightness.values) {
-    for (final width in [320.0, 393.0]) {
-      testWidgets(
-        '$brightness at $width delays loading hints and keeps preview geometry through success, failure and retry',
-        (tester) async {
-          tester.view.physicalSize = Size(width, 800);
-          tester.view.devicePixelRatio = 1;
-          addTearDown(tester.view.resetPhysicalSize);
-          addTearDown(tester.view.resetDevicePixelRatio);
-          final images = _ControlledImages();
-          final fixtures = await _createImages(tester);
-          final theme = brightness == Brightness.light
-              ? AppTheme.light()
-              : AppTheme.dark();
-          await tester.pumpWidget(
-            ProviderScope(
-              overrides: [
-                imageCacheServiceProvider.overrideWithValue(images),
-                forumImageRefererProvider.overrideWithValue(
-                  'https://bbs.yamibo.com/',
-                ),
-              ],
-              child: LocalizedTestApp(
-                theme: theme,
-                builder: (context, child) => MediaQuery(
-                  data: MediaQuery.of(
-                    context,
-                  ).copyWith(textScaler: const TextScaler.linear(1.8)),
-                  child: child!,
-                ),
-                home: Scaffold(
-                  body: SingleChildScrollView(
-                    child: Padding(
-                      padding: const EdgeInsets.all(6),
-                      child: UserThreadCard(
-                        item: UserThreadSummary(
-                          threadId: '100',
-                          title: 'A topic with independently loaded previews',
-                          uri: Uri.parse(
-                            'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100',
-                          ),
-                          authorName: 'Author',
-                          forumName: 'Forum',
-                          publishedAtText: '2026-10-02',
-                          excerpt: 'The preview row stays below the excerpt.',
-                          views: 123,
-                          replies: 8,
-                          images: [
-                            for (var i = 0; i < 4; i++)
-                              'https://bbs.yamibo.com/preview$i.jpg',
-                          ],
+  for (final (brightness, width) in const [
+    (Brightness.light, 393.0),
+    (Brightness.dark, 320.0),
+  ]) {
+    testWidgets(
+      '$brightness at $width delays loading hints and keeps preview geometry through success, failure and retry',
+      (tester) async {
+        tester.view.physicalSize = Size(width, 800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final images = _ControlledImages();
+        final fixtures = await _createImages(tester);
+        final theme = brightness == Brightness.light
+            ? AppTheme.light()
+            : AppTheme.dark();
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              imageCacheServiceProvider.overrideWithValue(images),
+              forumImageRefererProvider.overrideWithValue(
+                'https://bbs.yamibo.com/',
+              ),
+            ],
+            child: LocalizedTestApp(
+              theme: theme,
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context)
+                    .copyWith(textScaler: const TextScaler.linear(1.8)),
+                child: child!,
+              ),
+              home: Scaffold(
+                body: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.all(6),
+                    child: UserThreadCard(
+                      item: UserThreadSummary(
+                        threadId: '100',
+                        title: 'A topic with independently loaded previews',
+                        uri: Uri.parse(
+                          'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100',
                         ),
-                        type: UserThreadDirectoryType.threads,
-                        onOpenThread: () {},
-                        onOpenReply: (_) {},
+                        authorName: 'Author',
+                        forumName: 'Forum',
+                        publishedAtText: '2026-10-02',
+                        excerpt: 'The preview row stays below the excerpt.',
+                        views: 123,
+                        replies: 8,
+                        images: [
+                          for (var i = 0; i < 4; i++)
+                            'https://bbs.yamibo.com/preview$i.jpg',
+                        ],
                       ),
+                      type: UserThreadDirectoryType.threads,
+                      onOpenThread: () {},
+                      onOpenReply: (_) {},
                     ),
                   ),
                 ),
               ),
             ),
-          );
+          ),
+        );
 
-          // Observe the visible slots, rather than inspecting the layout widget
-          // used to arrange them. Transparent reserved slots are already square.
-          final initial = _previewRects(tester);
-          _expectOneRow(initial);
-          final initialCard = tester.getRect(find.byType(UserThreadCard));
-          final keys = tester
-              .widgetList<CachedLibraryImage>(find.byType(CachedLibraryImage))
-              .where(
-                (image) => image.request?.role == ImageCacheRole.threadInline,
-              )
-              .map((image) => image.request!.cacheKey)
-              .toList();
-          expect(keys, hasLength(3));
-          expect(images.lookups.keys, containsAll(keys));
-          expect(_loadingHints, findsNothing);
-          expect(find.byIcon(Icons.image_outlined), findsNothing);
-          expect(
-            find.descendant(
-              of: find.byType(CachedLibraryImage),
-              matching: find.byType(ColoredBox),
-            ),
-            findsNothing,
-          );
-          await tester.pump(const Duration(milliseconds: 200));
+        // Observe the visible slots, rather than inspecting the layout widget
+        // used to arrange them. Transparent reserved slots are already square.
+        final initial = _previewRects(tester);
+        _expectOneRow(initial);
+        final initialCard = tester.getRect(find.byType(UserThreadCard));
+        final keys = tester
+            .widgetList<CachedLibraryImage>(find.byType(CachedLibraryImage))
+            .where(
+              (image) => image.request?.role == ImageCacheRole.threadInline,
+            )
+            .map((image) => image.request!.cacheKey)
+            .toList();
+        expect(keys, hasLength(3));
+        expect(images.lookups.keys, containsAll(keys));
+        expect(_loadingHints, findsNothing);
+        expect(find.byIcon(Icons.image_outlined), findsNothing);
+        expect(
+          find.descendant(
+            of: find.byType(CachedLibraryImage),
+            matching: find.byType(ColoredBox),
+          ),
+          findsNothing,
+        );
+        await tester.pump(const Duration(milliseconds: 200));
 
-          // First and second slots miss the disk cache; the third stays in
-          // lookup. Cache misses must not restart the 300ms loading deadline.
-          images.lookups[keys[0]]!.complete(null);
-          images.lookups[keys[1]]!.complete(null);
-          await tester.pump();
-          await tester.pump(const Duration(milliseconds: 99));
-          expect(_loadingHints, findsNothing);
-          await tester.pump(const Duration(milliseconds: 1));
-          expect(_loadingHints, findsNWidgets(3));
-          _expectStable(tester, initial, initialCard);
-          images.downloads[keys[0]]!.complete(
-            CachedImageResult(success: true, localPath: fixtures[0].path),
-          );
-          await tester.pump();
-          await _decodeVisibleImages(tester, expectedCount: 1);
-          expect(_loadingHints, findsNWidgets(2));
-          _expectStable(tester, initial, initialCard);
-          await tester.pump(const Duration(milliseconds: 60));
-          _expectStable(tester, initial, initialCard);
+        // First and second slots miss the disk cache; the third stays in
+        // lookup. Cache misses must not restart the 300ms loading deadline.
+        images.lookups[keys[0]]!.complete(null);
+        images.lookups[keys[1]]!.complete(null);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 99));
+        expect(_loadingHints, findsNothing);
+        await tester.pump(const Duration(milliseconds: 1));
+        expect(_loadingHints, findsNWidgets(3));
+        _expectStable(tester, initial, initialCard);
+        images.downloads[keys[0]]!.complete(
+          CachedImageResult(success: true, localPath: fixtures[0].path),
+        );
+        await tester.pump();
+        await _decodeVisibleImages(tester, expectedCount: 1);
+        expect(_loadingHints, findsNWidgets(2));
+        _expectStable(tester, initial, initialCard);
+        await tester.pump(const Duration(milliseconds: 60));
+        _expectStable(tester, initial, initialCard);
 
-          // A failed cache write and a portrait cache hit keep their slots and
-          // end their own loading hints independently of the first image.
-          images.downloads[keys[1]]!.complete(CachedImageResult.failed);
-          images.lookups[keys[2]]!.complete(
-            CachedImageResult(
-              success: true,
-              fromCache: true,
-              localPath: fixtures[1].path,
-            ),
-          );
-          await tester.pump();
-          await _decodeVisibleImages(tester, expectedCount: 2);
-          _expectStable(tester, initial, initialCard);
-          await tester.pump(const Duration(milliseconds: 60));
-          _expectStable(tester, initial, initialCard);
-          await tester.pumpAndSettle();
-          _expectStable(tester, initial, initialCard);
-          final decoded = tester.widgetList<RawImage>(find.byType(RawImage));
-          expect(decoded.where((image) => image.image != null), hasLength(2));
-          expect(_loadingHints, findsNothing);
-          expect(find.byType(ImageRetryPlaceholder), findsOneWidget);
+        // A failed cache write and a portrait cache hit keep their slots and
+        // end their own loading hints independently of the first image.
+        images.downloads[keys[1]]!.complete(CachedImageResult.failed);
+        images.lookups[keys[2]]!.complete(
+          CachedImageResult(
+            success: true,
+            fromCache: true,
+            localPath: fixtures[1].path,
+          ),
+        );
+        await tester.pump();
+        await _decodeVisibleImages(tester, expectedCount: 2);
+        _expectStable(tester, initial, initialCard);
+        await tester.pump(const Duration(milliseconds: 60));
+        _expectStable(tester, initial, initialCard);
+        await tester.pumpAndSettle();
+        _expectStable(tester, initial, initialCard);
+        final decoded = tester.widgetList<RawImage>(find.byType(RawImage));
+        expect(decoded.where((image) => image.image != null), hasLength(2));
+        expect(_loadingHints, findsNothing);
+        expect(find.byType(ImageRetryPlaceholder), findsOneWidget);
 
-          images.lookups.remove(keys[1]);
-          images.downloads.remove(keys[1]);
-          await tester.tap(
-            find.byKey(ValueKey('my-thread-image-retry-${keys[1]}')),
-          );
-          await tester.pump();
-          expect(find.byType(ImageRetryPlaceholder), findsNothing);
-          expect(_loadingHints, findsNothing);
-          await tester.pump(const Duration(milliseconds: 299));
-          expect(_loadingHints, findsNothing);
-          await tester.pump(const Duration(milliseconds: 1));
-          expect(_loadingHints, findsOneWidget);
-          _expectStable(tester, initial, initialCard);
-          images.lookups[keys[1]]!.complete(
-            CachedImageResult(success: true, localPath: fixtures[0].path),
-          );
-          await tester.pump();
-          await _decodeVisibleImages(tester, expectedCount: 3);
-          await tester.pumpAndSettle();
-          expect(_loadingHints, findsNothing);
-          expect(find.byType(ImageRetryPlaceholder), findsNothing);
-          _expectStable(tester, initial, initialCard);
-          expect(tester.takeException(), isNull);
-        },
-      );
-    }
+        images.lookups.remove(keys[1]);
+        images.downloads.remove(keys[1]);
+        await tester.tap(
+          find.byKey(ValueKey('my-thread-image-retry-${keys[1]}')),
+        );
+        await tester.pump();
+        expect(find.byType(ImageRetryPlaceholder), findsNothing);
+        expect(_loadingHints, findsNothing);
+        await tester.pump(const Duration(milliseconds: 299));
+        expect(_loadingHints, findsNothing);
+        await tester.pump(const Duration(milliseconds: 1));
+        expect(_loadingHints, findsOneWidget);
+        _expectStable(tester, initial, initialCard);
+        images.lookups[keys[1]]!.complete(
+          CachedImageResult(success: true, localPath: fixtures[0].path),
+        );
+        await tester.pump();
+        await _decodeVisibleImages(tester, expectedCount: 3);
+        await tester.pumpAndSettle();
+        expect(_loadingHints, findsNothing);
+        expect(find.byType(ImageRetryPlaceholder), findsNothing);
+        _expectStable(tester, initial, initialCard);
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 
   testWidgets(

@@ -302,66 +302,62 @@ void main() {
     }
   }
 
-  for (final status in [
-    null,
-    ComicCommentLoadStatus.empty,
-    ComicCommentLoadStatus.failure,
-    ComicCommentLoadStatus.success,
+  for (final (status, hasNext) in [
+    (null, true),
+    (ComicCommentLoadStatus.empty, false),
+    (ComicCommentLoadStatus.failure, true),
+    (ComicCommentLoadStatus.success, true),
   ]) {
-    for (final hasNext in [false, true]) {
-      testWidgets(
-        'comment tail $status with next $hasNext has no intermediate action-bar gap',
-        (tester) async {
-          await pumpSwitchReader(
-            tester,
-            _ReaderFakeRepository(includeNextEpisode: hasNext),
-            commentStatus: status,
-          );
-          final scroll = readerScroll(tester);
+    testWidgets(
+      'comment tail $status with next $hasNext has no intermediate action-bar gap',
+      (tester) async {
+        await pumpSwitchReader(
+          tester,
+          _ReaderFakeRepository(includeNextEpisode: hasNext),
+          commentStatus: status,
+        );
+        final scroll = readerScroll(tester);
+        for (var i = 0; i < 3; i++) {
+          scroll.jumpTo(scroll.position.maxScrollExtent);
+          await pumpSwitchUi(tester);
+        }
+        if (status != null) {
+          final open = find.byKey(const Key('comic-comment-tail-load-button'));
+          if (open.evaluate().isNotEmpty) {
+            await tester.tap(open);
+            await pumpSwitchUi(tester);
+          }
           for (var i = 0; i < 3; i++) {
             scroll.jumpTo(scroll.position.maxScrollExtent);
             await pumpSwitchUi(tester);
           }
-          if (status != null) {
-            final open = find.byKey(
-              const Key('comic-comment-tail-load-button'),
-            );
-            if (open.evaluate().isNotEmpty) {
-              await tester.tap(open);
-              await pumpSwitchUi(tester);
-            }
-            for (var i = 0; i < 3; i++) {
-              scroll.jumpTo(scroll.position.maxScrollExtent);
-              await pumpSwitchUi(tester);
-            }
-          }
-          final tail = status == ComicCommentLoadStatus.success
-              ? find.byKey(const Key('comic-comment-tail-item-2'))
-              : find.byType(ComicCommentFeedbackSurface);
-          expect(tail, findsOneWidget);
-          final tailRect = tester.getRect(tail);
-          final bar = tester.getRect(
-            find.byKey(const Key('comic-comment-action-bar')),
+        }
+        final tail = status == ComicCommentLoadStatus.success
+            ? find.byKey(const Key('comic-comment-tail-item-2'))
+            : find.byType(ComicCommentFeedbackSurface);
+        expect(tail, findsOneWidget);
+        final tailRect = tester.getRect(tail);
+        final bar = tester.getRect(
+          find.byKey(const Key('comic-comment-action-bar')),
+        );
+        if (hasNext) {
+          final card = tester.getRect(
+            find.byKey(
+              const Key('comic-reader-next-chapter-transition-button'),
+            ),
           );
-          if (hasNext) {
-            final card = tester.getRect(
-              find.byKey(
-                const Key('comic-reader-next-chapter-transition-button'),
-              ),
-            );
-            expect(card.top - tailRect.bottom, closeTo(12, 0.5));
-            expect(bar.top - card.bottom, closeTo(12, 0.5));
-          } else {
-            expect(
-              find.byKey(const Key('comic-reader-next-chapter-transition')),
-              findsNothing,
-            );
-            expect(tailRect.bottom, closeTo(bar.top, 0.5));
-          }
-          expect(tester.takeException(), isNull);
-        },
-      );
-    }
+          expect(card.top - tailRect.bottom, closeTo(12, 0.5));
+          expect(bar.top - card.bottom, closeTo(12, 0.5));
+        } else {
+          expect(
+            find.byKey(const Key('comic-reader-next-chapter-transition')),
+            findsNothing,
+          );
+          expect(tailRect.bottom, closeTo(bar.top, 0.5));
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 
   Future<void> tapVisibleByKey(WidgetTester tester, Key key) async {

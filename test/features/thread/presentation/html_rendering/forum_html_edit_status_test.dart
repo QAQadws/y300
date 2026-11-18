@@ -11,40 +11,39 @@ const _statusKey = Key('forum-html-discuz-edit-status');
 const _notice = '本帖最后由 fixture-user-with-a-long-name 于 2026-1-1 12:34 编辑';
 
 void main() {
-  for (final width in [240.0, 360.0, 600.0]) {
-    for (final scale in [1.0, 2.0]) {
-      testWidgets('fits the entire notice at width=$width scale=$scale', (
-        tester,
-      ) async {
-        final semantics = tester.ensureSemantics();
-        try {
-          await tester.pumpWidget(
-            _host(width: width, fontScale: scale, systemScale: scale),
-          );
-          await tester.pumpAndSettle();
+  // Pair the narrowest layout with maximum scaling, and keep a wide baseline.
+  for (final (width, scale) in [(240.0, 2.0), (600.0, 1.0)]) {
+    testWidgets('fits the entire notice at width=$width scale=$scale', (
+      tester,
+    ) async {
+      final semantics = tester.ensureSemantics();
+      try {
+        await tester.pumpWidget(
+          _host(width: width, fontScale: scale, systemScale: scale),
+        );
+        await tester.pumpAndSettle();
 
-          final paragraph = _paragraph(tester);
-          final fitted = _fitted(tester);
-          final painted = MatrixUtils.transformRect(
-            paragraph.getTransformTo(fitted),
-            Offset.zero & paragraph.size,
-          );
-          expect(paragraph.text.toPlainText(), _notice);
-          expect(paragraph.maxLines, 1);
-          expect(paragraph.softWrap, isFalse);
-          expect(paragraph.didExceedMaxLines, isFalse);
-          expect(painted.left, greaterThanOrEqualTo(-0.01));
-          expect(painted.right, lessThanOrEqualTo(width + 0.01));
-          expect(painted.height, closeTo(fitted.size.height, 0.01));
-          expect(painted.height, lessThanOrEqualTo(paragraph.size.height));
-          expect(find.bySemanticsLabel(_notice), findsOneWidget);
-          expect(tester.takeException(), isNull);
-          expect(tester.binding.hasScheduledFrame, isFalse);
-        } finally {
-          semantics.dispose();
-        }
-      });
-    }
+        final paragraph = _paragraph(tester);
+        final fitted = _fitted(tester);
+        final painted = MatrixUtils.transformRect(
+          paragraph.getTransformTo(fitted),
+          Offset.zero & paragraph.size,
+        );
+        expect(paragraph.text.toPlainText(), _notice);
+        expect(paragraph.maxLines, 1);
+        expect(paragraph.softWrap, isFalse);
+        expect(paragraph.didExceedMaxLines, isFalse);
+        expect(painted.left, greaterThanOrEqualTo(-0.01));
+        expect(painted.right, lessThanOrEqualTo(width + 0.01));
+        expect(painted.height, closeTo(fitted.size.height, 0.01));
+        expect(painted.height, lessThanOrEqualTo(paragraph.size.height));
+        expect(find.bySemanticsLabel(_notice), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        expect(tester.binding.hasScheduledFrame, isFalse);
+      } finally {
+        semantics.dispose();
+      }
+    });
   }
 
   testWidgets('settings update the base size; fitting never enlarges text', (

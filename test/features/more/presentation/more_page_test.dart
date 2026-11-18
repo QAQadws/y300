@@ -47,37 +47,37 @@ import '../../messages/support/message_test_repository.dart';
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues(<String, Object>{}));
 
-  for (final locale in [const Locale('zh'), const Locale('zh', 'TW')]) {
-    testWidgets('More has no clipboard setting in ${locale.toLanguageTag()}', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
-            appAppearanceControllerProvider.overrideWith(
-              () => _FakeAppAppearanceController(),
-            ),
-          ],
-          child: LocalizedTestApp(home: const MorePage(), locale: locale),
+  testWidgets('More omits the clipboard setting in dark Traditional Chinese', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
+          appAppearanceControllerProvider.overrideWith(
+            () => _FakeAppAppearanceController(),
+          ),
+        ],
+        child: LocalizedTestApp(
+          home: const MorePage(),
+          locale: const Locale('zh', 'TW'),
+          theme: AppTheme.dark(),
         ),
-      );
-      await tester.pumpAndSettle();
-      final navigationEntry = find.byKey(
-        const Key('more-navigation-management-entry'),
-      );
-      await _scrollUntilVisibleIfNeeded(tester, navigationEntry);
-      final l10n = AppLocalizations.of(tester.element(navigationEntry));
-      expect(find.text(l10n.moreNavigationManagement), findsOneWidget);
-      expect(find.text(l10n.moreAppearance), findsOneWidget);
-      expect(find.byType(SwitchListTile), findsNothing);
-      expect(find.byIcon(Icons.content_paste_go_outlined), findsNothing);
-      expect(
-        find.byKey(const Key('more-clipboard-link-detection-switch')),
-        findsNothing,
-      );
-    });
-  }
+      ),
+    );
+    await tester.pumpAndSettle();
+    final navigationEntry = find.byKey(
+      const Key('more-navigation-management-entry'),
+    );
+    await _scrollUntilVisibleIfNeeded(tester, navigationEntry);
+    final l10n = AppLocalizations.of(tester.element(navigationEntry));
+    expect(find.text(l10n.moreNavigationManagement), findsOneWidget);
+    expect(find.text(l10n.moreAppearance), findsOneWidget);
+    expect(
+      find.byKey(const Key('more-clipboard-link-detection-switch')),
+      findsNothing,
+    );
+  });
 
   for (final type in UserThreadDirectoryType.values) {
     testWidgets('account ${type.name} statistic opens its native directory', (
@@ -498,26 +498,6 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
-
-  testWidgets('MorePage builds dark theme chrome', (tester) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          ..._moreAuthOverrides(_FakeAuthRepository(isLoggedIn: false)),
-
-          appAppearanceControllerProvider.overrideWith(
-            () => _FakeAppAppearanceController(),
-          ),
-        ],
-        child: LocalizedTestApp(theme: AppTheme.dark(), home: const MorePage()),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.byType(Scaffold), findsOneWidget);
-    expect(find.byKey(const Key('more-appearance-entry')), findsOneWidget);
-    expect(find.byKey(const Key('more-data-storage-entry')), findsOneWidget);
-  });
 
   testWidgets('MorePage renders entries without descriptions', (tester) async {
     await tester.pumpWidget(

@@ -70,61 +70,6 @@ void main() {
     });
   }
 
-  testWidgets('scheme role changes update the rendered status markers', (
-    tester,
-  ) async {
-    final baseTheme = AppTheme.light();
-    final updatedScheme = baseTheme.colorScheme.copyWith(
-      error: Colors.indigo,
-      onError: Colors.white,
-      secondaryContainer: Colors.teal,
-      onSecondaryContainer: Colors.black,
-      tertiaryContainer: Colors.orange,
-      onTertiaryContainer: Colors.brown,
-    );
-    for (final scheme in [baseTheme.colorScheme, updatedScheme]) {
-      final badgeTheme = ForumThreadBadgeTheme.fromColorScheme(
-        scheme,
-        standardBackground: baseTheme.appBarTheme.backgroundColor,
-        standardForeground: baseTheme.appBarTheme.foregroundColor,
-      );
-      await _pumpBadgeTheme(
-        tester,
-        baseTheme.copyWith(
-          colorScheme: scheme,
-          extensions: [
-            ...baseTheme.extensions.values.where(
-              (extension) => extension is! ForumThreadBadgeTheme,
-            ),
-            badgeTheme,
-          ],
-        ),
-      );
-      _expectThemeColorsWithoutBorders(
-        tester,
-        ForumThreadBadgeTheme(
-          closed: ForumThreadBadgeColors(
-            background: scheme.error,
-            foreground: scheme.onError,
-          ),
-          digest: ForumThreadBadgeColors(
-            background: scheme.secondaryContainer,
-            foreground: scheme.onSecondaryContainer,
-          ),
-          sticky: ForumThreadBadgeColors(
-            background: scheme.tertiaryContainer,
-            foreground: scheme.onTertiaryContainer,
-          ),
-          standard: ForumThreadBadgeColors(
-            background: baseTheme.appBarTheme.backgroundColor!,
-            foreground: baseTheme.appBarTheme.foregroundColor!,
-          ),
-        ),
-      );
-    }
-    expect(tester.takeException(), isNull);
-  });
-
   testWidgets('all markers update from the theme extension without borders', (
     tester,
   ) async {

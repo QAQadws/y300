@@ -4,42 +4,33 @@ import 'package:y300/features/app_update/presentation/app_update_messages.dart';
 import 'package:y300/l10n/app_localizations_zh.dart';
 
 void main() {
-  test('uses Y300 simplified Chinese update dialog copy', () {
-    final messages = Y300UpgraderMessages(AppLocalizationsZh());
+  test('updater uses the current locale for every dialog message', () {
+    final simplified = AppLocalizationsZh();
+    final messages = Y300UpgraderMessages(simplified);
+    expect(messages.languageCode, simplified.localeName);
 
-    expect(messages.languageCode, 'zh');
-    expect(messages.title, '发现新版本');
-    expect(
-      messages.body,
-      '{{appName}} v{{currentAppStoreVersion}} 已发布，当前版本为 '
-      'v{{currentInstalledVersion}}',
-    );
-    expect(messages.prompt, '是否立即更新？');
-    expect(messages.releaseNotes, '更新说明');
-    expect(messages.buttonTitleIgnore, '忽略');
-    expect(messages.buttonTitleLater, '关闭');
-    expect(messages.buttonTitleUpdate, '更新');
-  });
-
-  test('maps every dialog message key to the custom copy', () {
-    final messages = Y300UpgraderMessages(AppLocalizationsZh());
-
-    expect(messages.message(UpgraderMessage.title), '发现新版本');
-    expect(messages.message(UpgraderMessage.body), messages.body);
-    expect(messages.message(UpgraderMessage.buttonTitleIgnore), '忽略');
-    expect(messages.message(UpgraderMessage.buttonTitleLater), '关闭');
-    expect(messages.message(UpgraderMessage.buttonTitleUpdate), '更新');
-    expect(messages.message(UpgraderMessage.prompt), '是否立即更新？');
-    expect(messages.message(UpgraderMessage.releaseNotes), '更新说明');
-  });
-
-  test('switches update dialog copy to Traditional Chinese', () {
-    final messages = Y300UpgraderMessages(AppLocalizationsZh())
-      ..updateLocalization(AppLocalizationsZhTw());
-
-    expect(messages.title, '發現新版本');
-    expect(messages.prompt, '是否立即更新？');
-    expect(messages.releaseNotes, '更新說明');
-    expect(messages.buttonTitleLater, '關閉');
+    for (final l10n in [simplified, AppLocalizationsZhTw()]) {
+      messages.updateLocalization(l10n);
+      final expected = {
+        UpgraderMessage.title: l10n.appUpdateDialogTitle,
+        UpgraderMessage.body: l10n.appUpdateDialogBody(
+          '{{appName}}',
+          '{{currentAppStoreVersion}}',
+          '{{currentInstalledVersion}}',
+        ),
+        UpgraderMessage.prompt: l10n.appUpdateDialogPrompt,
+        UpgraderMessage.releaseNotes: l10n.appUpdateDialogReleaseNotes,
+        UpgraderMessage.buttonTitleIgnore: l10n.appUpdateDialogIgnore,
+        UpgraderMessage.buttonTitleLater: l10n.appUpdateDialogLater,
+        UpgraderMessage.buttonTitleUpdate: l10n.appUpdateDialogUpdate,
+      };
+      for (final entry in expected.entries) {
+        expect(
+          messages.message(entry.key),
+          entry.value,
+          reason: '${l10n.localeName}: ${entry.key}',
+        );
+      }
+    }
   });
 }

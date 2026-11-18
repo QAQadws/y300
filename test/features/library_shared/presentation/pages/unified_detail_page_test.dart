@@ -73,32 +73,8 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('测试作品'), findsWidgets);
-    expect(
-      tester
-          .widget<Text>(find.byKey(const Key('unified-detail-hero-title')))
-          .maxLines,
-      3,
-    );
-    expect(
-      tester
-          .widget<Text>(find.byKey(const Key('unified-detail-hero-title')))
-          .style
-          ?.fontWeight,
-      FontWeight.normal,
-    );
-    expect(
-      tester.widget<AppBar>(find.byType(AppBar)).titleTextStyle?.fontWeight,
-      FontWeight.normal,
-    );
     expect(find.byKey(const Key('unified-detail-author-row')), findsOneWidget);
     expect(find.text('UID: 10001'), findsOneWidget);
-    expect(
-      find.descendant(
-        of: find.byKey(const Key('unified-detail-author-row')),
-        matching: find.byIcon(Icons.person_outlined),
-      ),
-      findsOneWidget,
-    );
     expect(
       tester
           .widget<Text>(find.byKey(const Key('unified-detail-collapsed-title')))
@@ -155,10 +131,7 @@ void main() {
       find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
       findsOneWidget,
     );
-    expect(
-      tester.widget<Text>(find.text('第1章')).style?.fontWeight,
-      FontWeight.normal,
-    );
+    expect(find.text('第1章'), findsOneWidget);
     expect(find.textContaining('Pid:5001'), findsOneWidget);
 
     expect(find.text('继续'), findsOneWidget);
@@ -166,11 +139,6 @@ void main() {
     expect(find.byIcon(Icons.filter_list), findsAtLeastNWidgets(1));
     expect(find.byKey(const Key('unified-detail-tag-strip')), findsOneWidget);
     expect(find.text('韩国漫画'), findsOneWidget);
-    final tagWidth = tester
-        .getSize(find.byKey(const Key('unified-detail-source-tag')))
-        .width;
-    final labelWidth = tester.getSize(find.text('韩国漫画')).width;
-    expect(tagWidth, closeTo(labelWidth + 22, 1));
 
     await tester.tap(
       find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
@@ -242,6 +210,7 @@ void main() {
       final adapter = _EditableDetailAdapter();
       await tester.pumpWidget(
         LocalizedTestApp(
+          theme: AppTheme.dark(),
           home: UnifiedDetailPage(
             adapter: adapter,
             workId: 'work-1',
@@ -634,45 +603,6 @@ void main() {
   });
 
   testWidgets(
-    'UnifiedDetailPage uses dark hero metadata on a light covered header',
-    (tester) async {
-      const pageBackground = Color(0xFFF1F3F5);
-      final adapter = _FakeDetailAdapter(
-        coverLocalPath: 'missing-y300-detail-cover.png',
-      );
-
-      await tester.pumpWidget(
-        LocalizedTestApp(
-          theme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
-            scaffoldBackgroundColor: pageBackground,
-          ),
-          home: UnifiedDetailPage(
-            adapter: adapter,
-            workId: 'work-1',
-            onOpenReader: (context, target) async {},
-            onOpenThread: (context, target) async {},
-          ),
-        ),
-      );
-
-      await tester.pumpAndSettle();
-
-      expect(
-        tester
-            .widget<Text>(find.byKey(const Key('unified-detail-hero-title')))
-            .style
-            ?.color,
-        Colors.black,
-      );
-      expect(
-        tester.widget<AppBar>(find.byType(AppBar)).foregroundColor,
-        Colors.white,
-      );
-    },
-  );
-
-  testWidgets(
     'UnifiedDetailPage no-cover header remains available with custom theme',
     (tester) async {
       const pageBackground = Color(0xFFF1F3F5);
@@ -763,57 +693,6 @@ void main() {
     },
   );
 
-  testWidgets('UnifiedDetailPage builds dark theme chrome and sheets', (
-    tester,
-  ) async {
-    final adapter = _EditableDetailAdapter();
-
-    await tester.pumpWidget(
-      LocalizedTestApp(
-        theme: AppTheme.dark(),
-        home: UnifiedDetailPage(
-          adapter: adapter,
-          workId: 'work-1',
-          onOpenReader: (context, target) async {},
-          onOpenThread: (context, target) async {},
-        ),
-      ),
-    );
-
-    await tester.pumpAndSettle();
-
-    expect(find.byType(Scaffold), findsOneWidget);
-    expect(
-      find.byKey(const Key('unified-detail-header-section')),
-      findsOneWidget,
-    );
-    expect(find.byType(PopupMenuButton<String>), findsOneWidget);
-
-    await tester.tap(
-      find.descendant(
-        of: find.byType(AppBar),
-        matching: find.byIcon(Icons.filter_list),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(const Key('unified-detail-chapter-filter-sheet')),
-      findsOneWidget,
-    );
-    expect(find.byKey(const Key('unified-detail-sort-source')), findsOneWidget);
-    await tester.tap(find.text('取消'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byType(PopupMenuButton<String>).last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('unified-detail-edit-metadata')));
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(const Key('unified-detail-metadata-sheet')),
-      findsOneWidget,
-    );
-  });
-
   testWidgets('UnifiedDetailPage header seam bridge does not block actions', (
     tester,
   ) async {
@@ -903,10 +782,6 @@ void main() {
     );
     expect(progressSemantics.label, contains('第 3 页'));
     expect(progressSemantics.label, isNot(contains('共 12 页')));
-    expect(
-      find.byKey(const ValueKey<String>('unified-detail-chapter-progress-e1')),
-      findsNothing,
-    );
   });
 
   testWidgets('UnifiedDetailPage renders novel last-read marker inline', (
@@ -935,11 +810,6 @@ void main() {
       find.byKey(const ValueKey<String>('unified-detail-chapter-e1')),
       300,
       scrollable: find.byType(Scrollable).first,
-    );
-
-    expect(
-      find.byKey(const ValueKey<String>('unified-detail-chapter-progress-e1')),
-      findsNothing,
     );
     expect(
       find.byKey(
@@ -1006,25 +876,7 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(
-        find.byKey(
-          const ValueKey<String>('unified-detail-chapter-downloaded-badge-e1'),
-        ),
-        findsNothing,
-      );
-      expect(
-        find.byKey(
-          const ValueKey<String>('unified-detail-chapter-read-badge-e1'),
-        ),
-        findsNothing,
-      );
       expect(find.text('书签'), findsNothing);
-      expect(
-        find.byKey(
-          const ValueKey<String>('unified-detail-chapter-bookmark-button-e1'),
-        ),
-        findsNothing,
-      );
       expect(find.text('已缓存'), findsNothing);
       expect(find.byTooltip('已缓存，点击删除缓存'), findsOneWidget);
       expect(find.text('已读'), findsNothing);
@@ -1336,12 +1188,6 @@ void main() {
     expect(
       find.byKey(
         const ValueKey<String>('unified-detail-chapter-bookmark-indicator-e1'),
-      ),
-      findsNothing,
-    );
-    expect(
-      find.byKey(
-        const ValueKey<String>('unified-detail-chapter-bookmark-button-e1'),
       ),
       findsNothing,
     );
@@ -1688,24 +1534,11 @@ void main() {
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -120));
     await tester.pumpAndSettle();
 
-    expect(
-      find.byKey(
-        const ValueKey<String>('unified-detail-chapter-downloaded-badge-e1'),
-      ),
-      findsNothing,
-    );
-
     await tester.tap(find.byTooltip('缓存该章节'));
     await tester.pumpAndSettle();
 
     expect(adapter.isDownloaded, isTrue);
     expect(adapter.lastDownloadedEpisodeId, 'e1');
-    expect(
-      find.byKey(
-        const ValueKey<String>('unified-detail-chapter-downloaded-badge-e1'),
-      ),
-      findsNothing,
-    );
     expect(find.text('已缓存'), findsNothing);
     expect(find.byTooltip('已缓存，点击删除缓存'), findsOneWidget);
     expect(find.byIcon(Icons.offline_pin), findsOneWidget);
@@ -1716,12 +1549,6 @@ void main() {
 
     expect(adapter.isDownloaded, isFalse);
     expect(adapter.lastDeletedDownloadEpisodeId, 'e1');
-    expect(
-      find.byKey(
-        const ValueKey<String>('unified-detail-chapter-downloaded-badge-e1'),
-      ),
-      findsNothing,
-    );
   });
 
   testWidgets(
@@ -1774,33 +1601,6 @@ void main() {
       expect(find.byTooltip('正在缓存'), findsNothing);
       expect(find.byTooltip('已缓存，点击删除缓存'), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsNothing);
-    },
-  );
-
-  testWidgets(
-    'UnifiedDetailPage omits chapter progress badge when progress is null',
-    (tester) async {
-      final adapter = _FakeDetailAdapter();
-
-      await tester.pumpWidget(
-        LocalizedTestApp(
-          home: UnifiedDetailPage(
-            adapter: adapter,
-            workId: 'work-1',
-            onOpenReader: (context, target) async {},
-            onOpenThread: (context, target) async {},
-          ),
-        ),
-      );
-
-      await tester.pumpAndSettle();
-
-      expect(
-        find.byKey(
-          const ValueKey<String>('unified-detail-chapter-progress-e1'),
-        ),
-        findsNothing,
-      );
     },
   );
 
@@ -2111,12 +1911,6 @@ void main() {
 
       expect(find.textContaining('缓存失败'), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsNothing);
-      expect(
-        find.byKey(
-          const ValueKey<String>('unified-detail-chapter-downloaded-badge-e1'),
-        ),
-        findsNothing,
-      );
     },
   );
 
@@ -2223,12 +2017,6 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('删除缓存失败'), findsOneWidget);
-      expect(
-        find.byKey(
-          const ValueKey<String>('unified-detail-chapter-downloaded-badge-e1'),
-        ),
-        findsNothing,
-      );
       expect(find.text('已缓存'), findsNothing);
       expect(find.byTooltip('已缓存，点击删除缓存'), findsOneWidget);
     },

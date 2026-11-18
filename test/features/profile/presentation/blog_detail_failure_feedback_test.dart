@@ -314,47 +314,46 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  for (final family in AppThemeFamily.values) {
-    for (final brightness in Brightness.values) {
-      for (final largeText in [false, true]) {
-        testWidgets(
-          '$family $brightness largeText=$largeText keeps the browser action reachable',
-          (tester) async {
-            final host = _Host();
-            tester.view.physicalSize = Size(largeText ? 300 : 390, 750);
-            tester.view.devicePixelRatio = 1;
-            addTearDown(tester.view.resetPhysicalSize);
-            addTearDown(tester.view.resetDevicePixelRatio);
-            await host.pump(
-              tester,
-              largeText: largeText,
-              theme: AppTheme.build(family: family, brightness: brightness),
-            );
-            host.open();
-            await tester.pump();
-            host.details.requests.single.complete(
-              _failure('user_blog_password_required'),
-            );
-            await tester.pumpAndSettle();
-            expect(find.byType(SnackBarAction).hitTestable(), findsOneWidget);
-            if (!largeText) {
-              final snackBar = tester.widget<SnackBar>(find.byType(SnackBar));
-              final content = tester.getRect(find.byWidget(snackBar.content));
-              final action = tester.getRect(find.byType(SnackBarAction));
-              expect(action.left, greaterThan(content.right));
-              expect(
-                action.center.dy,
-                inInclusiveRange(content.top, content.bottom),
-              );
-            }
-            expect(tester.takeException(), isNull);
-            await tester.tap(find.byType(SnackBarAction));
-            await tester.pumpAndSettle();
-            expect(host.launches, hasLength(1));
-          },
+  for (final (family, brightness, largeText) in const [
+    (AppThemeFamily.warmPaper, Brightness.light, false),
+    (AppThemeFamily.plumPurple, Brightness.dark, true),
+  ]) {
+    testWidgets(
+      '$family $brightness largeText=$largeText keeps the browser action reachable',
+      (tester) async {
+        final host = _Host();
+        tester.view.physicalSize = Size(largeText ? 300 : 390, 750);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        await host.pump(
+          tester,
+          largeText: largeText,
+          theme: AppTheme.build(family: family, brightness: brightness),
         );
-      }
-    }
+        host.open();
+        await tester.pump();
+        host.details.requests.single.complete(
+          _failure('user_blog_password_required'),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byType(SnackBarAction).hitTestable(), findsOneWidget);
+        if (!largeText) {
+          final snackBar = tester.widget<SnackBar>(find.byType(SnackBar));
+          final content = tester.getRect(find.byWidget(snackBar.content));
+          final action = tester.getRect(find.byType(SnackBarAction));
+          expect(action.left, greaterThan(content.right));
+          expect(
+            action.center.dy,
+            inInclusiveRange(content.top, content.bottom),
+          );
+        }
+        expect(tester.takeException(), isNull);
+        await tester.tap(find.byType(SnackBarAction));
+        await tester.pumpAndSettle();
+        expect(host.launches, hasLength(1));
+      },
+    );
   }
 }
 

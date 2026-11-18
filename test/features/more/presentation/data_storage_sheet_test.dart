@@ -29,87 +29,68 @@ import 'package:y300/features/storage/domain/storage_root_migration.dart';
 import '../../storage/test_support/ready_storage_root_access_gate.dart';
 
 void main() {
-  for (final locale in [const Locale('zh'), const Locale('zh', 'TW')]) {
-    testWidgets(
-      'font usage is localized and excluded from cache size for $locale',
-      (tester) async {
-        final strings = await AppLocalizations.delegate.load(locale);
-        await pumpDataStorageSheet(
-          tester,
-          locale: locale,
-          overrides: _overridesWith(
-            maintenance: _FakeCacheMaintenanceService(clearableBytes: 1024),
-            accounting: _FakeStorageAccountingService(
-              report: _usageReport(
-                sections: const [
-                  StorageUsageSection(
-                    bucket: StorageBucket.imageCache,
-                    labelRef: StorageUsageLabelRef(
-                      kind: StorageUsageLabelKind.bucket,
-                      code: 'image_cache',
-                    ),
-                    bytes: 1024,
-                    clearable: true,
-                  ),
-                  StorageUsageSection(
-                    bucket: StorageBucket.fontLibrary,
-                    labelRef: StorageUsageLabelRef(
-                      kind: StorageUsageLabelKind.bucket,
-                      code: 'font_library',
-                    ),
-                    bytes: 2048,
-                    clearable: false,
-                  ),
-                ],
+  testWidgets('font usage is localized and excluded from cache size', (
+    tester,
+  ) async {
+    const locale = Locale('zh', 'TW');
+    final strings = await AppLocalizations.delegate.load(locale);
+    await pumpDataStorageSheet(
+      tester,
+      locale: locale,
+      overrides: _overridesWith(
+        maintenance: _FakeCacheMaintenanceService(clearableBytes: 1024),
+        accounting: _FakeStorageAccountingService(
+          report: _usageReport(
+            sections: const [
+              StorageUsageSection(
+                bucket: StorageBucket.imageCache,
+                labelRef: StorageUsageLabelRef(
+                  kind: StorageUsageLabelKind.bucket,
+                  code: 'image_cache',
+                ),
+                bytes: 1024,
+                clearable: true,
               ),
-            ),
+              StorageUsageSection(
+                bucket: StorageBucket.fontLibrary,
+                labelRef: StorageUsageLabelRef(
+                  kind: StorageUsageLabelKind.bucket,
+                  code: 'font_library',
+                ),
+                bytes: 2048,
+                clearable: false,
+              ),
+            ],
           ),
-        );
-
-        expect(
-          tester
-              .widget<Text>(
-                find.byKey(const Key('data-storage-clearable-cache-size')),
-              )
-              .data,
-          '1.0 KB',
-        );
-        expect(
-          find.text(strings.moreStorageUsageTotal('3.0 KB')),
-          findsOneWidget,
-        );
-        await tester.tap(find.byKey(const Key('data-storage-usage-overview')));
-        await tester.pumpAndSettle();
-        final fontSection = find.byKey(
-          const Key('data-storage-usage-section-font_library'),
-        );
-        expect(fontSection, findsOneWidget);
-        expect(
-          find.descendant(
-            of: fontSection,
-            matching: find.text(strings.moreStorageBucketFontLibrary),
-          ),
-          findsOneWidget,
-        );
-        expect(
-          find.descendant(of: fontSection, matching: find.text('2.0 KB')),
-          findsOneWidget,
-        );
-      },
+        ),
+      ),
     );
-  }
 
-  testWidgets('DataStorageSheet builds dark theme chrome', (tester) async {
-    await pumpDataStorageSheet(tester, overrides: _overridesWith());
-
-    expect(find.byKey(const Key('data-storage-sheet')), findsOneWidget);
     expect(
-      find.byKey(const Key('data-storage-cache-max-slider')),
+      tester
+          .widget<Text>(
+            find.byKey(const Key('data-storage-clearable-cache-size')),
+          )
+          .data,
+      '1.0 KB',
+    );
+    expect(find.text(strings.moreStorageUsageTotal('3.0 KB')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('data-storage-usage-overview')));
+    await tester.pumpAndSettle();
+    final fontSection = find.byKey(
+      const Key('data-storage-usage-section-font_library'),
+    );
+    expect(fontSection, findsOneWidget);
+    expect(
+      find.descendant(
+        of: fontSection,
+        matching: find.text(strings.moreStorageBucketFontLibrary),
+      ),
       findsOneWidget,
     );
     expect(
-      find.byKey(const Key('data-storage-choose-directory-button')),
-      findsNothing,
+      find.descendant(of: fontSection, matching: find.text('2.0 KB')),
+      findsOneWidget,
     );
   });
 

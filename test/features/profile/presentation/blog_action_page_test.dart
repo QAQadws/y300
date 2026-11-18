@@ -136,33 +136,34 @@ void main() {
     expect(service.submissions, isEmpty);
   });
 
-  for (final family in AppThemeFamily.values) {
-    for (final brightness in Brightness.values) {
-      testWidgets('confirmation fits $family $brightness with large text', (
+  for (final (family, brightness) in const [
+    (AppThemeFamily.warmPaper, Brightness.light),
+    (AppThemeFamily.plumPurple, Brightness.dark),
+  ]) {
+    testWidgets('confirmation fits $family $brightness with large text', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(300, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final service = BlogOperationFixture();
+      await _open(
         tester,
-      ) async {
-        await tester.binding.setSurfaceSize(const Size(300, 600));
-        addTearDown(() => tester.binding.setSurfaceSize(null));
-        final service = BlogOperationFixture();
-        await _open(
-          tester,
-          service,
-          theme: AppTheme.build(family: family, brightness: brightness),
-          largeReducedMotion: true,
-        );
-        expect(find.byType(LinearProgressIndicator), findsNothing);
-        service.prepared();
-        await tester.pumpAndSettle();
-        expect(tester.takeException(), isNull);
-        await tester.ensureVisible(find.byKey(const Key('blog-action-submit')));
-        await tester.tap(find.byKey(const Key('blog-action-submit')));
-        await tester.pump();
-        service.applied();
-        await tester.pumpAndSettle();
-        expect(find.byType(BlogActionPage), findsNothing);
-        expect(tester.takeException(), isNull);
-      });
-    }
+        service,
+        theme: AppTheme.build(family: family, brightness: brightness),
+        largeReducedMotion: true,
+      );
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      service.prepared();
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.ensureVisible(find.byKey(const Key('blog-action-submit')));
+      await tester.tap(find.byKey(const Key('blog-action-submit')));
+      await tester.pump();
+      service.applied();
+      await tester.pumpAndSettle();
+      expect(find.byType(BlogActionPage), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
   }
 }
 

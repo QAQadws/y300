@@ -11,16 +11,6 @@ import 'package:y300/features/search/data/services/forum_search_coordinator.dart
 import 'package:y300/features/search/presentation/forum_search_page.dart';
 
 void main() {
-  testWidgets('ForumSearchPage builds search chrome', (tester) async {
-    final coordinator = _FakeForumSearchCoordinator();
-    await tester.pumpWidget(_buildApp(coordinator));
-    addTearDown(coordinator.dispose);
-
-    expect(find.byType(Scaffold), findsOneWidget);
-    expect(find.byKey(const Key('forum-search-input')), findsOneWidget);
-    expect(find.byKey(const Key('forum-search-submit-button')), findsOneWidget);
-  });
-
   testWidgets('search builds a source-neutral query and renders topics', (
     tester,
   ) async {
@@ -51,7 +41,8 @@ void main() {
       find.byKey(const Key('forum-search-input')),
       '  测试漫画  ',
     );
-    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('forum-search-submit-button')));
     await tester.pumpAndSettle();
 
     expect(coordinator.queries.single.normalizedKeyword, '测试漫画');

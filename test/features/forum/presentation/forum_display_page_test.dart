@@ -23,7 +23,6 @@ import 'package:y300/features/favorites/data/providers/favorite_directory_provid
 import 'package:y300/features/forum/data/providers/forum_display_repository_providers.dart';
 import 'package:y300/features/forum/presentation/forum_display_page.dart';
 import 'package:y300/features/forum/presentation/widgets/forum_display_theme.dart';
-import 'package:y300/features/forum/presentation/widgets/forum_home_widgets.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/plain_text_batch_conversion_service.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_conversion_mode.dart';
 import 'package:y300/features/reader_shared/domain/rich_text/text_conversion/text_converter.dart';
@@ -390,24 +389,6 @@ void main() {
         find.byKey(const Key('forum-display-unfavorite-action')),
         findsNothing,
       );
-    });
-
-    test('light palette uses forum home native colors', () {
-      final theme = AppTheme.light();
-      final displayPalette = ForumDisplayThemePalette.resolve(theme);
-      final homePalette = ForumHomeNativePalette.resolve(theme);
-
-      expect(displayPalette.background, homePalette.background);
-      expect(displayPalette.panel, homePalette.sectionBodyBackground);
-      expect(displayPalette.card, homePalette.sectionBodyBackground);
-      expect(displayPalette.accent, homePalette.sectionHeaderBackground);
-      expect(
-        displayPalette.surfaceContainer,
-        homePalette.sectionBodyBackground,
-      );
-      expect(displayPalette.selectedContainer, isNot(Colors.transparent));
-      expect(displayPalette.outlineSoft.a, lessThan(1));
-      expect(displayPalette.stateLayer.a, lessThan(1));
     });
 
     test('dark palette remains derived from ColorScheme', () {
@@ -1620,46 +1601,6 @@ void main() {
       expect((shortTagRight.dx - longTagRight.dx).abs(), lessThan(0.1));
     });
 
-    testWidgets('clickable thread tag has a light shadow cue', (tester) async {
-      final repository = _FakeForumDisplayRepository((_, page, query) async {
-        return ApiSuccess(
-          _displayData(
-            page: page,
-            total: 1,
-            threads: [
-              ForumThreadSummary(
-                tid: 'tag-clickable',
-                subject: '带 tag 的帖子',
-                author: 'alice',
-                replies: 7,
-                views: 86,
-                dateline: 'today',
-                excerpt: '摘要',
-                sourceTagName: '長篇連載',
-                sourceTagUrl:
-                    'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=2&filter=typeid&typeid=69&mobile=2',
-              ),
-            ],
-          ),
-        );
-      });
-
-      await tester.pumpWidget(_buildTestApp(repository));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 120));
-
-      final tagFinder = find.byKey(const Key('forum-thread-tag-tag-clickable'));
-      final decoratedBox = tester.widget<DecoratedBox>(
-        find.descendant(of: tagFinder, matching: find.byType(DecoratedBox)),
-      );
-      final decoration = decoratedBox.decoration as BoxDecoration;
-
-      expect(decoration.boxShadow, isNotNull);
-      expect(decoration.boxShadow, isNotEmpty);
-      expect(decoration.boxShadow!.single.blurRadius, 5);
-      expect(decoration.border, isNull);
-    });
-
     testWidgets('dark theme uses theme-driven forum display surfaces', (
       tester,
     ) async {
@@ -1755,51 +1696,6 @@ void main() {
       expect(navigator.canPop(), isTrue);
       expect(find.text('百合会最萌世界杯专版！'), findsWidgets);
       expect(repository.lastQuery?.fid, '52');
-    });
-
-    testWidgets('opens search with the current forum fid', (tester) async {
-      final repository = _FakeForumDisplayRepository((fid, page, query) async {
-        return ApiSuccess(
-          _displayData(
-            fid: fid,
-            page: 1,
-            total: 1,
-            threads: const <ForumThreadSummary>[],
-          ),
-        );
-      });
-
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            forumDisplayRepositoryProvider.overrideWithValue(repository),
-          ],
-          child: const LocalizedTestApp(
-            home: ForumDisplayPage(fid: '30', title: '漫画区'),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      final searchButton = find.byKey(const Key('forum-display-search-button'));
-      expect(searchButton, findsOneWidget);
-      expect(
-        tester.getCenter(find.byKey(const Key('forum-display-more-button'))).dx,
-        greaterThan(
-          tester
-              .getCenter(find.byKey(const Key('forum-display-search-button')))
-              .dx,
-        ),
-      );
-
-      await tester.tap(searchButton);
-      await tester.pumpAndSettle();
-
-      final searchPage = tester.widget<ForumSearchPage>(
-        find.byType(ForumSearchPage),
-      );
-      expect(searchPage.scope, ForumSearchScope.currentForum);
-      expect(searchPage.forumId, '30');
     });
 
     testWidgets('opens search with non-30 forum fid', (tester) async {

@@ -39,37 +39,39 @@ void main() {
         tester.element(find.byType(NavigationManagementPage)),
       );
 
-      for (final destination in initialSettings.managedOrder) {
+      const scenarios = [
+        (MainShellDestination.comic, 'icon'),
+        (MainShellDestination.forum, 'title'),
+        (MainShellDestination.novel, 'space'),
+      ];
+      for (final (destination, hit) in scenarios) {
         final entry = find.byKey(
           ValueKey('navigation-management-open-${destination.name}'),
         );
-        // Icon, title and the remaining middle area all open the same route.
-        for (final hit in ['icon', 'title', 'space']) {
-          if (hit == 'space') {
-            final rect = tester.getRect(entry);
-            await tester.tapAt(Offset(rect.right - 8, rect.center.dy));
-          } else {
-            await tester.tap(
-              find.descendant(
-                of: entry,
-                matching: hit == 'icon'
-                    ? find.byIcon(destination.icon)
-                    : find.text(destination.localizedLabel(l10n)),
-              ),
-            );
-          }
-          await tester.pumpAndSettle();
-          expect(opened.last, destination);
-          expect(
-            find.byKey(ValueKey('opened-${destination.name}')),
-            findsOneWidget,
+        if (hit == 'space') {
+          final rect = tester.getRect(entry);
+          await tester.tapAt(Offset(rect.right - 8, rect.center.dy));
+        } else {
+          await tester.tap(
+            find.descendant(
+              of: entry,
+              matching: hit == 'icon'
+                  ? find.byIcon(destination.icon)
+                  : find.text(destination.localizedLabel(l10n)),
+            ),
           );
-          await tester.tap(find.byType(BackButton));
-          await tester.pumpAndSettle();
-          expect(find.byType(NavigationManagementPage), findsOneWidget);
         }
+        await tester.pumpAndSettle();
+        expect(opened.last, destination);
+        expect(
+          find.byKey(ValueKey('opened-${destination.name}')),
+          findsOneWidget,
+        );
+        await tester.tap(find.byType(BackButton));
+        await tester.pumpAndSettle();
+        expect(find.byType(NavigationManagementPage), findsOneWidget);
       }
-      expect(opened, hasLength(initialSettings.managedOrder.length * 3));
+      expect(opened, scenarios.map((scenario) => scenario.$1));
       expect(repository.savedSettings, isEmpty);
       expect(await repository.load(), initialSettings);
     },
@@ -166,6 +168,11 @@ void main() {
       find.byKey(const Key('navigation-management-visible-history')),
     );
     await tester.pumpAndSettle();
+    expect(repository.savedSettings, hasLength(1));
+    expect(
+      repository.savedSettings.single.hiddenDestinations,
+      contains(MainShellDestination.history),
+    );
     final handle = find.byKey(const Key('navigation-management-drag-forum'));
     await tester.tap(handle);
     await tester.pumpAndSettle();
@@ -282,24 +289,6 @@ void main() {
     expect(
       repository.savedSettings.single.isVisible(MainShellDestination.messages),
       isTrue,
-    );
-  });
-
-  testWidgets('visibility changes persist immediately', (tester) async {
-    final repository = _FakeMainNavigationSettingsRepository();
-    await _pumpPage(tester, repository);
-
-    await tester.tap(
-      find.byKey(
-        const ValueKey<String>('navigation-management-visible-history'),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(repository.savedSettings, hasLength(1));
-    expect(
-      repository.savedSettings.single.hiddenDestinations,
-      contains(MainShellDestination.history),
     );
   });
 

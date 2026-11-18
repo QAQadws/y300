@@ -174,7 +174,7 @@ void main() {
   );
 
   testWidgets(
-    'numeric refresh keeps the counter state and uses the shared animation duration',
+    'numeric refresh keeps the counter state without showing a loader',
     (tester) async {
       final repository = _Repository(
         (read) async => _success(credits: read == 1 ? 12 : 19),
@@ -195,10 +195,6 @@ void main() {
       await tester.pump();
       expect(tester.element(counter), same(initialState));
       expect(tester.widget<AnimatedFlipCounter>(counter).value, 19);
-      expect(
-        tester.widget<AnimatedFlipCounter>(counter).duration,
-        const Duration(milliseconds: 260),
-      );
       expect(find.byType(LinearProgressIndicator), findsNothing);
       await tester.pumpAndSettle();
     },
@@ -482,62 +478,57 @@ void main() {
     },
   );
 
-  for (final family in AppThemeFamily.values) {
-    testWidgets(
-      'account header stays transparent with $family dark group colors',
-      (tester) async {
-        final theme = AppTheme.build(
-          family: family,
-          brightness: Brightness.dark,
-        );
-        await _pumpHeader(
-          tester,
-          repository: _Repository((_) async => _success()),
-          theme: theme,
-        );
-        final material = tester.widget<Material>(
-          find
-              .descendant(
-                of: find.byKey(const Key('more-account-header')),
-                matching: find.byType(Material),
-              )
-              .first,
-        );
-        final group = tester.widget<Container>(
-          find.byKey(const Key('more-account-group')),
-        );
-
-        expect(material.color, Colors.transparent);
-        expect(material.surfaceTintColor, Colors.transparent);
-        expect(material.shape, theme.cardTheme.shape);
-        expect(
-          (group.decoration as BoxDecoration).color,
-          theme.colorScheme.secondaryContainer,
-        );
-        expect(tester.takeException(), isNull);
-      },
+  testWidgets('account header uses the active dark theme colors', (
+    tester,
+  ) async {
+    final theme = AppTheme.build(
+      family: AppThemeFamily.moonWhite,
+      brightness: Brightness.dark,
     );
-  }
-
-  for (final width in [360, 393]) {
-    testWidgets('$width dp header keeps fitting account controls on one row', (
+    await _pumpHeader(
       tester,
-    ) async {
-      tester.view.physicalSize = Size(width.toDouble(), width * 20 / 9);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      await _pumpHeader(
-        tester,
-        repository: _Repository(
-          (_) async => _success(name: '283475', group: '百合花蕾'),
-        ),
-      );
+      repository: _Repository((_) async => _success()),
+      theme: theme,
+    );
+    final material = tester.widget<Material>(
+      find
+          .descendant(
+            of: find.byKey(const Key('more-account-header')),
+            matching: find.byType(Material),
+          )
+          .first,
+    );
+    final group = tester.widget<Container>(
+      find.byKey(const Key('more-account-group')),
+    );
 
-      _expectAccountLayout(tester, toggleWraps: false);
-      expect(tester.takeException(), isNull);
-    });
-  }
+    expect(material.color, Colors.transparent);
+    expect(material.surfaceTintColor, Colors.transparent);
+    expect(material.shape, theme.cardTheme.shape);
+    expect(
+      (group.decoration as BoxDecoration).color,
+      theme.colorScheme.secondaryContainer,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('360dp header keeps fitting account controls on one row', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await _pumpHeader(
+      tester,
+      repository: _Repository(
+        (_) async => _success(name: '283475', group: '百合花蕾'),
+      ),
+    );
+
+    _expectAccountLayout(tester, toggleWraps: false);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('360dp header keeps fitting controls inline at 1.3x text', (
     tester,

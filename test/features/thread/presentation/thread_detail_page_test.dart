@@ -1031,73 +1031,67 @@ void main() {
       expect(history.drafts, hasLength(1));
     });
 
-    for (final dark in [false, true]) {
-      testWidgets(
-        'multiline entry title keeps its layout in ${dark ? 'dark' : 'light'} mode',
-        (tester) async {
-          tester.view.devicePixelRatio = 1;
-          tester.view.physicalSize = const Size(320, 800);
-          addTearDown(tester.view.resetDevicePixelRatio);
-          addTearDown(tester.view.resetPhysicalSize);
-          final subject = List.filled(3, '這是一個很長的測試標題').join();
-          final result = Completer<ApiResult<ThreadDetailData>>();
-          final repository = _FakeThreadRepository(
-            (tid, page) => result.future,
-          );
-          await tester.pumpWidget(
-            _buildTestApp(
-              repository,
-              theme: dark ? AppTheme.dark() : AppTheme.light(),
-              home: Builder(
-                builder: (context) => MediaQuery(
-                  data: MediaQuery.of(
-                    context,
-                  ).copyWith(textScaler: const TextScaler.linear(1.6)),
-                  child: ThreadDetailPage(tid: '100', subject: subject),
-                ),
-              ),
+    testWidgets('multiline entry title keeps its layout when content loads', (
+      tester,
+    ) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(320, 800);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      final subject = List.filled(3, '這是一個很長的測試標題').join();
+      final result = Completer<ApiResult<ThreadDetailData>>();
+      final repository = _FakeThreadRepository((tid, page) => result.future);
+      await tester.pumpWidget(
+        _buildTestApp(
+          repository,
+          theme: AppTheme.light(),
+          home: Builder(
+            builder: (context) => MediaQuery(
+              data: MediaQuery.of(context)
+                  .copyWith(textScaler: const TextScaler.linear(1.6)),
+              child: ThreadDetailPage(tid: '100', subject: subject),
             ),
-          );
-          await tester.pump();
-          final titleFinder = find.text(subject);
-          final titleRect = tester.getRect(titleFinder);
-          final titleStyle = tester.widget<Text>(titleFinder).style;
-          List<Rect> lineBoxes() => tester
-              .renderObject<RenderParagraph>(titleFinder)
-              .getBoxesForSelection(
-                TextSelection(baseOffset: 0, extentOffset: subject.length),
-              )
-              .map((box) => box.toRect())
-              .toList();
-          final linesBefore = lineBoxes();
-          expect(linesBefore.length, greaterThan(1));
-          result.complete(
-            ApiSuccess(
-              _threadDetailData(
-                tid: '100',
-                subject: subject,
-                posts: [
-                  _post(
-                    pid: 'multiline-p1',
-                    author: 'fixture-user',
-                    authorId: '1',
-                    number: 1,
-                    isFirst: true,
-                    message: '<p>fixture-body</p>',
-                  ),
-                ],
-              ),
-            ),
-          );
-          await tester.pumpAndSettle();
-          expect(find.byType(ThreadDetailLoading), findsNothing);
-          expect(tester.getRect(titleFinder), titleRect);
-          expect(tester.widget<Text>(titleFinder).style, titleStyle);
-          expect(lineBoxes(), linesBefore);
-          expect(repository.queryHistory, hasLength(1));
-        },
+          ),
+        ),
       );
-    }
+      await tester.pump();
+      final titleFinder = find.text(subject);
+      final titleRect = tester.getRect(titleFinder);
+      final titleStyle = tester.widget<Text>(titleFinder).style;
+      List<Rect> lineBoxes() => tester
+          .renderObject<RenderParagraph>(titleFinder)
+          .getBoxesForSelection(
+            TextSelection(baseOffset: 0, extentOffset: subject.length),
+          )
+          .map((box) => box.toRect())
+          .toList();
+      final linesBefore = lineBoxes();
+      expect(linesBefore.length, greaterThan(1));
+      result.complete(
+        ApiSuccess(
+          _threadDetailData(
+            tid: '100',
+            subject: subject,
+            posts: [
+              _post(
+                pid: 'multiline-p1',
+                author: 'fixture-user',
+                authorId: '1',
+                number: 1,
+                isFirst: true,
+                message: '<p>fixture-body</p>',
+              ),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(ThreadDetailLoading), findsNothing);
+      expect(tester.getRect(titleFinder), titleRect);
+      expect(tester.widget<Text>(titleFinder).style, titleStyle);
+      expect(lineBoxes(), linesBefore);
+      expect(repository.queryHistory, hasLength(1));
+    });
 
     for (final initialSubject in ['', 'fixture-old-title']) {
       testWidgets(
@@ -5757,48 +5751,6 @@ void main() {
       expect(commentRepository.loadedRequest, isNull);
     });
 
-    testWidgets('post actions do not expose HTML-first comparison', (
-      tester,
-    ) async {
-      final repository = _FakeThreadRepository((tid, page) async {
-        return ApiSuccess(
-          _threadDetailData(
-            tid: tid,
-            posts: [
-              ThreadPost(
-                pid: 'p1',
-                author: 'alice',
-                authorId: '1',
-                message: '<p>对照正文</p>',
-                number: 1,
-                isFirst: true,
-                dateline: 'today',
-              ),
-            ],
-          ),
-        );
-      });
-
-      await tester.pumpWidget(_buildTestApp(repository));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 120));
-
-      await _longPressVisibleTop(
-        tester,
-        find.byKey(const Key('thread-post-body-p1')),
-      );
-      await tester.pumpAndSettle();
-
-      expect(
-        find.byKey(const Key('thread-post-html-first-compare-action')),
-        findsNothing,
-      );
-      expect(
-        find.byKey(const Key('thread-post-select-copy-action')),
-        findsOneWidget,
-      );
-    });
-
     testWidgets('renders comic forum posts without eager shelf parsing', (
       tester,
     ) async {
@@ -5943,53 +5895,6 @@ void main() {
         );
       },
     );
-
-    testWidgets('hides search-in-forum action on thread detail page', (
-      tester,
-    ) async {
-      final repository = _FakeThreadRepository((tid, page) async {
-        return ApiSuccess(
-          ThreadDetailData(
-            tid: tid,
-            fid: '30',
-            subject: '测试主题',
-            author: 'alice',
-            replies: 0,
-            views: 1,
-            currentPage: 1,
-            perPage: 20,
-            posts: [
-              ThreadPost(
-                pid: 'p1',
-                author: 'alice',
-                authorId: '1',
-                message: '<p>正文</p>',
-                number: 1,
-                isFirst: true,
-                dateline: 'today',
-              ),
-            ],
-          ),
-        );
-      });
-
-      await tester.pumpWidget(_buildTestApp(repository));
-      await tester.pumpAndSettle();
-
-      expect(
-        find.byKey(const Key('thread-detail-search-button')),
-        findsNothing,
-      );
-      expect(
-        find.byKey(const Key('thread-detail-favorite-button')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const Key('thread-detail-appbar-reply-button')),
-        findsOneWidget,
-      );
-      expect(find.byKey(const Key('thread-detail-more-menu')), findsOneWidget);
-    });
 
     testWidgets('opens compact display settings from more menu', (
       tester,

@@ -841,44 +841,6 @@ void main() {
     expect(find.byType(SnackBar), findsOneWidget);
   });
 
-  testWidgets('ComposerQuillPrototypeEditor exposes WYSIWYG toolbar', (
-    tester,
-  ) async {
-    await tester.pumpWidget(_buildEditor());
-
-    expect(find.byKey(const Key('test-quill-format-button')), findsOneWidget);
-    expect(find.byKey(const Key('test-quill-align-button')), findsOneWidget);
-    expect(find.byKey(const Key('test-quill-quote-button')), findsOneWidget);
-    expect(find.byKey(const Key('test-quill-link-button')), findsOneWidget);
-    expect(find.byKey(const Key('test-quill-sticker-button')), findsOneWidget);
-    expect(find.byKey(const Key('test-quill-image-button')), findsOneWidget);
-    expect(find.byKey(const Key('test-quill-bbcode-output')), findsNothing);
-    expect(
-      find.ancestor(
-        of: find.byKey(const Key('test-quill-format-button')),
-        matching: find.byWidgetPredicate((widget) {
-          return widget is Material &&
-              widget.color ==
-                  AppTheme.light().colorScheme.surfaceContainerHighest;
-        }),
-      ),
-      findsNothing,
-    );
-    expect(
-      find.ancestor(
-        of: find.byKey(const Key('test-quill-editor')),
-        matching: find.byWidgetPredicate((widget) {
-          if (widget is! DecoratedBox) {
-            return false;
-          }
-          final decoration = widget.decoration;
-          return decoration is BoxDecoration && decoration.border != null;
-        }),
-      ),
-      findsNothing,
-    );
-  });
-
   testWidgets('format button toggles an embedded tool panel', (tester) async {
     await tester.pumpWidget(_buildEditor());
 

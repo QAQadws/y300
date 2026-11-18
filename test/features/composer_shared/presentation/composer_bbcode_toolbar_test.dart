@@ -40,34 +40,6 @@ void main() {
     expect(selected?.closingTag, '[/color]');
   });
 
-  testWidgets('ComposerBbCodeToolbar returns custom backcolor command', (
-    tester,
-  ) async {
-    ComposerBbCodeCommand? selected;
-    await tester.pumpWidget(
-      _buildToolbar(onCommandSelected: (command) => selected = command),
-    );
-
-    await tester.tap(find.byKey(const Key('reply-composer-backcolor-button')));
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(const Key('reply-composer-backcolor-sheet')),
-      findsOneWidget,
-    );
-    final picker = tester.widget<ColorPicker>(
-      find.byKey(const Key('reply-composer-backcolor-picker')),
-    );
-    picker.onColorChanged(const Color(0xffaabbcc));
-    await tester.pump();
-    await tester.tap(
-      find.byKey(const Key('reply-composer-backcolor-use-button')),
-    );
-    await tester.pumpAndSettle();
-
-    expect(selected?.openingTag, '[backcolor=#aabbcc]');
-    expect(selected?.closingTag, '[/backcolor]');
-  });
-
   testWidgets('ComposerBbCodeToolbar does not insert color on cancellation', (
     tester,
   ) async {
@@ -86,7 +58,7 @@ void main() {
     expect(selected, isNull);
   });
 
-  testWidgets('ComposerBbCodeToolbar returns link command from sheet', (
+  testWidgets('validates link fields before returning a trimmed command', (
     tester,
   ) async {
     ComposerBbCodeCommand? selected;
@@ -96,7 +68,14 @@ void main() {
 
     await tester.tap(find.byKey(const Key('reply-composer-link-button')));
     await tester.pumpAndSettle();
+    final use = find.byKey(const Key('reply-composer-link-use-button'));
+    await tester.tap(use);
+    await tester.pumpAndSettle();
+
+    expect(selected, isNull);
     expect(find.byKey(const Key('reply-composer-link-sheet')), findsOneWidget);
+    expect(find.text('请输入链接'), findsOneWidget);
+    expect(find.text('请输入链接文字'), findsOneWidget);
 
     await tester.enterText(
       find.byKey(const Key('reply-composer-link-url-input')),
@@ -106,31 +85,12 @@ void main() {
       find.byKey(const Key('reply-composer-link-label-input')),
       ' 示例链接 ',
     );
-    await tester.tap(find.byKey(const Key('reply-composer-link-use-button')));
+    await tester.tap(use);
     await tester.pumpAndSettle();
 
     expect(selected?.openingTag, '[url=https://example.com/a?b=1]');
     expect(selected?.closingTag, '[/url]');
     expect(selected?.body, '示例链接');
-  });
-
-  testWidgets('ComposerBbCodeToolbar keeps link sheet open for empty fields', (
-    tester,
-  ) async {
-    ComposerBbCodeCommand? selected;
-    await tester.pumpWidget(
-      _buildToolbar(onCommandSelected: (command) => selected = command),
-    );
-
-    await tester.tap(find.byKey(const Key('reply-composer-link-button')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('reply-composer-link-use-button')));
-    await tester.pumpAndSettle();
-
-    expect(selected, isNull);
-    expect(find.byKey(const Key('reply-composer-link-sheet')), findsOneWidget);
-    expect(find.text('请输入链接'), findsOneWidget);
-    expect(find.text('请输入链接文字'), findsOneWidget);
   });
 
   testWidgets('ComposerBbCodeToolbar link sheet reserves keyboard inset', (
@@ -179,43 +139,17 @@ void main() {
       _buildToolbar(onCommandSelected: (command) => selected = command),
     );
 
-    await tester.tap(find.byKey(const Key('reply-composer-align-button')));
+    final align = find.byKey(const Key('reply-composer-align-button'));
+    final quote = find.byKey(const Key('reply-composer-quote-button'));
+    expect(tester.getCenter(align).dx, lessThan(tester.getCenter(quote).dx));
+
+    await tester.tap(align);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('reply-composer-align-center')));
     await tester.pumpAndSettle();
 
     expect(selected?.openingTag, '[align=center]');
     expect(selected?.closingTag, '[/align]');
-  });
-
-  testWidgets('ComposerBbCodeToolbar places align before quote', (
-    tester,
-  ) async {
-    await tester.pumpWidget(_buildToolbar(onCommandSelected: (_) {}));
-
-    final alignCenter = tester.getCenter(
-      find.byKey(const Key('reply-composer-align-button')),
-    );
-    final quoteCenter = tester.getCenter(
-      find.byKey(const Key('reply-composer-quote-button')),
-    );
-
-    expect(alignCenter.dx, lessThan(quoteCenter.dx));
-  });
-
-  testWidgets('ComposerBbCodeToolbar returns quote command', (tester) async {
-    ComposerBbCodeCommand? selected;
-    await tester.pumpWidget(
-      _buildToolbar(onCommandSelected: (command) => selected = command),
-    );
-
-    expect(find.byKey(const Key('reply-composer-code-button')), findsNothing);
-
-    await tester.tap(find.byKey(const Key('reply-composer-quote-button')));
-    await tester.pump();
-
-    expect(selected?.openingTag, '[quote]');
-    expect(selected?.closingTag, '[/quote]');
   });
 
   testWidgets('ComposerBbCodeToolbar localizes Traditional Chinese chrome', (

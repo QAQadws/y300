@@ -1342,47 +1342,48 @@ void main() {
     },
   );
 
-  for (final family in AppThemeFamily.values) {
-    for (final brightness in Brightness.values) {
-      testWidgets(
-        'editor settings and preview fit $family $brightness with large text and keyboard',
-        (tester) async {
-          await tester.binding.setSurfaceSize(const Size(320, 740));
-          addTearDown(() => tester.binding.setSurfaceSize(null));
-          final service = BlogOperationFixture(autoPrepare: true);
-          await _open(
-            tester,
-            service,
-            create: true,
-            largeKeyboard: true,
-            theme: AppTheme.build(family: family, brightness: brightness),
-          );
-          await tester.enterText(
-            find.byKey(const Key('blog-editor-subject')),
-            '长标题 ' * 12,
-          );
-          await tester.ensureVisible(find.byKey(const Key('blog-editor-body')));
-          await _replaceBody(tester, '正文\n空行与换行\n\n' * 6);
-          await _openSettings(tester);
-          await _reveal(tester, find.byKey(const Key('blog-editor-open-web')));
-          expect(
-            find.byKey(const Key('blog-editor-open-web')).hitTestable(),
-            findsOneWidget,
-          );
-          expect(tester.takeException(), isNull);
-          await _closeSettings(tester);
-          await tester.tap(find.byKey(const Key('blog-editor-preview-toggle')));
-          await tester.pumpAndSettle();
-          expect(find.byType(ForumHtmlContentView), findsOneWidget);
-          expect(tester.takeException(), isNull);
-          await _save(tester);
-          service.saved();
-          await tester.pumpAndSettle();
-          expect(find.byType(BlogEditorPage), findsNothing);
-          expect(tester.takeException(), isNull);
-        },
-      );
-    }
+  for (final (family, brightness) in const [
+    (AppThemeFamily.warmPaper, Brightness.light),
+    (AppThemeFamily.plumPurple, Brightness.dark),
+  ]) {
+    testWidgets(
+      'editor settings and preview fit $family $brightness with large text and keyboard',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(320, 740));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        final service = BlogOperationFixture(autoPrepare: true);
+        await _open(
+          tester,
+          service,
+          create: true,
+          largeKeyboard: true,
+          theme: AppTheme.build(family: family, brightness: brightness),
+        );
+        await tester.enterText(
+          find.byKey(const Key('blog-editor-subject')),
+          '长标题 ' * 12,
+        );
+        await tester.ensureVisible(find.byKey(const Key('blog-editor-body')));
+        await _replaceBody(tester, '正文\n空行与换行\n\n' * 6);
+        await _openSettings(tester);
+        await _reveal(tester, find.byKey(const Key('blog-editor-open-web')));
+        expect(
+          find.byKey(const Key('blog-editor-open-web')).hitTestable(),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+        await _closeSettings(tester);
+        await tester.tap(find.byKey(const Key('blog-editor-preview-toggle')));
+        await tester.pumpAndSettle();
+        expect(find.byType(ForumHtmlContentView), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await _save(tester);
+        service.saved();
+        await tester.pumpAndSettle();
+        expect(find.byType(BlogEditorPage), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 }
 

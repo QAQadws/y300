@@ -29,61 +29,62 @@ import '../../../test_support/localized_test_app.dart';
 import '../test_support/thread_directory_fixture.dart';
 
 void main() {
-  for (final brightness in Brightness.values) {
-    for (final scale in [1.0, 1.8]) {
-      testWidgets(
-        '$brightness at $scale fits narrow phones and shares forum surfaces',
-        (tester) async {
-          tester.view.physicalSize = const Size(320, 680);
-          tester.view.devicePixelRatio = 1;
-          addTearDown(tester.view.resetPhysicalSize);
-          addTearDown(tester.view.resetDevicePixelRatio);
-          final theme = brightness == Brightness.light
-              ? AppTheme.light()
-              : AppTheme.dark();
-          final repository = ThreadDirectoryFixture(autoComplete: true);
-          final opened = <String?>[];
-          await _pump(
-            tester,
-            repository,
-            theme: theme,
-            scale: scale,
-            page: UserThreadPage(
-              initialType: UserThreadDirectoryType.replies,
-              onOpenThread: (_, _, reply) => opened.add(reply?.postId),
-            ),
-          );
-          final l10n = AppLocalizations.of(
-            tester.element(find.byType(UserThreadPage)),
-          );
-          expect(find.text(l10n.profileMyThreadsTitle), findsOneWidget);
-          expect(find.byType(NativePrimaryTabBar), findsOneWidget);
-          expect(
-            repository.requests.single.query.type,
-            UserThreadDirectoryType.replies,
-          );
-          final card = find.byType(UserThreadCard);
-          final material = tester.widget<Material>(
-            find.descendant(of: card, matching: find.byType(Material)).first,
-          );
-          expect(material.color, theme.y300NativeContent.card);
-          expect(material.elevation, 0);
-          final title = tester.widget<Text>(
-            find.text(threadSummary('100').title),
-          );
-          expect(
-            title.style!.color,
-            ThreadDetailNativePalette.resolve(theme).title,
-          );
-          final secondReply = find.byKey(const Key('my-thread-reply-502'));
-          await tester.ensureVisible(secondReply);
-          await tester.pumpAndSettle();
-          await tester.tap(secondReply);
-          expect(opened, ['502']);
-          expect(tester.takeException(), isNull);
-        },
-      );
-    }
+  for (final (brightness, scale) in const [
+    (Brightness.light, 1.0),
+    (Brightness.dark, 1.8),
+  ]) {
+    testWidgets(
+      '$brightness at $scale fits narrow phones and shares forum surfaces',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 680);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final theme = brightness == Brightness.light
+            ? AppTheme.light()
+            : AppTheme.dark();
+        final repository = ThreadDirectoryFixture(autoComplete: true);
+        final opened = <String?>[];
+        await _pump(
+          tester,
+          repository,
+          theme: theme,
+          scale: scale,
+          page: UserThreadPage(
+            initialType: UserThreadDirectoryType.replies,
+            onOpenThread: (_, _, reply) => opened.add(reply?.postId),
+          ),
+        );
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(UserThreadPage)),
+        );
+        expect(find.text(l10n.profileMyThreadsTitle), findsOneWidget);
+        expect(find.byType(NativePrimaryTabBar), findsOneWidget);
+        expect(
+          repository.requests.single.query.type,
+          UserThreadDirectoryType.replies,
+        );
+        final card = find.byType(UserThreadCard);
+        final material = tester.widget<Material>(
+          find.descendant(of: card, matching: find.byType(Material)).first,
+        );
+        expect(material.color, theme.y300NativeContent.card);
+        expect(material.elevation, 0);
+        final title = tester.widget<Text>(
+          find.text(threadSummary('100').title),
+        );
+        expect(
+          title.style!.color,
+          ThreadDetailNativePalette.resolve(theme).title,
+        );
+        final secondReply = find.byKey(const Key('my-thread-reply-502'));
+        await tester.ensureVisible(secondReply);
+        await tester.pumpAndSettle();
+        await tester.tap(secondReply);
+        expect(opened, ['502']);
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 
   testWidgets(

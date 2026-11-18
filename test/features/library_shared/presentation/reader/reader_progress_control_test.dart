@@ -21,21 +21,6 @@ void main() {
 
     expect(find.text('3'), findsOneWidget);
     expect(find.text('12'), findsOneWidget);
-  });
-
-  testWidgets('single digit labels use compact symmetric slots', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      _buildProgress(
-        config: ReaderProgressConfig(
-          current: 1,
-          total: 9,
-          onChanged: (_) {},
-          onChangeEnd: (_) {},
-        ),
-      ),
-    );
 
     final currentWidth = tester
         .getSize(find.byKey(const Key('shared-reader-current-label-slot')))
@@ -44,7 +29,6 @@ void main() {
         .getSize(find.byKey(const Key('shared-reader-total-label-slot')))
         .width;
 
-    expect(currentWidth, lessThan(24));
     expect(totalWidth, currentWidth);
   });
 

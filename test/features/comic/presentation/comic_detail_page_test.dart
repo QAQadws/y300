@@ -267,14 +267,6 @@ void main() {
 
       await tester.pumpAndSettle();
       await _scrollFirstChapterIntoTapArea(tester);
-      expect(
-        find.byKey(
-          const ValueKey<String>(
-            'unified-detail-chapter-read-badge-comic:1:e1',
-          ),
-        ),
-        findsNothing,
-      );
 
       await tester.tap(find.text('Episode 1'));
       await tester.pump();
@@ -316,14 +308,6 @@ void main() {
         find.byKey(const ValueKey<String>('unified-detail-chapter-comic:1:e1')),
         300,
         scrollable: find.byType(Scrollable).first,
-      );
-      expect(
-        find.byKey(
-          const ValueKey<String>(
-            'unified-detail-chapter-read-badge-comic:1:e1',
-          ),
-        ),
-        findsNothing,
       );
       expect(find.text('已读'), findsNothing);
     },

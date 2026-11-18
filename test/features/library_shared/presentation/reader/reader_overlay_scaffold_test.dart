@@ -1,44 +1,35 @@
 import 'package:flutter/material.dart';
+
 import '../../../../test_support/localized_test_app.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/features/library_shared/presentation/reader/reader.dart';
 
 void main() {
-  testWidgets('ReaderOverlayScaffold hides menu by default', (tester) async {
-    await tester.pumpWidget(_buildScaffold());
-
-    final top = tester.widget<IgnorePointer>(
-      find.byKey(const Key('shared-reader-top-overlay-hit-test-gate')),
-    );
-    final bottom = tester.widget<IgnorePointer>(
-      find.byKey(const Key('shared-reader-bottom-overlay-hit-test-gate')),
-    );
-
-    expect(top.ignoring, isTrue);
-    expect(bottom.ignoring, isTrue);
-  });
-
-  testWidgets('ReaderOverlayScaffold center tap toggles menu visibility', (
+  testWidgets('ReaderOverlayScaffold center tap toggles the hidden menu', (
     tester,
   ) async {
     await tester.pumpWidget(_buildScaffold());
 
+    final top = find.byKey(
+      const Key('shared-reader-top-overlay-hit-test-gate'),
+    );
+    final bottom = find.byKey(
+      const Key('shared-reader-bottom-overlay-hit-test-gate'),
+    );
+    expect(tester.widget<IgnorePointer>(top).ignoring, isTrue);
+    expect(tester.widget<IgnorePointer>(bottom).ignoring, isTrue);
+
     await tester.tapAt(const Offset(400, 300));
     await _pumpTapAndOverlayAnimation(tester);
 
-    var top = tester.widget<IgnorePointer>(
-      find.byKey(const Key('shared-reader-top-overlay-hit-test-gate')),
-    );
-    expect(top.ignoring, isFalse);
+    expect(tester.widget<IgnorePointer>(top).ignoring, isFalse);
 
     await tester.tapAt(const Offset(400, 300));
     await _pumpTapAndOverlayAnimation(tester);
 
-    top = tester.widget<IgnorePointer>(
-      find.byKey(const Key('shared-reader-top-overlay-hit-test-gate')),
-    );
-    expect(top.ignoring, isTrue);
+    expect(tester.widget<IgnorePointer>(top).ignoring, isTrue);
   });
 
   testWidgets('ReaderOverlayScaffold respects initially visible menu', (
