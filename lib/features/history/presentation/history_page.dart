@@ -12,6 +12,7 @@ import 'package:y300/features/history/presentation/models/history_view_state.dar
 import 'package:y300/features/history/presentation/widgets/history_day_section.dart';
 import 'package:y300/features/history/presentation/widgets/history_entry_tile.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/widgets/navigation/navigation_dock_insets.dart';
 
 typedef HistoryEntryOpenCallback =
     Future<HistoryOpenResult> Function(
@@ -205,6 +206,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
     }
 
     final groups = widget.groupingPolicy.group(state.items, now: _clock.now());
+    final dockInset = NavigationDockInsets.bottomOf(context);
     return CustomScrollView(
       key: const PageStorageKey<String>('history-timeline-scroll'),
       controller: _scrollController,
@@ -260,6 +262,8 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
           )
         else
           const SliverToBoxAdapter(child: SizedBox(height: 24)),
+        if (dockInset > 0)
+          SliverToBoxAdapter(child: SizedBox(height: dockInset)),
       ],
     );
   }

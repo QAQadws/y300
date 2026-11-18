@@ -61,12 +61,14 @@ import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/startup/presentation/main_shell_page.dart';
-import 'package:y300/features/startup/presentation/navigation_dock_surface.dart';
 import 'package:y300/app/startup/main_shell_startup_providers.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 import 'package:y300/l10n/app_localizations_zh.dart';
 import 'package:y300/features/profile/data/providers/profile_read_providers.dart';
 import 'package:y300/features/profile/presentation/profile_blog_page.dart';
+import 'package:y300/shared/widgets/navigation/navigation_dock.dart';
+import 'package:y300/shared/widgets/navigation/navigation_dock_insets.dart';
+import 'package:y300/shared/widgets/navigation/navigation_dock_surface.dart';
 
 import '../../profile/test_support/blog_directory_fixture.dart';
 
@@ -117,9 +119,9 @@ void main() {
         );
     void expectDot(MainShellDestination target, bool expected) {
       final entry = destination(target);
-      expect((entry.icon as MessageAttentionIcon).showAttention, expected);
+      expect(_navigationAttentionIcon(entry.icon).showAttention, expected);
       expect(
-        (entry.selectedIcon! as MessageAttentionIcon).showAttention,
+        _navigationAttentionIcon(entry.selectedIcon!).showAttention,
         expected,
       );
     }
@@ -414,16 +416,18 @@ void main() {
     },
   );
 
-  testWidgets('MainShellPage can switch across all six lazy tabs', (
+  testWidgets('all eight lazy tabs lay out behind the shared dock', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(320, 700));
     addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(tester.view.resetViewInsets);
     final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
       ComicSearchRefreshQueueSnapshot.empty,
     );
     final textScale = ValueNotifier<double>(2);
     final blogs = BlogDirectoryFixture();
+    final messages = MessageTestRepository();
     final webViewDriver = _FakeForumWebViewDriver();
     addTearDown(queueSnapshot.dispose);
     addTearDown(textScale.dispose);
@@ -432,6 +436,8 @@ void main() {
         overrides: [
           blogAccountIdProvider.overrideWithValue('101'),
           userBlogDirectoryRepositoryProvider.overrideWithValue(blogs),
+          messageAccountIdProvider.overrideWithValue('101'),
+          messageRepositoryProvider.overrideWithValue(messages),
           comicRepositoryProvider.overrideWithValue(_FakeComicRepository()),
           novelRepositoryProvider.overrideWithValue(_FakeNovelRepository()),
           libraryStateRepositoryProvider.overrideWithValue(
@@ -487,8 +493,22 @@ void main() {
     await _pumpMainShellReady(tester);
 
     final l10n = AppLocalizationsZh();
+    final dock = find.byType(NavigationDock);
 
-    expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
+    void expectDockOverlap(MainShellDestination destination) {
+      final page = find.byKey(Key('main-shell-page-${destination.name}'));
+      final inset = NavigationDockInsets.bottomOf(tester.element(page));
+      expect(inset, greaterThan(0));
+      expect(inset, tester.getSize(dock).height);
+      expect(tester.getBottomLeft(page).dy, tester.getBottomLeft(dock).dy);
+    }
+
+    final forumList = find.byKey(const Key('forum-home-list'));
+    expectDockOverlap(MainShellDestination.forum);
+    expect(
+      (tester.widget<ListView>(forumList).padding! as EdgeInsets).bottom,
+      tester.getSize(dock).height + 10,
+    );
     final initialNavigationBar = tester.widget<NavigationBar>(
       find.byType(NavigationBar),
     );
@@ -525,12 +545,18 @@ void main() {
     await tester.tap(find.text('收藏').last);
     await _pumpShellTab(tester);
     expect(find.text('收藏'), findsWidgets);
-    expect(find.byKey(const Key('unified-shelf-list-view')), findsOneWidget);
+    final shelfList = find.byKey(const Key('unified-shelf-list-view'));
+    expectDockOverlap(MainShellDestination.favorites);
+    expect(
+      (tester.widget<ListView>(shelfList).padding! as EdgeInsets).bottom,
+      tester.getSize(dock).height + 12,
+    );
 
     await tester.tap(find.text('漫画').last);
     await _pumpShellTab(tester);
     expect(find.byType(AppBar), findsOneWidget);
     expect(find.byIcon(Icons.search), findsOneWidget);
+    expectDockOverlap(MainShellDestination.comic);
 
     await tester.tap(find.text('小说').last);
     await _pumpShellTab(tester);
@@ -539,16 +565,44 @@ void main() {
       find.byKey(const Key('unified-shelf-category-indicator')),
       findsOneWidget,
     );
+    expectDockOverlap(MainShellDestination.novel);
 
     await tester.tap(find.text('记录').last);
     await _pumpShellTab(tester);
     expect(find.byKey(const Key('history-page')), findsOneWidget);
     expect(find.byKey(const Key('history-empty')), findsOneWidget);
+    expectDockOverlap(MainShellDestination.history);
+
+    tester.view.viewInsets = const FakeViewPadding(bottom: 240);
+    await tester.pump();
+    final history = find.byKey(const Key('history-page'));
+    expect(NavigationDockInsets.bottomOf(tester.element(history)), 0);
+    expect(
+      tester
+          .widget<NavigationDockSurface>(find.byType(NavigationDockSurface))
+          .blurPageEdge,
+      isFalse,
+    );
+    tester.view.resetViewInsets();
+    await tester.pump();
 
     await tester.tap(find.text('更多'));
     await _pumpShellTab(tester);
     expect(find.text('更多'), findsWidgets);
     expect(find.byKey(const Key('more-login-entry')), findsOneWidget);
+    expectDockOverlap(MainShellDestination.more);
+    final moreScroll = tester.state<ScrollableState>(
+      find.descendant(
+        of: find.byKey(const Key('more-page-list')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    moreScroll.position.jumpTo(moreScroll.position.maxScrollExtent);
+    await tester.pump();
+    expect(
+      tester.getBottomLeft(find.byKey(const Key('more-about-entry'))).dy,
+      closeTo(tester.getTopLeft(dock).dy, 0.01),
+    );
     final fullyBuiltStack = tester.widget<IndexedStack>(
       find.byType(IndexedStack),
     );
@@ -570,6 +624,7 @@ void main() {
     await tester.tap(find.text(l10n.profileBlogTitle).last);
     await _pumpShellTab(tester);
     final blogElement = tester.element(find.byType(ProfileBlogPage));
+    expectDockOverlap(MainShellDestination.blogs);
     expect(blogs.queries, hasLength(1));
     await tester.tap(find.text(l10n.appNavigationMore).last);
     await _pumpShellTab(tester);
@@ -577,6 +632,27 @@ void main() {
     await _pumpShellTab(tester);
     expect(tester.element(find.byType(ProfileBlogPage)), same(blogElement));
     expect(blogs.queries, hasLength(1));
+
+    await container
+        .read(mainNavigationSettingsControllerProvider.notifier)
+        .setVisibility(MainShellDestination.messages, true);
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    await tester.pump();
+    await tester.tap(find.text(l10n.appNavigationMessages).last);
+    await tester.pump();
+    messages.reads.single.result.complete(
+      messageTestPage([messageTestItem('1')], count: 21, owner: '101'),
+    );
+    await _pumpShellTab(tester);
+    expectDockOverlap(MainShellDestination.messages);
+    final messageList = tester.widget<CustomScrollView>(
+      find.byKey(const PageStorageKey('private-message-list:101')),
+    );
+    final footer = messageList.slivers.last as SliverToBoxAdapter;
+    expect(
+      ((footer.child! as Padding).padding as EdgeInsets).bottom,
+      tester.getSize(dock).height + 12,
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -1127,6 +1203,12 @@ void main() {
 
       expect(find.byType(NavigationBar), findsNothing);
       expect(find.byKey(const Key('selection-action-bar')), findsOneWidget);
+      expect(
+        NavigationDockInsets.bottomOf(
+          tester.element(find.byType(IndexedStack)),
+        ),
+        0,
+      );
 
       selectionHost.deactivate(selectionHost.state!.ownerToken);
       await tester.pumpAndSettle();
@@ -1509,8 +1591,11 @@ int _selectedNavigationIndex(WidgetTester tester) {
 }
 
 IconData? _navigationIconData(Widget widget) {
-  return (widget as MessageAttentionIcon).icon;
+  return _navigationAttentionIcon(widget).icon;
 }
+
+MessageAttentionIcon _navigationAttentionIcon(Widget widget) =>
+    (widget as Transform).child! as MessageAttentionIcon;
 
 ShelfSelectionHostDelegate _selectionDelegate({
   Future<SelectionActionOutcome> Function(

@@ -20,6 +20,7 @@
 - `lib/core/utils`：跨模块使用的小型解析工具和通用工具。
 - `lib/features`：按业务能力拆分的 feature；跨漫画/小说/收藏的书架能力位于 `library_shared`，跨图片阅读器能力位于 `reader_shared`，发帖/回复/帖子编辑共用编辑器能力位于 `composer_shared`，通用 HTML 正文能力位于 `content_rendering_shared`。
 - `lib/shared/widgets`：不属于单一 feature 的轻量可复用 UI，包括论坛原生 surface、头像、瞬时反馈、书架视觉组件和帖子正文/编辑器共享的折叠视觉壳。
+  - `navigation/` 提供玻璃底栏及 `NavigationDockInsets`。底栏接收导航项和选中回调，入口配置及未读提示由主壳组装。主壳将 `Scaffold` 测得的覆盖高度交给页面。默认 `ListView` 通过 `MediaQuery` 避让，显式设置内边距的列表、网格及自定义 sliver 在滚动末尾消费该高度。独立页面、键盘可见时及书架多选时沿用各自的自然布局。
 - `packages/yamibo_forum_client`：纯 Dart 论坛协议客户端包，不依赖 Flutter 与应用状态。包含 source-neutral 的读取/命令/资源/会话认证契约、Discuz adapter、来源装配计划（source plan）、document/snapshot 缓存端口和 WAF 边界；全部 Yamibo 请求构造、协议解析、成功证据与失败分类都在这里，feature 只消费契约结果。
 - `packages/forum_markup_core`：本地纯 Dart attach/collapse 语法包，运行时无第三方依赖。统一 grammar/token、无损 AST、默认 16 层 parser 与 serializer，保留 UTF-16 偏移、原始标签/CRLF 和非法原文回退；唯一入口为 `forum_markup_core.dart`。包内纯测试与 App Quill/预览/帖子编辑集成回归分别执行，旧 composer 核心路径退役；不承载远端协议、附件状态或 UI。
 - `packages/content_title_core`：本地纯 Dart 漫画/小说标题包，内部按 comic/novel 分工，运行时依赖 petitparser 和 characters。唯一入口 content_title_core.dart 显式导出 12 个既有类型；保持漫画原文/18 runes 搜索裁剪/候选规则，以及小说作品清洗/纯文本章节标题/36 grapheme 默认截断。算法语料与测试归包内 test，旧包和 App 纯核心路径退役。App 保有 subject/provider/刷新/HTML/分页与持久化；小说原 fixture 仅在测试层精确桥接纯语料并保有 HTML wrapper/分页标识，生产代码不依赖 fixture。

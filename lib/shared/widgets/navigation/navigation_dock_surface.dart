@@ -8,13 +8,13 @@ class NavigationDockSurface extends StatelessWidget {
   const NavigationDockSurface({
     required this.dockRect,
     required this.press,
-    required this.fadePage,
+    required this.blurPageEdge,
     super.key,
   });
 
   final Rect dockRect;
   final double press;
-  final bool fadePage;
+  final bool blurPageEdge;
 
   static final _pageBlur = ui.ImageFilter.blur(sigmaX: 5.5, sigmaY: 5.5);
   static const _pageFeather = DecoratedBox(
@@ -56,7 +56,7 @@ class NavigationDockSurface extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          if (fadePage && !highContrast)
+          if (blurPageEdge && !highContrast)
             ClipRect(
               child: BackdropFilter(filter: _pageBlur, child: _pageFeather),
             ),

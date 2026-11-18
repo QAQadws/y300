@@ -7,12 +7,10 @@ class MessageAttentionIcon extends StatelessWidget {
     super.key,
     required this.icon,
     required this.showAttention,
-    this.offset = Offset.zero,
   });
 
   final IconData icon;
   final bool showAttention;
-  final Offset offset;
 
   @override
   Widget build(BuildContext context) {
@@ -26,16 +24,13 @@ class MessageAttentionIcon extends StatelessWidget {
         child: SizedBox(
           width: 24,
           height: 24,
-          child: Transform.translate(
-            offset: offset,
-            child: Badge(
-              isLabelVisible: showAttention,
-              backgroundColor: Theme.of(context).colorScheme.error,
-              smallSize: 7,
-              alignment: Alignment.topRight,
-              offset: const Offset(2, -2),
-              child: Icon(icon),
-            ),
+          child: Badge(
+            isLabelVisible: showAttention,
+            backgroundColor: Theme.of(context).colorScheme.error,
+            smallSize: 7,
+            alignment: Alignment.topRight,
+            offset: const Offset(2, -2),
+            child: Icon(icon),
           ),
         ),
       ),

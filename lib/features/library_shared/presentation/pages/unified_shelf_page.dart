@@ -22,6 +22,7 @@ import 'package:y300/features/library_shared/presentation/services/library_task_
 import 'package:y300/features/library_shared/presentation/widgets/library_sort_option_tile.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/app_popup_menu.dart';
+import 'package:y300/shared/widgets/navigation/navigation_dock_insets.dart';
 import 'package:y300/shared/widgets/shelf/fixed_slot_pager_header.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_card.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_image.dart';
@@ -1228,7 +1229,10 @@ class _WorkGrid extends StatelessWidget {
             ),
             // 大书架场景预渲染适度前后缓存，降低滑动抖动。
             scrollCacheExtent: ScrollCacheExtent.pixels(rowExtent),
-            padding: const EdgeInsets.all(ShelfGridGeometry.contentPadding),
+            padding: NavigationDockInsets.scrollPaddingOf(
+              context,
+              const EdgeInsets.all(ShelfGridGeometry.contentPadding),
+            ),
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: gridColumns,
               crossAxisSpacing: ShelfGridGeometry.itemSpacing,
@@ -1403,7 +1407,10 @@ class _WorkList extends StatelessWidget {
         ),
         // 大书架场景预渲染适度前后缓存，降低滑动抖动。
         scrollCacheExtent: const ScrollCacheExtent.pixels(82),
-        padding: const EdgeInsets.all(12),
+        padding: NavigationDockInsets.scrollPaddingOf(
+          context,
+          const EdgeInsets.all(12),
+        ),
         itemCount: items.length,
         separatorBuilder: (context, index) => const SizedBox(height: 10),
         itemBuilder: (context, index) {

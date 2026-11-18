@@ -2,33 +2,35 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:y300/features/startup/presentation/navigation_dock_surface.dart';
+import 'package:y300/shared/widgets/navigation/navigation_dock_surface.dart';
 
-class MainNavigationDock extends StatefulWidget {
-  const MainNavigationDock({
+/// Floating Material destinations over a shared liquid glass surface.
+class NavigationDock extends StatefulWidget {
+  const NavigationDock({
+    super.key,
+    this.barKey,
     required this.destinations,
     required this.selectedIndex,
     required this.onSelected,
-    required this.fadePage,
-    super.key,
+    this.blurPageEdge = true,
   });
 
+  final Key? barKey;
   final List<NavigationDestination> destinations;
   final int selectedIndex;
   final ValueChanged<int> onSelected;
-  final bool fadePage;
+  final bool blurPageEdge;
 
   static const _iconSize = 20.0;
   static const _iconLabelGap = 3.0;
   // NavigationBar centers the icon in a 32 dp indicator even when transparent.
   static const _iconShift = (32.0 - _iconSize) / 2 - _iconLabelGap;
-  static const destinationIconOffset = Offset(0, _iconShift);
 
   @override
-  State<MainNavigationDock> createState() => _MainNavigationDockState();
+  State<NavigationDock> createState() => _NavigationDockState();
 }
 
-class _MainNavigationDockState extends State<MainNavigationDock>
+class _NavigationDockState extends State<NavigationDock>
     with TickerProviderStateMixin {
   static const _preferredItemWidth = 184.0 / 3;
   static const _minimumItemWidth = 48.0;
@@ -41,10 +43,10 @@ class _MainNavigationDockState extends State<MainNavigationDock>
   static const _underlineWidth = 12.0;
   static const _underlineHeight = 1.5;
   static const _labelBottomPadding =
-      MainNavigationDock._iconLabelGap +
+      NavigationDock._iconLabelGap +
       _underlineGap +
       _underlineHeight +
-      2 * MainNavigationDock._iconShift;
+      2 * NavigationDock._iconShift;
 
   late final _position = AnimationController.unbounded(
     vsync: this,
@@ -60,11 +62,11 @@ class _MainNavigationDockState extends State<MainNavigationDock>
   bool _dragging = false;
 
   @override
-  void didUpdateWidget(covariant MainNavigationDock oldWidget) {
+  void didUpdateWidget(covariant NavigationDock oldWidget) {
     super.didUpdateWidget(oldWidget);
     final sameDestinations = listEquals(
-      oldWidget.destinations.map((item) => item.key).toList(),
-      widget.destinations.map((item) => item.key).toList(),
+      oldWidget.destinations.map((item) => item.key ?? item.label).toList(),
+      widget.destinations.map((item) => item.key ?? item.label).toList(),
     );
     if (!sameDestinations) {
       _dragging = false;
@@ -155,8 +157,8 @@ class _MainNavigationDockState extends State<MainNavigationDock>
           );
           final underlineTop =
               dockRect.center.dy +
-              (MainNavigationDock._iconSize +
-                      MainNavigationDock._iconLabelGap +
+              (NavigationDock._iconSize +
+                      NavigationDock._iconLabelGap +
                       labelSize * _labelLineHeight +
                       _underlineGap -
                       _underlineHeight) /
@@ -175,7 +177,7 @@ class _MainNavigationDockState extends State<MainNavigationDock>
                     child: NavigationDockSurface(
                       dockRect: dockRect,
                       press: press,
-                      fadePage: widget.fadePage,
+                      blurPageEdge: widget.blurPageEdge,
                     ),
                   ),
                   Positioned.fromRect(
@@ -205,6 +207,10 @@ class _MainNavigationDockState extends State<MainNavigationDock>
                           if (!_dragging) return;
                           _dragging = false;
                           final next = _position.value.round();
+                          if (!widget.destinations[next].enabled) {
+                            _settle(widget.selectedIndex);
+                            return;
+                          }
                           _settle(next);
                           widget.onSelected(next);
                         },
@@ -252,7 +258,7 @@ class _MainNavigationDockState extends State<MainNavigationDock>
         navigationBarTheme: NavigationBarTheme.of(context).copyWith(
           iconTheme: WidgetStateProperty.resolveWith((states) {
             return IconThemeData(
-              size: MainNavigationDock._iconSize,
+              size: NavigationDock._iconSize,
               color: states.contains(WidgetState.selected)
                   ? colors.primary
                   : colors.onSurfaceVariant,
@@ -266,10 +272,22 @@ class _MainNavigationDockState extends State<MainNavigationDock>
         removeRight: true,
         removeBottom: true,
         child: NavigationBar(
-          key: const ValueKey<String>('main-shell-navigation-bar'),
+          key: widget.barKey,
           selectedIndex: widget.selectedIndex,
           onDestinationSelected: widget.onSelected,
-          destinations: widget.destinations,
+          destinations: [
+            for (final destination in widget.destinations)
+              NavigationDestination(
+                key: destination.key,
+                icon: _alignIcon(destination.icon),
+                selectedIcon: destination.selectedIcon == null
+                    ? null
+                    : _alignIcon(destination.selectedIcon!),
+                label: destination.label,
+                tooltip: destination.tooltip,
+                enabled: destination.enabled,
+              ),
+          ],
           height: height,
           backgroundColor: Colors.transparent,
           indicatorColor: Colors.transparent,
@@ -294,4 +312,9 @@ class _MainNavigationDockState extends State<MainNavigationDock>
       ),
     );
   }
+
+  Widget _alignIcon(Widget icon) => Transform.translate(
+    offset: const Offset(0, NavigationDock._iconShift),
+    child: icon,
+  );
 }

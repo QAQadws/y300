@@ -4,6 +4,7 @@ import 'package:y300/features/messages/presentation/message_feed_controller.dart
 import 'package:y300/features/messages/presentation/widgets/message_feed_view.dart';
 import 'package:y300/features/messages/presentation/widgets/message_read_status.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/widgets/navigation/navigation_dock_insets.dart';
 
 /// Shared list chrome; private messages and notifications keep separate state.
 class MessageFeedList<P> extends StatelessWidget {
@@ -34,6 +35,9 @@ class MessageFeedList<P> extends StatelessWidget {
       builder: (context, state) {
         final data = state.data;
         final count = data == null ? 0 : itemCount(data);
+        final dockPadding = EdgeInsets.only(
+          bottom: NavigationDockInsets.bottomOf(context),
+        );
         return RefreshIndicator(
           onRefresh: controller.refresh,
           child: CustomScrollView(
@@ -43,10 +47,13 @@ class MessageFeedList<P> extends StatelessWidget {
               if (data == null)
                 SliverFillRemaining(
                   hasScrollBody: false,
-                  child: Center(
-                    child: MessageReadStatus(
-                      failure: state.failure,
-                      onRetry: controller.refresh,
+                  child: Padding(
+                    padding: dockPadding,
+                    child: Center(
+                      child: MessageReadStatus(
+                        failure: state.failure,
+                        onRetry: controller.refresh,
+                      ),
                     ),
                   ),
                 )
@@ -93,7 +100,7 @@ class MessageFeedList<P> extends StatelessWidget {
               if (data != null)
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(12).add(dockPadding),
                     child: state.failure != null
                         ? MessageReadStatus(
                             failure: state.failure,

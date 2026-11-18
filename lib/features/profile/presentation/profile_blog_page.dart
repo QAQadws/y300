@@ -40,6 +40,7 @@ import 'package:y300/shared/services/localized_error_summary.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 import 'package:y300/shared/widgets/forum_content_spacing.dart';
 import 'package:y300/shared/widgets/native_pagination_bar.dart';
+import 'package:y300/shared/widgets/navigation/navigation_dock_insets.dart';
 
 export 'package:y300/features/profile/presentation/blog/blog_feed_controller.dart';
 export 'package:y300/features/profile/presentation/blog/blog_detail_controller.dart';
@@ -610,7 +611,10 @@ class _ProfileBlogListContentState extends State<_ProfileBlogListContent> {
           )),
           controller: _scrollController,
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding: NavigationDockInsets.scrollPaddingOf(
+            context,
+            const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          ),
           itemCount: data.items.length + 2,
           itemBuilder: (context, index) {
             if (index == 0) {
