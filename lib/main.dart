@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart' as date_symbol_data;
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:y300/app/y300_app.dart';
 import 'package:y300/app/startup/app_bootstrap.dart';
 import 'package:y300/core/media/global_image_cache_tuner.dart';
@@ -9,6 +10,7 @@ import 'package:y300/core/preferences/preferences_store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final loadNavigationDock = LiquidGlassWidgets.initialize();
   await date_symbol_data.initializeDateFormatting();
   // 配置运行时解码图片缓存预算（区别于磁盘缓存上限），让可见区与上下缓冲区的
   // 已解码 bitmap 常驻内存，避免来回滚动时反复重新解码。
@@ -24,10 +26,10 @@ Future<void> main() async {
   } catch (_) {
     // Cache-root retirement is retryable and must never block app startup.
   }
-  runApp(
-    await bootstrapApplication(
-      preferencesStore: preferencesStore,
-      child: const Y300App(),
-    ),
+  final app = await bootstrapApplication(
+    preferencesStore: preferencesStore,
+    child: const Y300App(),
   );
+  await loadNavigationDock;
+  runApp(app);
 }

@@ -61,6 +61,7 @@ import 'package:y300/features/novel/data/providers/novel_providers.dart';
 import 'package:y300/features/novel/data/repositories/novel_repository.dart';
 import 'package:y300/features/novel/domain/models/novel_reader_marks.dart';
 import 'package:y300/features/startup/presentation/main_shell_page.dart';
+import 'package:y300/features/startup/presentation/navigation_dock_surface.dart';
 import 'package:y300/app/startup/main_shell_startup_providers.dart';
 import 'package:y300/features/thread/domain/thread_content_classifier.dart';
 import 'package:y300/l10n/app_localizations_zh.dart';
@@ -726,7 +727,13 @@ void main() {
     },
   );
 
-  testWidgets('Novel tab icon changes after tap', (tester) async {
+  testWidgets('Dock changes the selected tab when the gesture ends', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(396, 880);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
     final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
       ComicSearchRefreshQueueSnapshot.empty,
     );
@@ -774,11 +781,54 @@ void main() {
     expect(find.byIcon(Icons.local_library_outlined), findsOneWidget);
     expect(find.byIcon(Icons.local_library), findsNothing);
 
-    await tester.tap(find.text('小说'));
+    final l10n = AppLocalizationsZh();
+    final bar = find.byType(NavigationBar);
+    final capsule = tester
+        .widget<NavigationDockSurface>(find.byType(NavigationDockSurface))
+        .dockRect;
+    expect(capsule.size, const Size(352, 54));
+    expect(tester.getSize(bar), const Size(340, 54));
+    expect(
+      tester.widget<NavigationBar>(bar).indicatorColor,
+      Colors.transparent,
+    );
+    final novelLabel = find.descendant(
+      of: bar,
+      matching: find.text(l10n.appNavigationNovel),
+    );
+    final novel = tester.getCenter(novelLabel);
+    final novelIcon = tester.getCenter(
+      find.byIcon(Icons.local_library_outlined),
+    );
+    expect(
+      tester.getTopLeft(novelLabel).dy - novelIcon.dy - 10,
+      closeTo(3, 0.1),
+    );
+    final forum = tester.getCenter(
+      find.descendant(of: bar, matching: find.text(l10n.appNavigationForum)),
+    );
+
+    final press = await tester.startGesture(novel);
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(_selectedNavigationIndex(tester), 0);
+    expect(find.byTooltip(l10n.appNavigationNovel), findsNothing);
+    await press.up();
     await _pumpShellTab(tester);
 
     expect(find.byIcon(Icons.local_library_outlined), findsNothing);
     expect(find.byIcon(Icons.local_library), findsOneWidget);
+    final novelIndex = _selectedNavigationIndex(tester);
+    expect(novelIndex, greaterThan(0));
+
+    final drag = await tester.startGesture(novel);
+    await drag.moveTo(Offset.lerp(novel, forum, 0.45)!);
+    await tester.pump(const Duration(milliseconds: 60));
+    await drag.moveTo(forum);
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(_selectedNavigationIndex(tester), novelIndex);
+    await drag.up();
+    await _pumpShellTab(tester);
+    expect(_selectedNavigationIndex(tester), 0);
   });
 
   testWidgets(

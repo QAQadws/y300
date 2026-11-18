@@ -15,6 +15,7 @@ import 'package:y300/features/library_shared/presentation/selection/shelf_select
 import 'package:y300/features/more/presentation/more_page.dart';
 import 'package:y300/features/messages/application/message_attention_providers.dart';
 import 'package:y300/features/messages/presentation/widgets/message_attention_icon.dart';
+import 'package:y300/features/startup/presentation/main_navigation_dock.dart';
 import 'package:y300/l10n/app_localizations.dart';
 
 /// 应用主壳：承载可配置业务入口和固定的“更多”入口。
@@ -93,6 +94,7 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
         );
 
     final selection = ref.watch(shelfSelectionHostControllerProvider);
+    final extendForum = currentDestination == MainShellDestination.forum;
     return ListenableBuilder(
       listenable: selection,
       builder: (context, _) => ForumClipboardLinkHost(
@@ -101,6 +103,7 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
         builder: (context) => MessageAttentionVisibilityHost(
           isMoreSelected: currentDestination == MainShellDestination.more,
           child: Scaffold(
+            extendBody: extendForum && !selection.isActive,
             body: IndexedStack(
               index: MainShellDestination.values.indexOf(currentDestination),
               children: _buildIndexedPages(
@@ -109,30 +112,30 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
               ),
             ),
             bottomNavigationBar: ShelfSelectionBottomBar(
-              fallback: NavigationBar(
-                key: const ValueKey<String>('main-shell-navigation-bar'),
+              fallback: MainNavigationDock(
                 selectedIndex: visibleDestinations.indexOf(currentDestination),
-                onDestinationSelected: (index) {
+                fadePage: extendForum,
+                onSelected: (index) {
                   final destination = visibleDestinations[index];
+                  if (_currentDestination == destination) return;
                   setState(() {
                     _currentDestination = destination;
                     _builtDestinations.add(destination);
                   });
                 },
-                destinations: visibleDestinations
-                    .map(
-                      (destination) => _buildNavigationDestination(
-                        destination,
-                        showAttention: switch (destination) {
-                          MainShellDestination.messages =>
-                            attention.messagesNavigationDot,
-                          MainShellDestination.more =>
-                            attention.moreNavigationDot,
-                          _ => false,
-                        },
-                      ),
-                    )
-                    .toList(growable: false),
+                destinations: [
+                  for (final destination in visibleDestinations)
+                    _buildNavigationDestination(
+                      destination,
+                      showAttention: switch (destination) {
+                        MainShellDestination.messages =>
+                          attention.messagesNavigationDot,
+                        MainShellDestination.more =>
+                          attention.moreNavigationDot,
+                        _ => false,
+                      },
+                    ),
+                ],
               ),
             ),
           ),
@@ -166,11 +169,16 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
         showAttention: showAttention,
       ),
       label: destination.localizedLabel(AppLocalizations.of(context)),
+      tooltip: '',
     );
   }
 
   Widget _buildNavigationIcon(IconData icon, {required bool showAttention}) {
-    return MessageAttentionIcon(icon: icon, showAttention: showAttention);
+    return MessageAttentionIcon(
+      icon: icon,
+      showAttention: showAttention,
+      offset: MainNavigationDock.destinationIconOffset,
+    );
   }
 
   List<Widget> _buildIndexedPages(

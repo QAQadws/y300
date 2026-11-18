@@ -441,7 +441,9 @@ class _ForumHomeContentState extends ConsumerState<_ForumHomeContent> {
             child: ListView(
               key: const Key('forum-home-list'),
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.only(bottom: 10),
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.paddingOf(context).bottom + 10,
+              ),
               children: [
                 ForumHomeCarousel(
                   items: widget.state.viewData.carouselItems,

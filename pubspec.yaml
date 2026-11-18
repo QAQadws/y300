@@ -85,6 +85,7 @@ dependencies:
   animated_flip_counter: ^0.3.4
   flutter_quill: ^11.6.0
   font_awesome_flutter: ^11.0.0
+  liquid_glass_widgets: ^1.17.5
 
 dev_dependencies:
   flutter_driver:
