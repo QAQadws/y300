@@ -674,7 +674,7 @@ DataCommandFailure _failureFromTransport(
   DataCommandRetryPolicy retryPolicy = DataCommandRetryPolicy.explicitOnly,
   bool cancellationWasAfterSend = false,
 }) => DataCommandFailure(
-  kind: failure.statusCode == 405
+  kind: failure.isSecurityFailure
       ? DataCommandFailureKind.securityChallenge
       : switch (failure.kind) {
           ForumTransportFailureKind.network => DataCommandFailureKind.network,

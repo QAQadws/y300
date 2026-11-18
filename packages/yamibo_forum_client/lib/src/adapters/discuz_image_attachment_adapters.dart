@@ -714,8 +714,7 @@ DataCommandOutcomeUnknown<ForumImageAttachmentUploadReceipt> _unknownAfterSend(
 ) => DataCommandOutcomeUnknown(_transportCommandFailure(failure));
 
 DataCommandFailure _transportCommandFailure(ForumTransportFailure failure) {
-  final security =
-      failure.code.startsWith('security_') || failure.code.startsWith('waf_');
+  final security = failure.isSecurityFailure;
   return DataCommandFailure(
     kind: security
         ? DataCommandFailureKind.securityChallenge

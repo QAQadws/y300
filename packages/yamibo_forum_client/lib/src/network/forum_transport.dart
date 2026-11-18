@@ -44,6 +44,13 @@ final class ForumTransportFailure {
 
   /// Optional HTTP status code.
   final int? statusCode;
+
+  /// Stable security classification, including header-based HTTP 200 denials.
+  /// Keeps command adapters independent of transport-specific WAF status codes.
+  bool get isSecurityFailure =>
+      statusCode == 405 ||
+      code.startsWith('security_') ||
+      code.startsWith('waf_');
 }
 
 /// Transport result before source-specific parsing and capability mapping.

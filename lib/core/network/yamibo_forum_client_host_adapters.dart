@@ -183,7 +183,9 @@ final class Y300ForumClientNetworkAdapter
         forum.ForumResourceFailureKind.redirectRejected,
       'resource_not_found' => forum.ForumResourceFailureKind.notFound,
       'resource_is_not_image' => forum.ForumResourceFailureKind.invalidContent,
-      'security_challenge_persisted' || 'security_verification_not_completed' =>
+      'security_challenge_persisted' ||
+      'security_verification_not_completed' ||
+      'security_access_denied' =>
         forum.ForumResourceFailureKind.securityChallenge,
       'request_cancelled' => forum.ForumResourceFailureKind.cancelled,
       _ => switch (error.type) {

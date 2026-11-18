@@ -22,7 +22,7 @@ void main() {
     },
   );
 
-  test('deduplicates concurrent recovery requests', () async {
+  test('deduplicates concurrent status and header recovery requests', () async {
     final coordinator = WafChallengeRecoveryCoordinator();
     final completer = Completer<WafChallengeRecoveryResult>();
     var launchCount = 0;
@@ -32,7 +32,14 @@ void main() {
     });
 
     final first = coordinator.recover(request);
-    final second = coordinator.recover(request);
+    final second = coordinator.recover(
+      WafChallengeRecoveryRequest(
+        triggeringUri: request.triggeringUri,
+        method: 'GET',
+        evidence: WafChallengeEvidence.httpAutoRatelimit,
+        userAgent: request.userAgent,
+      ),
+    );
     expect(launchCount, 1);
 
     completer.complete(WafChallengeRecoveryResult.verified);

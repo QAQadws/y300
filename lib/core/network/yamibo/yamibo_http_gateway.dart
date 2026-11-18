@@ -3,7 +3,10 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:logger/logger.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart'
-    show ForumResourceMetadataPolicy;
+    show
+        ForumResourceMetadataPolicy,
+        ForumWafResponseDecision,
+        ForumWafHttpClientAdapter;
 import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/browser_user_agents.dart';
@@ -42,7 +45,12 @@ class YamiboHttpGateway {
                validateStatus: (status) =>
                    status != null && status >= 200 && status < 400,
              ),
-           );
+           ) {
+    _dio.httpClientAdapter = ForumWafHttpClientAdapter(
+      delegate: _dio.httpClientAdapter,
+      isManagedUri: _isSameSite,
+    );
+  }
 
   final CookieStore _cookieStore;
   final WafChallengeRecoveryCoordinator? _wafChallengeRecoveryCoordinator;
@@ -207,6 +215,47 @@ class YamiboHttpGateway {
       }
       final status = response.statusCode ?? 0;
 
+      final decision = sameSite
+          ? WafChallengeDetector.classify(
+              statusCode: status,
+              headers: response.headers.map,
+            )
+          : ForumWafResponseDecision.none;
+      if (decision == ForumWafResponseDecision.accessDenied) {
+        await _cancelResourceBodyBestEffort(body.stream);
+        return ApiFailure(_securityAccessDeniedError(status));
+      }
+      final challenge = decision.evidence;
+      if (challenge != null) {
+        await _cancelResourceBodyBestEffort(body.stream);
+        if (recoveryAttempt > 0) {
+          return ApiFailure(
+            _securityChallengeError(statusCode: status, alreadyRetried: true),
+          );
+        }
+        final recovery = await _recoverSecurityChallenge(
+          uri: uri,
+          method: 'GET',
+          evidence: challenge,
+          userAgent: userAgent,
+        );
+        if (recovery != WafChallengeRecoveryResult.verified) {
+          return ApiFailure(
+            _securityChallengeError(statusCode: status, alreadyRetried: false),
+          );
+        }
+        return await _openImageResource(
+          uri,
+          referer: referer,
+          userAgent: userAgent,
+          ifNoneMatch: ifNoneMatch,
+          cancelToken: cancelToken,
+          redirectCount: redirectCount,
+          recoveryAttempt: recoveryAttempt + 1,
+          allowConditionalHeaders: allowConditionalHeaders,
+        );
+      }
+
       if (_isResourceRedirect(status)) {
         await _cancelResourceBodyBestEffort(body.stream);
         final location = response.headers.value('location');
@@ -253,49 +302,6 @@ class YamiboHttpGateway {
               response.realUri,
             ),
           ),
-        );
-      }
-
-      final challenge = sameSite
-          ? WafChallengeDetector.detect(statusCode: status)
-          : null;
-      if (challenge != null) {
-        await _cancelResourceBodyBestEffort(body.stream);
-        if (recoveryAttempt > 0) {
-          return ApiFailure(
-            ApiError(
-              type: ApiErrorType.server,
-              message: 'network.security_challenge_persisted',
-              code: 'security_challenge_persisted',
-              statusCode: status,
-            ),
-          );
-        }
-        final recovery = await _recoverSecurityChallenge(
-          uri: uri,
-          method: 'GET',
-          evidence: challenge,
-          userAgent: userAgent,
-        );
-        if (recovery != WafChallengeRecoveryResult.verified) {
-          return ApiFailure(
-            ApiError(
-              type: ApiErrorType.server,
-              message: 'network.security_verification_not_completed',
-              code: 'security_verification_not_completed',
-              statusCode: status,
-            ),
-          );
-        }
-        return await _openImageResource(
-          uri,
-          referer: referer,
-          userAgent: userAgent,
-          ifNoneMatch: ifNoneMatch,
-          cancelToken: cancelToken,
-          redirectCount: redirectCount,
-          recoveryAttempt: recoveryAttempt + 1,
-          allowConditionalHeaders: allowConditionalHeaders,
         );
       }
 
@@ -426,11 +432,15 @@ class YamiboHttpGateway {
       if (!_isSameSite(response.realUri)) {
         return WafChallengeClearance.inconclusive;
       }
-      final evidence = WafChallengeDetector.detect(
+      final decision = WafChallengeDetector.classify(
         statusCode: response.statusCode,
+        headers: response.headers.map,
       );
-      if (evidence != null) {
+      if (decision.evidence != null) {
         return WafChallengeClearance.challenged;
+      }
+      if (decision == ForumWafResponseDecision.accessDenied) {
+        return WafChallengeClearance.inconclusive;
       }
       final statusCode = response.statusCode;
       if (statusCode != null && statusCode >= 200 && statusCode < 400) {
@@ -442,6 +452,7 @@ class YamiboHttpGateway {
       if (response != null) {
         final evidence = WafChallengeDetector.detect(
           statusCode: response.statusCode,
+          headers: response.headers.map,
         );
         if (evidence != null) {
           return WafChallengeClearance.challenged;
@@ -642,10 +653,15 @@ class YamiboHttpGateway {
       );
       final body = normalizeBody(response.data);
 
-      final challengeEvidence = _detectSecurityChallenge(
-        uri: response.requestOptions.uri,
+      final decision = _classifySecurityResponse(
+        uri: response.realUri,
         statusCode: response.statusCode,
+        headers: response.headers.map,
       );
+      if (decision == ForumWafResponseDecision.accessDenied) {
+        return ApiFailure(_securityAccessDeniedError(response.statusCode));
+      }
+      final challengeEvidence = decision.evidence;
       if (challengeEvidence != null) {
         final recovery = allowWafReplay && attempt == 0
             ? await _recoverSecurityChallenge(
@@ -720,10 +736,15 @@ class YamiboHttpGateway {
     } on DioException catch (error) {
       final elapsedMs = _elapsedMs(startedAt);
       final response = error.response;
-      final challengeEvidence = _detectSecurityChallenge(
-        uri: error.requestOptions.uri,
+      final decision = _classifySecurityResponse(
+        uri: response?.realUri ?? error.requestOptions.uri,
         statusCode: response?.statusCode,
+        headers: response?.headers.map ?? const {},
       );
+      if (decision == ForumWafResponseDecision.accessDenied) {
+        return ApiFailure(_securityAccessDeniedError(response?.statusCode));
+      }
+      final challengeEvidence = decision.evidence;
       if (challengeEvidence != null) {
         final recovery = allowWafReplay && attempt == 0
             ? await _recoverSecurityChallenge(
@@ -796,15 +817,26 @@ class YamiboHttpGateway {
     }
   }
 
-  WafChallengeEvidence? _detectSecurityChallenge({
+  ForumWafResponseDecision _classifySecurityResponse({
     required Uri uri,
     required int? statusCode,
+    required Map<String, List<String>> headers,
   }) {
     if (!_isSameSite(uri)) {
-      return null;
+      return ForumWafResponseDecision.none;
     }
-    return WafChallengeDetector.detect(statusCode: statusCode);
+    return WafChallengeDetector.classify(
+      statusCode: statusCode,
+      headers: headers,
+    );
   }
+
+  ApiError _securityAccessDeniedError(int? statusCode) => ApiError(
+    type: ApiErrorType.server,
+    message: 'network.security_verification_not_completed',
+    code: 'security_access_denied',
+    statusCode: statusCode,
+  );
 
   Future<WafChallengeRecoveryResult> _recoverSecurityChallenge({
     required Uri uri,

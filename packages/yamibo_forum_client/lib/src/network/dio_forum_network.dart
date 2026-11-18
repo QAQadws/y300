@@ -15,6 +15,7 @@ import 'forum_request.dart';
 import 'forum_request_profile.dart';
 import 'forum_response.dart';
 import 'forum_transport.dart';
+import 'forum_waf_http_client_adapter.dart';
 
 /// Source-neutral dio forum client network.
 final class DioForumClientNetwork
@@ -27,7 +28,12 @@ final class DioForumClientNetwork
     ForumClientLogger? logger,
     Dio? dio,
   }) : logger = logger ?? const NoopForumClientLogger(),
-       _dio = dio ?? Dio();
+       _dio = dio ?? Dio() {
+    _dio.httpClientAdapter = ForumWafHttpClientAdapter(
+      delegate: _dio.httpClientAdapter,
+      isManagedUri: _isManagedForumUri,
+    );
+  }
 
   /// Config.
   final ForumClientConfig config;
@@ -113,13 +119,18 @@ final class DioForumClientNetwork
         onSendProgress: request.onSendProgress,
       );
       final status = response.statusCode;
-      if (_detectChallenge(response.realUri, status) != null) {
+      final decision = _classifyResponse(response);
+      if (decision == ForumWafResponseDecision.accessDenied) {
+        return ForumTransportError(_accessDeniedFailure(status));
+      }
+      final challenge = decision.evidence;
+      if (challenge != null) {
         if (recoveryAttempt > 0) {
-          return const ForumTransportError(
+          return ForumTransportError(
             ForumTransportFailure(
               kind: ForumTransportFailureKind.server,
               code: 'security_challenge_persisted',
-              statusCode: 405,
+              statusCode: status,
             ),
           );
         }
@@ -129,7 +140,7 @@ final class DioForumClientNetwork
                 ForumWafRecoveryRequest(
                   uri: request.uri,
                   method: 'POST',
-                  evidence: ForumWafEvidence.httpStatus405,
+                  evidence: challenge,
                   userAgent: headers['User-Agent']!,
                 ),
               );
@@ -297,6 +308,58 @@ final class DioForumClientNetwork
           ),
         );
       }
+      final decision = sameSite
+          ? _classifyResponse(response)
+          : ForumWafResponseDecision.none;
+      if (decision == ForumWafResponseDecision.accessDenied) {
+        await _cancelResourceBodyBestEffort(body.stream);
+        return ForumResourceError(
+          ForumResourceFailure(
+            kind: ForumResourceFailureKind.securityChallenge,
+            code: 'security_access_denied',
+            statusCode: status,
+          ),
+        );
+      }
+      final challenge = decision.evidence;
+      if (challenge != null) {
+        await _cancelResourceBodyBestEffort(body.stream);
+        if (recoveryAttempt > 0) {
+          return ForumResourceError(
+            ForumResourceFailure(
+              kind: ForumResourceFailureKind.securityChallenge,
+              code: 'security_challenge_persisted',
+              statusCode: status,
+            ),
+          );
+        }
+        final recovery = waf == null
+            ? ForumWafRecoveryResult.unavailable
+            : await waf!.recover(
+                ForumWafRecoveryRequest(
+                  uri: uri,
+                  method: 'GET',
+                  evidence: challenge,
+                  userAgent: config.effectiveResourceUserAgent,
+                ),
+              );
+        if (recovery != ForumWafRecoveryResult.verified) {
+          return ForumResourceError(
+            ForumResourceFailure(
+              kind: ForumResourceFailureKind.securityChallenge,
+              code: 'waf_${recovery.name}',
+              statusCode: status,
+            ),
+          );
+        }
+        return await _openResource(
+          request,
+          uri: uri,
+          redirectCount: redirectCount,
+          recoveryAttempt: recoveryAttempt + 1,
+          allowConditionalHeaders: allowConditionalHeaders,
+        );
+      }
       if (_isRedirectStatus(status)) {
         await _cancelResourceBodyBestEffort(body.stream);
         final location = response.headers.value('location');
@@ -337,45 +400,6 @@ final class DioForumClientNetwork
             response.headers.value('content-type'),
             response.realUri,
           ),
-        );
-      }
-
-      if (sameSite && status == 405) {
-        await _cancelResourceBodyBestEffort(body.stream);
-        if (recoveryAttempt > 0) {
-          return const ForumResourceError(
-            ForumResourceFailure(
-              kind: ForumResourceFailureKind.securityChallenge,
-              code: 'security_challenge_persisted',
-              statusCode: 405,
-            ),
-          );
-        }
-        final recovery = waf == null
-            ? ForumWafRecoveryResult.unavailable
-            : await waf!.recover(
-                ForumWafRecoveryRequest(
-                  uri: uri,
-                  method: 'GET',
-                  evidence: ForumWafEvidence.httpStatus405,
-                  userAgent: config.effectiveResourceUserAgent,
-                ),
-              );
-        if (recovery != ForumWafRecoveryResult.verified) {
-          return ForumResourceError(
-            ForumResourceFailure(
-              kind: ForumResourceFailureKind.securityChallenge,
-              code: 'waf_${recovery.name}',
-              statusCode: status,
-            ),
-          );
-        }
-        return await _openResource(
-          request,
-          uri: uri,
-          redirectCount: redirectCount,
-          recoveryAttempt: recoveryAttempt + 1,
-          allowConditionalHeaders: allowConditionalHeaders,
         );
       }
 
@@ -518,7 +542,11 @@ final class DioForumClientNetwork
               }),
             ]);
       final body = response.data;
-      final challenge = _detectChallenge(response.realUri, response.statusCode);
+      final decision = _classifyResponse(response);
+      if (decision == ForumWafResponseDecision.accessDenied) {
+        return ForumTransportError(_accessDeniedFailure(response.statusCode));
+      }
+      final challenge = decision.evidence;
       if (challenge != null) {
         if (!request.allowWafReplay) {
           return ForumTransportError<ForumResponse<Object?>>(
@@ -635,6 +663,14 @@ final class DioForumClientNetwork
     required String requestId,
     required DateTime started,
   }) async {
+    if (request.cancellation?.isCancelled ?? false) {
+      return const ForumTransportError(
+        ForumTransportFailure(
+          kind: ForumTransportFailureKind.cancelled,
+          code: 'cancelled',
+        ),
+      );
+    }
     final headers = <String, String>{
       'User-Agent': config.userAgent,
       'Accept': '*/*',
@@ -644,6 +680,15 @@ final class DioForumClientNetwork
     final stored = await cookies.read(request.uri);
     if (stored.isNotEmpty) headers['Cookie'] = _cookieHeader(stored);
     try {
+      final cancelToken = CancelToken();
+      final cancellation = request.cancellation;
+      if (cancellation != null) {
+        unawaited(
+          cancellation.whenCancelled.then((_) {
+            cancelToken.cancel('cancelled');
+          }),
+        );
+      }
       final response = await _dio.requestUri<Object?>(
         request.uri,
         data: _requestBody(request.body),
@@ -660,13 +705,18 @@ final class DioForumClientNetwork
           receiveTimeout: config.receiveTimeout,
           validateStatus: (status) => status != null,
         ),
+        cancelToken: cancelToken,
       );
-      if (_detectChallenge(response.realUri, response.statusCode) != null) {
-        return const ForumTransportError<ForumResponse<Object?>>(
+      final decision = _classifyResponse(response);
+      if (decision == ForumWafResponseDecision.accessDenied) {
+        return ForumTransportError(_accessDeniedFailure(response.statusCode));
+      }
+      if (decision.evidence != null) {
+        return ForumTransportError<ForumResponse<Object?>>(
           ForumTransportFailure(
             kind: ForumTransportFailureKind.server,
             code: 'security_challenge_persisted',
-            statusCode: 405,
+            statusCode: response.statusCode,
           ),
         );
       }
@@ -777,12 +827,22 @@ final class DioForumClientNetwork
     return body;
   }
 
-  ForumWafEvidence? _detectChallenge(Uri uri, int? status) {
-    if (!_isManagedForumUri(uri) || status != 405) {
-      return null;
+  ForumWafResponseDecision _classifyResponse(Response<dynamic> response) {
+    if (!_isManagedForumUri(response.realUri)) {
+      return ForumWafResponseDecision.none;
     }
-    return ForumWafEvidence.httpStatus405;
+    return ForumWafResponsePolicy.classify(
+      statusCode: response.statusCode,
+      headers: response.headers.map,
+    );
   }
+
+  ForumTransportFailure _accessDeniedFailure(int? status) =>
+      ForumTransportFailure(
+        kind: ForumTransportFailureKind.server,
+        code: 'security_access_denied',
+        statusCode: status,
+      );
 
   String _cookieHeader(Map<String, String> values) =>
       values.entries.map((e) => '${e.key}=${e.value}').join('; ');

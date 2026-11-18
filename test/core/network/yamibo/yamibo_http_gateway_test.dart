@@ -21,6 +21,8 @@ void main() {
       SharedPreferences.setMockInitialValues(<String, Object>{});
     });
 
+    _wafHeaderTests();
+
     test(
       'injects a browser User-Agent fallback when the caller omits one',
       () async {
@@ -982,6 +984,298 @@ void main() {
       );
       expect(adapter.lastHeaders['Cookie'], contains('confirmed-auth'));
     });
+  });
+}
+
+void _wafHeaderTests() {
+  const rateLimitHeaders = <String, List<String>>{
+    'X-Tengine-Error': ['  DENIED BY HTTP_AUTO_RATELIMIT  '],
+  };
+  final uri = Uri.parse('https://bbs.yamibo.com/index.php?mobile=2');
+  const context = YamiboRequestContext(
+    kind: YamiboRequestKind.html,
+    operation: 'fixture.waf',
+  );
+
+  for (final responseType in forum.ForumResponseType.values) {
+    test(
+      'header challenge recovers $responseType through the Host bridge',
+      () async {
+        final adapter = _GatewayTestAdapter.scripted(const [
+          _ScriptedResponse(
+            headers: rateLimitHeaders,
+            textBody: '<script>opaque</script>',
+          ),
+          _ScriptedResponse(textBody: '{"ok":true}', bytesBody: [1, 2, 3]),
+        ]);
+        final store = CookieStore();
+        final coordinator = WafChallengeRecoveryCoordinator(
+          retryCooldown: Duration.zero,
+        );
+        var launches = 0;
+        coordinator.attachLauncher((request) async {
+          launches++;
+          expect(request.evidence, WafChallengeEvidence.httpAutoRatelimit);
+          await store.saveCookies(uri, {'pass': 'fresh'});
+          return WafChallengeRecoveryResult.verified;
+        });
+        final gateway = _buildGateway(
+          adapter: adapter,
+          cookieStore: store,
+          wafChallengeRecoveryCoordinator: coordinator,
+        );
+        final network = Y300ForumClientNetworkAdapter(
+          gateway: gateway,
+          apiOrigin: uri,
+          siteOrigin: uri,
+          resourceUserAgent: 'fixture',
+        );
+        final result = await network.send(
+          forum.ForumRequest(
+            method: forum.ForumRequestMethod.get,
+            uri: uri,
+            context: const forum.ForumRequestContext(operation: 'fixture.waf'),
+            responseType: responseType,
+          ),
+        );
+        expect(
+          result,
+          isA<forum.ForumTransportSuccess<forum.ForumResponse<Object?>>>(),
+        );
+        expect(launches, 1);
+        expect(adapter.fetchCount, 2);
+        expect(adapter.lastHeaders['Cookie'], contains('pass=fresh'));
+        if (responseType == forum.ForumResponseType.json) {
+          expect(
+            (result
+                    as forum.ForumTransportSuccess<
+                      forum.ForumResponse<Object?>
+                    >)
+                .response
+                .body,
+            {'ok': true},
+          );
+        }
+      },
+    );
+  }
+
+  test(
+    'persistent header challenge preserves status and omits raw payload',
+    () async {
+      final adapter = _GatewayTestAdapter.scripted(const [
+        _ScriptedResponse(headers: rateLimitHeaders, textBody: 'opaque'),
+        _ScriptedResponse(headers: rateLimitHeaders, textBody: 'opaque'),
+      ]);
+      final coordinator = WafChallengeRecoveryCoordinator()
+        ..attachLauncher((_) async => WafChallengeRecoveryResult.verified);
+      final result = await _buildGateway(
+        adapter: adapter,
+        wafChallengeRecoveryCoordinator: coordinator,
+      ).getText(uri, context: context);
+      expect(result.errorOrNull?.code, 'security_challenge_persisted');
+      expect(result.errorOrNull?.statusCode, 200);
+      expect(result.errorOrNull?.raw, isNull);
+      expect(adapter.fetchCount, 2);
+    },
+  );
+
+  test('disabled header recovery does not launch or replay a POST', () async {
+    final adapter = _GatewayTestAdapter.scripted(const [
+      _ScriptedResponse(headers: rateLimitHeaders),
+    ]);
+    var launches = 0;
+    final coordinator = WafChallengeRecoveryCoordinator()
+      ..attachLauncher((_) async {
+        launches++;
+        return WafChallengeRecoveryResult.verified;
+      });
+    final result =
+        await _buildGateway(
+          adapter: adapter,
+          wafChallengeRecoveryCoordinator: coordinator,
+        ).postForm(
+          uri,
+          context: context,
+          data: const {'field': 'value'},
+          allowWafReplay: false,
+        );
+    expect(result.errorOrNull?.code, 'security_verification_not_completed');
+    expect(launches, 0);
+    expect(adapter.fetchCount, 1);
+  });
+
+  for (final denial in [
+    'denied by Referer ACL',
+    'denied by req auth: expired timestamp',
+  ]) {
+    for (final status in [200, 403]) {
+      test(
+        '$denial $status fails closed without a browser or cookie merge',
+        () async {
+          final adapter = _GatewayTestAdapter.scripted([
+            _ScriptedResponse(
+              statusCode: status,
+              headers: {
+                'x-tengine-error': [denial],
+              },
+              setCookie: const ['auth=untrusted; Path=/'],
+              textBody: 'opaque',
+            ),
+          ]);
+          var launches = 0;
+          final coordinator = WafChallengeRecoveryCoordinator()
+            ..attachLauncher((_) async {
+              launches++;
+              return WafChallengeRecoveryResult.verified;
+            });
+          final store = CookieStore();
+          final result = await _buildGateway(
+            adapter: adapter,
+            cookieStore: store,
+            wafChallengeRecoveryCoordinator: coordinator,
+          ).getText(uri, context: context);
+          expect(result.errorOrNull?.code, 'security_access_denied');
+          expect(result.errorOrNull?.statusCode, status);
+          expect(result.errorOrNull?.raw, isNull);
+          expect(await store.readCookieMap(uri), isEmpty);
+          expect(launches, 0);
+        },
+      );
+    }
+  }
+
+  for (final status in [200, 304]) {
+    test(
+      'image header challenge $status uses recovery before content or cache validation',
+      () async {
+        final adapter = _GatewayTestAdapter.scripted([
+          _ScriptedResponse(
+            statusCode: status,
+            headers: rateLimitHeaders,
+            contentType: 'image/jpeg',
+            bytesBody: const [0],
+          ),
+          const _ScriptedResponse(
+            contentType: 'image/jpeg',
+            bytesBody: [1, 2, 3],
+          ),
+        ]);
+        var launches = 0;
+        final coordinator = WafChallengeRecoveryCoordinator()
+          ..attachLauncher((request) async {
+            launches++;
+            expect(request.evidence, WafChallengeEvidence.httpAutoRatelimit);
+            return WafChallengeRecoveryResult.verified;
+          });
+        final result = await _buildGateway(
+          adapter: adapter,
+          wafChallengeRecoveryCoordinator: coordinator,
+        ).openImageResource(uri, referer: uri, userAgent: 'fixture');
+        expect(
+          await result.dataOrNull!.content.expand((chunk) => chunk).toList(),
+          [1, 2, 3],
+        );
+        expect(launches, 1);
+        expect(adapter.fetchCount, 2);
+      },
+    );
+  }
+
+  test('image denial maps through the bridge as a security failure', () async {
+    final adapter = _GatewayTestAdapter.scripted(const [
+      _ScriptedResponse(
+        headers: {
+          'x-tengine-error': ['denied by IP ACL = blacklist'],
+        },
+        contentType: 'image/jpeg',
+        bytesBody: [1],
+      ),
+    ]);
+    final network = Y300ForumClientNetworkAdapter(
+      gateway: _buildGateway(adapter: adapter),
+      apiOrigin: uri,
+      siteOrigin: uri,
+      resourceUserAgent: 'fixture',
+    );
+    final result = await network.open(
+      forum.ForumResourceRequest(
+        reference: forum.ForumResourceReferenceResolver(siteOrigin: uri)
+            .resolve('/image.jpg', referer: uri)!,
+      ),
+    );
+    final failure = (result as forum.ForumResourceError).failure;
+    expect(failure.kind, forum.ForumResourceFailureKind.securityChallenge);
+    expect(failure.code, 'security_access_denied');
+  });
+
+  for (final scenario in [
+    (
+      header: 'denied by http_auto_ratelimit',
+      expected: WafChallengeClearance.challenged,
+    ),
+    (
+      header: 'denied by Referer ACL',
+      expected: WafChallengeClearance.inconclusive,
+    ),
+    (
+      header: 'denied by req auth: expired timestamp',
+      expected: WafChallengeClearance.inconclusive,
+    ),
+  ]) {
+    test(
+      'probe ${scenario.header} never grants clearance or opens recovery',
+      () async {
+        final adapter = _GatewayTestAdapter.scripted([
+          _ScriptedResponse(
+            headers: {
+              'x-tengine-error': [scenario.header],
+            },
+            textBody: 'opaque',
+          ),
+        ]);
+        var launches = 0;
+        final coordinator = WafChallengeRecoveryCoordinator()
+          ..attachLauncher((_) async {
+            launches++;
+            return WafChallengeRecoveryResult.verified;
+          });
+        final clearance = await _buildGateway(
+          adapter: adapter,
+          wafChallengeRecoveryCoordinator: coordinator,
+        ).probeWafChallengeClearance(uri, userAgent: 'fixture');
+        expect(clearance, scenario.expected);
+        expect(launches, 0);
+        expect(adapter.fetchCount, 1);
+      },
+    );
+  }
+
+  test('third-party image denial never launches forum recovery', () async {
+    final adapter = _GatewayTestAdapter.scripted(const [
+      _ScriptedResponse(
+        headers: rateLimitHeaders,
+        textBody: '<html>challenge</html>',
+      ),
+    ]);
+    var launches = 0;
+    final coordinator = WafChallengeRecoveryCoordinator()
+      ..attachLauncher((_) async {
+        launches++;
+        return WafChallengeRecoveryResult.verified;
+      });
+    final result =
+        await _buildGateway(
+          adapter: adapter,
+          wafChallengeRecoveryCoordinator: coordinator,
+        ).openImageResource(
+          Uri.parse('https://other.test/image.jpg'),
+          referer: uri,
+          userAgent: 'fixture',
+        );
+    expect(result.errorOrNull?.code, 'resource_is_not_image');
+    expect(launches, 0);
+    expect(adapter.lastHeaders, isNot(contains('Cookie')));
   });
 }
 

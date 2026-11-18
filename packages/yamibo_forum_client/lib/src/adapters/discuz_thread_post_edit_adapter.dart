@@ -1261,7 +1261,7 @@ DataCommandFailure _commandFailure(DataCommandFailureKind kind, String code) =>
 DataCommandFailure _commandTransportFailure(
   ForumTransportFailure failure,
 ) => DataCommandFailure(
-  kind: failure.statusCode == 405
+  kind: failure.isSecurityFailure
       ? DataCommandFailureKind.securityChallenge
       : switch (failure.kind) {
           ForumTransportFailureKind.network => DataCommandFailureKind.network,

@@ -4,6 +4,66 @@ import 'package:test/test.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client.dart';
 
 void main() {
+  group('header-only response policy', () {
+    test('retains 405 and matches the exact normalized rate-limit rule', () {
+      for (final status in [200, 403, 405, 503]) {
+        final decision = ForumWafResponsePolicy.classify(
+          statusCode: status,
+          headers: const {
+            'X-Tengine-Error': ['  DENIED BY HTTP_AUTO_RATELIMIT  '],
+          },
+        );
+        expect(
+          decision.evidence,
+          status == 405
+              ? ForumWafEvidence.httpStatus405
+              : ForumWafEvidence.httpAutoRatelimit,
+        );
+      }
+    });
+
+    test('unknown and conflicting denials cannot start browser recovery', () {
+      for (final values in [
+        ['denied by req auth: expired timestamp'],
+        ['denied by Referer ACL'],
+        ['denied by IP ACL = blacklist'],
+        ['denied by http_auto_ratelimit_extra'],
+        ['denied by http_auto_ratelimit', 'denied by Referer ACL'],
+      ]) {
+        final decision = ForumWafResponsePolicy.classify(
+          statusCode: 200,
+          headers: {'x-tengine-error': values},
+        );
+        expect(decision, ForumWafResponseDecision.accessDenied);
+        expect(decision.evidence, isNull);
+      }
+    });
+
+    test('vendor name and unrelated headers do not prove a denial', () {
+      for (final headers in <Map<String, List<String>>>[
+        {},
+        {
+          'server': ['ESA'],
+        },
+        {
+          'x-other': ['denied by http_auto_ratelimit'],
+        },
+        {
+          'x-tengine-error': ['upstream timeout'],
+        },
+      ]) {
+        expect(
+          ForumWafResponsePolicy.classify(statusCode: 200, headers: headers),
+          ForumWafResponseDecision.none,
+        );
+      }
+      expect(
+        ForumWafResponsePolicy.classify(statusCode: 405).evidence,
+        ForumWafEvidence.httpStatus405,
+      );
+    });
+  });
+
   test('verification probes only after cookie sync completes', () async {
     final events = <String>[];
     final service = ForumWafVerificationService(

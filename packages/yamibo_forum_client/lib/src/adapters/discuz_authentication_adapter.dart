@@ -331,7 +331,7 @@ final class DiscuzAuthenticationAdapter
     ForumTransportFailure failure, {
     DataCommandRetryPolicy defaultRetry = DataCommandRetryPolicy.explicitOnly,
   }) {
-    final security = failure.statusCode == 405;
+    final security = failure.isSecurityFailure;
     final kind = security
         ? DataCommandFailureKind.securityChallenge
         : switch (failure.kind) {

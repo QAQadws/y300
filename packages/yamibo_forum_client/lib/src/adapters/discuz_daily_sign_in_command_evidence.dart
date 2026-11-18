@@ -2,6 +2,7 @@ import '../contracts/data_command_contract.dart';
 import '../contracts/forum_daily_sign_in.dart';
 import '../network/forum_response.dart';
 import '../network/forum_transport.dart';
+import '../waf/forum_waf.dart';
 
 /// Keeps a sent sign-in command inconclusive until a verified postcondition is
 /// available. Untrusted HTML, URLs, and transport diagnostics are never copied
@@ -12,7 +13,11 @@ unconfirmedDailySignInPostSend(
 ) {
   final (kind, code, statusCode) = switch (observation) {
     ForumTransportSuccess<ForumResponse<String>>(:final response) =>
-      response.statusCode == 405
+      ForumWafResponsePolicy.classify(
+                statusCode: response.statusCode,
+                headers: response.headers,
+              ) !=
+              ForumWafResponseDecision.none
           ? (
               DataCommandFailureKind.securityChallenge,
               'daily_sign_in_security_challenge',
@@ -24,7 +29,7 @@ unconfirmedDailySignInPostSend(
               response.statusCode,
             ),
     ForumTransportError<ForumResponse<String>>(:final failure) => (
-      failure.statusCode == 405
+      failure.isSecurityFailure
           ? DataCommandFailureKind.securityChallenge
           : switch (failure.kind) {
               ForumTransportFailureKind.network =>

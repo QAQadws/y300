@@ -201,7 +201,7 @@ DataCommandFailureKind _transportKind(ForumTransportFailure failure) =>
       ForumTransportFailureKind.unauthorized =>
         DataCommandFailureKind.unauthenticated,
       ForumTransportFailureKind.server =>
-        failure.statusCode == 405
+        failure.isSecurityFailure
             ? DataCommandFailureKind.securityChallenge
             : DataCommandFailureKind.server,
       ForumTransportFailureKind.parse => DataCommandFailureKind.parse,

@@ -3,6 +3,47 @@ import 'package:yamibo_forum_client/src/adapters/discuz_daily_sign_in_command_ev
 import 'package:yamibo_forum_client/yamibo_forum_client.dart';
 
 void main() {
+  for (final code in [
+    'security_verification_not_completed',
+    'security_challenge_persisted',
+    'security_access_denied',
+    'waf_unavailable',
+  ]) {
+    test('HTTP 200 $code stays unknown with structured security failure', () {
+      final result = unconfirmedDailySignInPostSend(
+        ForumTransportError<ForumResponse<String>>(
+          ForumTransportFailure(
+            kind: ForumTransportFailureKind.server,
+            code: code,
+            statusCode: 200,
+          ),
+        ),
+      );
+      expect(result, isA<DataCommandOutcomeUnknown<ForumDailySignInReceipt>>());
+      expect(result.failure.kind, DataCommandFailureKind.securityChallenge);
+      expect(result.failure.statusCode, 200);
+      expect(result.failure.retryPolicy, DataCommandRetryPolicy.explicitOnly);
+    });
+  }
+
+  test('header-denied successful transport does not prove sign-in applied', () {
+    final result = unconfirmedDailySignInPostSend(
+      ForumTransportSuccess<ForumResponse<String>>(
+        ForumResponse(
+          uri: Uri.parse('https://bbs.yamibo.com/plugin.php?id=zqlj_sign'),
+          statusCode: 200,
+          headers: const {
+            'x-tengine-error': ['denied by http_auto_ratelimit'],
+          },
+          body: 'opaque',
+        ),
+      ),
+    );
+    expect(result, isA<DataCommandOutcomeUnknown<ForumDailySignInReceipt>>());
+    expect(result.failure.kind, DataCommandFailureKind.securityChallenge);
+    expect(result.failure.retryPolicy, DataCommandRetryPolicy.explicitOnly);
+  });
+
   // These are synthetic outcomes, not observed Yamibo sign-in responses.
   final syntheticResponses =
       <({String name, int statusCode, String body, String uri})>[

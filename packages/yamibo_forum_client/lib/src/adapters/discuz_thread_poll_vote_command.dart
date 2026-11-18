@@ -196,7 +196,7 @@ DataCommandFailure _formhashFailure(ForumTransportFailure failure) =>
 DataCommandFailure _transportFailure(
   ForumTransportFailure failure,
 ) => DataCommandFailure(
-  kind: failure.statusCode == 405
+  kind: failure.isSecurityFailure
       ? DataCommandFailureKind.securityChallenge
       : switch (failure.kind) {
           ForumTransportFailureKind.network => DataCommandFailureKind.network,

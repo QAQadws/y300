@@ -3,6 +3,60 @@
 enum ForumWafEvidence {
   /// Http status405.
   httpStatus405,
+
+  /// ESA's automatic rate-limit challenge response header.
+  httpAutoRatelimit,
+}
+
+/// Header-only access assessment; callers enforce the managed-site boundary.
+enum ForumWafResponseDecision {
+  /// No recognized edge denial.
+  none,
+
+  /// Existing status-based challenge.
+  httpStatus405,
+
+  /// A known edge rule for which browser recovery may be attempted.
+  httpAutoRatelimit,
+
+  /// An edge denial that must not launch automatic browser recovery.
+  accessDenied;
+
+  /// Only known recovery evidence can start the browser.
+  ForumWafEvidence? get evidence => switch (this) {
+    httpStatus405 => ForumWafEvidence.httpStatus405,
+    httpAutoRatelimit => ForumWafEvidence.httpAutoRatelimit,
+    none || accessDenied => null,
+  };
+}
+
+/// Shared by ordinary requests, image streams, and native clearance probes.
+/// Never inspects a response body or treats a vendor name as challenge proof.
+abstract final class ForumWafResponsePolicy {
+  /// Classifies status and headers without I/O or response payload data.
+  static ForumWafResponseDecision classify({
+    required int? statusCode,
+    Map<String, List<String>> headers = const {},
+  }) {
+    if (statusCode == 405) return ForumWafResponseDecision.httpStatus405;
+    var rateLimited = false;
+    for (final entry in headers.entries) {
+      if (entry.key.toLowerCase() != 'x-tengine-error') continue;
+      for (final value in entry.value) {
+        final normalized = value.trim().toLowerCase();
+        if (normalized == 'denied by http_auto_ratelimit') {
+          rateLimited = true;
+        } else if (normalized == 'denied by' ||
+            normalized.startsWith('denied by ')) {
+          // Unknown or conflicting denials cannot prove a solvable challenge.
+          return ForumWafResponseDecision.accessDenied;
+        }
+      }
+    }
+    return rateLimited
+        ? ForumWafResponseDecision.httpAutoRatelimit
+        : ForumWafResponseDecision.none;
+  }
 }
 
 /// Result returned by a Host WAF recovery implementation.
