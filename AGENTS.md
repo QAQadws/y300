@@ -1,103 +1,46 @@
 # AGENTS.md
 
-全部编写工作请用UTF-8，你全部的读取代码的工作也是UTF-8编码
+所有文件的读取、编写和修改均使用 UTF-8。
 
-## 项目背景
+## 项目与架构
 
-本仓库是面向 Yamibo 论坛内容的 Y300 Flutter/Dart 客户端。主壳包含论坛、收藏、漫画、小说、记录和更多六个入口，覆盖登录与会话、论坛原生解析/WebView 浏览、HTML-first 帖子详情、发帖/回复/帖子编辑、Quill/BBCode 富文本、搜索与标签、收藏同步、漫画/小说书架与阅读器、漫画离线下载队列、应用更新、缓存与数据管理等完整流程。
+Y300 是面向 Yamibo 论坛的 Flutter/Dart 客户端。主壳默认显示论坛、收藏、漫画、小说、记录和更多，博客与消息可在导航设置中启用。业务数据、阅读状态、偏好、下载和可再生缓存分别由 SQLite、SharedPreferences 和文件系统按现有职责管理。
 
-应用同时使用 SQLite、SharedPreferences 和文件系统保存业务数据、阅读状态、偏好、下载及可再生缓存。全部 Yamibo 论坛远端协议（读取、写命令、认证、受保护图片资源）封装在纯 Dart 包 `packages/yamibo_forum_client` 中，应用统一经 `yamiboForumClientProvider` 提供的 `YamiboForumClient` facade 访问；Host 侧由 `YamiboHttpGateway` 承担唯一共享传输（Cookie、`YamiboSessionStore`、Discuz formhash、WAF 单次重放），并通过 host adapter 桥接 document/snapshot 缓存与表情目录存储。阅读和同步流程普遍包含缓存、取消、single-flight、generation/owner 隔离及失败恢复。进入仓库工作时，必须先理解目标 feature、共享契约和持久化边界的既有写法，并让改动贴合当前架构与兼容策略。
+修改 `lib/` 前，查阅 [lib 架构地图](.codex/context/lib架构地图.md) 中目标模块的职责。涉及跨 feature、论坛协议、持久化、缓存、阅读器或编辑器时，一并查阅相关的跨模块流转。涉及小说分页与恢复、HTML 或图片渲染、相关共享包及测试样本时，查阅 [阅读渲染与测试约束](.codex/context/阅读渲染与测试约束.md) 中适用的章节。
 
-## 架构约束与上下文入口
+- 依赖方向优先保持 `presentation -> domain <- data`。跨 feature 调用使用公开 contract、service、adapter、bus 或 use case。
+- Yamibo 远端协议集中在 `packages/yamibo_forum_client`。应用统一通过 `yamiboForumClientProvider` 提供的 `YamiboForumClient` 访问读取、写命令、认证及受保护图片资源。
+- `YamiboHttpGateway` 是唯一共享 Host 传输，负责 Cookie、`YamiboSessionStore`、Discuz formhash、WAF、取消、日志及单次重放。WebView 重定向 resolver 是 App 侧例外。document/snapshot 缓存和表情目录存储使用现有 Host adapter。
+- 写命令只有收到 `applied` 才能按成功更新已确认的业务数据或提示成功。草稿、待确认状态和失败反馈按各自的流程处理。`outcomeUnknown` 禁止自动重发和展示服务器原始载荷。
+- 阅读、同步与缓存保持现有的取消、single-flight、generation/owner 隔离及失败恢复机制，防止迟到结果覆盖当前状态。
+- 小说作者帖子正文固定通过 `threadAuthorPosts` 使用 `viewthread version=1`。
 
-完整的 `lib` 目录、模块职责和跨模块流转说明位于 [`.codex/context/lib架构地图.md`](.codex/context/lib架构地图.md)。修改 `lib/` 前，必须阅读目标 feature 的职责；涉及跨 feature、论坛协议、持久化、缓存、阅读器或编辑器时，还必须阅读对应的跨模块流转说明。
+## 实现与 UI 迭代
 
-以下高风险边界仍属于强制约束：
+- 检查当前分支和工作区，保留已有改动。沿用现有实现和模块边界，保留正常入口与兼容行为，做能解决任务的最小改动。
+- 只格式化本次实际修改的 Dart 文件。在难以从代码看出原因的决策处补简洁注释。
+- UI 方向未定时，先用局部样稿同当前页面对照，按目标屏幕比例检查排版、图标语义和状态。样式和状态确定后，再调过渡与交互反馈。
+- 方向确定后，优先在实际页面用 App 热重载微调和验收。`@Preview` 适合独立对照组件或状态，也可以用静态样稿或 App 直接验证。
+- 从已验证且反复出现的需求中提炼主题、组件、图标和动效规则。局部 UI 优化沿用现有交互、数据与缓存路径。
 
-- 依赖方向优先保持 `presentation -> domain <- data`，跨 feature 调用经过公开 contract、service、adapter、bus 或 use case。
-- 全部 Yamibo 远端协议位于纯 Dart 包 `packages/yamibo_forum_client`，feature 统一通过 `YamiboForumClient` facade 消费；不得重建旁路请求或第二套会话。
-- `YamiboHttpGateway` 是唯一 Host 传输，负责 Cookie、Session/formhash 存储、WAF、取消、日志和单次重放；WebView 重定向 resolver 是明确的 App-bound 例外。
-- 写命令只有 `applied` 才能更新本地状态；`outcomeUnknown` 不得自动重发，也不得展示服务器原始载荷。
-- 异步阅读、同步与缓存流程必须保持 cancellation、single-flight 和 generation/owner 隔离，迟到结果不得污染新状态。
-- 小说作者帖子正文固定通过 `threadAuthorPosts` 使用 `viewthread version=1`，不得改成 `version=4`。
-- 小说横向新锚点使用格式 1 的节点内语义码点与文本身份；DOM 源坐标、UTF-16 和扩展字素通过显式投影转换，不用语义 offset 切 HTML。精确恢复核对格式/文本身份和实际 coverage；旧、未来格式或近似恢复不因首帧、补页完成或退出自动迁移，真实阅读导航才确认新位置。语义文档记录构建时的转换来源，不能用当前预览偏好推断；来源不一致不猜节点对应。
-- 小说分页等待超时、测量失败或后台补页停滞不得自动切换或持久改写阅读模式；只由用户主动选择滚动。保留已可读页与位置，重试核对布局前缀并以独立请求代次隔离迟到结果；退出和取消释放等待 timer 与测量 session。
-- 小说活跃顺序分页先满足目标与邻页，后台工作只在稳定封页后有界等待 Flutter idle；主动让步不算停滞，需求提升沿同一 session 继续。缺页翻页只保留一个等待意图，真正到页才确认位置；相反操作、拖动、新导航/seek、重试或代次变化退役等待及其自动动画，不能因补页完成自动切章。
-- 小说横向 TextPainter、测量 Overlay 和可见 HTML 共用局部解析的字体/字重、对齐、方向及 renderer 有效缩放输入，变化须失效对应布局缓存；已解析 textStyle 不重复 fontScale，作者 CSS 与真实 renderer 校验保留。当前 fwfh 使用单缩放因子，不把它宣称为完整非线性缩放。
-- 小说复杂分页串行等待 chunk 消费，只在封页并完成稳定发布后确认 committed offset；晚失败只回退未发布 DOM 尾部，不重发整块或改动已读前缀。页快照使用只追加存储的固定只读前缀；plan/measure/boundary/prepared 纯缓存归实际阅读会话，模式切换保留，退出或换 owner 永久关闭并隔离迟到回填，不缓存 Context、Overlay 或测量 session。
-- HTML 文字坐标、DOM 索引/切片、合法/受保护边界与有界 fit 搜索位于纯 Dart 包 `packages/html_pagination_core`，只消费 `html_pagination_core.dart` 公开入口。包内范围区分源码点、字素和 UTF-16；论坛保护判定、语义锚点投影、章节/cache identity、Flutter 测量、实际取消生命周期及 composer/hybrid 编排仍归 App。parse 端口不覆盖切片序列化，禁止借抽包启用随机起点或持久检查点。
-- 漫画/小说纯标题策略位于 `packages/content_title_core`，生产消费者统一使用 `content_title_core.dart` 公开入口。两组规则独立，subject 映射、HTML 准备、provider、搜索/同步与持久化仍归应用；生产代码不得依赖包的测试 fixture。
-- 图片连续阅读几何位于纯 Dart 包 `packages/continuous_image_geometry`，统一使用 `continuous_image_geometry.dart` 公开入口。应用图片模型实现只读 `ContinuousImageLayoutItem`，URL/缓存与业务 FlowPolicy、sequence position、Flutter 控制器、会话失效及实际 preload 仍归应用；不因提包启用未接入的长图/prefetch planner。
-- HTML 准备流水线与 prepared image 只依赖中立 `ForumHtmlPreparedImageResource` 和同步图片准备端口；资源实现保持不可变纯值，可随小说后台准备传递。缓存 spec/request 与默认 URL 装配归 application Host，不把缓存类型放回 prepared document，也不合并准备、显示和阅读器的既有缓存分类。
-- HTML 图片工厂与 viewport 只消费 `ForumHtmlDisplayImage`、布局值及 `ForumHtmlImageHost`，不读取缓存/provider。App adapter 保管显示 spec/request、尺寸索引、预取 scope 和 referer；Host 换绑只更新图片，保留正文测量与折叠状态，迟到尺寸、decode、首帧和失败回调须检查当前绑定与显示代次。HTML 准备、theme/style、renderer、body/viewport 与颜色/字号/折叠 helper 的唯一实现位于 Flutter 包 `packages/forum_content_renderer`，使用包公开入口；App feature 继续通过 `content_rendering.dart` 装配。Core 显式接收 prepared document、theme、render options 与折叠 labels，不导入 App/provider/传输。完整偏好、简繁转换与小说章节缓存 identity、默认准备和图片缓存配置仍归 App；更新回调或文案不得重挂正文，完整排版/主题值变化必须使样式缓存失效。
+## 验证
 
-## 强制约束
-Flutter 系列命令和dart系列指令是无法在Codex沙箱内跑的，
-请你用 require_escalated 发起权限请求，然后自己审批，或者我允许你在沙箱外执行，适合 flutter analyze、flutter test 这类需要访问 SDK/cache 的命令
+- Flutter 应用及 Flutter 包的代码改动运行 `flutter analyze` 和相关 `flutter test`。纯 Dart 包在对应包目录运行 `dart analyze` 和相关 `dart test`。涉及 App 与包之间的契约时，在受影响的两侧验证。
+- 需要访问沙箱外 Flutter/Dart SDK 或缓存时，按当前权限配置使用 `require_escalated` 申请执行。用户明确安排自行运行时，按其提供的结果处理，并在交付中区分验证来源。
+- 纯文档或静态样稿按交付内容检查链接、格式或显示效果。交付时说明已验证的范围和未能完成的验证。
 
-对你的写的代码要用flutter analyze和flutter test检验（不一定跑完全部的测试，只需要跑必要的测试即可）
+## 界面文字与国际化
 
-## 新增界面文字与国际化
+- 应用新增用户可见文案时，标题、按钮、菜单、tooltip、Semantics、SnackBar、错误提示、确认框及空状态均补齐所有支持语言的 ARB。
+- Presentation 层通过 `AppLocalizations` 获取显示文字。domain、data、repository、controller 和业务模型不得硬编码 UI 文案。
+- 修改 ARB 后执行 `flutter gen-l10n`，核对生成文件和未翻译报告。测试期望文字优先从 `AppLocalizations` 获取。
+- 服务器正文、用户名、URL、协议字段和 parser 判断字符串保留原有业务或协议语义。
 
-- 所有新增用户可见文字，包括页面标题、按钮、菜单、tooltip、Semantics、SnackBar、错误提示、确认框和空状态，必须加入所有支持语言的 ARB 文件。
-- Presentation 层通过 `AppLocalizations` 获取显示文字；domain、data、repository、controller 和业务模型不得硬编码 UI 文案。
-- 修改 ARB 后必须执行 `flutter gen-l10n`，检查生成文件和未翻译报告，并在测试中优先使用 `AppLocalizations` 获取期望文字，避免固定语言字符串断言。
-- 服务器正文、用户名、URL、协议字段和 parser 判断字符串属于业务原文或协议语义，不是应用 UI 文案，不得误写入 ARB 或进行 UI 文案替换。
+## 文档与本地记录
 
-## 工程实现要求
-
-实现代码改动时：
-
-- 优先考虑工程化、现代化、可维护的实现。
-- 考虑设计模式、设计原则和现有模块边界。
-- 不要把所有逻辑耦合到一个地方。
-- 优先使用职责清晰的小型 service、adapter 或 interface，避免庞大纠缠的流程。
-- 保持代码解耦，方便 review。
-- 引入新抽象前，先遵循项目已有约定。
-- 只格式化本次实际修改的 Dart 文件；不得无目的地对整个 `lib`、`test` 或仓库执行 formatter，避免产生大量无关 diff。
-- 在非显而易见的决策或复杂逻辑处添加简洁注释，方便 review。
-- 不要添加只是复述代码表面含义的噪音注释。
-
-## 文档要求
-
-- 日常功能调整、修复及验证结果通过提交信息记录；尚未提交时在交付说明中记录，不必逐次追加开发文档，也不因此自动提交。
-- 仅在架构、公共契约、持久化规则或长期工作流发生变化时，更新 `docs/开发文档.md` 或对应的专项文档。
-- 直接修订相关章节，保持文档描述当前有效的设计与约定；不在文档顶部持续追加逐次开发流水，避免新旧方案混杂。
-- 重要技术决策可在专项文档中保留原因、取舍及兼容要求；普通改动无需单独创建设计文档。
-- 不需要更新 `docs/Review文档.md`。
-
-## 本地过程记录
-
-- 分支尝试、备选方案、失败路径、待办、AI 交接上下文和原始验证输出默认是本地工作资料，不放入需要提交的 `docs/`，也不通过 `git add -f` 强制追踪。
-- 统一保存在 `.local/agent-notes/<完整分支名>/`，保留分支名中的目录层级，例如 `.local/agent-notes/codex/blogs/`。该目录由 `.gitignore` 忽略；在尚未包含此规则的旧分支工作时，使用本仓库 `.git/info/exclude` 补充 `/.local/agent-notes/`，不要修改全局 Git 配置。
-- 每条分支用简短的 `README.md` 作为索引：注明对应分支、最近核对的提交、当前结论、未决问题和必要的资料链接。较长的专题记录或运行输出另存文件；更新有效结论，不连续追加整段对话和重复日志。
-- 接续任务时先核对当前分支和工作区，再按需读取该分支索引。笔记只提供线索，旧计划和旧测试结果不能代替当前代码、用户指令及实际运行结果；分支变基或重命名后同步修正索引中的提交或位置。
-- 日常改动的最终行为、原因和验证结果仍写入提交信息或未提交交付说明。只有已经落地、面向维护者长期有效的架构、公共契约、持久化规则和工作流，才提炼进入正式文档；不把过程笔记原样改名后提交。正式文档不得依赖本地笔记链接才能读懂。
-- 提交前用 `git status` 与 staged diff 核对范围，确保过程资料没有被追踪；仅新增忽略规则不能取消已有追踪。已经进入历史的记录须区分是否上传，未经用户授权不改写共享历史。
-- 本地笔记不是远端备份，也不保存密码、Cookie 或真实私密正文。分支切换时保留；跨设备交接或删除工作树前，先按用户安排复制到仓库外的私有备份位置，不把临时目录作为唯一副本。
-
-## 协作说明
-
-- 如果用户提供测试或 analyzer 输出，根据输出修复问题，但不要自行运行这些命令。
-- 如果遇到已有未提交改动，保留用户改动，并基于当前状态继续工作，不要回退无关改动。
-- 优先做范围明确、能解决问题且不破坏整体一致性的最小改动。
-
-
-## 方案创建
-- 对于方案的规划要优先考虑工程化、现代化、可维护的实现。
-- 考虑设计模式、设计原则和现有模块边界。
-- 不要把所有逻辑耦合到一个地方。
-
-
-## 重要决策
-小说的解析要version=1，而不是version=4，要不然可能会发生格式错误，目前已经实现了，但是我希望你记住而不要乱改
-
-## 标题样本与测试
-
-- 新增漫画纯标题分析样本，添加到 `packages/content_title_core/test/fixtures/comic_title_fixtures.dart`；对应算法测试在包内运行。
-- 新增小说作品标题清洗或纯文本章节标题样本，添加到 `packages/content_title_core/test/fixtures/novel_title_fixtures.dart`；算法样本只维护一份，不放进生产 barrel。
-- 漫画 subject 业务映射、重复匹配和交互样本继续归 `test/features/comic/domain/services/comic_title_parser_cases.dart`。
-- 小说 HTML/分页集成样本继续归应用 `test/features/novel/test_support/`；原 `novel_title_fixtures.dart` 只桥接包内标题样本，并保有 HTML wrapper/分页标识，不复制算法语料。
-- `content_title_core` 包内测试不得读取 App 文件或导入 Flutter。App 仅通过上述小说 fixture 桥接复用包内测试数据；新增跨边界测试引用须明确归属并更新对应守护。
-- 图片几何算法与纯参考样本维护在 `packages/continuous_image_geometry/test/`；Host 图片映射、视口 Widget、恢复/seek 与会话回归继续归应用测试，不跨边界引用包内测试 fixture。
-- HTML 分页纯坐标、DOM/Unicode 合成样本及 fit 算法测试维护在 `packages/html_pagination_core/test/`；章节转换、业务锚点、renderer、持久化和阅读时序仍归 App 测试。包内测试只经公开入口、不得读 App 或导入 Flutter；App 不引用该包测试 fixture，不复制纯算法语料。
+- 普通功能和修复的行为、原因与验证结果写入提交信息或未提交的交付说明。按用户要求提交。
+- Git 提交标题使用 `type(scope): description`，三项必填，分别表示改动类型、影响范围和改动摘要。
+- 架构、公共契约、持久化规则或长期工作流发生变化时，直接修订受 Git 追踪的相关文档，记录必要的取舍和兼容要求。`docs/` 是 Git 忽略的本地文档目录，可用于用户指定的本地文档交付。
+- 需要续作的分支试验、未决事项、交接内容和原始验证输出放在 `.local/agent-notes/<完整分支名>/`。需要索引时，用该目录的 `README.md` 记录分支、最近核对的提交、当前结论和资料链接。续作以当前代码、用户指令和验证结果为准，分支变基或改名后同步更新索引。
+- 过程资料留在本地，避免写入密码、Cookie 或私密正文。跨设备交接或删除工作树前，按用户安排留存到仓库外的私有位置。正式文档应独立可读。
+- 提交前用 `git status` 和 `git diff --cached` 核对范围，防止过程资料进入提交。对已追踪的资料先核对 Git 状态和共享历史，改写共享历史须经用户授权。
