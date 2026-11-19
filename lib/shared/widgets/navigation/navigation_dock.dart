@@ -42,6 +42,7 @@ class _NavigationDockState extends State<NavigationDock>
   static const _underlineGap = 3.0;
   static const _underlineWidth = 12.0;
   static const _underlineHeight = 1.5;
+  static const _tapPressPeak = 0.55;
   static const _labelBottomPadding =
       NavigationDock._iconLabelGap +
       _underlineGap +
@@ -106,7 +107,20 @@ class _NavigationDockState extends State<NavigationDock>
   void _release(PointerEvent event) {
     if (event.pointer != _pressedPointer) return;
     _pressedPointer = null;
-    _press.reverse();
+    if (event is PointerUpEvent && !_dragging && _press.value < _tapPressPeak) {
+      // A quick tap can release before the first animation frame.
+      _press
+          .animateTo(
+            _tapPressPeak,
+            duration: const Duration(milliseconds: 45),
+            curve: Curves.easeOut,
+          )
+          .then((_) {
+            if (mounted && _pressedPointer == null) _press.reverse();
+          });
+    } else {
+      _press.reverse();
+    }
   }
 
   @override
@@ -156,7 +170,7 @@ class _NavigationDockState extends State<NavigationDock>
             dockHeight,
           );
           final underlineTop =
-              dockRect.center.dy +
+              dockHeight / 2 +
               (NavigationDock._iconSize +
                       NavigationDock._iconLabelGap +
                       labelSize * _labelLineHeight +
@@ -169,8 +183,40 @@ class _NavigationDockState extends State<NavigationDock>
             builder: (context, bar) {
               final press = reduceMotion ? 0.0 : _press.value;
               final index = rtl ? count - 1 - _position.value : _position.value;
-              final underlineX =
-                  dockRect.left + inset + tabRun * (index + 0.5) / count;
+              final underlineX = inset + tabRun * (index + 0.5) / count;
+              // Move the entire foreground while keeping touch targets fixed.
+              final foreground = Transform.translate(
+                offset: Offset(0, -1.2 * press),
+                transformHitTests: false,
+                child: Transform.scale(
+                  scale: 1 + 0.02 * press,
+                  transformHitTests: false,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    clipBehavior: Clip.none,
+                    children: [
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: inset),
+                        child: bar,
+                      ),
+                      Positioned(
+                        left: underlineX - _underlineWidth / 2,
+                        width: _underlineWidth,
+                        top: underlineTop,
+                        height: _underlineHeight,
+                        child: IgnorePointer(
+                          child: DecoratedBox(
+                            decoration: ShapeDecoration(
+                              color: colors.primary,
+                              shape: const StadiumBorder(),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
               return Stack(
                 children: [
                   Positioned.fill(
@@ -219,24 +265,7 @@ class _NavigationDockState extends State<NavigationDock>
                           _dragging = false;
                           _settle(widget.selectedIndex);
                         },
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(horizontal: inset),
-                          child: bar,
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: underlineX - _underlineWidth / 2,
-                    width: _underlineWidth,
-                    top: underlineTop,
-                    height: _underlineHeight,
-                    child: IgnorePointer(
-                      child: DecoratedBox(
-                        decoration: ShapeDecoration(
-                          color: colors.primary,
-                          shape: const StadiumBorder(),
-                        ),
+                        child: foreground,
                       ),
                     ),
                   ),

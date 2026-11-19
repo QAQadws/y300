@@ -873,21 +873,55 @@ void main() {
       matching: find.text(l10n.appNavigationNovel),
     );
     final novel = tester.getCenter(novelLabel);
-    final novelIcon = tester.getCenter(
-      find.byIcon(Icons.local_library_outlined),
-    );
+    final novelIcon = find.byIcon(Icons.local_library_outlined);
     expect(
-      tester.getTopLeft(novelLabel).dy - novelIcon.dy - 10,
+      tester.getTopLeft(novelLabel).dy - tester.getCenter(novelIcon).dy - 10,
       closeTo(3, 0.1),
     );
-    final forum = tester.getCenter(
-      find.descendant(of: bar, matching: find.text(l10n.appNavigationForum)),
+    final forumLabel = find.descendant(
+      of: bar,
+      matching: find.text(l10n.appNavigationForum),
     );
+    final forumIcon = find.descendant(
+      of: find.byKey(const ValueKey('main-shell-destination-forum')),
+      matching: find.byType(Icon),
+    );
+    final forum = tester.getCenter(forumLabel);
+    final restingForum = tester.getRect(forumLabel);
+    final restingForumIcon = tester.getRect(forumIcon);
+    final restingNovelLabel = tester.getRect(novelLabel);
+    final restingNovelIcon = tester.getRect(novelIcon);
+
+    await tester.tapAt(forum);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(tester.getRect(forumLabel).height, greaterThan(restingForum.height));
+    expect(
+      tester.getRect(forumIcon).height,
+      greaterThan(restingForumIcon.height),
+    );
+    expect(
+      tester.getRect(novelLabel).height,
+      greaterThan(restingNovelLabel.height),
+    );
+    await _pumpShellTab(tester);
+    expect(tester.getRect(forumLabel), restingForum);
+    expect(tester.getRect(novelLabel), restingNovelLabel);
 
     final press = await tester.startGesture(novel);
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
     expect(_selectedNavigationIndex(tester), 0);
     expect(find.byTooltip(l10n.appNavigationNovel), findsNothing);
+    expect(
+      tester.getRect(novelLabel).height,
+      greaterThan(restingNovelLabel.height),
+    );
+    expect(
+      tester.getRect(novelIcon).height,
+      greaterThan(restingNovelIcon.height),
+    );
+    expect(tester.getRect(forumLabel).height, greaterThan(restingForum.height));
     await press.up();
     await _pumpShellTab(tester);
 
@@ -902,6 +936,7 @@ void main() {
     await drag.moveTo(forum);
     await tester.pump(const Duration(milliseconds: 60));
     expect(_selectedNavigationIndex(tester), novelIndex);
+    expect(tester.getRect(forumLabel).height, greaterThan(restingForum.height));
     await drag.up();
     await _pumpShellTab(tester);
     expect(_selectedNavigationIndex(tester), 0);
