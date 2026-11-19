@@ -126,6 +126,7 @@
   "networkSecurityVerificationFailed": "安全驗證未完成，請重試",
 
   "forumHomeTitle": "論壇首頁",
+  "forumHomeMastheadTitle": "百合會論壇",
   "forumHomeSearch": "搜尋論壇",
   "forumHomeRefresh": "重新整理論壇首頁",
   "forumHomeEmpty": "目前沒有論壇版塊",

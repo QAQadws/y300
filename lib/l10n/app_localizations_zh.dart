@@ -333,6 +333,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get forumHomeTitle => '论坛首页';
 
   @override
+  String get forumHomeMastheadTitle => '百合会论坛';
+
+  @override
   String get forumHomeSearch => '搜索论坛';
 
   @override
@@ -5903,6 +5906,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get forumHomeTitle => '論壇首頁';
+
+  @override
+  String get forumHomeMastheadTitle => '百合會論壇';
 
   @override
   String get forumHomeSearch => '搜尋論壇';

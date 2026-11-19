@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/navigation/forum_link_opener.dart';
+import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
 import 'package:y300/features/auth/application/auth_session_controller.dart';
 import 'package:y300/features/auth/application/verified_session_owner.dart';
@@ -101,7 +103,11 @@ class _ForumHomePageState extends ConsumerState<ForumHomePage>
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.forumHomeTitle),
+        centerTitle: false,
+        titleSpacing: 20,
+        toolbarHeight: _ForumHomeMasthead.toolbarHeightOf(context),
+        title: _ForumHomeMasthead(title: l10n.forumHomeMastheadTitle),
+        actionsPadding: const EdgeInsetsDirectional.only(end: 4),
         actions: [
           IconButton(
             key: const Key('forum-home-search-button'),
@@ -113,11 +119,12 @@ class _ForumHomePageState extends ConsumerState<ForumHomePage>
                 ),
               );
             },
+            iconSize: 22,
             icon: const Icon(Icons.search),
           ),
           AppPopupMenuButton<String>(
             key: const Key('forum-home-more-button'),
-            icon: const Icon(Icons.more_vert),
+            icon: const Icon(Icons.more_vert, size: 20),
             onSelected: (value) {
               unawaited(_handleMoreMenuSelected(context, value));
             },
@@ -304,6 +311,73 @@ class _ForumHomePageState extends ConsumerState<ForumHomePage>
       return 'anonymous';
     }
     return 'logged_in:${state.uid.trim()}';
+  }
+}
+
+class _ForumHomeMasthead extends StatelessWidget {
+  const _ForumHomeMasthead({required this.title});
+
+  final String title;
+
+  static final _siteHost = Uri.parse(AppConfig.siteBaseUrl).host;
+  static const _titleSize = 20.0;
+  static const _titleHeight = 1.1;
+  static const _hostSize = 11.0;
+  static const _hostHeight = 1.15;
+  static const _gap = 2.0;
+
+  static double toolbarHeightOf(BuildContext context) {
+    final scaler = MediaQuery.textScalerOf(context);
+    return math.max(
+      kToolbarHeight,
+      (scaler.scale(_titleSize) * _titleHeight +
+              scaler.scale(_hostSize) * _hostHeight +
+              _gap +
+              12)
+          .ceilToDouble(),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = DefaultTextStyle.of(context).style.color;
+    final highContrast = MediaQuery.highContrastOf(context);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontSize: _titleSize,
+            height: _titleHeight,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.4,
+          ),
+        ),
+        const SizedBox(height: _gap),
+        Padding(
+          // Align the host with the left stroke in the lower half of 百.
+          padding: const EdgeInsetsDirectional.only(start: 2),
+          child: Text(
+            _siteHost,
+            textDirection: TextDirection.ltr,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: foreground?.withValues(alpha: highContrast ? 1 : 0.7),
+              fontSize: _hostSize,
+              height: _hostHeight,
+              fontWeight: FontWeight.w400,
+              letterSpacing: 0.25,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 

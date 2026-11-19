@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart'
     hide ForumHomeRepository, ForumHomeFavoriteForum;
+import 'package:y300/core/config/app_config.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/features/cache/domain/models/document_cache_models.dart';
 import 'package:y300/features/forum/data/repositories/forum_home_repository.dart';
@@ -50,7 +51,14 @@ void main() {
         final l10n = AppLocalizations.of(
           tester.element(find.byType(ForumHomePage)),
         );
-        expect(find.text(l10n.forumHomeTitle), findsOneWidget);
+        expect(find.text(l10n.forumHomeMastheadTitle), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(AppBar),
+            matching: find.text(Uri.parse(AppConfig.siteBaseUrl).host),
+          ),
+          findsOneWidget,
+        );
         expect(find.byKey(const Key('forum-home-list')), findsOneWidget);
         expect(find.byKey(const Key('forum-webview-page')), findsNothing);
         expect(

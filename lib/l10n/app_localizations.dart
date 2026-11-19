@@ -715,6 +715,12 @@ abstract class AppLocalizations {
   /// **'论坛首页'**
   String get forumHomeTitle;
 
+  /// No description provided for @forumHomeMastheadTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'百合会论坛'**
+  String get forumHomeMastheadTitle;
+
   /// No description provided for @forumHomeSearch.
   ///
   /// In zh, this message translates to:
