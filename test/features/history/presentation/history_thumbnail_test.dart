@@ -3,8 +3,10 @@ import 'dart:io' as io;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
 import 'package:y300/features/history/presentation/widgets/history_thumbnail.dart';
+import 'package:y300/shared/widgets/forum_media_loading_style.dart';
 
 import '../test_support/history_test_support.dart';
 
@@ -33,6 +35,12 @@ void main() {
           ),
         ),
       ),
+    );
+    expect(
+      tester
+          .widget<LibraryCachedImage>(find.byType(LibraryCachedImage))
+          .fadeInDuration,
+      ForumMediaLoadingStyle.fadeInDuration,
     );
     await tester.pump();
     await tester.pump();

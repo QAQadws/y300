@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/history/domain/models/history_models.dart';
+import 'package:y300/shared/widgets/forum_media_loading_style.dart';
 
 class HistoryResolvedThumbnail {
   const HistoryResolvedThumbnail({
@@ -120,6 +121,7 @@ class HistoryThumbnail extends StatelessWidget {
                 referer: imageReferer,
                 placeholder: fallback,
                 errorPlaceholder: fallback,
+                fadeInDuration: ForumMediaLoadingStyle.fadeInDuration,
               )
             : fallback,
       ),
