@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/app/localization/app_locale_resolution.dart';
 import 'package:y300/app/settings/app_appearance_controller.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
+import 'package:y300/app/settings/app_ui_style_controller.dart';
 import 'package:y300/app/startup/app_bootstrap.dart';
 import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/app/theme/app_theme_palette.dart';
@@ -50,6 +51,7 @@ void main() {
       PreferenceKeys.appThemeFamily.name,
       PreferenceKeys.appThemePreference.name,
       PreferenceKeys.appLanguagePreference.name,
+      PreferenceKeys.appUiStyle.name,
     });
     expect(store.writes, isEmpty);
     await tester.pumpWidget(app);
@@ -71,6 +73,10 @@ void main() {
       expect(frame.locale, appTraditionalLocale);
     }
     expect(mountedContainer!.read(preferencesStoreProvider), same(store));
+    expect(
+      mountedContainer!.read(appUiStyleControllerProvider).value,
+      AppUiStyle.glassStandard,
+    );
     expect(
       mountedContainer!.read(appAppearanceControllerProvider).hasValue,
       isTrue,
@@ -257,6 +263,7 @@ Map<String, Object> _savedAppearance() => {
   PreferenceKeys.appThemeFamily.name: 'moonWhite',
   PreferenceKeys.appThemePreference.name: 'dark',
   PreferenceKeys.appLanguagePreference.name: 'traditionalChinese',
+  PreferenceKeys.appUiStyle.name: 'glassStandard',
 };
 
 Widget _app(

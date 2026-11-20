@@ -2610,6 +2610,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get moreAppearanceModeSectionTitle => '外观模式';
 
   @override
+  String get moreUiStyleSectionTitle => '界面风格';
+
+  @override
+  String get moreUiStyleClassic => '经典';
+
+  @override
+  String get moreUiStyleGlassPremium => '液态玻璃 Premium';
+
+  @override
+  String get moreUiStyleGlassStandard => '液态玻璃 Standard';
+
+  @override
+  String get moreUiStyleSaveFailed => '界面风格保存失败，请重试';
+
+  @override
   String get moreThemeFamilyWarmPaper => '暖纸';
 
   @override
@@ -8183,6 +8198,21 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get moreAppearanceModeSectionTitle => '外觀模式';
+
+  @override
+  String get moreUiStyleSectionTitle => '介面風格';
+
+  @override
+  String get moreUiStyleClassic => '經典';
+
+  @override
+  String get moreUiStyleGlassPremium => '液態玻璃 Premium';
+
+  @override
+  String get moreUiStyleGlassStandard => '液態玻璃 Standard';
+
+  @override
+  String get moreUiStyleSaveFailed => '介面風格儲存失敗，請重試';
 
   @override
   String get moreThemeFamilyWarmPaper => '暖紙';

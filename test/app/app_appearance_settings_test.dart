@@ -4,12 +4,42 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/app/settings/app_appearance_controller.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
 import 'package:y300/app/settings/app_appearance_settings_repository.dart';
+import 'package:y300/app/settings/app_ui_style_controller.dart';
 import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/core/config/app_storage_keys.dart';
 import 'package:y300/core/preferences/preference_key_names.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'UI style falls back for unknown values and persists the last choice',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        PreferenceKeyNames.appUiStyle: 'future_style',
+        PreferenceKeyNames.appThemeFamily: 'moonWhite',
+      });
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      expect(
+        await container.read(appUiStyleControllerProvider.future),
+        AppUiStyle.classic,
+      );
+      final controller = container.read(appUiStyleControllerProvider.notifier);
+      await Future.wait([
+        controller.setStyle(AppUiStyle.glassPremium),
+        controller.setStyle(AppUiStyle.glassStandard),
+      ]);
+      final store = await SharedPreferences.getInstance();
+      expect(store.getString(PreferenceKeyNames.appUiStyle), 'glassStandard');
+      expect(store.getString(PreferenceKeyNames.appThemeFamily), 'moonWhite');
+      container.invalidate(appUiStyleControllerProvider);
+      expect(
+        await container.read(appUiStyleControllerProvider.future),
+        AppUiStyle.glassStandard,
+      );
+    },
+  );
 
   group('SharedPrefsAppAppearanceSettingsRepository', () {
     test(

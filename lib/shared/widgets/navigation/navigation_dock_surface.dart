@@ -9,12 +9,14 @@ class NavigationDockSurface extends StatelessWidget {
     required this.dockRect,
     required this.press,
     required this.blurPageEdge,
+    this.quality = GlassQuality.premium,
     super.key,
   });
 
   final Rect dockRect;
   final double press;
   final bool blurPageEdge;
+  final GlassQuality quality;
 
   static final _pageBlur = ui.ImageFilter.blur(sigmaX: 5.5, sigmaY: 5.5);
   static const _pageFeather = DecoratedBox(
@@ -78,7 +80,7 @@ class NavigationDockSurface extends StatelessWidget {
                         ),
                       )
                     : AdaptiveGlass(
-                        quality: GlassQuality.premium,
+                        quality: quality,
                         shape: LiquidRoundedRectangle(
                           borderRadius: dockRect.height / 2,
                         ),

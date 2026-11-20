@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart'
+    show GlassQuality;
 import 'package:y300/app/clipboard/forum_clipboard_link_host.dart';
 import 'package:y300/app/navigation/main_destination_page.dart';
 import 'package:y300/app/navigation/main_navigation_settings.dart';
 import 'package:y300/app/navigation/main_navigation_settings_controller.dart';
 import 'package:y300/app/navigation/main_shell_destination_presentation.dart';
+import 'package:y300/app/settings/app_ui_style_controller.dart';
 import 'package:y300/app/startup/main_shell_startup_coordinator.dart';
 import 'package:y300/app/startup/main_shell_startup_host.dart';
 import 'package:y300/app/startup/main_shell_library_gate.dart';
@@ -93,13 +96,45 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
         .project(
           messagesVisible: settings.isVisible(MainShellDestination.messages),
         );
+    final uiStyle =
+        ref.watch(appUiStyleControllerProvider).value ??
+        AppUiStyle.defaultStyle;
+    final glassQuality = switch (uiStyle) {
+      AppUiStyle.classic => null,
+      AppUiStyle.glassPremium => GlassQuality.premium,
+      AppUiStyle.glassStandard => GlassQuality.standard,
+    };
+    const barKey = ValueKey<String>('main-shell-navigation-bar');
+    final selectedIndex = visibleDestinations.indexOf(currentDestination);
+    final destinations = [
+      for (final destination in visibleDestinations)
+        _buildNavigationDestination(
+          destination,
+          tooltip: glassQuality == null ? null : '',
+          showAttention: switch (destination) {
+            MainShellDestination.messages => attention.messagesNavigationDot,
+            MainShellDestination.more => attention.moreNavigationDot,
+            _ => false,
+          },
+        ),
+    ];
+    void selectDestination(int index) {
+      final destination = visibleDestinations[index];
+      if (_currentDestination == destination) return;
+      setState(() {
+        _currentDestination = destination;
+        _builtDestinations.add(destination);
+      });
+    }
 
     final selection = ref.watch(shelfSelectionHostControllerProvider);
     return ListenableBuilder(
       listenable: selection,
       builder: (context, _) {
         final overlapsBody =
-            !selection.isActive && MediaQuery.viewInsetsOf(context).bottom == 0;
+            glassQuality != null &&
+            !selection.isActive &&
+            MediaQuery.viewInsetsOf(context).bottom == 0;
         return ForumClipboardLinkHost(
           isReady: isReady,
           allowPrompt: !selection.isActive,
@@ -125,33 +160,24 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
                 ),
               ),
               bottomNavigationBar: ShelfSelectionBottomBar(
-                fallback: NavigationDock(
-                  barKey: const ValueKey<String>('main-shell-navigation-bar'),
-                  selectedIndex: visibleDestinations.indexOf(
-                    currentDestination,
-                  ),
-                  blurPageEdge: overlapsBody,
-                  onSelected: (index) {
-                    final destination = visibleDestinations[index];
-                    if (_currentDestination == destination) return;
-                    setState(() {
-                      _currentDestination = destination;
-                      _builtDestinations.add(destination);
-                    });
-                  },
-                  destinations: [
-                    for (final destination in visibleDestinations)
-                      _buildNavigationDestination(
-                        destination,
-                        showAttention: switch (destination) {
-                          MainShellDestination.messages =>
-                            attention.messagesNavigationDot,
-                          MainShellDestination.more =>
-                            attention.moreNavigationDot,
-                          _ => false,
-                        },
-                      ),
-                  ],
+                // Switch the layout together with Scaffold's overlap mode.
+                fallback: KeyedSubtree(
+                  key: const ValueKey('main-shell-navigation-fallback'),
+                  child: glassQuality == null
+                      ? NavigationBar(
+                          key: barKey,
+                          selectedIndex: selectedIndex,
+                          onDestinationSelected: selectDestination,
+                          destinations: destinations,
+                        )
+                      : NavigationDock(
+                          barKey: barKey,
+                          selectedIndex: selectedIndex,
+                          blurPageEdge: overlapsBody,
+                          quality: glassQuality,
+                          onSelected: selectDestination,
+                          destinations: destinations,
+                        ),
                 ),
               ),
             ),
@@ -174,6 +200,7 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
   NavigationDestination _buildNavigationDestination(
     MainShellDestination destination, {
     required bool showAttention,
+    String? tooltip,
   }) {
     return NavigationDestination(
       key: ValueKey<String>('main-shell-destination-${destination.name}'),
@@ -186,7 +213,7 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
         showAttention: showAttention,
       ),
       label: destination.localizedLabel(AppLocalizations.of(context)),
-      tooltip: '',
+      tooltip: tooltip,
     );
   }
 

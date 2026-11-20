@@ -1149,6 +1149,17 @@ void main() {
     );
     expect(find.byIcon(Icons.check), findsNothing);
 
+    final classicOption = find.byKey(const Key('appearance-ui-style-classic'));
+    await tester.ensureVisible(classicOption);
+    await tester.tap(classicOption);
+    await tester.pumpAndSettle();
+    _expectAppearanceOptionSelected(classicOption);
+    expect(appearanceController.themeFamily, AppThemeFamily.plumPurple);
+    expect(
+      appearanceController.brightnessPreference,
+      AppBrightnessPreference.dark,
+    );
+
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
@@ -1234,6 +1245,12 @@ void main() {
       final brightnessStrip = find.byKey(
         const Key('appearance-brightness-options-scroll'),
       );
+      final uiStyleStrip = find.byKey(
+        const Key('appearance-ui-style-options-scroll'),
+      );
+      _expectAppearanceOptionSelected(
+        find.byKey(const Key('appearance-ui-style-classic')),
+      );
       final languageStrip = find.byKey(
         const Key('appearance-language-options-scroll'),
       );
@@ -1243,6 +1260,10 @@ void main() {
       );
       expect(
         tester.widget<SingleChildScrollView>(brightnessStrip).scrollDirection,
+        Axis.horizontal,
+      );
+      expect(
+        tester.widget<SingleChildScrollView>(uiStyleStrip).scrollDirection,
         Axis.horizontal,
       );
       expect(
@@ -1269,10 +1290,35 @@ void main() {
         Key('appearance-brightness-option-system'),
       ]);
       _expectSameVerticalCenter(tester, const <Key>[
+        Key('appearance-ui-style-classic'),
+        Key('appearance-ui-style-glassPremium'),
+        Key('appearance-ui-style-glassStandard'),
+      ]);
+      for (final icon in const [
+        Icons.web_asset_outlined,
+        Icons.auto_awesome_outlined,
+        Icons.layers_outlined,
+      ]) {
+        expect(
+          find.descendant(of: uiStyleStrip, matching: find.byIcon(icon)),
+          findsOneWidget,
+        );
+      }
+      _expectSameVerticalCenter(tester, const <Key>[
         Key('appearance-language-option-system'),
         Key('appearance-language-option-simplifiedChinese'),
         Key('appearance-language-option-traditionalChinese'),
       ]);
+      for (final key in const [
+        Key('appearance-theme-family-warmPaper'),
+        Key('appearance-brightness-option-light'),
+        Key('appearance-ui-style-classic'),
+        Key('appearance-ui-style-glassPremium'),
+        Key('appearance-ui-style-glassStandard'),
+        Key('appearance-language-option-system'),
+      ]) {
+        expect(tester.getSize(find.byKey(key)).height, 40);
+      }
       _expectSingleLineButtonLabel(
         tester,
         const Key('appearance-brightness-option-system'),
@@ -1286,6 +1332,18 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(languageScrollable.position.pixels, greaterThan(0));
+
+      final standard = find.byKey(
+        const Key('appearance-ui-style-glassStandard'),
+      );
+      final initialStandardX = tester.getTopLeft(standard).dx;
+      await tester.drag(uiStyleStrip, const Offset(-360, 0));
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(standard).dx, lessThan(initialStandardX));
+      await tester.ensureVisible(standard);
+      await tester.tap(standard);
+      await tester.pumpAndSettle();
+      _expectAppearanceOptionSelected(standard);
       expect(tester.takeException(), isNull);
     },
   );
@@ -1541,6 +1599,18 @@ ForumWebViewRouteFactory _profileWebRoutes(
     builder: (_) => const Scaffold(key: Key('test-profile-webview')),
   );
 };
+
+void _expectAppearanceOptionSelected(Finder button) {
+  expect(
+    find.ancestor(
+      of: button,
+      matching: find.byWidgetPredicate(
+        (widget) => widget is Semantics && widget.properties.selected == true,
+      ),
+    ),
+    findsOneWidget,
+  );
+}
 
 void _expectSameVerticalCenter(WidgetTester tester, List<Key> keys) {
   final centers = keys

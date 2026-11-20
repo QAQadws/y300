@@ -221,6 +221,8 @@ class _MorePageState extends ConsumerState<MorePage> {
   Future<void> _showAppearanceSettingsSheet(BuildContext context) {
     return showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
       builder: (_) => const AppearanceSettingsSheet(),
     );
   }

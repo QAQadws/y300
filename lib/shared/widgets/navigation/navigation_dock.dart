@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart'
+    show GlassQuality;
 import 'package:y300/shared/widgets/navigation/navigation_dock_surface.dart';
 
 /// Floating Material destinations over a shared liquid glass surface.
@@ -13,6 +15,7 @@ class NavigationDock extends StatefulWidget {
     required this.selectedIndex,
     required this.onSelected,
     this.blurPageEdge = true,
+    this.quality = GlassQuality.premium,
   });
 
   final Key? barKey;
@@ -20,6 +23,7 @@ class NavigationDock extends StatefulWidget {
   final int selectedIndex;
   final ValueChanged<int> onSelected;
   final bool blurPageEdge;
+  final GlassQuality quality;
 
   static const _iconSize = 20.0;
   static const _iconLabelGap = 3.0;
@@ -224,6 +228,7 @@ class _NavigationDockState extends State<NavigationDock>
                       dockRect: dockRect,
                       press: press,
                       blurPageEdge: widget.blurPageEdge,
+                      quality: widget.quality,
                     ),
                   ),
                   Positioned.fromRect(

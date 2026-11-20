@@ -15,6 +15,9 @@ abstract final class PreferenceKeys {
   static const appLanguagePreference = PreferenceKey<String>(
     PreferenceKeyNames.appLanguagePreference,
   );
+  static const appUiStyle = PreferenceKey<String>(
+    PreferenceKeyNames.appUiStyle,
+  );
   static const appNavigationSnapshotV1 = PreferenceKey<String>(
     PreferenceKeyNames.appNavigationSnapshotV1,
   );

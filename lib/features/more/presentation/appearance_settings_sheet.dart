@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/app/settings/app_appearance_controller.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
+import 'package:y300/app/settings/app_ui_style_controller.dart';
 import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/app/theme/app_theme_palette.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/transient_feedback.dart';
 import 'package:y300/features/more/presentation/more_text_resolver.dart';
+
+const _appearanceOptionHeight = 40.0;
 
 class AppearanceSettingsSheet extends ConsumerWidget {
   const AppearanceSettingsSheet({super.key});
@@ -16,6 +19,9 @@ class AppearanceSettingsSheet extends ConsumerWidget {
     final settingsState = ref.watch(appAppearanceControllerProvider);
     final settings =
         settingsState.asData?.value ?? AppAppearanceSettings.defaults();
+    final uiStyle =
+        ref.watch(appUiStyleControllerProvider).value ??
+        AppUiStyle.defaultStyle;
     final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context);
 
@@ -67,6 +73,41 @@ class AppearanceSettingsSheet extends ConsumerWidget {
           ),
           const SizedBox(height: 20),
           Text(
+            l10n.moreUiStyleSectionTitle,
+            style: theme.textTheme.titleSmall?.copyWith(
+              color: theme.colorScheme.primary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 10),
+          _AppearanceOptionStrip(
+            scrollViewKey: const Key('appearance-ui-style-options-scroll'),
+            children: [
+              for (final style in AppUiStyle.values)
+                _AppearanceIconChoice(
+                  buttonKey: ValueKey('appearance-ui-style-${style.name}'),
+                  icon: switch (style) {
+                    AppUiStyle.classic => const RotatedBox(
+                      quarterTurns: 2,
+                      child: Icon(Icons.web_asset_outlined, size: 18),
+                    ),
+                    AppUiStyle.glassPremium => const Icon(
+                      Icons.auto_awesome_outlined,
+                      size: 18,
+                    ),
+                    AppUiStyle.glassStandard => const Icon(
+                      Icons.layers_outlined,
+                      size: 18,
+                    ),
+                  },
+                  label: MoreTextResolver.uiStyleLabel(l10n, style),
+                  selected: uiStyle == style,
+                  onPressed: () => _setUiStyle(context, ref, style),
+                ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Text(
             l10n.appLanguageSectionTitle,
             style: theme.textTheme.titleSmall?.copyWith(
               color: theme.colorScheme.primary,
@@ -78,8 +119,13 @@ class AppearanceSettingsSheet extends ConsumerWidget {
             scrollViewKey: const Key('appearance-language-options-scroll'),
             children: [
               for (final language in AppLanguage.values)
-                _AppearanceLanguageChoice(
-                  language: language,
+                _AppearanceIconChoice(
+                  buttonKey: Key('appearance-language-option-${language.name}'),
+                  icon: Icon(
+                    Icons.language_outlined,
+                    key: Key('appearance-language-icon-${language.name}'),
+                    size: 18,
+                  ),
                   label: _languageLabel(l10n, language),
                   selected: settings.languagePreference == language,
                   onPressed: () =>
@@ -98,6 +144,22 @@ class AppearanceSettingsSheet extends ConsumerWidget {
       AppLanguage.simplifiedChinese => l10n.appLanguageSimplifiedChinese,
       AppLanguage.traditionalChinese => l10n.appLanguageTraditionalChinese,
     };
+  }
+
+  Future<void> _setUiStyle(
+    BuildContext context,
+    WidgetRef ref,
+    AppUiStyle style,
+  ) async {
+    try {
+      await ref.read(appUiStyleControllerProvider.notifier).setStyle(style);
+    } on Object {
+      if (!context.mounted) return;
+      showTransientSnackBar(
+        context,
+        AppLocalizations.of(context).moreUiStyleSaveFailed,
+      );
+    }
   }
 
   Future<void> _setThemeFamily(
@@ -216,7 +278,7 @@ class _AppearanceThemeFamilyChoice extends StatelessWidget {
           style: OutlinedButton.styleFrom(
             foregroundColor: foreground,
             backgroundColor: selected ? scheme.primaryContainer : null,
-            minimumSize: const Size(0, 40),
+            minimumSize: const Size(0, _appearanceOptionHeight),
             padding: const EdgeInsets.symmetric(horizontal: 12),
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             side: BorderSide(
@@ -299,44 +361,20 @@ class _AppearanceBrightnessChoice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context);
-    final foreground = selected ? scheme.onPrimaryContainer : scheme.onSurface;
     final label = MoreTextResolver.brightnessLabel(l10n, preference);
 
-    return Semantics(
-      button: true,
+    return _AppearanceIconChoice(
+      buttonKey: Key('appearance-brightness-option-${preference.name}'),
+      label: label,
+      semanticsLabel: '$label${l10n.moreAppearanceModeSectionTitle}',
+      tooltip: MoreTextResolver.brightnessDescription(l10n, preference),
       selected: selected,
-      label: '$label${l10n.moreAppearanceModeSectionTitle}',
-      child: Tooltip(
-        message: MoreTextResolver.brightnessDescription(l10n, preference),
-        child: OutlinedButton.icon(
-          key: Key('appearance-brightness-option-${preference.name}'),
-          onPressed: onPressed,
-          style: OutlinedButton.styleFrom(
-            foregroundColor: foreground,
-            backgroundColor: selected ? scheme.primaryContainer : null,
-            minimumSize: const Size(0, 40),
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            side: BorderSide(
-              color: selected ? Colors.transparent : scheme.outlineVariant,
-              width: selected ? 0 : 1,
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            textStyle: TextStyle(
-              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-            ),
-          ),
-          icon: Icon(
-            _icon,
-            key: Key('appearance-brightness-icon-${preference.name}'),
-            size: 18,
-          ),
-          label: Text(label, maxLines: 1, softWrap: false),
-        ),
+      onPressed: onPressed,
+      icon: Icon(
+        _icon,
+        key: Key('appearance-brightness-icon-${preference.name}'),
+        size: 18,
       ),
     );
   }
@@ -350,55 +388,59 @@ class _AppearanceBrightnessChoice extends StatelessWidget {
   }
 }
 
-class _AppearanceLanguageChoice extends StatelessWidget {
-  const _AppearanceLanguageChoice({
-    required this.language,
+class _AppearanceIconChoice extends StatelessWidget {
+  const _AppearanceIconChoice({
+    required this.buttonKey,
+    required this.icon,
     required this.label,
     required this.selected,
     required this.onPressed,
+    this.semanticsLabel,
+    this.tooltip,
   });
 
-  final AppLanguage language;
+  final Key buttonKey;
+  final Widget icon;
   final String label;
   final bool selected;
   final VoidCallback onPressed;
+  final String? semanticsLabel;
+  final String? tooltip;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final foreground = selected ? scheme.onPrimaryContainer : scheme.onSurface;
 
+    final button = OutlinedButton.icon(
+      key: buttonKey,
+      onPressed: onPressed,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: foreground,
+        backgroundColor: selected ? scheme.primaryContainer : null,
+        minimumSize: const Size(0, _appearanceOptionHeight),
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        side: BorderSide(
+          color: selected ? Colors.transparent : scheme.outlineVariant,
+          width: selected ? 0 : 1,
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        textStyle: TextStyle(
+          fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+        ),
+      ),
+      icon: icon,
+      label: Text(label, maxLines: 1, softWrap: false),
+    );
+    final message = tooltip;
     return Semantics(
       button: true,
       selected: selected,
-      label: label,
-      child: OutlinedButton.icon(
-        key: Key('appearance-language-option-${language.name}'),
-        onPressed: onPressed,
-        style: OutlinedButton.styleFrom(
-          foregroundColor: foreground,
-          backgroundColor: selected ? scheme.primaryContainer : null,
-          minimumSize: const Size(0, 40),
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          side: BorderSide(
-            color: selected ? Colors.transparent : scheme.outlineVariant,
-            width: selected ? 0 : 1,
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          textStyle: TextStyle(
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-          ),
-        ),
-        icon: Icon(
-          Icons.language_outlined,
-          key: Key('appearance-language-icon-${language.name}'),
-          size: 18,
-        ),
-        label: Text(label, maxLines: 1, softWrap: false),
-      ),
+      label: semanticsLabel ?? label,
+      child: message == null
+          ? button
+          : Tooltip(message: message, child: button),
     );
   }
 }

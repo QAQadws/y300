@@ -10,11 +10,14 @@ import '../../../test_support/localized_test_app.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart'
+    show GlassQuality;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:y300/app/navigation/main_navigation_settings.dart';
 import 'package:y300/app/navigation/main_destination_page.dart';
 import 'package:y300/app/navigation/main_navigation_settings_controller.dart';
 import 'package:y300/app/navigation/main_navigation_settings_repository.dart';
+import 'package:y300/app/settings/app_ui_style_controller.dart';
 import 'package:y300/features/messages/data/message_repository_provider.dart';
 import 'package:y300/features/messages/presentation/message_center_page.dart';
 import 'package:y300/features/messages/presentation/message_feed_providers.dart';
@@ -26,6 +29,7 @@ import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/core/network/api_result.dart';
 import 'package:y300/core/network/cookie_store.dart';
 import 'package:y300/core/network/yamibo_forum_transport_providers.dart';
+import 'package:y300/core/preferences/preference_key_names.dart';
 import '../../../support/forum_auth_test_support.dart';
 import 'package:y300/features/comic/data/providers/comic_providers.dart';
 import 'package:y300/features/comic/domain/repositories/comic_repository.dart';
@@ -419,6 +423,9 @@ void main() {
   testWidgets('all eight lazy tabs lay out behind the shared dock', (
     tester,
   ) async {
+    SharedPreferences.setMockInitialValues({
+      PreferenceKeyNames.appUiStyle: AppUiStyle.glassPremium.name,
+    });
     await tester.binding.setSurfaceSize(const Size(320, 700));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     addTearDown(tester.view.resetViewInsets);
@@ -653,6 +660,42 @@ void main() {
       ((footer.child! as Padding).padding as EdgeInsets).bottom,
       tester.getSize(dock).height + 12,
     );
+
+    final messagePage = find.byType(MessageCenterPage);
+    final messageElement = tester.element(messagePage);
+    final selectedIndex = _selectedNavigationIndex(tester);
+    final uiStyle = container.read(appUiStyleControllerProvider.notifier);
+    await uiStyle.setStyle(AppUiStyle.glassStandard);
+    await tester.pump();
+    final standard = tester.widget<NavigationDockSurface>(
+      find.byType(NavigationDockSurface),
+    );
+    expect(standard.quality, GlassQuality.standard);
+    expectDockOverlap(MainShellDestination.messages);
+
+    await uiStyle.setStyle(AppUiStyle.classic);
+    await tester.pump();
+    expect(dock, findsNothing);
+    final classicBar = find.byType(NavigationBar);
+    expect(tester.getSize(classicBar).width, 360);
+    expect(NavigationDockInsets.bottomOf(tester.element(messagePage)), 0);
+    expect(
+      tester.getBottomLeft(messagePage).dy,
+      tester.getTopLeft(classicBar).dy,
+    );
+    expect(_selectedNavigationIndex(tester), selectedIndex);
+    expect(tester.element(messagePage), same(messageElement));
+
+    await uiStyle.setStyle(AppUiStyle.glassPremium);
+    await tester.pump();
+    expect(
+      tester
+          .widget<NavigationDockSurface>(find.byType(NavigationDockSurface))
+          .quality,
+      GlassQuality.premium,
+    );
+    expectDockOverlap(MainShellDestination.messages);
+    expect(tester.element(messagePage), same(messageElement));
     expect(tester.takeException(), isNull);
   });
 
@@ -806,6 +849,9 @@ void main() {
   testWidgets('Dock changes the selected tab when the gesture ends', (
     tester,
   ) async {
+    SharedPreferences.setMockInitialValues({
+      PreferenceKeyNames.appUiStyle: AppUiStyle.glassPremium.name,
+    });
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(396, 880);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -943,7 +989,7 @@ void main() {
   });
 
   testWidgets(
-    'MainShellPage navigation bar reads the themed background color',
+    'MainShellPage defaults to a classic navigation bar with themed colors',
     (tester) async {
       final queueSnapshot = ValueNotifier<ComicSearchRefreshQueueSnapshot>(
         ComicSearchRefreshQueueSnapshot.empty,
@@ -992,6 +1038,7 @@ void main() {
 
       await _pumpMainShellReady(tester);
 
+      expect(find.byType(NavigationDock), findsNothing);
       final navigationBarContext = tester.element(find.byType(NavigationBar));
       expect(
         NavigationBarTheme.of(navigationBarContext).backgroundColor,
@@ -1630,7 +1677,9 @@ IconData? _navigationIconData(Widget widget) {
 }
 
 MessageAttentionIcon _navigationAttentionIcon(Widget widget) =>
-    (widget as Transform).child! as MessageAttentionIcon;
+    widget is MessageAttentionIcon
+    ? widget
+    : (widget as Transform).child! as MessageAttentionIcon;
 
 ShelfSelectionHostDelegate _selectionDelegate({
   Future<SelectionActionOutcome> Function(

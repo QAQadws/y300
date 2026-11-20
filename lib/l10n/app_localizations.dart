@@ -4318,6 +4318,36 @@ abstract class AppLocalizations {
   /// **'外观模式'**
   String get moreAppearanceModeSectionTitle;
 
+  /// No description provided for @moreUiStyleSectionTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'界面风格'**
+  String get moreUiStyleSectionTitle;
+
+  /// No description provided for @moreUiStyleClassic.
+  ///
+  /// In zh, this message translates to:
+  /// **'经典'**
+  String get moreUiStyleClassic;
+
+  /// No description provided for @moreUiStyleGlassPremium.
+  ///
+  /// In zh, this message translates to:
+  /// **'液态玻璃 Premium'**
+  String get moreUiStyleGlassPremium;
+
+  /// No description provided for @moreUiStyleGlassStandard.
+  ///
+  /// In zh, this message translates to:
+  /// **'液态玻璃 Standard'**
+  String get moreUiStyleGlassStandard;
+
+  /// No description provided for @moreUiStyleSaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'界面风格保存失败，请重试'**
+  String get moreUiStyleSaveFailed;
+
   /// No description provided for @moreThemeFamilyWarmPaper.
   ///
   /// In zh, this message translates to:

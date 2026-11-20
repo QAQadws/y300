@@ -1,6 +1,7 @@
 import 'package:y300/app/navigation/main_navigation_settings.dart';
 import 'package:y300/app/navigation/main_shell_destination_presentation.dart';
 import 'package:y300/app/settings/app_appearance_settings.dart';
+import 'package:y300/app/settings/app_ui_style_controller.dart';
 import 'package:y300/app/theme/app_theme_family.dart';
 import 'package:y300/features/cache/domain/models/storage_usage_models.dart';
 import 'package:y300/features/more/domain/models/about_app_info.dart';
@@ -10,6 +11,14 @@ import 'package:y300/l10n/app_localizations.dart';
 
 final class MoreTextResolver {
   const MoreTextResolver._();
+
+  static String uiStyleLabel(AppLocalizations l10n, AppUiStyle style) {
+    return switch (style) {
+      AppUiStyle.classic => l10n.moreUiStyleClassic,
+      AppUiStyle.glassPremium => l10n.moreUiStyleGlassPremium,
+      AppUiStyle.glassStandard => l10n.moreUiStyleGlassStandard,
+    };
+  }
 
   static String themeFamilyLabel(AppLocalizations l10n, AppThemeFamily family) {
     return switch (family) {
