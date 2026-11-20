@@ -34,13 +34,13 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
   MainShellDestination? _currentDestination;
   final Set<MainShellDestination> _builtDestinations = <MainShellDestination>{};
   late final MainShellStartupCoordinator _startup;
-  late final Future<void> _coverMigrationReady;
+  late final Future<void> _libraryReadiness;
 
   @override
   void initState() {
     super.initState();
     _startup = ref.read(mainShellStartupCoordinatorFactoryProvider).call();
-    _coverMigrationReady = _startup.start();
+    _libraryReadiness = _startup.start();
   }
 
   @override
@@ -53,13 +53,11 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
   Widget build(BuildContext context) {
     return ProviderScope(
       overrides: [
-        mainShellLibraryReadinessProvider.overrideWithValue(
-          _coverMigrationReady,
-        ),
+        mainShellLibraryReadinessProvider.overrideWithValue(_libraryReadiness),
       ],
       child: MainShellStartupHost(
         child: FutureBuilder<void>(
-          future: _coverMigrationReady,
+          future: _libraryReadiness,
           builder: (context, snapshot) {
             final libraryReady =
                 snapshot.connectionState == ConnectionState.done;

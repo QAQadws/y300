@@ -28,71 +28,50 @@ import 'package:y300/features/storage/domain/storage_root_access_gate.dart';
 import 'package:y300/features/storage/domain/storage_root_migration.dart';
 
 void main() {
-  test(
-    'cover recovery precedes custom adoption and detached maintenance',
-    () async {
-      final recovery = Completer<void>();
-      final custom = Completer<void>();
-      final source = Completer<void>();
-      final fixture = _BackgroundFixture(
-        recovery: () => recovery.future,
-        custom: () => custom.future,
-        source: () => source.future,
-      );
-      addTearDown(fixture.dispose);
-      var ready = false;
-      final operation = fixture.start(() => true).then((_) => ready = true);
-      expect(fixture.events, ['recovery']);
-      recovery.complete();
-      await _flush();
-      expect(fixture.events, ['recovery', 'custom']);
-      expect(ready, isFalse);
-      custom.complete();
-      await operation;
-      expect(ready, isTrue);
-      // Download recovery remains detached behind the storage-gate await.
-      await _flush();
-      expect(fixture.events, [
-        'recovery',
-        'custom',
-        'budget',
-        'search',
-        'gate',
-        'source',
-        'thumbnails',
-        'download',
-      ]);
-      // Pending regenerable source-cover work does not hold shell readiness.
-      source.complete();
-      await _flush();
-    },
-  );
+  test('cover recovery precedes detached maintenance', () async {
+    final recovery = Completer<void>();
+    final source = Completer<void>();
+    final fixture = _BackgroundFixture(
+      recovery: () => recovery.future,
+      source: () => source.future,
+    );
+    addTearDown(fixture.dispose);
+    final operation = fixture.start(() => true);
+    expect(fixture.events, ['recovery']);
+    recovery.complete();
+    await operation;
+    // Download recovery remains detached behind the storage-gate await.
+    await _flush();
+    expect(fixture.events, [
+      'recovery',
+      'budget',
+      'search',
+      'gate',
+      'source',
+      'thumbnails',
+      'download',
+    ]);
+    // Pending regenerable source-cover work does not hold shell readiness.
+    source.complete();
+    await _flush();
+  });
 
-  for (final barrier in ['recovery', 'custom']) {
-    test('dispose during $barrier suppresses remaining startup work', () async {
-      final pending = Completer<void>();
-      var active = true;
-      final fixture = _BackgroundFixture(
-        recovery: barrier == 'recovery' ? () => pending.future : null,
-        custom: barrier == 'custom' ? () => pending.future : null,
-      );
-      addTearDown(fixture.dispose);
-      final operation = fixture.start(() => active);
-      await _flush();
-      active = false;
-      pending.complete();
-      await operation;
-      expect(
-        fixture.events,
-        barrier == 'recovery' ? ['recovery'] : ['recovery', 'custom'],
-      );
-    });
-  }
+  test('dispose during recovery suppresses remaining startup work', () async {
+    final pending = Completer<void>();
+    var active = true;
+    final fixture = _BackgroundFixture(recovery: () => pending.future);
+    addTearDown(fixture.dispose);
+    final operation = fixture.start(() => active);
+    await _flush();
+    active = false;
+    pending.complete();
+    await operation;
+    expect(fixture.events, ['recovery']);
+  });
 
   test('failed cover and independent tasks still complete readiness', () async {
     final fixture = _BackgroundFixture(
       recovery: () async => throw StateError('recovery fixture'),
-      custom: () async => throw StateError('custom fixture'),
       source: () async => throw StateError('source fixture'),
     );
     addTearDown(fixture.dispose);
@@ -338,7 +317,6 @@ MainShellStartupCoordinator _budgetCoordinator(
 ) => MainShellStartupCoordinator(
   prepareLibrary: (isActive) => runMainShellBackgroundTasks(
     isActive: isActive,
-    migrateCustomCovers: () async {},
     maintenance: [scheduler.start],
   ),
   initializeNotifications: (_) async {},
@@ -358,7 +336,6 @@ const _readyStorage = StorageRootMigrationResult(
 class _BackgroundFixture {
   _BackgroundFixture({
     Future<void> Function()? recovery,
-    Future<void> Function()? custom,
     Future<void> Function()? source,
     Future<StorageRootMigrationResult>? gate,
   }) {
@@ -372,10 +349,6 @@ class _BackgroundFixture {
       overrides: [
         libraryCoverLegacyMigratorProvider.overrideWithValue(
           _CoverMigrator(
-            custom: () async {
-              events.add('custom');
-              await custom?.call();
-            },
             source: () async {
               events.add('source');
               await source?.call();
@@ -425,11 +398,8 @@ class _BackgroundFixture {
 }
 
 class _CoverMigrator implements LibraryCoverLegacyMigrator {
-  _CoverMigrator({required this.custom, required this.source});
-  final Future<void> Function() custom;
+  _CoverMigrator({required this.source});
   final Future<void> Function() source;
-  @override
-  Future<void> migrateCustomAssets() => custom();
   @override
   Future<void> migrateSourceAssets({int batchSize = 32}) => source();
   @override

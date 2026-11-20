@@ -46,7 +46,6 @@ final mainShellBackgroundTaskStarterProvider = Provider<MainShellLifecycleTask>(
       await runMainShellBackgroundTasks(
         isActive: canContinue,
         recoverCoverMerges: mergeRecovery?.recoverPendingCoverMerges,
-        migrateCustomCovers: migrator.migrateCustomAssets,
         maintenance: [
           () => ref.read(mainShellCacheBudgetSchedulerProvider).start(),
           () => ref.read(comicSearchRefreshQueueServiceProvider).start(),

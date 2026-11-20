@@ -45,21 +45,17 @@ final class MainShellStartupCoordinator {
   void dispose() => _disposed = true;
 }
 
-/// Custom covers are user assets. Finish recovery and lossless adoption before
-/// shelves render; regenerable covers and other maintenance remain detached.
+/// Finish interrupted cover merges before shelves render. Cache maintenance
+/// and download recovery run independently of shelf readiness.
 Future<void> runMainShellBackgroundTasks({
   required bool Function() isActive,
   Future<void> Function()? recoverCoverMerges,
-  required Future<void> Function() migrateCustomCovers,
   required List<Future<void> Function()> maintenance,
 }) async {
   if (!isActive()) return;
   if (recoverCoverMerges != null) {
     await _runStartupTaskSafely(recoverCoverMerges);
-    if (!isActive()) return;
   }
-  await _runStartupTaskSafely(migrateCustomCovers);
-  if (!isActive()) return;
   for (final task in maintenance) {
     if (!isActive()) return;
     unawaited(_runStartupTaskSafely(task));

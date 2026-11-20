@@ -37,7 +37,7 @@ void main() {
   });
 
   test(
-    'custom cover migration is idempotent and preserves legacy file',
+    'source-cover batch leaves legacy custom cover for per-comic maintenance',
     () async {
       final legacy = io.File('${root.path}/legacy-custom.png');
       await legacy.writeAsBytes(
@@ -60,15 +60,20 @@ void main() {
         legacyCacheRepository: LocalImageCacheRepository(Future.value(db)),
       );
 
-      await migrator.migrateCustomAssets();
-      await migrator.migrateCustomAssets();
-
       const asset = LibraryCoverAssetRef(
         assetId: 'comic/comic:legacy/custom',
         revision: 1,
         kind: LibraryCoverAssetKind.custom,
       );
-      expect(await (await store.fileFor(asset)).exists(), isTrue);
+
+      await migrator.migrateSourceAssets();
+      final original = await store.fileFor(asset);
+      expect(await original.exists(), isFalse);
+
+      await migrator.migrateComicAssets('comic:legacy');
+      await migrator.migrateComicAssets('comic:legacy');
+
+      expect(await original.exists(), isTrue);
       expect(await legacy.exists(), isTrue);
       final row = (await db.query(
         AppDatabase.comicsTable,

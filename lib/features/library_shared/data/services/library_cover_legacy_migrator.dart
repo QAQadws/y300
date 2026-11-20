@@ -121,19 +121,10 @@ class LibraryCoverLegacyMigrator {
     });
   }
 
-  /// Custom covers are user assets and are always migrated before source
-  /// covers. A failed item remains untouched and is retried on next startup.
-  Future<void> migrateCustomAssets() async {
-    final candidates = await _loadCandidates(custom: true);
-    for (final candidate in candidates) {
-      await _migrate(candidate);
-    }
-  }
-
   /// Source covers are best-effort and deliberately batched to avoid startup
   /// I/O spikes. Repeated runs continue from per-asset completion markers.
   Future<void> migrateSourceAssets({int batchSize = 32}) async {
-    final candidates = await _loadCandidates(custom: false);
+    final candidates = await _loadSourceCandidates();
     var attempted = 0;
     for (final candidate in candidates) {
       if (attempted >= batchSize) {
@@ -147,20 +138,15 @@ class LibraryCoverLegacyMigrator {
     }
   }
 
-  Future<List<_LegacyCoverCandidate>> _loadCandidates({
-    required bool custom,
-  }) async {
+  Future<List<_LegacyCoverCandidate>> _loadSourceCandidates() async {
     final db = await _database;
     final comics = await db.query(
       AppDatabase.comicsTable,
       columns: const <String>[
         'comic_id',
         'cover_image_url',
-        'custom_cover_image_url',
         'cover_local_path',
-        'custom_cover_local_path',
         'cover_revision',
-        'custom_cover_revision',
       ],
     );
     final novels = await db.query(
@@ -169,9 +155,7 @@ class LibraryCoverLegacyMigrator {
         'work_id',
         'cover_image_url',
         'cover_local_path',
-        'custom_cover_local_path',
         'cover_revision',
-        'custom_cover_revision',
       ],
       where: 'content_type = ?',
       whereArgs: const <Object>['novel'],
@@ -182,14 +166,14 @@ class LibraryCoverLegacyMigrator {
           ownerType: 'comic',
           ownerId: row['comic_id'] as String,
           row: row,
-          custom: custom,
+          custom: false,
         ),
       for (final row in novels)
         _candidate(
           ownerType: 'novel',
           ownerId: row['work_id'] as String,
           row: row,
-          custom: custom,
+          custom: false,
         ),
     ].where((candidate) => candidate.shouldMigrate).toList(growable: false);
   }
@@ -253,17 +237,6 @@ class LibraryCoverLegacyMigrator {
         );
         if (!localOnly) await _store.deleteOlderRevisions(candidate.asset);
       } else if (!localOnly &&
-          candidate.asset.kind == LibraryCoverAssetKind.custom &&
-          candidate.asset.sourceUrl?.trim().isNotEmpty == true) {
-        try {
-          await _store.ensureAvailable(
-            candidate.asset.copyWith(clearLegacyLocalPath: true),
-          );
-        } catch (_) {
-          return;
-        }
-      } else if (!localOnly &&
-          candidate.asset.kind == LibraryCoverAssetKind.source &&
           candidate.asset.sourceUrl?.trim().isNotEmpty == true) {
         await _complete(candidate, installed: false);
         return;
@@ -315,20 +288,7 @@ class LibraryCoverLegacyMigrator {
       whereArgs: <Object>[candidate.asset.assetId, candidate.asset.revision],
       limit: 1,
     );
-    if (rows.isEmpty) {
-      return false;
-    }
-    final file = await _store.fileFor(candidate.asset);
-    if (await file.exists() ||
-        candidate.asset.kind == LibraryCoverAssetKind.source) {
-      return true;
-    }
-    await db.delete(
-      AppDatabase.libraryCoverMigrationsTable,
-      where: 'asset_id = ? AND revision = ?',
-      whereArgs: <Object>[candidate.asset.assetId, candidate.asset.revision],
-    );
-    return false;
+    return rows.isNotEmpty;
   }
 
   Future<void> _complete(
