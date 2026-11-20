@@ -29,6 +29,7 @@ import 'package:y300/shared/widgets/shelf/shelf_cover_image.dart';
 import 'package:y300/shared/widgets/shelf/shelf_grid_geometry.dart';
 import 'package:y300/shared/widgets/shelf/shelf_theme_palette.dart';
 import 'package:y300/shared/widgets/library_cover_placeholder.dart';
+import 'package:y300/shared/widgets/forum_media_loading_style.dart';
 import 'package:y300/shared/widgets/inline_search_app_bar.dart';
 
 /// 统一书架页面（Phase 3）。
@@ -1289,6 +1290,7 @@ class _WorkGrid extends StatelessWidget {
       alignment: config.alignment,
       placeholder: config.placeholder,
       referer: config.imageReferer,
+      fadeInDuration: ForumMediaLoadingStyle.fadeInDuration,
     );
   }
 }
@@ -1502,6 +1504,7 @@ class _WorkList extends StatelessWidget {
         alignment: alignment,
         placeholder: placeholder,
         referer: imageReferer,
+        fadeInDuration: ForumMediaLoadingStyle.fadeInDuration,
       );
     }
     return ShelfCoverImage(

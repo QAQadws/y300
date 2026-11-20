@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' as io;
 
 import 'package:flutter/foundation.dart';
@@ -9,6 +10,7 @@ import 'package:y300/features/library_shared/domain/models/library_cover_asset.d
 import 'package:y300/features/library_shared/domain/services/library_cover_decode_policy.dart';
 import 'package:y300/features/library_shared/presentation/images/library_cover_image.dart';
 import 'package:y300/features/library_shared/presentation/images/library_cover_image_provider.dart';
+import 'package:y300/shared/widgets/forum_media_loading_style.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -143,6 +145,54 @@ void main() {
     expect(find.byType(Image), findsOneWidget);
     expect(find.byType(Stack), findsNothing);
   });
+
+  testWidgets(
+    'first decoded cover fades in while a memory hit shows immediately',
+    (tester) async {
+      const fadeDuration = ForumMediaLoadingStyle.fadeInDuration;
+      const placeholderKey = Key('pending-cover');
+      final image = (await tester.runAsync(
+        () => createTestImage(width: 3, height: 5, cache: false),
+      ))!;
+      addTearDown(image.dispose);
+      final cover = provider(asset: source.copyWith(revision: 6));
+      final frame = Completer<ImageInfo>();
+      final cache = PaintingBinding.instance.imageCache;
+      cache.putIfAbsent(
+        cover.cacheKey,
+        () => OneFrameImageStreamCompleter(frame.future),
+      );
+      addTearDown(() => cache.evict(cover.cacheKey));
+
+      Widget buildCover() => Directionality(
+        textDirection: TextDirection.ltr,
+        child: LibraryCoverProviderImage(
+          provider: cover,
+          fit: BoxFit.cover,
+          placeholder: const SizedBox.expand(key: placeholderKey),
+          fadeInDuration: fadeDuration,
+        ),
+      );
+
+      await tester.pumpWidget(buildCover());
+      expect(find.byKey(placeholderKey), findsOneWidget);
+      expect(find.byType(RawImage), findsNothing);
+
+      frame.complete(ImageInfo(image: image.clone()));
+      await tester.pump();
+      await tester.pump(fadeDuration ~/ 2);
+      expect(find.byKey(placeholderKey), findsOneWidget);
+      expect(find.byType(RawImage), findsOneWidget);
+
+      await tester.pumpAndSettle();
+      expect(find.byKey(placeholderKey), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpWidget(buildCover());
+      expect(find.byKey(placeholderKey), findsNothing);
+      expect(find.byType(RawImage), findsOneWidget);
+    },
+  );
 }
 
 class _NoopCoverStore implements LibraryCoverStore {

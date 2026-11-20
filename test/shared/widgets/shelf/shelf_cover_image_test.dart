@@ -3,6 +3,7 @@ import '../../../test_support/localized_test_app.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/image_loading/presentation/app_image.dart';
+import 'package:y300/shared/widgets/forum_media_loading_style.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_image.dart';
 
 void main() {
@@ -22,7 +23,10 @@ void main() {
       ),
     );
 
-    expect(find.byType(AppImage), findsOneWidget);
+    expect(
+      tester.widget<AppImage>(find.byType(AppImage)).fadeInDuration,
+      ForumMediaLoadingStyle.fadeInDuration,
+    );
   });
 
   testWidgets(

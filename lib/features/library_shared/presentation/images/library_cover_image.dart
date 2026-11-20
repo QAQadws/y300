@@ -8,6 +8,8 @@ import 'package:y300/features/library_shared/domain/services/library_cover_decod
 import 'package:y300/features/library_shared/presentation/images/library_cover_image_provider.dart';
 import 'package:y300/features/library_shared/data/services/library_cover_thumbnail_store.dart';
 import 'package:y300/features/library_shared/presentation/images/library_cover_thumbnail_writer.dart';
+import 'package:y300/shared/widgets/forum_media_loading_style.dart';
+import 'package:y300/shared/widgets/image_first_frame_transition.dart';
 
 abstract final class LibraryCoverProviderResolver {
   static LibraryCoverImageProvider resolve({
@@ -80,6 +82,7 @@ class LibraryCoverImage extends ConsumerWidget {
           alignment: alignment,
           filterQuality: filterQuality,
           placeholder: placeholder,
+          fadeInDuration: ForumMediaLoadingStyle.fadeInDuration,
         );
         return image;
       },
@@ -104,6 +107,7 @@ class LibraryCoverProviderImage extends StatelessWidget {
     this.height,
     this.alignment = Alignment.center,
     this.filterQuality = FilterQuality.medium,
+    this.fadeInDuration = Duration.zero,
   });
 
   final LibraryCoverImageProvider provider;
@@ -113,6 +117,7 @@ class LibraryCoverProviderImage extends StatelessWidget {
   final double? height;
   final AlignmentGeometry alignment;
   final FilterQuality filterQuality;
+  final Duration fadeInDuration;
 
   @override
   Widget build(BuildContext context) {
@@ -124,12 +129,16 @@ class LibraryCoverProviderImage extends StatelessWidget {
       alignment: alignment,
       filterQuality: filterQuality,
       gaplessPlayback: true,
-      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-        if (frame != null || wasSynchronouslyLoaded) {
-          return child;
-        }
-        return placeholder;
-      },
+      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) =>
+          buildImageFirstFrameTransition(
+            context,
+            child: child,
+            placeholder: placeholder,
+            isResolved: frame != null || wasSynchronouslyLoaded,
+            wasSynchronouslyLoaded: wasSynchronouslyLoaded,
+            duration: fadeInDuration,
+            identity: provider,
+          ),
       errorBuilder: (context, error, stackTrace) => placeholder,
     );
   }

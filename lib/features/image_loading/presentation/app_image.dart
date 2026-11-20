@@ -9,6 +9,7 @@ import 'package:y300/core/media/image_downscale_policy.dart';
 import 'package:y300/features/image_loading/data/app_image_providers.dart';
 import 'package:y300/features/image_loading/domain/app_image_source.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
+import 'package:y300/shared/widgets/image_first_frame_transition.dart';
 
 /// 统一图片显示控件——缓存层对外的唯一入口。
 ///
@@ -32,6 +33,7 @@ class AppImage extends ConsumerStatefulWidget {
     this.downscalePolicy = const WidthBoundImageDownscalePolicy(),
     required this.placeholder,
     this.errorPlaceholder,
+    this.fadeInDuration = Duration.zero,
     this.onImageFailed,
   });
 
@@ -51,6 +53,7 @@ class AppImage extends ConsumerStatefulWidget {
   final ImageDownscalePolicy downscalePolicy;
   final Widget placeholder;
   final Widget? errorPlaceholder;
+  final Duration fadeInDuration;
 
   final VoidCallback? onImageFailed;
 
@@ -114,6 +117,7 @@ class _AppImageState extends ConsumerState<AppImage> {
           height: widget.height,
           alignment: widget.alignment,
           gaplessPlayback: true,
+          frameBuilder: _firstFrameBuilder(displayProvider),
           errorBuilder: (context, error, stackTrace) {
             _markImageFailed('file:${file.path}');
             return _effectiveErrorPlaceholder;
@@ -170,32 +174,56 @@ class _AppImageState extends ConsumerState<AppImage> {
       devicePixelRatio: _devicePixelRatio,
       downscalePolicy: widget.downscalePolicy,
     );
+    final frameBuilder = _firstFrameBuilder(displayProvider);
+    final image = Image(
+      image: displayProvider,
+      fit: widget.fit,
+      width: widget.width,
+      height: widget.height,
+      alignment: widget.alignment,
+      gaplessPlayback: true,
+      frameBuilder: frameBuilder,
+      loadingBuilder: frameBuilder == null ? _buildWhileDownloading : null,
+      errorBuilder: (context, error, stackTrace) {
+        if (frameBuilder == null) _markNetworkResolved();
+        _markImageFailed('net:${source.cacheKey}');
+        return _effectiveErrorPlaceholder;
+      },
+    );
+    if (frameBuilder != null) {
+      return image;
+    }
     return Stack(
       fit: StackFit.passthrough,
-      children: <Widget>[
-        if (!_networkResolved) widget.placeholder,
-        Image(
-          image: displayProvider,
-          fit: widget.fit,
-          width: widget.width,
-          height: widget.height,
-          alignment: widget.alignment,
-          gaplessPlayback: true,
-          loadingBuilder: (context, child, loadingProgress) {
-            if (loadingProgress == null) {
-              _markNetworkResolved();
-              return child;
-            }
-            return const SizedBox.shrink();
-          },
-          errorBuilder: (context, error, stackTrace) {
-            _markNetworkResolved();
-            _markImageFailed('net:${source.cacheKey}');
-            return _effectiveErrorPlaceholder;
-          },
-        ),
-      ],
+      children: [if (!_networkResolved) widget.placeholder, image],
     );
+  }
+
+  Widget _buildWhileDownloading(
+    BuildContext context,
+    Widget child,
+    ImageChunkEvent? loadingProgress,
+  ) {
+    if (loadingProgress == null) {
+      _markNetworkResolved();
+      return child;
+    }
+    return const SizedBox.shrink();
+  }
+
+  ImageFrameBuilder? _firstFrameBuilder(ImageProvider provider) {
+    final duration = widget.fadeInDuration;
+    if (duration <= Duration.zero) return null;
+    return (context, child, frame, wasSynchronouslyLoaded) =>
+        buildImageFirstFrameTransition(
+          context,
+          child: child,
+          placeholder: widget.placeholder,
+          isResolved: frame != null || wasSynchronouslyLoaded,
+          wasSynchronouslyLoaded: wasSynchronouslyLoaded,
+          duration: duration,
+          identity: provider,
+        );
   }
 
   bool _hasSameNetworkRequestIdentity(

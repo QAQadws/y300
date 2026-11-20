@@ -9,6 +9,7 @@ import 'package:y300/core/media/image_downscale_policy.dart';
 import 'package:y300/core/network/site_url_resolver.dart';
 import 'package:y300/features/image_loading/data/app_image_providers.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
+import 'package:y300/shared/widgets/image_first_frame_transition.dart';
 
 enum LibraryImageFrameSource { localFile, remote, override }
 
@@ -395,33 +396,15 @@ class _LibraryCachedImageState extends ConsumerState<LibraryCachedImage> {
     required bool isResolved,
     required bool wasSynchronouslyLoaded,
     required String identity,
-  }) {
-    final duration = widget.fadeInDuration;
-    if (wasSynchronouslyLoaded ||
-        duration <= Duration.zero ||
-        MediaQuery.disableAnimationsOf(context)) {
-      return isResolved ? child : widget.placeholder;
-    }
-    return AnimatedSwitcher(
-      duration: duration,
-      reverseDuration: duration,
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeOutCubic,
-      layoutBuilder: (currentChild, previousChildren) {
-        return Stack(
-          fit: StackFit.passthrough,
-          alignment: Alignment.center,
-          children: <Widget>[...previousChildren, ?currentChild],
-        );
-      },
-      child: KeyedSubtree(
-        key: ValueKey<String>(
-          isResolved ? 'image:$identity' : 'placeholder:$identity',
-        ),
-        child: isResolved ? child : widget.placeholder,
-      ),
-    );
-  }
+  }) => buildImageFirstFrameTransition(
+    context,
+    child: child,
+    placeholder: widget.placeholder,
+    isResolved: isResolved,
+    wasSynchronouslyLoaded: wasSynchronouslyLoaded,
+    duration: widget.fadeInDuration,
+    identity: identity,
+  );
 
   /// 失败即从 Flutter 图片缓存驱逐，否则重试可能拿回同一个已失败的 completer。
   ///

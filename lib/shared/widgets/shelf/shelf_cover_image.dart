@@ -4,6 +4,7 @@ import 'package:y300/features/image_loading/domain/app_image_source.dart';
 import 'package:y300/features/image_loading/presentation/app_image.dart';
 import 'package:y300/features/library_shared/domain/models/library_cover_asset.dart';
 import 'package:y300/features/library_shared/presentation/images/library_cover_image.dart';
+import 'package:y300/shared/widgets/forum_media_loading_style.dart';
 
 /// Shelf cover image widget.
 ///
@@ -72,6 +73,7 @@ class ShelfCoverImage extends StatelessWidget {
       downscalePolicy: downscalePolicy,
       placeholder: placeholder,
       errorPlaceholder: errorPlaceholder,
+      fadeInDuration: ForumMediaLoadingStyle.fadeInDuration,
     );
   }
 }

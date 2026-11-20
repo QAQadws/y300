@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Shared loading treatment for forum chrome and avatars.
+/// Shared image loading style for forum chrome, avatars, and shelf covers.
 abstract final class ForumMediaLoadingStyle {
   static const Duration fadeInDuration = Duration(milliseconds: 300);
   static const double placeholderDarkenAmount = 0.10;
