@@ -12,6 +12,7 @@ import 'package:y300/features/history/presentation/models/history_view_state.dar
 import 'package:y300/features/history/presentation/widgets/history_day_section.dart';
 import 'package:y300/features/history/presentation/widgets/history_entry_tile.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/widgets/inline_search_app_bar.dart';
 import 'package:y300/shared/widgets/navigation/navigation_dock_insets.dart';
 
 typedef HistoryEntryOpenCallback =
@@ -133,39 +134,16 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
   PreferredSizeWidget _buildAppBar(HistoryViewState state) {
     final l10n = AppLocalizations.of(context);
     if (_searchActive) {
-      return AppBar(
-        leading: IconButton(
-          key: const Key('history-search-close'),
-          tooltip: l10n.historySearchClose,
-          onPressed: _closeSearch,
-          icon: const Icon(Icons.arrow_back),
-        ),
-        title: TextField(
-          key: const Key('history-search-input'),
-          controller: _searchController,
-          focusNode: _searchFocusNode,
-          textInputAction: TextInputAction.search,
-          decoration: InputDecoration(
-            hintText: l10n.historySearchHint,
-            border: InputBorder.none,
-            suffixIcon: _searchController.text.isEmpty
-                ? null
-                : IconButton(
-                    key: const Key('history-search-clear'),
-                    tooltip: l10n.historySearchClear,
-                    onPressed: () {
-                      _searchController.clear();
-                      _controller.updateSearchText('');
-                      setState(() {});
-                    },
-                    icon: const Icon(Icons.close),
-                  ),
-          ),
-          onChanged: (value) {
-            _controller.updateSearchText(value);
-            setState(() {});
-          },
-        ),
+      return InlineSearchAppBar(
+        controller: _searchController,
+        focusNode: _searchFocusNode,
+        fieldKey: const Key('history-search-input'),
+        backButtonKey: const Key('history-search-close'),
+        clearButtonKey: const Key('history-search-clear'),
+        hintText: l10n.historySearchHint,
+        clearTooltip: l10n.historySearchClear,
+        onBack: _closeSearch,
+        onChanged: _controller.updateSearchText,
       );
     }
     return AppBar(
@@ -273,11 +251,6 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
       _timelineOffset = _scrollController.offset;
     }
     setState(() => _searchActive = true);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _searchFocusNode.requestFocus();
-      }
-    });
   }
 
   Future<void> _closeSearch() async {

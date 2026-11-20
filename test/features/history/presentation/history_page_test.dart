@@ -12,6 +12,7 @@ import 'package:y300/features/history/presentation/controllers/history_controlle
 import 'package:y300/features/history/presentation/history_page.dart';
 import 'package:y300/features/history/presentation/widgets/history_thumbnail.dart';
 import 'package:y300/l10n/app_localizations_zh.dart';
+import 'package:y300/shared/widgets/inline_search_app_bar.dart';
 
 import '../test_support/history_test_support.dart';
 
@@ -344,15 +345,24 @@ void main() {
 
       await tester.tap(find.byKey(const Key('history-search-button')));
       await tester.pump();
-      await tester.enterText(
-        find.byKey(const Key('history-search-input')),
-        '不存在',
-      );
+      expect(find.byType(InlineSearchAppBar), findsOneWidget);
+      final searchField = find.byKey(const Key('history-search-input'));
+      final field = tester.widget<TextField>(searchField);
+      expect(field.focusNode?.hasFocus, isTrue);
+      await tester.enterText(searchField, '不存在');
       await tester.pump();
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('history-search-empty')), findsOneWidget);
       expect(find.text(zh.historyNoResults), findsOneWidget);
 
+      await tester.tap(find.byKey(const Key('history-search-clear')));
+      await tester.pumpAndSettle();
+      expect(field.controller?.text, isEmpty);
+      expect(field.focusNode?.hasFocus, isTrue);
+      expect(find.text('论坛帖子'), findsOneWidget);
+
+      await tester.enterText(searchField, '不存在');
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('history-search-close')));
       await tester.pumpAndSettle();
       expect(find.text('论坛帖子'), findsOneWidget);
