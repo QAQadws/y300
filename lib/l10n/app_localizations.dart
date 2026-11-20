@@ -1520,6 +1520,12 @@ abstract class AppLocalizations {
   /// **'书架为空'**
   String get libraryShelfEmpty;
 
+  /// No description provided for @libraryShelfLoading.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在读取书架…'**
+  String get libraryShelfLoading;
+
   /// No description provided for @libraryShelfSearch.
   ///
   /// In zh, this message translates to:

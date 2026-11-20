@@ -10,6 +10,7 @@ import 'package:y300/features/favorites/presentation/favorite_shelf_page.dart';
 import 'package:y300/features/forum/presentation/forum_shell_page.dart';
 import 'package:y300/features/forum/presentation/webview/forum_webview_controller.dart';
 import 'package:y300/features/history/presentation/history_page.dart';
+import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_bottom_bar.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_controller.dart';
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_providers.dart';
@@ -71,12 +72,15 @@ class MainDestinationPage extends ConsumerWidget {
     return switch (destination) {
       MainShellDestination.forum => ForumShellPage(isActive: isActive),
       MainShellDestination.favorites => MainShellLibraryGate(
+        moduleKey: LibraryModuleKey.favorite,
         child: FavoriteShelfPage(isActive: isActive),
       ),
       MainShellDestination.comic => MainShellLibraryGate(
+        moduleKey: LibraryModuleKey.comic,
         child: ComicTabPage(isActive: isActive),
       ),
       MainShellDestination.novel => MainShellLibraryGate(
+        moduleKey: LibraryModuleKey.novel,
         child: NovelTabPage(isActive: isActive),
       ),
       MainShellDestination.blogs => ProfileBlogPage(isActive: isActive),

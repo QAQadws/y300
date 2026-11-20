@@ -19,6 +19,8 @@ import 'package:y300/features/library_shared/presentation/selection/shelf_select
 import 'package:y300/features/library_shared/presentation/selection/shelf_selection_host_controller.dart';
 import 'package:y300/features/library_shared/presentation/services/library_shelf_text_resolver.dart';
 import 'package:y300/features/library_shared/presentation/services/library_task_text_resolver.dart';
+import 'package:y300/features/library_shared/presentation/widgets/library_shelf_app_bar.dart';
+import 'package:y300/features/library_shared/presentation/widgets/library_shelf_loading.dart';
 import 'package:y300/features/library_shared/presentation/widgets/library_sort_option_tile.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/app_popup_menu.dart';
@@ -188,9 +190,8 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
               ? Column(
                   children: [
                     _buildTaskProgressBanner(),
-                    const Expanded(
-                      child: Center(child: CircularProgressIndicator()),
-                    ),
+                    const LibraryShelfCategoryPlaceholder(),
+                    const Expanded(child: LibraryShelfLoadingStatus()),
                   ],
                 )
               : Column(
@@ -521,58 +522,42 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
     }
     final moduleActions = _moduleMenuActions();
     if (!state.isSearchMode) {
-      return AppBar(
-        title: Text(
-          LibraryShelfTextResolver.moduleTitle(
-            AppLocalizations.of(context),
-            state.moduleKey,
-          ),
-        ),
-        actions: [
-          IconButton(
-            key: const Key('unified-shelf-search-button'),
-            icon: const Icon(Icons.search),
-            tooltip: AppLocalizations.of(context).libraryShelfSearch,
-            onPressed: _enterSearchMode,
-          ),
-          IconButton(
-            key: const Key('unified-shelf-filter-button'),
-            icon: const Icon(Icons.filter_list),
-            tooltip: AppLocalizations.of(context).libraryShelfFilterAndSort,
-            onPressed: _showFilterSheet,
-          ),
-          AppPopupMenuButton<String>(
-            key: const Key('unified-shelf-more-button'),
-            onSelected: _handleMenuAction,
-            itemBuilder: (context) => [
-              AppPopupMenuItem<String>(
-                value: 'add-category',
-                label: AppLocalizations.of(context).libraryShelfCreateCategory,
-              ),
-              AppPopupMenuItem<String>(
-                value: 'rename-category',
-                label: AppLocalizations.of(context).libraryShelfRenameCategory,
-              ),
-              AppPopupMenuItem<String>(
-                value: 'delete-category',
-                label: AppLocalizations.of(context).libraryShelfDeleteCategory,
-              ),
-              if (moduleActions.isNotEmpty) ...[
-                const PopupMenuDivider(),
-                ..._moduleActionItems(moduleActions),
-              ],
+      return buildLibraryShelfAppBar(
+        context,
+        moduleKey: state.moduleKey,
+        onSearch: _enterSearchMode,
+        onFilter: _showFilterSheet,
+        menu: AppPopupMenuButton<String>(
+          key: const Key('unified-shelf-more-button'),
+          onSelected: _handleMenuAction,
+          itemBuilder: (context) => [
+            AppPopupMenuItem<String>(
+              value: 'add-category',
+              label: AppLocalizations.of(context).libraryShelfCreateCategory,
+            ),
+            AppPopupMenuItem<String>(
+              value: 'rename-category',
+              label: AppLocalizations.of(context).libraryShelfRenameCategory,
+            ),
+            AppPopupMenuItem<String>(
+              value: 'delete-category',
+              label: AppLocalizations.of(context).libraryShelfDeleteCategory,
+            ),
+            if (moduleActions.isNotEmpty) ...[
               const PopupMenuDivider(),
-              AppPopupMenuItem<String>(
-                value: 'refresh-shelf',
-                label: AppLocalizations.of(context).libraryShelfUpdate,
-              ),
-              AppPopupMenuItem<String>(
-                value: 'random-open',
-                label: AppLocalizations.of(context).libraryShelfRandomOpen,
-              ),
+              ..._moduleActionItems(moduleActions),
             ],
-          ),
-        ],
+            const PopupMenuDivider(),
+            AppPopupMenuItem<String>(
+              value: 'refresh-shelf',
+              label: AppLocalizations.of(context).libraryShelfUpdate,
+            ),
+            AppPopupMenuItem<String>(
+              value: 'random-open',
+              label: AppLocalizations.of(context).libraryShelfRandomOpen,
+            ),
+          ],
+        ),
       );
     }
 

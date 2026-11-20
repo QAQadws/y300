@@ -18,6 +18,8 @@ class FixedSlotPagerHeader extends StatefulWidget {
     required this.tabKeyBuilder,
   });
 
+  static const double height = 56;
+
   final PageController pageController;
   final List<FixedSlotHeaderTab> tabs;
   final int selectedIndex;
@@ -61,7 +63,7 @@ class _FixedSlotPagerHeaderState extends State<FixedSlotPagerHeader> {
     if (widget.tabs.isEmpty) {
       return Material(
         color: palette.categoryBarBackground,
-        child: const SizedBox(height: 56),
+        child: const SizedBox(height: FixedSlotPagerHeader.height),
       );
     }
 
@@ -70,7 +72,7 @@ class _FixedSlotPagerHeaderState extends State<FixedSlotPagerHeader> {
       // 避免列表模式滚动时下方 item 透出。
       color: palette.categoryBarBackground,
       child: SizedBox(
-        height: 56,
+        height: FixedSlotPagerHeader.height,
         child: LayoutBuilder(
           builder: (context, constraints) {
             final slotWidth = constraints.maxWidth / 4;

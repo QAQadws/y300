@@ -306,6 +306,7 @@
   "libraryShelfTitle": "{module, select, comic {漫畫} novel {小說} favorite {收藏} other {書架}}",
   "libraryShelfLoadFailed": "載入書架失敗：{error}",
   "libraryShelfEmpty": "書架為空",
+  "libraryShelfLoading": "正在讀取書架…",
   "libraryShelfSearch": "搜尋書架",
   "libraryShelfSearchHint": "搜尋作品",
   "libraryShelfFilterAndSort": "篩選與排序",

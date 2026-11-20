@@ -203,7 +203,7 @@ void main() {
   });
 
   testWidgets(
-    'cached forum stays mounted while covers wait and only shelves are gated',
+    'shelves show their toolbar while recovery gates reading and on first visit',
     (tester) async {
       final covers = Completer<void>();
       final network = Completer<ForumHomeReadResult>();
@@ -254,6 +254,15 @@ void main() {
       expect(find.text('Cached forum'), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsNothing);
       final before = tester.element(find.byKey(const Key('forum-home-list')));
+      final l10n = AppLocalizations.of(before);
+      final comicToolbar = find.widgetWithText(
+        AppBar,
+        l10n.libraryShelfTitle(LibraryModuleKey.comic.name),
+      );
+      final shelfSearch = find.byKey(const Key('unified-shelf-search-button'));
+      final categoryPlaceholder = find.byKey(
+        const Key('unified-shelf-category-placeholder'),
+      );
       // Standalone shelves from navigation management use the same barrier.
       final route = ProviderScope.containerOf(
         before,
@@ -266,18 +275,20 @@ void main() {
         findsOneWidget,
       );
       expect(find.byType(UnifiedShelfPage), findsNothing);
+      expect(comicToolbar, findsOneWidget);
+      expect(categoryPlaceholder, findsOneWidget);
+      expect(tester.widget<IconButton>(shelfSearch).onPressed, isNull);
       navigator.pop();
       await tester.pumpAndSettle();
-      final l10n = AppLocalizations.of(
-        tester.element(find.byType(MainShellPage)),
-      );
       await tester.tap(find.text(l10n.appNavigationComic).last);
-      await _pumpShellTab(tester);
+      await tester.pump();
       expect(
         find.byKey(const Key('main-shell-library-loading')),
         findsOneWidget,
       );
       expect(find.byType(UnifiedShelfPage), findsNothing);
+      final pendingToolbar = tester.getRect(comicToolbar);
+      expect(categoryPlaceholder, findsOneWidget);
       await tester.tap(find.text(l10n.appNavigationForum).last);
       await _pumpShellTab(tester);
       final reads = repository.cacheReads;
@@ -296,6 +307,22 @@ void main() {
       await _pumpShellTab(tester);
       expect(find.byKey(const Key('main-shell-library-loading')), findsNothing);
       expect(find.byType(UnifiedShelfPage), findsOneWidget);
+      expect(tester.getRect(comicToolbar), pendingToolbar);
+      expect(tester.widget<IconButton>(shelfSearch).onPressed, isNotNull);
+
+      for (final (tab, module) in [
+        (l10n.appNavigationFavorites, LibraryModuleKey.favorite),
+        (l10n.appNavigationNovel, LibraryModuleKey.novel),
+      ]) {
+        await tester.tap(find.text(tab).last);
+        await tester.pump();
+        expect(
+          find.widgetWithText(AppBar, l10n.libraryShelfTitle(module.name)),
+          findsOneWidget,
+        );
+        expect(find.byType(UnifiedShelfPage), findsOneWidget);
+        expect(tester.widget<IconButton>(shelfSearch).onPressed, isNotNull);
+      }
       expect(tester.takeException(), isNull);
     },
   );
@@ -1568,12 +1595,9 @@ void main() {
 }
 
 Future<void> _pumpShellTab(WidgetTester tester) async {
-  // Shelf tabs can legitimately keep an indeterminate loading indicator
-  // alive while their first async load is in flight. The test only needs a
-  // bounded frame window for the tab transition, not global quiescence.
+  // Deliver the navigation animation and rebuilds queued by page setup.
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 300));
-  // A newly mounted shelf first passes its own cover-readiness FutureBuilder.
   await tester.pump();
 }
 

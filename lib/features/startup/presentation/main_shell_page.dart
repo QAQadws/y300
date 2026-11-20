@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart'
@@ -34,18 +36,23 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
   MainShellDestination? _currentDestination;
   final Set<MainShellDestination> _builtDestinations = <MainShellDestination>{};
   late final MainShellStartupCoordinator _startup;
-  late final Future<void> _libraryReadiness;
+  final _libraryReadiness = ValueNotifier<bool>(false);
 
   @override
   void initState() {
     super.initState();
     _startup = ref.read(mainShellStartupCoordinatorFactoryProvider).call();
-    _libraryReadiness = _startup.start();
+    unawaited(
+      _startup.start().then((_) {
+        if (mounted) _libraryReadiness.value = true;
+      }),
+    );
   }
 
   @override
   void dispose() {
     _startup.dispose();
+    _libraryReadiness.dispose();
     super.dispose();
   }
 
@@ -56,11 +63,9 @@ class _MainShellPageState extends ConsumerState<MainShellPage> {
         mainShellLibraryReadinessProvider.overrideWithValue(_libraryReadiness),
       ],
       child: MainShellStartupHost(
-        child: FutureBuilder<void>(
-          future: _libraryReadiness,
-          builder: (context, snapshot) {
-            final libraryReady =
-                snapshot.connectionState == ConnectionState.done;
+        child: ValueListenableBuilder<bool>(
+          valueListenable: _libraryReadiness,
+          builder: (context, libraryReady, _) {
             return MainShellReadyTaskHost(
               isReady: libraryReady,
               child: _buildReadyShell(context, isReady: libraryReady),

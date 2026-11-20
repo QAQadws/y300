@@ -25,6 +25,7 @@ import 'package:y300/features/library_shared/presentation/selection/shelf_select
 import 'package:y300/l10n/app_localizations_zh.dart';
 import 'package:y300/shared/widgets/inline_search_app_bar.dart';
 import 'package:y300/shared/widgets/library_cover_placeholder.dart';
+import 'package:y300/shared/widgets/shelf/fixed_slot_pager_header.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_card.dart';
 import 'package:y300/shared/widgets/shelf/shelf_cover_image.dart';
 import 'package:y300/shared/widgets/shelf/shelf_theme_palette.dart';
@@ -33,6 +34,50 @@ import '../../../../test_support/localized_test_app.dart';
 import '../../../../test_support/unavailable_library_cover_store.dart';
 
 void main() {
+  testWidgets('slow first read keeps the category slot at its loaded height', (
+    tester,
+  ) async {
+    final pending = Completer<Map<String, List<LibraryWorkItem>>>();
+    final opened = <String>[];
+    await tester.pumpWidget(
+      LocalizedTestApp(
+        home: UnifiedShelfPage(
+          adapter: _FakeShelfAdapter(
+            initialDisplayMode: LibraryDisplayMode.grid,
+            onQuery: ({
+              required categories,
+              required filters,
+              required sortOption,
+              required keyword,
+            }) => pending.future,
+          ),
+          onOpenWork: (_, workId) async => opened.add(workId),
+        ),
+      ),
+    );
+
+    final placeholder = find.byKey(
+      const Key('unified-shelf-category-placeholder'),
+    );
+    final loading = find.text(AppLocalizationsZh().libraryShelfLoading);
+    final reservedSlot = tester.getRect(placeholder);
+    expect(find.byType(AppBar), findsOneWidget);
+    expect(loading, findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(loading, findsOneWidget);
+
+    pending.complete({
+      'default': [_item(workId: '1', title: 'Comic A')],
+    });
+    await tester.pumpAndSettle();
+    expect(tester.getRect(find.byType(FixedSlotPagerHeader)), reservedSlot);
+    expect(placeholder, findsNothing);
+    expect(loading, findsNothing);
+    await tester.tap(find.text('Comic A'));
+    expect(opened, ['1']);
+  });
+
   testWidgets(
     'snapshot displays before initial category preference write completes',
     (tester) async {
@@ -1081,11 +1126,16 @@ void main() {
       ),
     );
 
-    expect(find.text('书架为空'), findsNothing);
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    final l10n = AppLocalizationsZh();
+    expect(find.text(l10n.libraryShelfEmpty), findsNothing);
+    expect(find.text(l10n.libraryShelfLoading), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
 
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pumpAndSettle();
+    expect(find.text(l10n.libraryShelfEmpty), findsNothing);
+    expect(find.text(l10n.libraryShelfLoading), findsNothing);
+    expect(find.text('Comic A'), findsOneWidget);
   });
 
   testWidgets(

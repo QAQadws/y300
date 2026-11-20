@@ -902,6 +902,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get libraryShelfEmpty => '书架为空';
 
   @override
+  String get libraryShelfLoading => '正在读取书架…';
+
+  @override
   String get libraryShelfSearch => '搜索书架';
 
   @override
@@ -6490,6 +6493,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get libraryShelfEmpty => '書架為空';
+
+  @override
+  String get libraryShelfLoading => '正在讀取書架…';
 
   @override
   String get libraryShelfSearch => '搜尋書架';
