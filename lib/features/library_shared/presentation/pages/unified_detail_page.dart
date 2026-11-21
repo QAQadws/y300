@@ -23,6 +23,7 @@ import 'package:y300/features/library_shared/presentation/widgets/cover_focal_po
 import 'package:y300/features/library_shared/presentation/widgets/library_sort_option_tile.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/app_popup_menu.dart';
+import 'package:y300/shared/widgets/delayed_loading_status.dart';
 
 /// 统一详情页骨架（Phase 4）
 ///
@@ -35,6 +36,8 @@ class UnifiedDetailPage extends StatefulWidget {
     super.key,
     required this.adapter,
     required this.workId,
+    this.initialTitle,
+    this.initialHasCover = false,
     required this.onOpenReader,
     required this.onOpenThread,
     this.imageReferer,
@@ -51,6 +54,8 @@ class UnifiedDetailPage extends StatefulWidget {
 
   final DetailModuleAdapter adapter;
   final String workId;
+  final String? initialTitle;
+  final bool initialHasCover;
   final Future<void> Function(BuildContext context, ReaderRouteTarget target)
   onOpenReader;
   final Future<void> Function(BuildContext context, ThreadRouteTarget target)
@@ -179,6 +184,9 @@ class _UnifiedDetailPageState extends State<_UnifiedDetailPageContent> {
     _controller = UnifiedDetailController(
       adapter: _page.adapter,
       workId: _page.workId,
+      onHeaderReady: () {
+        if (mounted) setState(() {});
+      },
     );
     _scrollController = ScrollController()..addListener(_handleScroll);
     _page.shelfRefreshBus?.signal.addListener(_handleShelfRefreshSignal);
@@ -318,11 +326,26 @@ class _UnifiedDetailPageState extends State<_UnifiedDetailPageContent> {
     final l10n = AppLocalizations.of(context);
     final state = _controller.state;
     final header = state.header;
+    final opening =
+        header == null && (state.isLoading || state.errorMessage == null);
+    final waitingForChapters =
+        _controller.isReadingChapters && state.chapters.isEmpty;
+    final knownTitle = header?.title ?? _page.initialTitle?.trim();
+    final title = knownTitle == null || (header == null && knownTitle.isEmpty)
+        ? l10n.libraryDetailOpeningTitle
+        : LibraryShelfTextResolver.workTitle(
+            l10n,
+            _page.adapter.moduleKey,
+            knownTitle,
+            header?.workId ?? _page.workId,
+          );
     final topInset = MediaQuery.paddingOf(context).top;
     final detailPalette = const UnifiedDetailPaletteResolver().resolve(
       Theme.of(context),
     );
-    final headerHasCover = header != null && hasUnifiedDetailCover(header);
+    final headerHasCover = header == null
+        ? opening && _page.initialHasCover
+        : hasUnifiedDetailCover(header);
     final expandedAppBarForeground = headerHasCover
         ? detailPalette.onHeader
         : detailPalette.collapsedAppBarForeground;
@@ -360,14 +383,7 @@ class _UnifiedDetailPageState extends State<_UnifiedDetailPageContent> {
               title: ExcludeSemantics(
                 excluding: progress == 0,
                 child: Text(
-                  header == null
-                      ? ''
-                      : LibraryShelfTextResolver.workTitle(
-                          l10n,
-                          _page.adapter.moduleKey,
-                          header.title,
-                          header.workId,
-                        ),
+                  title,
                   key: const Key('unified-detail-collapsed-title'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -391,7 +407,7 @@ class _UnifiedDetailPageState extends State<_UnifiedDetailPageContent> {
                   key: const Key('unified-detail-appbar-filter'),
                   tooltip: l10n.libraryDetailFilterAndSort,
                   icon: const Icon(Icons.filter_list),
-                  onPressed: _showChapterFilterSheet,
+                  onPressed: header == null ? null : _showChapterFilterSheet,
                 ),
                 AppPopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert),
@@ -451,134 +467,156 @@ class _UnifiedDetailPageState extends State<_UnifiedDetailPageContent> {
           },
         ),
       ),
-      body: state.isLoading && header == null
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              // 从屏幕顶部出现刷新指示器。
-              edgeOffset: 0,
-              displacement: 28,
-              elevation: 0,
-              onRefresh: _refreshAndShowFeedback,
-              child: CustomScrollView(
-                controller: _scrollController,
-                physics: const AlwaysScrollableScrollPhysics(
-                  parent: ClampingScrollPhysics(),
+      body: RefreshIndicator(
+        // 从屏幕顶部出现刷新指示器。
+        edgeOffset: 0,
+        displacement: 28,
+        elevation: 0,
+        onRefresh: _refreshAndShowFeedback,
+        child: CustomScrollView(
+          controller: _scrollController,
+          physics: const AlwaysScrollableScrollPhysics(
+            parent: ClampingScrollPhysics(),
+          ),
+          slivers: [
+            if (opening) ...[
+              SliverToBoxAdapter(
+                child: UnifiedDetailOpeningHeader(
+                  key: const Key('unified-detail-opening-header'),
+                  title: title,
+                  hasCover: headerHasCover,
+                  moduleKey: _page.adapter.moduleKey,
+                  topInset: topInset,
+                  palette: detailPalette,
                 ),
-                slivers: [
-                  if (header != null)
-                    SliverToBoxAdapter(
-                      child: UnifiedDetailHeaderSection(
-                        header: header,
-                        moduleKey: _page.adapter.moduleKey,
-                        topInset: topInset,
-                        palette: detailPalette,
-                        imageReferer: _page.imageReferer,
-                        onToggleShelf: () => _showMoveCategorySheet(),
-                        onRefresh: _refreshAndShowFeedback,
-                        onRefreshLongPress: _supportsFullRefresh
-                            ? () => _refreshAndShowFeedback(full: true)
-                            : null,
-                        onOpenThread: () async {
-                          final target = await _page.adapter
-                              .getThreadRouteTarget(workId: _page.workId);
-                          if (!context.mounted || target == null) {
-                            return;
-                          }
-                          await _page.onOpenThread(context, target);
-                        },
-                      ),
-                    ),
-                  if (state.errorMessage != null &&
-                      state.errorMessage!.isNotEmpty)
-                    SliverToBoxAdapter(
-                      child: UnifiedDetailErrorPanel(
-                        message: state.errorMessage!,
-                        topPadding: header == null
-                            ? topInset + kToolbarHeight
-                            : 10,
-                        onRetry: _retryLoad,
-                      ),
-                    ),
-                  if (header != null)
-                    SliverToBoxAdapter(
-                      child: UnifiedDetailIntroSection(
-                        intro: header.intro?.trim().isNotEmpty == true
-                            ? header.intro!
-                            : l10n.libraryDetailNoIntro,
-                        expanded: _introExpanded,
-                        onToggle: () =>
-                            setState(() => _introExpanded = !_introExpanded),
-                      ),
-                    ),
-                  if (header != null)
-                    SliverToBoxAdapter(
-                      child: UnifiedDetailTagStrip(
-                        sourceTagName: header.sourceTagName,
-                        sourceTypeId: header.sourceTypeId,
-                      ),
-                    ),
-                  if (_page.chapterStatus != null)
-                    SliverToBoxAdapter(child: _page.chapterStatus),
-                  SliverToBoxAdapter(
-                    child: UnifiedDetailChapterToolbar(
-                      chapterCount: state.chapters.length,
-                      filterSummary: _chapterFilterSummary(state.filters),
-                      hasActiveFilter: _hasActiveChapterFilter(state.filters),
-                      modeControl: _page.chapterModeControl,
-                    ),
-                  ),
-                  SliverList.builder(
-                    itemCount: state.chapters.length,
-                    addAutomaticKeepAlives: false,
-                    addRepaintBoundaries: true,
-                    addSemanticIndexes: false,
-                    itemBuilder: (context, index) {
-                      final chapter = state.chapters[index];
-                      return UnifiedDetailChapterTile(
-                        tileKey: ValueKey<String>(
-                          'unified-detail-chapter-${chapter.episodeId}',
-                        ),
-                        chapter: chapter,
-                        subtitle: _chapterSubtitle(chapter),
-                        isDownloading: _isChapterDownloading(chapter.episodeId),
-                        downloadIconSize: _chapterDownloadIconSize,
-                        onTap: () => _openChapter(chapter),
-                        onLongPress: () => _showChapterActions(chapter),
-                        onToggleReadState: _supportsChapterReadState
-                            ? () => _toggleChapterReadingState(chapter)
-                            : null,
-                        readStateMutationLocked: _controller
-                            .isChapterReadingStateLocked(chapter.episodeId),
-                        onToggleDownload: _supportsChapterDownloads
-                            ? () => _toggleChapterDownload(chapter)
-                            : null,
-                      );
-                    },
-                  ),
-                  // 预留足够底部滚动空间，保证短列表场景也能触发折叠标题阈值。
-                  const SliverToBoxAdapter(child: SizedBox(height: 320)),
-                ],
               ),
+              SliverToBoxAdapter(
+                child: Center(
+                  child: DelayedLoadingStatus(
+                    label: l10n.libraryDetailOpeningStatus,
+                  ),
+                ),
+              ),
+            ],
+            if (header != null)
+              SliverToBoxAdapter(
+                child: UnifiedDetailHeaderSection(
+                  header: header,
+                  moduleKey: _page.adapter.moduleKey,
+                  topInset: topInset,
+                  palette: detailPalette,
+                  imageReferer: _page.imageReferer,
+                  onToggleShelf: () => _showMoveCategorySheet(),
+                  onRefresh: _refreshAndShowFeedback,
+                  onRefreshLongPress: _supportsFullRefresh
+                      ? () => _refreshAndShowFeedback(full: true)
+                      : null,
+                  onOpenThread: () async {
+                    final target = await _page.adapter.getThreadRouteTarget(
+                      workId: _page.workId,
+                    );
+                    if (!context.mounted || target == null) {
+                      return;
+                    }
+                    await _page.onOpenThread(context, target);
+                  },
+                ),
+              ),
+            if (state.errorMessage != null && state.errorMessage!.isNotEmpty)
+              SliverToBoxAdapter(
+                child: UnifiedDetailErrorPanel(
+                  message: state.errorMessage!,
+                  topPadding: header == null ? topInset + kToolbarHeight : 10,
+                  onRetry: _retryLoad,
+                ),
+              ),
+            if (header != null)
+              SliverToBoxAdapter(
+                child: UnifiedDetailIntroSection(
+                  intro: header.intro?.trim().isNotEmpty == true
+                      ? header.intro!
+                      : l10n.libraryDetailNoIntro,
+                  expanded: _introExpanded,
+                  onToggle: () =>
+                      setState(() => _introExpanded = !_introExpanded),
+                ),
+              ),
+            if (header != null)
+              SliverToBoxAdapter(
+                child: UnifiedDetailTagStrip(
+                  sourceTagName: header.sourceTagName,
+                  sourceTypeId: header.sourceTypeId,
+                ),
+              ),
+            if (header != null && _page.chapterStatus != null)
+              SliverToBoxAdapter(child: _page.chapterStatus),
+            if (header != null &&
+                (state.errorMessage == null ||
+                    waitingForChapters ||
+                    state.chapters.isNotEmpty))
+              SliverToBoxAdapter(
+                child: UnifiedDetailChapterToolbar(
+                  chapterCount: waitingForChapters ? null : state.chapters.length,
+                  filterSummary: _chapterFilterSummary(state.filters),
+                  hasActiveFilter: _hasActiveChapterFilter(state.filters),
+                  modeControl: _page.chapterModeControl,
+                ),
+              ),
+            SliverList.builder(
+              itemCount: state.chapters.length,
+              addAutomaticKeepAlives: false,
+              addRepaintBoundaries: true,
+              addSemanticIndexes: false,
+              itemBuilder: (context, index) {
+                final chapter = state.chapters[index];
+                return UnifiedDetailChapterTile(
+                  tileKey: ValueKey<String>(
+                    'unified-detail-chapter-${chapter.episodeId}',
+                  ),
+                  chapter: chapter,
+                  subtitle: _chapterSubtitle(chapter),
+                  isDownloading: _isChapterDownloading(chapter.episodeId),
+                  downloadIconSize: _chapterDownloadIconSize,
+                  onTap: () => _openChapter(chapter),
+                  onLongPress: () => _showChapterActions(chapter),
+                  onToggleReadState: _supportsChapterReadState
+                      ? () => _toggleChapterReadingState(chapter)
+                      : null,
+                  readStateMutationLocked: _controller
+                      .isChapterReadingStateLocked(chapter.episodeId),
+                  onToggleDownload: _supportsChapterDownloads
+                      ? () => _toggleChapterDownload(chapter)
+                      : null,
+                );
+              },
             ),
+            // 预留足够底部滚动空间，保证短列表场景也能触发折叠标题阈值。
+            if (!opening)
+              const SliverToBoxAdapter(child: SizedBox(height: 320)),
+          ],
+        ),
+      ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          final target = await _page.adapter.getReaderRouteTarget(
-            workId: _page.workId,
-            preferContinue: true,
-          );
-          if (!context.mounted || target == null) {
-            return;
-          }
-          final handler = _page.onContinue ?? _page.onOpenReader;
-          await handler(context, target);
-          if (!context.mounted) {
-            return;
-          }
-          await _controller.reload();
-          if (mounted) {
-            setState(() {});
-          }
-        },
+        onPressed: header == null
+            ? null
+            : () async {
+                final target = await _page.adapter.getReaderRouteTarget(
+                  workId: _page.workId,
+                  preferContinue: true,
+                );
+                if (!context.mounted || target == null) {
+                  return;
+                }
+                final handler = _page.onContinue ?? _page.onOpenReader;
+                await handler(context, target);
+                if (!context.mounted) {
+                  return;
+                }
+                await _controller.reload();
+                if (mounted) {
+                  setState(() {});
+                }
+              },
         icon: const Icon(Icons.play_arrow),
         label: Text(l10n.libraryDetailContinue),
       ),
@@ -1159,7 +1197,10 @@ class _UnifiedDetailPageState extends State<_UnifiedDetailPageContent> {
   }
 
   Future<void> _retryLoad() async {
-    await _controller.reload();
+    if (_controller.state.isLoading) return;
+    final reload = _controller.reload();
+    setState(() {});
+    await reload;
     if (mounted) {
       setState(() {});
       _scheduleFirstContentPresented();

@@ -1,16 +1,78 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:y300/features/library_shared/domain/contracts/detail_module_adapter.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/domain/models/library_sort_models.dart';
 import 'package:y300/features/library_shared/presentation/pages/unified_detail_page.dart';
+import 'package:y300/l10n/app_localizations.dart';
 
 import '../../../../test_support/localized_test_app.dart';
 
 void main() {
+  testWidgets('detail shows a stable cover slot before chapter data arrives', (
+    tester,
+  ) async {
+    final header = Completer<LibraryDetailHeader>();
+    final chapters = Completer<List<LibraryChapterItem>>();
+    final adapter = _PageAdapter()
+      ..headerReplies['work'] = header
+      ..chapterReplies['work'] = chapters;
+    var presented = false;
+    await tester.pumpWidget(
+      ProviderScope(
+        child: LocalizedTestApp(
+          home: UnifiedDetailPage(
+            adapter: adapter,
+            workId: 'work',
+            initialTitle: 'Shelf title',
+            initialHasCover: true,
+            onOpenReader: (_, _) async {},
+            onOpenThread: (_, _) async {},
+            onFirstContentPresented: (_, _) {
+              presented = true;
+            },
+          ),
+        ),
+      ),
+    );
+
+    final title = find.byKey(const Key('unified-detail-hero-title'));
+    final cover = find.byKey(const Key('unified-detail-cover-placeholder'));
+    final coverRect = tester.getRect(cover);
+    final l10n = AppLocalizations.of(tester.element(title));
+    expect(tester.widget<Text>(title).data, 'Shelf title');
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    await tester.pump(const Duration(milliseconds: 180));
+    expect(find.text(l10n.libraryDetailOpeningStatus), findsOneWidget);
+
+    header.complete(
+      const LibraryDetailHeader(
+        workId: 'work',
+        title: 'Stored title',
+        inShelf: true,
+        coverLocalPath: 'missing-detail-cover.png',
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(tester.widget<Text>(title).data, 'Stored title');
+    expect(tester.getRect(cover), coverRect);
+    expect(find.text(l10n.libraryChapterCount(0)), findsNothing);
+    expect(presented, isFalse);
+    await tester.pump(const Duration(milliseconds: 180));
+    expect(find.text(l10n.libraryChapterManagementLoading), findsOneWidget);
+
+    chapters.complete(const []);
+    await tester.pumpAndSettle();
+    expect(find.text(l10n.libraryChapterCount(0)), findsOneWidget);
+    expect(find.text(l10n.libraryChapterManagementLoading), findsNothing);
+    expect(presented, isTrue);
+  });
+
   testWidgets('work replacement retires an unfinished initial load', (
     tester,
   ) async {
@@ -139,6 +201,7 @@ void main() {
 class _PageAdapter implements DetailModuleAdapter {
   String titlePrefix = 'title';
   final headerReplies = <String, Completer<LibraryDetailHeader>>{};
+  final chapterReplies = <String, Completer<List<LibraryChapterItem>>>{};
   final headerReads = <String>[];
   final chapterReads = <String>[];
   final refreshReply = Completer<DetailRefreshResult>();
@@ -166,6 +229,8 @@ class _PageAdapter implements DetailModuleAdapter {
     required LibraryChapterSortOption sortOption,
   }) async {
     chapterReads.add(workId);
+    final reply = chapterReplies[workId];
+    if (reply != null) return reply.future;
     return [
       LibraryChapterItem(
         episodeId: 'chapter',

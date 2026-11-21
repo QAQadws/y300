@@ -1171,6 +1171,18 @@ abstract class AppLocalizations {
   /// **'加载失败，点击重试'**
   String get historyLoadMoreFailed;
 
+  /// No description provided for @historyLoading.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在读取浏览记录…'**
+  String get historyLoading;
+
+  /// No description provided for @historyLoadingMore.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在读取更多记录…'**
+  String get historyLoadingMore;
+
   /// No description provided for @historyTypeThread.
   ///
   /// In zh, this message translates to:
@@ -1937,6 +1949,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'暂无简介'**
   String get libraryDetailNoIntro;
+
+  /// No description provided for @libraryDetailOpeningTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'作品详情'**
+  String get libraryDetailOpeningTitle;
+
+  /// No description provided for @libraryDetailOpeningStatus.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在读取作品详情…'**
+  String get libraryDetailOpeningStatus;
 
   /// No description provided for @libraryDetailContinue.
   ///

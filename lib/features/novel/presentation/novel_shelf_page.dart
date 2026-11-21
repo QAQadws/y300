@@ -41,10 +41,14 @@ class NovelShelfPage extends ConsumerWidget {
       imageReferer: ref.watch(forumImageRefererProvider),
       isActive: isActive,
       selectionHost: ref.watch(shelfSelectionHostControllerProvider),
-      onOpenWork: (context, workId) async {
+      onOpenWork: (context, workId, item) async {
         await Navigator.of(context).push(
           MaterialPageRoute<void>(
-            builder: (_) => NovelDetailPage(novelId: workId),
+            builder: (_) => NovelDetailPage(
+              novelId: workId,
+              initialTitle: item?.title,
+              initialHasCover: item?.hasCoverSource ?? false,
+            ),
           ),
         );
       },

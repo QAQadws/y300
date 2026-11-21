@@ -71,12 +71,14 @@ class UnifiedDetailController {
   UnifiedDetailController({
     required DetailModuleAdapter adapter,
     required String workId,
+    this.onHeaderReady,
   }) : _adapter = adapter,
        _workId = workId,
        _state = UnifiedDetailState.initial();
 
   final DetailModuleAdapter _adapter;
   final String _workId;
+  final void Function()? onHeaderReady;
   final _operations = UnifiedDetailOperationCoordinator();
   _DetailLoadRequest? _headerRequest;
   _DetailLoadRequest? _chapterRequest;
@@ -87,6 +89,8 @@ class UnifiedDetailController {
 
   UnifiedDetailState _state;
   UnifiedDetailState get state => _state;
+
+  bool get isReadingChapters => _chapterRequest != null;
 
   bool get isResettingWorkReading => _operations.isResettingReading;
 
@@ -339,6 +343,7 @@ class UnifiedDetailController {
         errorMessage: _chapterError,
         clearError: _chapterError == null,
       );
+      onHeaderReady?.call();
       if (identical(_chapterRequest, request)) await _readChapters(request);
     } catch (error) {
       if (_closed || !identical(_headerRequest, request)) return;

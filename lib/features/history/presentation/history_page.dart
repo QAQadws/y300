@@ -12,6 +12,7 @@ import 'package:y300/features/history/presentation/models/history_view_state.dar
 import 'package:y300/features/history/presentation/widgets/history_day_section.dart';
 import 'package:y300/features/history/presentation/widgets/history_entry_tile.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/widgets/delayed_loading_status.dart';
 import 'package:y300/shared/widgets/inline_search_app_bar.dart';
 import 'package:y300/shared/widgets/navigation/navigation_dock_insets.dart';
 
@@ -155,22 +156,33 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
           onPressed: _openSearch,
           icon: const Icon(Icons.search),
         ),
-        if (state.items.isNotEmpty)
-          IconButton(
-            key: const Key('history-clear-all-button'),
-            tooltip: l10n.historyClearAll,
-            onPressed: _confirmClearAll,
+        // Keep search at the same position while the first query resolves.
+        Opacity(
+          opacity: state.items.isEmpty ? 0 : 1,
+          child: IconButton(
+            key: state.items.isEmpty
+                ? null
+                : const Key('history-clear-all-button'),
+            tooltip: state.items.isEmpty ? null : l10n.historyClearAll,
+            onPressed: state.items.isEmpty ? null : _confirmClearAll,
             icon: const Icon(Icons.delete_sweep_outlined),
           ),
+        ),
       ],
     );
   }
 
   Widget _buildBody(HistoryViewState state) {
     if (state.isInitialLoading && state.items.isEmpty) {
-      return const Center(
-        key: Key('history-initial-loading'),
-        child: CircularProgressIndicator(),
+      return Padding(
+        key: const Key('history-initial-loading'),
+        padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: DelayedLoadingStatus(
+            label: AppLocalizations.of(context).historyLoading,
+          ),
+        ),
       );
     }
     if (state.errorMessage != null && state.items.isEmpty) {
@@ -214,27 +226,24 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
             },
           ),
         ],
-        if (state.isLoadingMore)
-          const SliverToBoxAdapter(
+        if (state.isLoadingMore || state.loadMoreError != null)
+          SliverToBoxAdapter(
             child: SizedBox(
-              key: Key('history-load-more-progress'),
               height: 64,
               child: Center(
-                child: SizedBox.square(
-                  dimension: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
-            ),
-          )
-        else if (state.loadMoreError != null)
-          SliverToBoxAdapter(
-            child: Center(
-              child: TextButton.icon(
-                key: const Key('history-load-more-retry'),
-                onPressed: _controller.loadMore,
-                icon: const Icon(Icons.refresh),
-                label: Text(AppLocalizations.of(context).historyLoadMoreFailed),
+                child: state.isLoadingMore
+                    ? DelayedLoadingStatus(
+                        key: const Key('history-load-more-progress'),
+                        label: AppLocalizations.of(context).historyLoadingMore,
+                      )
+                    : TextButton.icon(
+                        key: const Key('history-load-more-retry'),
+                        onPressed: _controller.loadMore,
+                        icon: const Icon(Icons.refresh),
+                        label: Text(
+                          AppLocalizations.of(context).historyLoadMoreFailed,
+                        ),
+                      ),
               ),
             ),
           )

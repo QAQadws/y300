@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
 import '../../../test_support/localized_test_app.dart';
+
 import 'package:intl/date_symbol_data_local.dart' as date_symbol_data;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,6 +23,45 @@ void main() {
   final zh = AppLocalizationsZh();
 
   setUpAll(date_symbol_data.initializeDateFormatting);
+
+  testWidgets('history keeps search and rows steady during delayed reads', (
+    tester,
+  ) async {
+    final repository = _DelayedHistoryRepository(_fixtures(now));
+    final controller = buildHistoryController(repository, pageSize: 2);
+    addTearDown(controller.dispose);
+    addTearDown(repository.dispose);
+    await tester.pumpWidget(_testApp(controller: controller, now: now));
+
+    final search = find.byKey(const Key('history-search-button'));
+    final searchPosition = tester.getCenter(search);
+    expect(find.text(zh.historyLoading), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    await tester.pump(const Duration(milliseconds: 180));
+    expect(find.text(zh.historyLoading), findsOneWidget);
+
+    repository.firstPage.complete();
+    await tester.pumpAndSettle();
+    expect(find.text(zh.historyLoading), findsNothing);
+    expect(tester.getCenter(search), searchPosition);
+    final row = find.text('论坛帖子');
+    final rowPosition = tester.getTopLeft(row);
+
+    final append = controller.loadMore();
+    await tester.pump();
+    expect(find.text(zh.historyLoadingMore), findsNothing);
+    await tester.pump(const Duration(milliseconds: 180));
+    expect(find.text(zh.historyLoadingMore), findsOneWidget);
+    expect(tester.getTopLeft(row), rowPosition);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    repository.nextPage.complete();
+    await append;
+    await tester.pumpAndSettle();
+    expect(find.text(zh.historyLoadingMore), findsNothing);
+    expect(find.text('小说作品'), findsOneWidget);
+    expect(tester.getTopLeft(row), rowPosition);
+  });
 
   testWidgets('can undo a deleted blog record with traditional labels', (
     tester,
@@ -640,6 +681,19 @@ void main() {
   });
 }
 
+class _DelayedHistoryRepository extends MemoryHistoryRepository {
+  _DelayedHistoryRepository(super.initial);
+
+  final firstPage = Completer<void>();
+  final nextPage = Completer<void>();
+
+  @override
+  Future<HistoryQueryPage> query(HistoryQuery query) async {
+    await (query.cursor == null ? firstPage.future : nextPage.future);
+    return super.query(query);
+  }
+}
+
 Widget _testApp({
   required HistoryController controller,
   required DateTime now,
@@ -654,9 +708,8 @@ Widget _testApp({
       theme: theme ?? AppTheme.light(),
       builder: (context, child) {
         return MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(textScaler: TextScaler.linear(textScale)),
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(textScale)),
           child: child!,
         );
       },

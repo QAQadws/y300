@@ -1,9 +1,8 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:y300/features/library_shared/domain/models/library_models.dart';
 import 'package:y300/features/library_shared/presentation/widgets/library_shelf_app_bar.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/widgets/delayed_loading_status.dart';
 import 'package:y300/shared/widgets/shelf/fixed_slot_pager_header.dart';
 import 'package:y300/shared/widgets/shelf/shelf_theme_palette.dart';
 
@@ -47,43 +46,13 @@ class LibraryShelfCategoryPlaceholder extends StatelessWidget {
   }
 }
 
-class LibraryShelfLoadingStatus extends StatefulWidget {
+class LibraryShelfLoadingStatus extends StatelessWidget {
   const LibraryShelfLoadingStatus({super.key});
 
   @override
-  State<LibraryShelfLoadingStatus> createState() =>
-      _LibraryShelfLoadingStatusState();
-}
-
-class _LibraryShelfLoadingStatusState extends State<LibraryShelfLoadingStatus> {
-  late final Timer _delay;
-  bool _visible = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // A quick local read should go straight from the reserved space to content.
-    _delay = Timer(const Duration(milliseconds: 180), () {
-      setState(() => _visible = true);
-    });
-  }
-
-  @override
-  void dispose() {
-    _delay.cancel();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) => Center(
-    child: _visible
-        ? Semantics(
-            liveRegion: true,
-            child: Text(
-              AppLocalizations.of(context).libraryShelfLoading,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          )
-        : null,
+    child: DelayedLoadingStatus(
+      label: AppLocalizations.of(context).libraryShelfLoading,
+    ),
   );
 }

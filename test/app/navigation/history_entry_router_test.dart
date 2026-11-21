@@ -188,11 +188,11 @@ void main() {
     final router = HistoryEntryRouter(
       comicWorkExists: _workExists,
       novelWorkExists: _workExists,
-      comicPageBuilder: (workId) {
+      comicPageBuilder: (workId, _, _) {
         opened.add('comic:$workId');
         return const _DestinationPage(label: 'comic-detail');
       },
-      novelPageBuilder: (workId) {
+      novelPageBuilder: (workId, _, _) {
         opened.add('novel:$workId');
         return const _DestinationPage(label: 'novel-detail');
       },
@@ -334,11 +334,11 @@ void main() {
     final router = HistoryEntryRouter(
       comicWorkExists: (_) async => false,
       novelWorkExists: (_) async => false,
-      comicPageBuilder: (workId) {
+      comicPageBuilder: (workId, _, _) {
         builtWorks.add(workId);
         return const _DestinationPage(label: 'comic-detail');
       },
-      novelPageBuilder: (workId) {
+      novelPageBuilder: (workId, _, _) {
         builtWorks.add(workId);
         return const _DestinationPage(label: 'novel-detail');
       },

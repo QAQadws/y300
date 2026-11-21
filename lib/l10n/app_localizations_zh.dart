@@ -581,6 +581,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get historyLoadMoreFailed => '加载失败，点击重试';
 
   @override
+  String get historyLoading => '正在读取浏览记录…';
+
+  @override
+  String get historyLoadingMore => '正在读取更多记录…';
+
+  @override
   String get historyTypeThread => '帖子';
 
   @override
@@ -1154,6 +1160,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get libraryDetailNoIntro => '暂无简介';
+
+  @override
+  String get libraryDetailOpeningTitle => '作品详情';
+
+  @override
+  String get libraryDetailOpeningStatus => '正在读取作品详情…';
 
   @override
   String get libraryDetailContinue => '继续';
@@ -6174,6 +6186,12 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get historyLoadMoreFailed => '載入失敗，點擊重試';
 
   @override
+  String get historyLoading => '正在讀取瀏覽記錄…';
+
+  @override
+  String get historyLoadingMore => '正在讀取更多記錄…';
+
+  @override
   String get historyTypeThread => '帖子';
 
   @override
@@ -6747,6 +6765,12 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get libraryDetailNoIntro => '目前沒有簡介';
+
+  @override
+  String get libraryDetailOpeningTitle => '作品詳情';
+
+  @override
+  String get libraryDetailOpeningStatus => '正在讀取作品詳情…';
 
   @override
   String get libraryDetailContinue => '繼續';

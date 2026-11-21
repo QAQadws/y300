@@ -20,7 +20,11 @@ typedef HistoryNativeBlogPageBuilder =
       required String blogId,
       required String title,
     });
-typedef HistoryWorkPageBuilder = Widget Function(String workId);
+typedef HistoryWorkPageBuilder = Widget Function(
+  String workId,
+  String title,
+  bool hasCover,
+);
 
 final historyEntryRouterProvider = Provider<HistoryEntryRouter>((ref) {
   return HistoryEntryRouter(
@@ -140,7 +144,11 @@ class HistoryEntryRouter {
         fallbackTid: fallbackTid,
       );
     }
-    return builder(workId);
+    final thumbnail = entry.thumbnail;
+    final hasCover =
+        thumbnail?.localPath?.trim().isNotEmpty == true ||
+        thumbnail?.remoteUrl?.trim().isNotEmpty == true;
+    return builder(workId, entry.title, hasCover);
   }
 
   Object _buildBlogDestination(HistoryEntry entry) {
@@ -185,6 +193,16 @@ Widget _buildNativeBlogPage({
   initialTitle: title,
 );
 
-Widget _buildComicPage(String workId) => ComicDetailPage(comicId: workId);
+Widget _buildComicPage(String workId, String title, bool hasCover) =>
+    ComicDetailPage(
+      comicId: workId,
+      initialTitle: title,
+      initialHasCover: hasCover,
+    );
 
-Widget _buildNovelPage(String workId) => NovelDetailPage(novelId: workId);
+Widget _buildNovelPage(String workId, String title, bool hasCover) =>
+    NovelDetailPage(
+      novelId: workId,
+      initialTitle: title,
+      initialHasCover: hasCover,
+    );

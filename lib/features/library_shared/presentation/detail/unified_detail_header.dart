@@ -13,7 +13,10 @@ import 'package:y300/features/library_shared/presentation/images/library_cover_i
 import 'package:y300/features/library_shared/presentation/images/library_cover_original_page.dart';
 import 'package:y300/features/library_shared/presentation/services/library_shelf_text_resolver.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/widgets/forum_media_loading_style.dart';
 import 'package:y300/shared/widgets/library_cover_placeholder.dart';
+
+const _detailCoverSize = Size(120, 168);
 
 bool hasUnifiedDetailCover(LibraryDetailHeader header) {
   if (header.coverAsset != null) {
@@ -57,6 +60,12 @@ class UnifiedDetailHeaderSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final title = LibraryShelfTextResolver.workTitle(
+      AppLocalizations.of(context),
+      moduleKey,
+      header.title,
+      header.workId,
+    );
     if (!hasUnifiedDetailCover(header)) {
       return Column(
         key: const Key('unified-detail-header-section'),
@@ -64,6 +73,7 @@ class UnifiedDetailHeaderSection extends ConsumerWidget {
         children: [
           _PlainHeroInfoSection(
             header: header,
+            title: title,
             moduleKey: moduleKey,
             topInset: topInset,
             palette: palette,
@@ -83,7 +93,7 @@ class UnifiedDetailHeaderSection extends ConsumerWidget {
         ? null
         : LibraryCoverProviderResolver.resolve(
             asset: asset,
-            displaySize: const Size(120, 168),
+            displaySize: _detailCoverSize,
             devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
             store: ref.watch(libraryCoverStoreProvider),
             scheduler: ref.watch(libraryCoverDecodeSchedulerProvider),
@@ -98,6 +108,7 @@ class UnifiedDetailHeaderSection extends ConsumerWidget {
           children: [
             _HeroInfoSection(
               header: header,
+              title: title,
               moduleKey: moduleKey,
               topInset: topInset,
               palette: palette,
@@ -131,15 +142,50 @@ class UnifiedDetailHeaderSection extends ConsumerWidget {
   }
 }
 
-/// 可随列表滚动消失的封面+元信息区。
-class _HeroInfoSection extends StatelessWidget {
-  const _HeroInfoSection({
-    required this.header,
+class UnifiedDetailOpeningHeader extends StatelessWidget {
+  const UnifiedDetailOpeningHeader({
+    super.key,
+    required this.title,
+    required this.hasCover,
     required this.moduleKey,
     required this.topInset,
     required this.palette,
-    required this.imageReferer,
-    required this.coverProvider,
+  });
+
+  final String title;
+  final bool hasCover;
+  final LibraryModuleKey moduleKey;
+  final double topInset;
+  final UnifiedDetailPalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    return hasCover
+        ? _HeroInfoSection(
+            title: title,
+            moduleKey: moduleKey,
+            topInset: topInset,
+            palette: palette,
+          )
+        : _PlainHeroInfoSection(
+            title: title,
+            moduleKey: moduleKey,
+            topInset: topInset,
+            palette: palette,
+          );
+  }
+}
+
+/// 可随列表滚动消失的封面+元信息区。
+class _HeroInfoSection extends StatelessWidget {
+  const _HeroInfoSection({
+    required this.title,
+    required this.moduleKey,
+    required this.topInset,
+    required this.palette,
+    this.header,
+    this.imageReferer,
+    this.coverProvider,
   });
 
   // Hero 区高度（含状态栏与 AppBar 覆盖区）
@@ -151,7 +197,8 @@ class _HeroInfoSection extends StatelessWidget {
   static double heightFor(double topInset) =>
       topInset + kToolbarHeight + _heroExtraHeight;
 
-  final LibraryDetailHeader header;
+  final String title;
+  final LibraryDetailHeader? header;
   final LibraryModuleKey moduleKey;
   final double topInset;
   final UnifiedDetailPalette palette;
@@ -160,14 +207,9 @@ class _HeroInfoSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final title = LibraryShelfTextResolver.workTitle(
-      AppLocalizations.of(context),
-      moduleKey,
-      header.title,
-      header.workId,
-    );
-    final author = _nonEmpty(header.author);
-    final group = _nonEmpty(header.translationGroup);
+    final header = this.header;
+    final author = _nonEmpty(header?.author);
+    final group = _nonEmpty(header?.translationGroup);
 
     return SizedBox(
       key: const Key('unified-detail-cover-header'),
@@ -176,10 +218,10 @@ class _HeroInfoSection extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           _DetailHeaderBackground(
-            coverImageUrl: header.coverImageUrl,
-            customCoverImageUrl: header.customCoverImageUrl,
-            coverLocalPath: header.coverLocalPath,
-            customCoverLocalPath: header.customCoverLocalPath,
+            coverImageUrl: header?.coverImageUrl,
+            customCoverImageUrl: header?.customCoverImageUrl,
+            coverLocalPath: header?.coverLocalPath,
+            customCoverLocalPath: header?.customCoverLocalPath,
             palette: palette,
             imageReferer: imageReferer,
             coverProvider: coverProvider,
@@ -192,9 +234,11 @@ class _HeroInfoSection extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 _CoverImage(
-                  url: _preferredRemoteUrl(header),
-                  localPath: _preferredLocalPath(header),
-                  alignment: _isShowingCustomCover(header)
+                  url: header == null ? null : _preferredRemoteUrl(header),
+                  localPath: header == null
+                      ? null
+                      : _preferredLocalPath(header),
+                  alignment: header != null && _isShowingCustomCover(header)
                       ? coverAlignmentFromFocus(
                           header.customCoverFocusX,
                           header.customCoverFocusY,
@@ -203,7 +247,7 @@ class _HeroInfoSection extends StatelessWidget {
                   palette: palette,
                   imageReferer: imageReferer,
                   coverProvider: coverProvider,
-                  coverAsset: header.coverAsset,
+                  coverAsset: header?.coverAsset,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -219,10 +263,10 @@ class _HeroInfoSection extends StatelessWidget {
                       moduleKey: moduleKey,
                       title: title,
                       author: author,
-                      sourceAuthorId: header.sourceAuthorId,
+                      sourceAuthorId: header?.sourceAuthorId,
                       translationGroup: group,
-                      publisherName: _nonEmpty(header.publisherName),
-                      publisherId: _nonEmpty(header.publisherId),
+                      publisherName: _nonEmpty(header?.publisherName),
+                      publisherId: _nonEmpty(header?.publisherId),
                       foregroundColor: palette.heroInfoForeground,
                     ),
                   ),
@@ -274,13 +318,15 @@ class _HeroInfoSection extends StatelessWidget {
 
 class _PlainHeroInfoSection extends StatelessWidget {
   const _PlainHeroInfoSection({
-    required this.header,
+    required this.title,
     required this.moduleKey,
     required this.topInset,
     required this.palette,
+    this.header,
   });
 
-  final LibraryDetailHeader header;
+  final String title;
+  final LibraryDetailHeader? header;
   final LibraryModuleKey moduleKey;
   final double topInset;
   final UnifiedDetailPalette palette;
@@ -304,17 +350,12 @@ class _PlainHeroInfoSection extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: _HeroMetaColumn(
               moduleKey: moduleKey,
-              title: LibraryShelfTextResolver.workTitle(
-                AppLocalizations.of(context),
-                moduleKey,
-                header.title,
-                header.workId,
-              ),
-              author: _nonEmpty(header.author),
-              sourceAuthorId: _nonEmpty(header.sourceAuthorId),
-              translationGroup: _nonEmpty(header.translationGroup),
-              publisherName: _nonEmpty(header.publisherName),
-              publisherId: _nonEmpty(header.publisherId),
+              title: title,
+              author: _nonEmpty(header?.author),
+              sourceAuthorId: header?.sourceAuthorId,
+              translationGroup: _nonEmpty(header?.translationGroup),
+              publisherName: _nonEmpty(header?.publisherName),
+              publisherId: _nonEmpty(header?.publisherId),
               foregroundColor: Theme.of(context).colorScheme.onSurface,
             ),
           ),
@@ -354,9 +395,8 @@ class _HeroMetaColumn extends StatelessWidget {
     final showContributorMetadata = moduleKey != LibraryModuleKey.novel;
 
     return DefaultTextStyle(
-      style: Theme.of(
-        context,
-      ).textTheme.bodyMedium!.copyWith(color: foregroundColor),
+      style: Theme.of(context).textTheme.bodyMedium!
+          .copyWith(color: foregroundColor),
       child: Column(
         key: const Key('unified-detail-hero-meta'),
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -391,9 +431,8 @@ class _HeroMetaColumn extends StatelessWidget {
               key: const Key('unified-detail-source-author-id'),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: foregroundColor.withValues(alpha: 0.82),
-              ),
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: foregroundColor.withValues(alpha: 0.82)),
             ),
           ],
           if (showContributorMetadata && translationGroup != null) ...[
@@ -423,9 +462,8 @@ class _HeroMetaColumn extends StatelessWidget {
               key: const Key('unified-detail-publisher-id'),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: foregroundColor.withValues(alpha: 0.72),
-              ),
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: foregroundColor.withValues(alpha: 0.72)),
             ),
           ],
         ],
@@ -452,9 +490,8 @@ class _HeroMetadataRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      label: AppLocalizations.of(
-        context,
-      ).libraryDetailMetadataSemantics(semanticLabel, value),
+      label: AppLocalizations.of(context)
+          .libraryDetailMetadataSemantics(semanticLabel, value),
       excludeSemantics: true,
       child: Row(
         key: rowKey,
@@ -494,39 +531,45 @@ class _DetailHeaderBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final localPath = _preferredLocalPath;
+    final remoteUrl = _preferredRemoteUrl;
+    final placeholder = LibraryCoverPlaceholder(
+      key: const Key('unified-detail-background-placeholder'),
+      color: palette.headerPlaceholderBackground,
+    );
     return RepaintBoundary(
       child: Stack(
         fit: StackFit.expand,
         children: [
           // 背景与前景订阅同一个 provider key；这里只在 GPU 上放大和模糊。
-          ClipRect(
-            child: ImageFiltered(
-              imageFilter: ImageFilter.blur(
-                sigmaX: _blurSigma,
-                sigmaY: _blurSigma,
+          if (coverProvider == null && localPath == null && remoteUrl == null)
+            placeholder
+          else
+            ClipRect(
+              child: ImageFiltered(
+                imageFilter: ImageFilter.blur(
+                  sigmaX: _blurSigma,
+                  sigmaY: _blurSigma,
+                ),
+                child: coverProvider == null
+                    ? LibraryCachedImage(
+                        localPath: localPath,
+                        imageUrl: remoteUrl,
+                        fit: BoxFit.cover,
+                        decodeDisplaySize: _detailCoverSize,
+                        placeholder: placeholder,
+                        referer: imageReferer,
+                        fadeInDuration: ForumMediaLoadingStyle.fadeInDuration,
+                      )
+                    : LibraryCoverProviderImage(
+                        provider: coverProvider!,
+                        fit: BoxFit.cover,
+                        filterQuality: FilterQuality.low,
+                        placeholder: placeholder,
+                        fadeInDuration: ForumMediaLoadingStyle.fadeInDuration,
+                      ),
               ),
-              child: coverProvider == null
-                  ? LibraryCachedImage(
-                      localPath: _preferredLocalPath,
-                      imageUrl: _preferredRemoteUrl,
-                      fit: BoxFit.cover,
-                      placeholder: LibraryCoverPlaceholder(
-                        key: const Key('unified-detail-background-placeholder'),
-                        color: palette.headerPlaceholderBackground,
-                      ),
-                      referer: imageReferer,
-                    )
-                  : LibraryCoverProviderImage(
-                      provider: coverProvider!,
-                      fit: BoxFit.cover,
-                      filterQuality: FilterQuality.low,
-                      placeholder: LibraryCoverPlaceholder(
-                        key: const Key('unified-detail-background-placeholder'),
-                        color: palette.headerPlaceholderBackground,
-                      ),
-                    ),
             ),
-          ),
           DecoratedBox(
             key: const Key('unified-detail-header-gradient'),
             decoration: BoxDecoration(
@@ -654,14 +697,14 @@ class _CoverImage extends StatelessWidget {
   Widget build(BuildContext context) {
     final cover = ClipRRect(
       borderRadius: BorderRadius.circular(10),
-      child: SizedBox(
-        width: 120,
-        height: 168,
+      child: SizedBox.fromSize(
+        size: _detailCoverSize,
         child: coverProvider != null
             ? LibraryCoverProviderImage(
                 provider: coverProvider!,
                 fit: BoxFit.cover,
                 alignment: alignment,
+                fadeInDuration: ForumMediaLoadingStyle.fadeInDuration,
                 placeholder: LibraryCoverPlaceholder(
                   key: const Key('unified-detail-cover-placeholder'),
                   color: palette.headerPlaceholderBackground,
@@ -678,6 +721,8 @@ class _CoverImage extends StatelessWidget {
                 imageUrl: url,
                 fit: BoxFit.cover,
                 alignment: alignment,
+                decodeDisplaySize: _detailCoverSize,
+                fadeInDuration: ForumMediaLoadingStyle.fadeInDuration,
                 placeholder: LibraryCoverPlaceholder(
                   key: const Key('unified-detail-cover-placeholder'),
                   color: palette.headerPlaceholderBackground,

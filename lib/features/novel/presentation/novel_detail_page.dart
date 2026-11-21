@@ -52,9 +52,16 @@ final _novelDetailAdapterProvider = Provider.autoDispose<NovelDetailAdapter>((
 
 /// 小说详情页：统一详情页薄壳、首次章节水合与双打开模式入口。
 class NovelDetailPage extends ConsumerStatefulWidget {
-  const NovelDetailPage({super.key, required this.novelId});
+  const NovelDetailPage({
+    super.key,
+    required this.novelId,
+    this.initialTitle,
+    this.initialHasCover = false,
+  });
 
   final String novelId;
+  final String? initialTitle;
+  final bool initialHasCover;
 
   @override
   ConsumerState<NovelDetailPage> createState() => _NovelDetailPageState();
@@ -137,6 +144,8 @@ class _NovelDetailPageState extends ConsumerState<NovelDetailPage> {
     return UnifiedDetailPage(
       adapter: adapter,
       workId: widget.novelId,
+      initialTitle: widget.initialTitle,
+      initialHasCover: widget.initialHasCover,
       imageReferer: ref.watch(forumImageRefererProvider),
       shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
       pickCoverImage: () async {

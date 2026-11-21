@@ -51,7 +51,7 @@ void main() {
               required keyword,
             }) => pending.future,
           ),
-          onOpenWork: (_, workId) async => opened.add(workId),
+          onOpenWork: (_, workId, _) async => opened.add(workId),
         ),
       ),
     );
@@ -89,7 +89,7 @@ void main() {
               initialDisplayMode: LibraryDisplayMode.grid,
             ),
             viewPreferencesRepository: preferences,
-            onOpenWork: (_, _) async {},
+            onOpenWork: (_, _, _) async {},
           ),
         ),
       );
@@ -110,7 +110,7 @@ void main() {
           adapter: _FakeShelfAdapter(
             initialDisplayMode: LibraryDisplayMode.grid,
           ),
-          onOpenWork: (context, workId) async {},
+          onOpenWork: (context, workId, _) async {},
         ),
       ),
     );
@@ -172,7 +172,7 @@ void main() {
           adapter: _FakeShelfAdapter(
             initialDisplayMode: LibraryDisplayMode.grid,
           ),
-          onOpenWork: (context, workId) async {},
+          onOpenWork: (context, workId, _) async {},
         ),
       ),
     );
@@ -221,7 +221,7 @@ void main() {
       LocalizedTestApp(
         home: UnifiedShelfPage(
           adapter: adapter,
-          onOpenWork: (context, workId) async {},
+          onOpenWork: (context, workId, _) async {},
         ),
       ),
     );
@@ -256,7 +256,7 @@ void main() {
           adapter: _FakeShelfAdapter(
             initialDisplayMode: LibraryDisplayMode.grid,
           ),
-          onOpenWork: (context, workId) async {},
+          onOpenWork: (context, workId, _) async {},
         ),
       ),
     );
@@ -310,7 +310,7 @@ void main() {
       LocalizedTestApp(
         home: UnifiedShelfPage(
           adapter: adapter,
-          onOpenWork: (context, workId) async {},
+          onOpenWork: (context, workId, _) async {},
         ),
       ),
     );
@@ -379,7 +379,7 @@ void main() {
               ],
             },
           ),
-          onOpenWork: (context, workId) async {},
+          onOpenWork: (context, workId, _) async {},
         ),
       ),
     );
@@ -418,7 +418,7 @@ void main() {
         LocalizedTestApp(
           home: UnifiedShelfPage(
             adapter: adapter,
-            onOpenWork: (context, workId) async {},
+            onOpenWork: (context, workId, _) async {},
           ),
         ),
       );
@@ -446,7 +446,7 @@ void main() {
           adapter: _FakeShelfAdapter(
             initialDisplayMode: LibraryDisplayMode.grid,
           ),
-          onOpenWork: (context, workId) async {},
+          onOpenWork: (context, workId, _) async {},
         ),
       ),
     );
@@ -503,7 +503,7 @@ void main() {
               initialDisplayMode: LibraryDisplayMode.grid,
               itemsByCategory: {'default': items},
             ),
-            onOpenWork: (context, workId) async {},
+            onOpenWork: (context, workId, _) async {},
           ),
         ),
       ),
@@ -565,7 +565,7 @@ void main() {
           featureFlags: ShelfFeatureFlags.defaults.copyWith(
             useShelfCoverImage: false,
           ),
-          onOpenWork: (context, workId) async {},
+          onOpenWork: (context, workId, _) async {},
         ),
       ),
     );
@@ -584,7 +584,7 @@ void main() {
             adapter: _FakeShelfAdapter(
               initialDisplayMode: LibraryDisplayMode.list,
             ),
-            onOpenWork: (context, workId) async {},
+            onOpenWork: (context, workId, _) async {},
           ),
         ),
       );
@@ -634,7 +634,7 @@ void main() {
                     };
                   },
             ),
-            onOpenWork: (context, workId) async {},
+            onOpenWork: (context, workId, _) async {},
           ),
         ),
       ),
@@ -691,7 +691,7 @@ void main() {
                   ],
                 },
               ),
-              onOpenWork: (context, workId) async {},
+              onOpenWork: (context, workId, _) async {},
             ),
           ),
         ),
@@ -736,7 +736,7 @@ void main() {
                   };
                 },
           ),
-          onOpenWork: (context, workId) async {},
+          onOpenWork: (context, workId, _) async {},
         ),
       ),
     );
@@ -794,7 +794,7 @@ void main() {
                   },
                 ),
                 selectionHost: host,
-                onOpenWork: (_, _) async {},
+                onOpenWork: (_, _, _) async {},
               ),
             ),
           ),
@@ -844,7 +844,7 @@ void main() {
             adapter: _FakeShelfAdapter(
               initialDisplayMode: LibraryDisplayMode.grid,
             ),
-            onOpenWork: (context, workId) async {},
+            onOpenWork: (context, workId, _) async {},
           ),
         ),
       );
@@ -883,7 +883,7 @@ void main() {
             initialDisplayMode: LibraryDisplayMode.list,
             taskProgress: progress,
           ),
-          onOpenWork: (context, workId) async {},
+          onOpenWork: (context, workId, _) async {},
         ),
       ),
     );
@@ -926,7 +926,7 @@ void main() {
               initialDisplayMode: LibraryDisplayMode.list,
               taskProgress: progress,
             ),
-            onOpenWork: (context, workId) async {},
+            onOpenWork: (context, workId, _) async {},
           ),
         ),
       );
@@ -982,7 +982,7 @@ void main() {
                     };
                   },
             ),
-            onOpenWork: (context, workId) async {},
+            onOpenWork: (context, workId, _) async {},
           ),
         ),
       ),
@@ -1051,7 +1051,7 @@ void main() {
             initialDisplayMode: LibraryDisplayMode.list,
             taskProgress: progress,
           ),
-          onOpenWork: (context, workId) async {},
+          onOpenWork: (context, workId, _) async {},
         ),
       ),
     );
@@ -1085,7 +1085,7 @@ void main() {
             initialDisplayMode: LibraryDisplayMode.list,
             taskProgress: progress,
           ),
-          onOpenWork: (context, workId) async {},
+          onOpenWork: (context, workId, _) async {},
         ),
       ),
     );
@@ -1121,7 +1121,7 @@ void main() {
       LocalizedTestApp(
         home: UnifiedShelfPage(
           adapter: adapter,
-          onOpenWork: (context, workId) async {},
+          onOpenWork: (context, workId, _) async {},
         ),
       ),
     );
@@ -1150,7 +1150,7 @@ void main() {
               initialDisplayMode: LibraryDisplayMode.grid,
             ),
             selectionHost: host,
-            onOpenWork: (context, workId) async {},
+            onOpenWork: (context, workId, _) async {},
           ),
         ),
       );
@@ -1183,7 +1183,7 @@ void main() {
             initialDisplayMode: LibraryDisplayMode.grid,
           ),
           selectionHost: host,
-          onOpenWork: (context, workId) async {
+          onOpenWork: (context, workId, _) async {
             openCount += 1;
           },
         ),
@@ -1234,7 +1234,7 @@ void main() {
             },
           ),
           selectionHost: host,
-          onOpenWork: (context, workId) async {},
+          onOpenWork: (context, workId, _) async {},
         ),
       ),
     );
@@ -1277,7 +1277,7 @@ void main() {
             initialDisplayMode: LibraryDisplayMode.grid,
           ),
           selectionHost: host,
-          onOpenWork: (context, workId) async {},
+          onOpenWork: (context, workId, _) async {},
         ),
       ),
     );
@@ -1306,7 +1306,7 @@ void main() {
             initialDisplayMode: LibraryDisplayMode.list,
           ),
           selectionHost: host,
-          onOpenWork: (context, workId) async {},
+          onOpenWork: (context, workId, _) async {},
         ),
       ),
     );
@@ -1355,7 +1355,7 @@ void main() {
             },
           ),
           selectionHost: host,
-          onOpenWork: (context, workId) async {},
+          onOpenWork: (context, workId, _) async {},
         ),
       ),
     );
@@ -1405,7 +1405,7 @@ void main() {
             },
           ),
           selectionHost: host,
-          onOpenWork: (context, workId) async {},
+          onOpenWork: (context, workId, _) async {},
         ),
       ),
     );
@@ -1497,7 +1497,7 @@ void main() {
               },
             ),
             selectionHost: host,
-            onOpenWork: (context, workId) async {},
+            onOpenWork: (context, workId, _) async {},
           ),
         ),
       );

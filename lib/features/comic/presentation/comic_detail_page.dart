@@ -48,9 +48,16 @@ final _comicDetailAdapterProvider = Provider.autoDispose<ComicDetailAdapter>((
 
 /// 漫画详情页（Phase 4）：统一详情页薄壳接入。
 class ComicDetailPage extends ConsumerWidget {
-  const ComicDetailPage({super.key, required this.comicId});
+  const ComicDetailPage({
+    super.key,
+    required this.comicId,
+    this.initialTitle,
+    this.initialHasCover = false,
+  });
 
   final String comicId;
+  final String? initialTitle;
+  final bool initialHasCover;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -59,6 +66,8 @@ class ComicDetailPage extends ConsumerWidget {
     return UnifiedDetailPage(
       adapter: adapter,
       workId: comicId,
+      initialTitle: initialTitle,
+      initialHasCover: initialHasCover,
       shelfRefreshBus: ref.watch(libraryShelfRefreshBusProvider),
       imageReferer: ref.watch(forumImageRefererProvider),
       pickCoverImage: () async {

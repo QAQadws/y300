@@ -49,7 +49,12 @@ class UnifiedShelfPage extends StatefulWidget {
 
   final ShelfModuleAdapter adapter;
   final LibraryViewPreferencesRepository? viewPreferencesRepository;
-  final Future<void> Function(BuildContext context, String workId) onOpenWork;
+  final Future<void> Function(
+    BuildContext context,
+    String workId,
+    LibraryWorkItem? shelfItem,
+  )
+  onOpenWork;
   final String? imageReferer;
   final ShelfFeatureFlags featureFlags;
   final bool isActive;
@@ -386,12 +391,12 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
     return _currentCategoryItems.map((item) => item.workId).toSet();
   }
 
-  Future<void> _handleItemTap(String workId) async {
+  Future<void> _handleItemTap(LibraryWorkItem item) async {
     if (_selectionEnabled && _selectionController.isSelecting) {
-      _selectionController.toggle(workId);
+      _selectionController.toggle(item.workId);
       return;
     }
-    await _openWorkAndRefreshShelf(workId);
+    await _openWorkAndRefreshShelf(item.workId, shelfItem: item);
   }
 
   Future<void> _handleItemLongPress(String workId) async {
@@ -951,8 +956,15 @@ class _UnifiedShelfPageState extends State<UnifiedShelfPage> {
     );
   }
 
-  Future<void> _openWorkAndRefreshShelf(String workId) async {
-    await widget.onOpenWork(context, workId);
+  Future<void> _openWorkAndRefreshShelf(
+    String workId, {
+    LibraryWorkItem? shelfItem,
+  }) async {
+    // Random opening can choose a work outside the visible, filtered items.
+    shelfItem ??= _currentCategoryItems
+        .where((item) => item.workId == workId)
+        .firstOrNull;
+    await widget.onOpenWork(context, workId, shelfItem);
     if (!mounted) {
       return;
     }
@@ -1011,7 +1023,7 @@ class _ShelfCategoryPage extends ConsumerStatefulWidget {
   final String? imageReferer;
   final bool useShelfCoverImage;
   final bool showUnreadBadge;
-  final Future<void> Function(String workId) onTapItem;
+  final Future<void> Function(LibraryWorkItem item) onTapItem;
   final Future<void> Function(String workId) onLongPressItem;
   final bool selectionEnabled;
   final Set<String> selectedWorkIds;
@@ -1190,7 +1202,7 @@ class _WorkGrid extends StatelessWidget {
   final String? imageReferer;
   final bool useShelfCoverImage;
   final bool showUnreadBadge;
-  final Future<void> Function(String workId) onTapItem;
+  final Future<void> Function(LibraryWorkItem item) onTapItem;
   final Future<void> Function(String workId) onLongPressItem;
   final bool selectionEnabled;
   final Set<String> selectedWorkIds;
@@ -1247,7 +1259,7 @@ class _WorkGrid extends StatelessWidget {
                 coverLayerBuilder: useShelfCoverImage
                     ? null
                     : _legacyCoverLayerBuilder,
-                onTap: () async => onTapItem(item.workId),
+                onTap: () async => onTapItem(item),
                 onLongPress: selectionEnabled
                     ? () async => onLongPressItem(item.workId)
                     : null,
@@ -1377,7 +1389,7 @@ class _WorkList extends StatelessWidget {
   final String? imageReferer;
   final bool useShelfCoverImage;
   final bool showUnreadBadge;
-  final Future<void> Function(String workId) onTapItem;
+  final Future<void> Function(LibraryWorkItem item) onTapItem;
   final Future<void> Function(String workId) onLongPressItem;
   final bool selectionEnabled;
   final Set<String> selectedWorkIds;
@@ -1406,7 +1418,7 @@ class _WorkList extends StatelessWidget {
           final shelfPalette = const ShelfThemePaletteResolver().resolve(
             Theme.of(context),
           );
-          final leading = _hasCoverSource(item)
+          final leading = item.hasCoverSource
               ? ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: SizedBox(
@@ -1439,7 +1451,7 @@ class _WorkList extends StatelessWidget {
                   ),
                   minTileHeight: 72,
                   selected: selected,
-                  onTap: () async => onTapItem(item.workId),
+                  onTap: () async => onTapItem(item),
                   onLongPress: selectionEnabled
                       ? () async => onLongPressItem(item.workId)
                       : null,
@@ -1510,14 +1522,6 @@ class _WorkList extends StatelessWidget {
     }
     final custom = item.customCoverLocalPath?.trim();
     return custom != null && custom.isNotEmpty;
-  }
-
-  bool _hasCoverSource(LibraryWorkItem item) {
-    // 区分“作品没有配置封面”和“封面配置存在但加载失败”：
-    // 前者在列表模式不占 leading，后者仍交给图片组件显示兜底。
-    return item.coverAsset != null ||
-        _preferredLocalPath(item) != null ||
-        _preferredRemoteUrl(item) != null;
   }
 
   String? _preferredLocalPath(LibraryWorkItem item) {

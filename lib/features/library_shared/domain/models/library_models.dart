@@ -130,6 +130,13 @@ class LibraryWorkItem {
   final bool hasBookmarks;
   final bool isDownloaded;
 
+  bool get hasCoverSource =>
+      coverAsset != null ||
+      coverLocalPath?.trim().isNotEmpty == true ||
+      customCoverLocalPath?.trim().isNotEmpty == true ||
+      coverImageUrl?.trim().isNotEmpty == true ||
+      customCoverImageUrl?.trim().isNotEmpty == true;
+
   LibraryWorkItem copyWith({
     String? title,
     String? secondaryName,

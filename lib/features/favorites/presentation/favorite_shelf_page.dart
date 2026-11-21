@@ -102,7 +102,7 @@ class _FavoriteShelfPageState extends ConsumerState<FavoriteShelfPage> {
       imageReferer: ref.watch(forumImageRefererProvider),
       isActive: widget.isActive,
       selectionHost: ref.watch(shelfSelectionHostControllerProvider),
-      onOpenWork: (context, workId) async {
+      onOpenWork: (context, workId, item) async {
         final target = await repository.getRouteTargetByShelfWorkId(workId);
         if (!context.mounted || target == null) {
           return;
@@ -117,7 +117,11 @@ class _FavoriteShelfPageState extends ConsumerState<FavoriteShelfPage> {
             }
             await Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => ComicDetailPage(comicId: comicId),
+                builder: (_) => ComicDetailPage(
+                  comicId: comicId,
+                  initialTitle: target.title,
+                  initialHasCover: item?.hasCoverSource ?? false,
+                ),
               ),
             );
             break;
@@ -129,7 +133,11 @@ class _FavoriteShelfPageState extends ConsumerState<FavoriteShelfPage> {
             }
             await Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => NovelDetailPage(novelId: novelId),
+                builder: (_) => NovelDetailPage(
+                  novelId: novelId,
+                  initialTitle: target.title,
+                  initialHasCover: item?.hasCoverSource ?? false,
+                ),
               ),
             );
             break;

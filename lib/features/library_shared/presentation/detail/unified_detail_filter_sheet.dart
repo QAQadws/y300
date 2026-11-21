@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:y300/features/library_shared/domain/models/library_filter_models.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/widgets/delayed_loading_status.dart';
 
 class UnifiedDetailChapterToolbar extends StatelessWidget {
   const UnifiedDetailChapterToolbar({
@@ -11,7 +12,7 @@ class UnifiedDetailChapterToolbar extends StatelessWidget {
     this.modeControl,
   });
 
-  final int chapterCount;
+  final int? chapterCount;
   final String filterSummary;
   final bool hasActiveFilter;
   final Widget? modeControl;
@@ -29,15 +30,21 @@ class UnifiedDetailChapterToolbar extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(
-                  l10n.libraryChapterCount(chapterCount),
-                  key: const Key('unified-detail-chapter-heading'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-                ),
+                child: chapterCount == null
+                    ? Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: DelayedLoadingStatus(
+                          label: l10n.libraryChapterManagementLoading,
+                        ),
+                      )
+                    : Text(
+                        l10n.libraryChapterCount(chapterCount!),
+                        key: const Key('unified-detail-chapter-heading'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
               ),
               if (modeControl != null) ...[
                 const SizedBox(width: 12),
@@ -51,9 +58,8 @@ class UnifiedDetailChapterToolbar extends StatelessWidget {
               filterSummary,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: scheme.onSurfaceVariant),
             ),
           ],
         ],
@@ -102,9 +108,8 @@ class UnifiedDetailTriStateLine extends StatelessWidget {
       title: Text(label),
       trailing: Text(
         stateLabel,
-        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
+        style: Theme.of(context).textTheme.labelMedium
+            ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
       ),
       onTap: () {
         final next = switch (value) {
@@ -131,9 +136,8 @@ class UnifiedDetailSheetSectionHeader extends StatelessWidget {
         alignment: Alignment.centerLeft,
         child: Text(
           title,
-          style: Theme.of(
-            context,
-          ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+          style: Theme.of(context).textTheme.titleSmall
+              ?.copyWith(fontWeight: FontWeight.w700),
         ),
       ),
     );
