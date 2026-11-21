@@ -36,11 +36,12 @@ import 'package:y300/features/profile/presentation/profile_user_link.dart';
 import 'package:y300/features/profile/presentation/widgets/feed_pagination_scroll_controller.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
 import 'package:y300/l10n/app_localizations.dart';
-import 'package:y300/shared/services/localized_error_summary.dart';
+import 'package:y300/shared/widgets/delayed_loading_status.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 import 'package:y300/shared/widgets/forum_content_spacing.dart';
 import 'package:y300/shared/widgets/native_pagination_bar.dart';
 import 'package:y300/shared/widgets/navigation/navigation_dock_insets.dart';
+import 'package:y300/shared/widgets/transient_feedback.dart';
 
 export 'package:y300/features/profile/presentation/blog/blog_feed_controller.dart';
 export 'package:y300/features/profile/presentation/blog/blog_detail_controller.dart';
@@ -246,8 +247,10 @@ class _ProfileBlogFeedPage extends ConsumerWidget {
                 )
               : !isActive
               ? const SizedBox.expand()
-              : state.isLoading
-              ? const Center(child: CircularProgressIndicator())
+              : state.failure == null
+              ? _BlogLoadingBody(
+                  label: AppLocalizations.of(context).profileBlogLoadingList,
+                )
               : _ProfileBlogError(
                   error: state.failure,
                   palette: palette,
@@ -367,13 +370,14 @@ class _ProfileBlogDetailPageState extends ConsumerState<ProfileBlogDetailPage> {
                     child: _ProfileBlogDetailContent(
                       data: state.data!,
                       capabilities: state.capabilities,
-                      failure: state.failure,
                       palette: palette,
                       imageReferer: referer,
                       onComment: (action, comment) =>
                           _openComment(controller, action, comment),
                       onArticleAction: _openArticleAction,
-                      onLoadNextComments: state.canLoadNext
+                      onLoadNextComments:
+                          state.query.commentId == null &&
+                              state.data!.commentPagination.hasNext == true
                           ? controller.loadNextComments
                           : null,
                       onPreviousComments: state.firstCommentPage > 1
@@ -385,6 +389,13 @@ class _ProfileBlogDetailPageState extends ConsumerState<ProfileBlogDetailPage> {
                           ? () => controller.selectCommentPage(1)
                           : null,
                       isLoading: state.isLoading,
+                      isLoadingComments:
+                          state.isLoading && state.commentPageRequest != null,
+                      onRetryComments:
+                          state.failure != null &&
+                              state.commentPageRequest != null
+                          ? controller.retryCommentPage
+                          : null,
                       focusComments: widget.focusComments,
                       linkBaseUri: ref
                           .read(userBlogNavigationProvider)
@@ -399,8 +410,8 @@ class _ProfileBlogDetailPageState extends ConsumerState<ProfileBlogDetailPage> {
                       ),
                     ),
                   )
-                : state.isLoading
-                ? const Center(child: CircularProgressIndicator())
+                : state.failure == null
+                ? _BlogLoadingBody(label: l10n.profileBlogLoadingBody)
                 : const SizedBox.expand(),
           ),
         ),
@@ -530,10 +541,33 @@ class _ProfileBlogListContentState extends State<_ProfileBlogListContent> {
   void _handleFeedChanged() {
     // TabBarView can retain the outgoing widget during its transition.
     // The source notification retires work before that widget updates.
-    if (_feedIdentity(widget.controller.value.query) !=
-        _feedIdentity(widget.state.query)) {
+    final controller = widget.controller;
+    final state = controller.value;
+    if (_feedIdentity(state.query) != _feedIdentity(widget.state.query)) {
       _scrollController.cancelReturn();
+      return;
     }
+    if (state.data == null ||
+        state.failure == null ||
+        state.requestedPage != null ||
+        !widget.isActive) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          !widget.isActive ||
+          !identical(widget.controller, controller) ||
+          !identical(controller.value, state) ||
+          ModalRoute.isCurrentOf(context) == false) {
+        return;
+      }
+      final l10n = AppLocalizations.of(context);
+      showTransientSnackBar(
+        context,
+        ProfileTextResolver.blogReadError(l10n, state.failure),
+        snackBarKey: const Key('profile-blog-refresh-failed'),
+      );
+    });
   }
 
   @override
@@ -596,6 +630,7 @@ class _ProfileBlogListContentState extends State<_ProfileBlogListContent> {
     final palette = widget.palette;
     final data = state.data!;
     final l10n = AppLocalizations.of(context);
+    final failedPage = state.failure != null ? state.requestedPage : null;
     return KeyedSubtree(
       key: const Key('profile-blog-list'),
       child: NotificationListener<ScrollNotification>(
@@ -615,22 +650,9 @@ class _ProfileBlogListContentState extends State<_ProfileBlogListContent> {
             context,
             const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           ),
-          itemCount: data.items.length + 2,
+          itemCount: data.items.length + 1,
           itemBuilder: (context, index) {
-            if (index == 0) {
-              return state.failure == null
-                  ? const SizedBox.shrink()
-                  : Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Text(
-                        l10n.profileBlogLoadFailed(
-                          LocalizedErrorSummary.resolve(l10n, state.failure),
-                        ),
-                        style: TextStyle(color: palette.muted),
-                      ),
-                    );
-            }
-            if (index == data.items.length + 1) {
+            if (index == data.items.length) {
               return Column(
                 children: [
                   if (data.items.isEmpty)
@@ -642,8 +664,9 @@ class _ProfileBlogListContentState extends State<_ProfileBlogListContent> {
                     state: state,
                     onLoadPreviousPage: () =>
                         unawaited(_loadPage(state.currentPage - 1)),
-                    onLoadNextPage: () =>
-                        unawaited(_loadPage(state.currentPage + 1)),
+                    onLoadNextPage: () => unawaited(
+                      _loadPage(failedPage ?? state.currentPage + 1),
+                    ),
                     onSelectPage: (page) async {
                       // The picker route must close before checking ownership.
                       await WidgetsBinding.instance.endOfFrame;
@@ -653,7 +676,7 @@ class _ProfileBlogListContentState extends State<_ProfileBlogListContent> {
                 ],
               );
             }
-            final item = data.items[index - 1];
+            final item = data.items[index];
             return Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: _ProfileBlogListCard(
@@ -892,6 +915,10 @@ class _PaginationBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final failedPage = state.failure != null ? state.requestedPage : null;
+    final nextLabel = state.hasMore
+        ? l10n.commonNextPage
+        : l10n.forumDisplayNoMore;
     return NativePaginationBar(
       key: const Key('profile-blog-pagination'),
       previousButtonKey: const Key('profile-blog-previous-page-button'),
@@ -901,17 +928,41 @@ class _PaginationBar extends StatelessWidget {
       currentPage: state.currentPage,
       lastPage: state.lastPage,
       hasMore: state.hasMore,
+      canLoadNext: state.hasMore || failedPage != null,
       canLoadPrevious: state.canLoadPrevious,
       isLoading: state.isLoading,
+      loadingNextChild: state.requestedPage == null
+          ? Text(nextLabel)
+          : DelayedLoadingStatus(
+              label: l10n.profileBlogLoadingPage,
+              beforeDelay: Text(nextLabel),
+            ),
       onLoadPrevious: onLoadPreviousPage,
       onLoadNext: onLoadNextPage,
       onSelectPage: onSelectPage,
       previousLabel: l10n.commonPreviousPage,
       currentLabel: l10n.commonPage(state.currentPage),
-      nextLabel: state.hasMore ? l10n.commonNextPage : l10n.forumDisplayNoMore,
+      nextLabel: failedPage == null
+          ? nextLabel
+          : l10n.profileBlogRetryPage(failedPage),
       padding: const EdgeInsets.fromLTRB(0, 12, 0, 24),
     );
   }
+}
+
+class _BlogLoadingBody extends StatelessWidget {
+  const _BlogLoadingBody({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+    child: Align(
+      alignment: Alignment.topCenter,
+      child: DelayedLoadingStatus(label: label),
+    ),
+  );
 }
 
 class _ProfileBlogEmptyState extends StatelessWidget {
@@ -942,7 +993,6 @@ class _ProfileBlogDetailContent extends StatelessWidget {
   const _ProfileBlogDetailContent({
     required this.data,
     required this.capabilities,
-    required this.failure,
     required this.palette,
     required this.imageReferer,
     required this.onComment,
@@ -951,6 +1001,8 @@ class _ProfileBlogDetailContent extends StatelessWidget {
     required this.onPreviousComments,
     required this.onShowAllComments,
     required this.isLoading,
+    required this.isLoadingComments,
+    required this.onRetryComments,
     required this.focusComments,
     required this.linkBaseUri,
     required this.onOpenLink,
@@ -958,7 +1010,6 @@ class _ProfileBlogDetailContent extends StatelessWidget {
 
   final UserBlogDetailData data;
   final UserBlogDetailReadCapabilities? capabilities;
-  final Object? failure;
   final Y300NativeContentColors palette;
   final String imageReferer;
   final void Function(UserBlogCommentAction, UserBlogComment?) onComment;
@@ -967,12 +1018,15 @@ class _ProfileBlogDetailContent extends StatelessWidget {
   final VoidCallback? onPreviousComments;
   final VoidCallback? onShowAllComments;
   final bool isLoading;
+  final bool isLoadingComments;
+  final VoidCallback? onRetryComments;
   final bool focusComments;
   final Uri? linkBaseUri;
   final ValueChanged<String> onOpenLink;
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     const commentsStart = ValueKey('profile-blog-comments-start');
     final hasComments =
         capabilities?.supports(UserBlogDetailCapability.orderedComments) ==
@@ -994,20 +1048,6 @@ class _ProfileBlogDetailContent extends StatelessWidget {
           ),
           sliver: SliverList.list(
             children: [
-              if (failure != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Text(
-                    AppLocalizations.of(context).profileBlogLoadFailed(
-                      LocalizedErrorSummary.resolve(
-                        AppLocalizations.of(context),
-                        failure,
-                      ),
-                    ),
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: palette.muted),
-                  ),
-                ),
               _BlogDetailCard(
                 data: data,
                 capabilities: capabilities,
@@ -1056,16 +1096,18 @@ class _ProfileBlogDetailContent extends StatelessWidget {
                   const SizedBox(height: 8),
                 ],
               ],
-              if (isLoading) const LinearProgressIndicator(),
               if (onShowAllComments != null ||
                   onLoadNextComments != null ||
-                  onPreviousComments != null)
+                  onPreviousComments != null ||
+                  isLoadingComments ||
+                  onRetryComments != null)
                 Wrap(
+                  key: const Key('blog-comment-pagination'),
                   spacing: 8,
                   children: [
                     if (onShowAllComments != null)
                       TextButton(
-                        onPressed: onShowAllComments,
+                        onPressed: isLoading ? null : onShowAllComments,
                         child: Text(
                           AppLocalizations.of(context).profileBlogAllComments,
                         ),
@@ -1077,12 +1119,26 @@ class _ProfileBlogDetailContent extends StatelessWidget {
                           AppLocalizations.of(context).commonPreviousPage,
                         ),
                       ),
-                    if (onLoadNextComments != null)
+                    if (onLoadNextComments != null ||
+                        isLoadingComments ||
+                        onRetryComments != null)
                       TextButton(
-                        onPressed: onLoadNextComments,
-                        child: Text(
-                          AppLocalizations.of(context).profileBlogMoreComments,
-                        ),
+                        key: onRetryComments == null
+                            ? null
+                            : const Key('profile-blog-comments-retry'),
+                        onPressed: isLoading
+                            ? null
+                            : onRetryComments ?? onLoadNextComments,
+                        child: isLoadingComments
+                            ? DelayedLoadingStatus(
+                                label: l10n.profileBlogLoadingComments,
+                                beforeDelay: Text(l10n.profileBlogMoreComments),
+                              )
+                            : Text(
+                                onRetryComments == null
+                                    ? l10n.profileBlogMoreComments
+                                    : l10n.profileBlogRetryComments,
+                              ),
                       ),
                   ],
                 ),

@@ -54,6 +54,7 @@ final class UserBlogDirectoryPageState {
     this.capabilities,
     this.failure,
     this.isLoading = false,
+    this.requestedPage,
     this.categories = const [],
   });
 
@@ -66,6 +67,8 @@ final class UserBlogDirectoryPageState {
   >?
   failure;
   final bool isLoading;
+  // A page change keeps its target through a retryable failure.
+  final int? requestedPage;
   final List<UserBlogCategory> categories;
 
   int get currentPage => data?.pagination.currentPage ?? query.page;
@@ -95,14 +98,17 @@ final class UserBlogDirectoryPageState {
 
   bool get canLoadPrevious => !isLoading && data != null && currentPage > 1;
 
-  UserBlogDirectoryPageState waiting({bool loading = true}) =>
-      UserBlogDirectoryPageState(
-        query: query,
-        data: data,
-        capabilities: capabilities,
-        isLoading: loading,
-        categories: categories,
-      );
+  UserBlogDirectoryPageState waiting({
+    bool loading = true,
+    int? requestedPage,
+  }) => UserBlogDirectoryPageState(
+    query: query,
+    data: data,
+    capabilities: capabilities,
+    isLoading: loading,
+    requestedPage: requestedPage,
+    categories: categories,
+  );
 }
 
 /// Retains the last selection for each tab for this route and account only.
@@ -258,7 +264,8 @@ final class ProfileBlogPageController
     final cancellation = ForumRequestCancellation();
     _cancellation = cancellation;
     _refreshing = refresh;
-    value = previous.waiting();
+    final requestedPage = !refresh && previous.data != null ? query.page : null;
+    value = previous.waiting(requestedPage: requestedPage);
     return _pending = _perform(query, cancellation, refresh: refresh).then((
       result,
     ) {
@@ -289,6 +296,7 @@ final class ProfileBlogPageController
           data: retain ? previous.data : null,
           capabilities: retain ? previous.capabilities : null,
           failure: failure,
+          requestedPage: retain ? requestedPage : null,
           categories: retain ? previous.categories : const [],
         );
       }

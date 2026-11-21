@@ -4,6 +4,12 @@ import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 typedef BlogDetailRead =
     DataReadResult<UserBlogDetailData, UserBlogDetailReadCapabilities>;
 
+typedef BlogCommentPageRequest = ({
+  UserBlogDetailQuery query,
+  bool append,
+  bool refresh,
+});
+
 @immutable
 final class UserBlogDetailPageState {
   const UserBlogDetailPageState({
@@ -13,6 +19,7 @@ final class UserBlogDetailPageState {
     this.failure,
     this.isLoading = false,
     this.firstCommentPage = 1,
+    this.commentPageRequest,
   });
 
   final UserBlogDetailQuery query;
@@ -22,6 +29,7 @@ final class UserBlogDetailPageState {
   failure;
   final bool isLoading;
   final int firstCommentPage;
+  final BlogCommentPageRequest? commentPageRequest;
 
   bool get canLoadNext =>
       !isLoading &&
@@ -90,12 +98,31 @@ final class ProfileBlogDetailController
       : _load(
           _query(page: value.data!.commentPagination.currentPage + 1),
           append: true,
+          commentPaging: true,
         );
 
   Future<void> selectCommentPage(int page, {bool refresh = false}) {
     if (!_active || _disposed || _deleted || page < 1) return Future.value();
     _cancel();
-    return _load(_query(page: page), refresh: refresh);
+    return _load(_query(page: page), refresh: refresh, commentPaging: true);
+  }
+
+  Future<void> retryCommentPage() {
+    final request = value.commentPageRequest;
+    if (!_active ||
+        _disposed ||
+        _deleted ||
+        value.isLoading ||
+        value.failure == null ||
+        request == null) {
+      return Future.value();
+    }
+    return _load(
+      request.query,
+      refresh: request.refresh,
+      append: request.append,
+      commentPaging: true,
+    );
   }
 
   Future<void> loadLastComments() {
@@ -150,18 +177,23 @@ final class ProfileBlogDetailController
     UserBlogDetailQuery query, {
     bool refresh = false,
     bool append = false,
+    bool commentPaging = false,
   }) {
     final previous = value;
     final generation = ++_generation;
     final cancellation = ForumRequestCancellation();
     _cancellation = cancellation;
     _refreshing = refresh;
+    final request = commentPaging
+        ? (query: query, append: append, refresh: refresh)
+        : null;
     value = UserBlogDetailPageState(
       query: previous.query,
       data: previous.data,
       capabilities: previous.capabilities,
       firstCommentPage: previous.firstCommentPage,
       isLoading: true,
+      commentPageRequest: request,
     );
     return _pending = _perform(query, cancellation, refresh: refresh).then((
       result,
@@ -194,6 +226,7 @@ final class ProfileBlogDetailController
           data: retain ? previous.data : null,
           capabilities: retain ? previous.capabilities : null,
           failure: failure,
+          commentPageRequest: retain ? request : null,
           firstCommentPage: previous.firstCommentPage,
         );
       }

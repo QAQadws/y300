@@ -74,13 +74,11 @@ class _BlogDetailFailureFeedbackState
     if (!mounted || !_active) return;
     final controller = widget.controller;
     final state = controller.value;
-    if (state.data != null) {
-      _hasContent = true;
-      return;
-    }
+    if (state.data != null) _hasContent = true;
     if (identical(_reportedFailure, state) ||
         state.isLoading ||
         state.failure == null ||
+        (state.data != null && state.commentPageRequest != null) ||
         state.failure!.kind == DataReadFailureKind.cancelled) {
       return;
     }
@@ -98,10 +96,18 @@ class _BlogDetailFailureFeedbackState
       final navigator = Navigator.of(context);
       _reportedFailure = state;
       final l10n = AppLocalizations.of(context);
+      final message = ProfileTextResolver.blogReadError(l10n, state.failure);
+      if (state.data != null) {
+        showTransientSnackBar(
+          context,
+          message,
+          snackBarKey: const Key('blog-detail-refresh-failed'),
+        );
+        return;
+      }
       final uri = ref.read(userBlogNavigationProvider)?.detail(state.query);
       final factory = ref.read(forumWebViewRouteFactoryProvider);
       final actor = ref.read(blogAccountIdProvider);
-      final message = ProfileTextResolver.blogReadError(l10n, state.failure);
       // The action outlives this page. Use the surviving navigator context,
       // never this State/WidgetRef, and reject a changed account generation.
       if (!_hasContent && navigator.canPop()) navigator.pop();

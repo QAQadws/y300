@@ -23,6 +23,8 @@ class NativePaginationBar extends StatelessWidget {
     required this.menuKeyPrefix,
     this.padding = EdgeInsets.zero,
     this.spacing = 8,
+    this.loadingNextChild,
+    this.canLoadNext,
   });
 
   final int currentPage;
@@ -42,6 +44,8 @@ class NativePaginationBar extends StatelessWidget {
   final String menuKeyPrefix;
   final EdgeInsetsGeometry padding;
   final double spacing;
+  final Widget? loadingNextChild;
+  final bool? canLoadNext;
 
   @override
   Widget build(BuildContext context) {
@@ -78,7 +82,7 @@ class NativePaginationBar extends StatelessWidget {
               style: buttonStyle,
               onSelected: onSelectPage,
             ),
-            if (isLoading)
+            if (isLoading && loadingNextChild == null)
               const SizedBox(
                 width: 72,
                 height: 34,
@@ -95,9 +99,11 @@ class NativePaginationBar extends StatelessWidget {
                 key: nextButtonKey,
                 height: 34,
                 child: TextButton(
-                  onPressed: hasMore ? onLoadNext : null,
+                  onPressed: !isLoading && (canLoadNext ?? hasMore)
+                      ? onLoadNext
+                      : null,
                   style: buttonStyle,
-                  child: Text(nextLabel),
+                  child: isLoading ? loadingNextChild! : Text(nextLabel),
                 ),
               ),
           ],

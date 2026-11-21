@@ -492,15 +492,15 @@ void main() {
       final harness = _Harness(tester, theme);
       await harness.size(const Size(390, 844));
       await harness.show(_center());
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      await tester.pump(const Duration(milliseconds: 180));
       expect(
         tester
-            .widget<CircularProgressIndicator>(
-              find.byType(CircularProgressIndicator),
-            )
+            .widget<Text>(find.text(harness.l10n.messageLoadingPrivate))
+            .style!
             .color,
-        palette.accent,
+        theme.colorScheme.onSurfaceVariant,
       );
-      await tester.pump(const Duration(milliseconds: 500));
       await harness.capture('loading');
       harness.repository.reads.single.result.complete(
         const DataReadFailure(

@@ -4,6 +4,8 @@ import 'package:y300/features/messages/presentation/message_feed_controller.dart
 import 'package:y300/features/messages/presentation/widgets/message_feed_view.dart';
 import 'package:y300/features/messages/presentation/widgets/message_read_status.dart';
 import 'package:y300/l10n/app_localizations.dart';
+import 'package:y300/shared/services/localized_error_summary.dart';
+import 'package:y300/shared/widgets/delayed_loading_status.dart';
 import 'package:y300/shared/widgets/navigation/navigation_dock_insets.dart';
 
 /// Shared list chrome; private messages and notifications keep separate state.
@@ -15,6 +17,7 @@ class MessageFeedList<P> extends StatelessWidget {
     required this.listKey,
     required this.itemCount,
     required this.itemBuilder,
+    required this.loadingText,
     required this.emptyText,
     required this.emptyIcon,
   });
@@ -23,6 +26,7 @@ class MessageFeedList<P> extends StatelessWidget {
   final PageStorageKey<String> listKey;
   final int Function(P) itemCount;
   final Widget Function(BuildContext, P, int) itemBuilder;
+  final String loadingText;
   final String emptyText;
   final IconData emptyIcon;
 
@@ -49,12 +53,22 @@ class MessageFeedList<P> extends StatelessWidget {
                   hasScrollBody: false,
                   child: Padding(
                     padding: dockPadding,
-                    child: Center(
-                      child: MessageReadStatus(
-                        failure: state.failure,
-                        onRetry: controller.refresh,
-                      ),
-                    ),
+                    child: state.failure != null
+                        ? Center(
+                            child: MessageReadStatus(
+                              failure: state.failure,
+                              onRetry: controller.refresh,
+                            ),
+                          )
+                        : isActive
+                        ? Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+                            child: Align(
+                              alignment: Alignment.topCenter,
+                              child: DelayedLoadingStatus(label: loadingText),
+                            ),
+                          )
+                        : const SizedBox.shrink(),
                   ),
                 )
               else if (count == 0)
@@ -77,9 +91,9 @@ class MessageFeedList<P> extends StatelessWidget {
                             textAlign: TextAlign.center,
                             style: Theme.of(context).textTheme.bodyMedium
                                 ?.copyWith(
-                                  color: Theme.of(
-                                    context,
-                                  ).y300NativeContent.supportingText,
+                                  color: Theme.of(context)
+                                      .y300NativeContent
+                                      .supportingText,
                                 ),
                           ),
                         ],
@@ -100,33 +114,10 @@ class MessageFeedList<P> extends StatelessWidget {
               if (data != null)
                 SliverToBoxAdapter(
                   child: Padding(
+                    key: const Key('message-feed-footer'),
                     padding: const EdgeInsets.all(12).add(dockPadding),
-                    child: state.failure != null
-                        ? MessageReadStatus(
-                            failure: state.failure,
-                            onRetry:
-                                state.failedOperation ==
-                                    MessageFeedOperation.more
-                                ? controller.loadMore
-                                : controller.refresh,
-                          )
-                        : state.operation == MessageFeedOperation.more
-                        ? Center(
-                            child: CircularProgressIndicator(
-                              color: Theme.of(context).y300NativeContent.accent,
-                            ),
-                          )
-                        : controller.hasMore
-                        ? Center(
-                            child: TextButton(
-                              onPressed: state.isBusy
-                                  ? null
-                                  : controller.loadMore,
-                              child: Text(
-                                AppLocalizations.of(context).messageLoadMore,
-                              ),
-                            ),
-                          )
+                    child: controller.hasMore || state.failure != null
+                        ? _buildPageAction(context, state)
                         : const SizedBox.shrink(),
                   ),
                 ),
@@ -136,4 +127,47 @@ class MessageFeedList<P> extends StatelessWidget {
       },
     ),
   );
+
+  Widget _buildPageAction(BuildContext context, MessageFeedState<P> state) {
+    final l10n = AppLocalizations.of(context);
+    final loadLabel = Text(l10n.messageLoadMore);
+    final failure = state.failure;
+    final retryRefresh = state.failedOperation == MessageFeedOperation.refresh;
+    final Widget label;
+    if (failure != null) {
+      label = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              LocalizedErrorSummary.resolve(l10n, failure),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(l10n.commonRetry),
+        ],
+      );
+    } else if (isActive && state.operation == MessageFeedOperation.more) {
+      label = DelayedLoadingStatus(
+        key: const Key('message-feed-page-status'),
+        label: l10n.messageLoadingMore,
+        beforeDelay: loadLabel,
+      );
+    } else {
+      label = loadLabel;
+    }
+    // The text button keeps the footer's control height across read and retry.
+    return Center(
+      child: TextButton(
+        onPressed: state.isBusy
+            ? null
+            : retryRefresh
+            ? controller.refresh
+            : controller.loadMore,
+        child: label,
+      ),
+    );
+  }
 }

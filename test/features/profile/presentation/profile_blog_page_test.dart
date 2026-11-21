@@ -978,16 +978,15 @@ void main() {
       expect(find.text(l10n.commonPage(1)), findsOneWidget);
       expect(_paginationButton(tester, 'previous-page').onPressed, isNull);
       expect(_paginationButton(tester, 'current-page').onPressed, isNull);
-      expect(
-        find.byKey(const Key('profile-blog-next-page-button')),
-        findsNothing,
-      );
+      expect(_paginationButton(tester, 'next-page').onPressed, isNull);
+      await tester.pump(const Duration(milliseconds: 180));
+      expect(find.text(l10n.profileBlogLoadingPage), findsOneWidget);
       expect(
         find.descendant(
           of: find.byKey(const Key('profile-blog-pagination')),
           matching: find.byType(CircularProgressIndicator),
         ),
-        findsOneWidget,
+        findsNothing,
       );
 
       nextPageGate.complete();
@@ -1020,6 +1019,7 @@ void main() {
     expect(find.text(l10n.commonPage(1)), findsOneWidget);
     expect(_paginationButton(tester, 'previous-page').onPressed, isNull);
     expect(_paginationButton(tester, 'next-page').onPressed, isNotNull);
+    expect(find.text(l10n.profileBlogRetryPage(2)), findsOneWidget);
 
     repository.failedPages.clear();
     await tester.tap(find.byKey(const Key('profile-blog-next-page-button')));
@@ -1156,12 +1156,15 @@ void main() {
     await tester.scrollUntilVisible(next, 500, scrollable: scrollable);
     await tester.pumpAndSettle();
     final oldOffset = tester.state<ScrollableState>(scrollable).position.pixels;
+    final tail = find.byKey(const Key('profile-blog-item-30'));
+    final tailPosition = tester.getTopLeft(tail);
     await tester.tap(next);
     await tester.pumpAndSettle();
     expect(
       tester.state<ScrollableState>(scrollable).position.pixels,
       closeTo(oldOffset, 0.5),
     );
+    expect(tester.getTopLeft(tail), tailPosition);
     expect(repository.queries.last.page, 2);
     expect(tester.takeException(), isNull);
   });
@@ -1223,6 +1226,8 @@ void main() {
       directoryRepository: repository,
       detailRepository: _FakeBlogDetailRepository(),
     );
+    final row = find.byKey(const Key('profile-blog-item-117558'));
+    final position = tester.getTopLeft(row);
     await tester
         .widget<RefreshIndicator>(find.byType(RefreshIndicator))
         .onRefresh();
@@ -1230,10 +1235,53 @@ void main() {
 
     expect(find.text('一种体验'), findsOneWidget);
     expect(find.textContaining('网络连接失败'), findsOneWidget);
+    expect(tester.getTopLeft(row), position);
     expect(repository.policies, <CacheLoadPolicy>[
       CacheLoadPolicy.cacheFirst,
       CacheLoadPolicy.networkFirst,
     ]);
+  });
+
+  testWidgets('article opens with its title and retries comments in place', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    final details = _FakeBlogDetailRepository(gate: gate, pagedComments: true)
+      ..failedCommentPages.add(2);
+    await _pumpBlogPage(
+      tester,
+      directoryRepository: _FakeBlogDirectoryRepository(),
+      detailRepository: details,
+    );
+    final l10n = AppLocalizations.of(tester.element(find.byType(ProfileBlogPage)));
+    await tester.tap(find.byKey(const Key('profile-blog-item-117558')));
+    await tester.pumpAndSettle();
+    expect(find.byType(ProfileBlogDetailPage), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.text('一种体验'), findsWidgets);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text(l10n.profileBlogLoadingBody), findsOneWidget);
+
+    gate.complete();
+    await tester.pumpAndSettle();
+    final more = find.text(l10n.profileBlogMoreComments);
+    await tester.ensureVisible(more);
+    await tester.pumpAndSettle();
+    final comment = find.byKey(const Key('profile-blog-comment-646846'));
+    final position = tester.getTopLeft(comment);
+    await tester.tap(more);
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(comment), position);
+
+    details.failedCommentPages.clear();
+    await tester.tap(find.byKey(const Key('profile-blog-comments-retry')));
+    await tester.pumpAndSettle();
+    expect(details.queries.map((query) => query.page), [1, 2, 2]);
+    expect(
+      find.byKey(const Key('profile-blog-comment-646847')),
+      findsOneWidget,
+    );
+    expect(tester.getTopLeft(comment), position);
   });
 
   testWidgets('initial failure shows retry and then loads content', (
@@ -1567,6 +1615,7 @@ class _FakeBlogDetailRepository implements UserBlogDetailRepository {
     this.emptyComments = false,
     this.viewCount = 39,
     this.commentCount = 1,
+    this.pagedComments = false,
   }) : readCapabilities = capabilities ?? _detailCapabilities();
 
   final UserBlogDetailReadCapabilities readCapabilities;
@@ -1577,6 +1626,8 @@ class _FakeBlogDetailRepository implements UserBlogDetailRepository {
   final bool emptyComments;
   final int? viewCount;
   final int? commentCount;
+  final bool pagedComments;
+  final failedCommentPages = <int>{};
   final policies = <CacheLoadPolicy>[];
   final Completer<void>? gate;
   final cancellations = <ForumRequestCancellation?>[];
@@ -1597,6 +1648,12 @@ class _FakeBlogDetailRepository implements UserBlogDetailRepository {
     policies.add(cachePolicy);
     cancellations.add(cancellation);
     await gate?.future;
+    if (failedCommentPages.contains(query.page)) {
+      return const DataReadFailure(
+        kind: DataReadFailureKind.network,
+        diagnosticMessage: 'network failure',
+      );
+    }
     return DataReadSuccess(
       data: UserBlogDetailData(
         blogId: query.blogId,
@@ -1608,11 +1665,15 @@ class _FakeBlogDetailRepository implements UserBlogDetailRepository {
         viewCount: viewCount,
         commentCount: commentCount,
         commentsOpen: true,
+        commentPagination: UserBlogPagination(
+          currentPage: query.page,
+          hasNext: pagedComments && query.page == 1,
+        ),
         actions: blogActions,
         comments: <UserBlogComment>[
           if (!emptyComments)
             UserBlogComment(
-              commentId: '646846',
+              commentId: pagedComments && query.page == 2 ? '646847' : '646846',
               authorName: 'thessky',
               authorUserId: commentAuthorId,
               bodyHtml: '<p>探险的感觉</p>',

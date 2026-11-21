@@ -157,6 +157,7 @@ class _MessageCenterBodyState extends ConsumerState<_MessageCenterBody>
                       'private-message-list:${widget.accountId}',
                     ),
                     itemCount: (page) => page.items.length,
+                    loadingText: l10n.messageLoadingPrivate,
                     emptyText: l10n.profileNoMessages,
                     emptyIcon: Icons.chat_bubble_outline,
                     itemBuilder: (context, page, index) => _ConversationRow(
@@ -178,6 +179,7 @@ class _MessageCenterBodyState extends ConsumerState<_MessageCenterBody>
                       'notification-list:${widget.accountId}',
                     ),
                     itemCount: (page) => page.items.length,
+                    loadingText: l10n.messageLoadingNotifications,
                     emptyText: l10n.profileNoNotifications,
                     emptyIcon: Icons.notifications_none,
                     itemBuilder: (context, page, index) => _NotificationRow(

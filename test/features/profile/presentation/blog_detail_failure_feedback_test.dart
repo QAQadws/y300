@@ -297,6 +297,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    final article = find.text('retained body', findRichText: true);
+    final articlePosition = tester.getTopLeft(article);
     final controller = tester
         .widget<BlogDetailFailureFeedback>(
           find.byType(BlogDetailFailureFeedback),
@@ -309,8 +311,8 @@ void main() {
     await refreshing;
     await tester.pumpAndSettle();
     expect(find.byType(ProfileBlogDetailPage), findsOneWidget);
-    expect(find.text('retained body', findRichText: true), findsOneWidget);
-    expect(find.byType(SnackBar), findsNothing);
+    expect(tester.getTopLeft(article), articlePosition);
+    expect(find.byKey(const Key('blog-detail-refresh-failed')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

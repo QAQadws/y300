@@ -612,7 +612,12 @@ void main() {
         settle: state != 'loading',
       );
       if (state == 'loading') {
-        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+        await tester.pump(const Duration(milliseconds: 180));
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(ProfileBlogPage)),
+        );
+        expect(find.text(l10n.profileBlogLoadingList), findsOneWidget);
       }
       if (state == 'error' || state == 'login') {
         expect(find.byKey(const Key('blog-read-open-web')), findsOneWidget);
