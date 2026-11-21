@@ -117,9 +117,10 @@ class _PostEditAttachmentCard extends StatelessWidget {
                 Positioned.fill(
                   child: Center(
                     child: resolution.isAvailable
-                        ? ComposerAttachmentPreviewImage(
+                        ? ComposerAttachmentPreviewImage.thumbnail(
                             resolution: resolution,
-                            maxWidth: 96,
+                            width: 96,
+                            height: 88,
                             imageKey: Key('post-edit-image-$aid'),
                           )
                         : Semantics(

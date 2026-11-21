@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
+import 'package:y300/shared/widgets/forum_media_loading_style.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 /// A stable thumbnail slot, including when its lazy parent is recreated.
@@ -81,6 +82,7 @@ class _ThreadPollOptionImageViewState
               width: _extent,
               height: _extent,
               decodeDisplaySize: decodeSize,
+              fadeInDuration: ForumMediaLoadingStyle.fadeInDuration,
               placeholder: const SizedBox.expand(),
               errorPlaceholder: Center(
                 child: Icon(

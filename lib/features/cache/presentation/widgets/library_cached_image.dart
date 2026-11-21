@@ -230,19 +230,25 @@ class _LibraryCachedImageState extends ConsumerState<LibraryCachedImage> {
         alignment: widget.alignment,
         gaplessPlayback: true,
         frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+          final identity = 'file:${file.path}';
           final isResolved = frame != null || wasSynchronouslyLoaded;
           if (isResolved) {
             _reportFirstFrameRendered(
-              'file:${file.path}',
+              identity,
               LibraryImageFrameSource.localFile,
             );
           }
           return _buildFirstFrameTransition(
             context: context,
             child: child,
-            isResolved: isResolved,
+            // Gapless playback still has the visible frame while the same
+            // file is decoded at a refined size.
+            isResolved:
+                isResolved ||
+                (widget.fadeInDuration > Duration.zero &&
+                    _reportedFirstFrameIdentity == identity),
             wasSynchronouslyLoaded: wasSynchronouslyLoaded,
-            identity: 'file:${file.path}',
+            identity: identity,
           );
         },
         errorBuilder: (context, error, stackTrace) {

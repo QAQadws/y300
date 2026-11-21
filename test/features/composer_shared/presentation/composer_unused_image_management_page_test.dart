@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' as io;
 
 import 'package:flutter/material.dart';
@@ -14,9 +15,52 @@ import 'package:y300/features/composer_shared/domain/models/composer_unused_imag
 import 'package:y300/features/composer_shared/domain/repositories/composer_unused_image_repository.dart';
 import 'package:y300/features/composer_shared/presentation/controllers/composer_unused_image_management_controller.dart';
 import 'package:y300/features/composer_shared/presentation/widgets/composer_unused_image_management_page.dart';
+import 'package:y300/shared/widgets/forum_media_loading_style.dart';
+
 import '../../../test_support/localized_test_app.dart';
 
 void main() {
+  testWidgets('fades the decoded thumbnail inside the original square', (
+    tester,
+  ) async {
+    const path = 'unused-image-fade.png';
+    final image = (await tester.runAsync(
+      () => createTestImage(width: 40, height: 24, cache: false),
+    ))!;
+    addTearDown(image.dispose);
+    final frame = Completer<ImageInfo>();
+    final provider = FileImage(io.File(path));
+    final imageCache = PaintingBinding.instance.imageCache;
+    imageCache.putIfAbsent(
+      provider,
+      () => OneFrameImageStreamCompleter(frame.future),
+    );
+    addTearDown(() => imageCache.evict(provider));
+    final repository = _FakeUnusedImageRepository(images: [_image('1')]);
+    final cache = _FakeImageCacheService(
+      cachedByAid: {'1': path},
+      now: tester.binding.clock.now,
+    );
+
+    await tester.pumpWidget(_testApp(repository: repository, cache: cache));
+    await tester.pump();
+    final thumbnail = find.byKey(const Key('unused-image-thumbnail-1'));
+    final slot = tester.getRect(thumbnail);
+    expect(slot.width, closeTo(slot.height, 0.001));
+    expect(find.byIcon(Icons.image_outlined), findsOneWidget);
+
+    frame.complete(ImageInfo(image: image.clone()));
+    await tester.pump();
+    await tester.pump(ForumMediaLoadingStyle.fadeInDuration * 0.5);
+    expect(tester.getRect(thumbnail), slot);
+    expect(find.byIcon(Icons.image_outlined), findsOneWidget);
+    expect(tester.widget<RawImage>(find.byType(RawImage)).image, isNotNull);
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.image_outlined), findsNothing);
+    expect(tester.getRect(thumbnail), slot);
+    expect(cache.ensureAids, isEmpty);
+  });
+
   testWidgets('shows cache hits immediately and serializes network misses', (
     tester,
   ) async {
@@ -82,6 +126,8 @@ void main() {
       ),
     );
     await tester.pump();
+    final card = find.byKey(const Key('unused-image-card-12'));
+    final cardRect = tester.getRect(card);
 
     _reportImageDecodeFailure(tester, '12');
     await tester.pump();
@@ -101,6 +147,9 @@ void main() {
         .read(composerUnusedImageManagementControllerProvider.notifier)
         .reportThumbnailDecodeFailure(aid: '12', localPath: validThumbnailPath);
 
+    await tester.pump();
+    expect(tester.getRect(card), cardRect);
+    expect(find.byIcon(Icons.broken_image_outlined), findsOneWidget);
     expect(cache.deletedOwnerAids, <String>['12']);
     expect(cache.ensureAids, <String>['12']);
     expect(

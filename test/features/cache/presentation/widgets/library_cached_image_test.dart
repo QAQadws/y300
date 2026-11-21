@@ -354,6 +354,70 @@ void main() {
     expect(tester.hasRunningAnimations, isFalse);
   });
 
+  testWidgets('a local thumbnail stays visible while its decode size changes', (
+    tester,
+  ) async {
+    final image = (await tester.runAsync(
+      () => createTestImage(width: 24, height: 48, cache: false),
+    ))!;
+    addTearDown(image.dispose);
+
+    const path = 'refined-thumbnail.png';
+    const slot = Size.square(96);
+    const refinedSize = Size(48, 96);
+    final imageCache = PaintingBinding.instance.imageCache;
+    final first = Completer<ImageInfo>();
+    final refined = Completer<ImageInfo>();
+    for (final (size, result) in [(slot, first), (refinedSize, refined)]) {
+      final provider = resolveDownscaledFileImageProvider(
+        localPath: path,
+        fit: BoxFit.contain,
+        displaySize: size,
+        devicePixelRatio: 1,
+      );
+      final key = await provider.obtainKey(ImageConfiguration.empty);
+      imageCache.putIfAbsent(
+        key,
+        () => OneFrameImageStreamCompleter(result.future),
+      );
+      addTearDown(() => imageCache.evict(key));
+    }
+
+    Widget build(Size decodeSize) => LocalizedTestApp(
+      home: MediaQuery(
+        data: const MediaQueryData(devicePixelRatio: 1),
+        child: Center(
+          child: LibraryCachedImage(
+            localPath: path,
+            fit: BoxFit.contain,
+            width: slot.width,
+            height: slot.height,
+            decodeDisplaySize: decodeSize,
+            placeholder: const SizedBox(key: Key('placeholder')),
+            fadeInDuration: const Duration(milliseconds: 300),
+            onFirstFrameRendered: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(build(slot));
+    expect(find.byKey(const Key('placeholder')), findsOneWidget);
+    first.complete(ImageInfo(image: image.clone()));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('placeholder')), findsNothing);
+
+    await tester.pumpWidget(build(refinedSize));
+    expect(tester.widget<RawImage>(find.byType(RawImage)).image, isNotNull);
+    expect(find.byKey(const Key('placeholder')), findsNothing);
+    expect(tester.hasRunningAnimations, isFalse);
+
+    refined.complete(ImageInfo(image: image.clone()));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('placeholder')), findsNothing);
+    expect(tester.getSize(find.byType(RawImage)), slot);
+  });
+
   testWidgets('bumping retryToken re-resolves a failed remote image', (
     tester,
   ) async {

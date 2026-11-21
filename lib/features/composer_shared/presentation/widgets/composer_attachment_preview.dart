@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/composer_shared/domain/models/composer_attachment_preview_models.dart';
 import 'package:y300/features/image_loading/domain/app_image_source.dart';
 import 'package:y300/features/image_loading/presentation/app_image.dart';
+import 'package:y300/shared/widgets/forum_media_loading_style.dart';
 
 typedef ComposerLocalImageBuilder = Widget Function(File file, Key key);
 typedef ComposerLocalFileExists = bool Function(File file);
@@ -32,18 +33,33 @@ class ComposerAttachmentPreviewImage extends ConsumerWidget {
     this.imageKey,
     this.localImageBuilder = defaultComposerLocalImageBuilder,
     this.localFileExists = defaultComposerLocalFileExists,
-  });
+  }) : _thumbnailHeight = null;
+
+  const ComposerAttachmentPreviewImage.thumbnail({
+    super.key,
+    required this.resolution,
+    required double width,
+    required double height,
+    this.imageKey,
+  }) : maxWidth = width,
+       _thumbnailHeight = height,
+       localImageBuilder = defaultComposerLocalImageBuilder,
+       localFileExists = defaultComposerLocalFileExists;
 
   final ComposerAttachmentResolution resolution;
   final double maxWidth;
   final Key? imageKey;
   final ComposerLocalImageBuilder localImageBuilder;
   final ComposerLocalFileExists localFileExists;
+  final double? _thumbnailHeight;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final source = resolution.preview;
-    if (!resolution.isAvailable || source == null) {
+    final source = resolution.isAvailable ? resolution.preview : null;
+    if (_thumbnailHeight case final height?) {
+      return _buildThumbnail(source, height);
+    }
+    if (source == null) {
       return const SizedBox.shrink();
     }
     return switch (source) {
@@ -53,6 +69,38 @@ class ComposerAttachmentPreviewImage extends ConsumerWidget {
         referer,
       ),
     };
+  }
+
+  Widget _buildThumbnail(ComposerImagePreviewSource? source, double height) {
+    const failed = Center(child: Icon(Icons.broken_image_outlined));
+    final (localPath, networkSource) = switch (source) {
+      ComposerLocalImagePreview(:final path) => (path, null),
+      ComposerRemoteImagePreview(:final url, :final referer) => (
+        null,
+        NetworkAppImageSource(url: url, referer: referer),
+      ),
+      null => (null, null),
+    };
+
+    return SizedBox(
+      width: maxWidth,
+      height: height,
+      child:
+          source == null ||
+              (localPath != null && !localFileExists(File(localPath)))
+          ? failed
+          : AppImage(
+              key:
+                  imageKey ??
+                  ValueKey<String>('composer-thumbnail-${resolution.aid}'),
+              localPath: localPath,
+              networkSource: networkSource,
+              fit: BoxFit.contain,
+              fadeInDuration: ForumMediaLoadingStyle.fadeInDuration,
+              placeholder: const Center(child: Icon(Icons.image_outlined)),
+              errorPlaceholder: failed,
+            ),
+    );
   }
 
   Widget _buildLocal(String path) {

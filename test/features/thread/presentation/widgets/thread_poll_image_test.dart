@@ -13,6 +13,7 @@ import 'package:y300/features/cache/presentation/widgets/cached_library_image.da
 import 'package:y300/features/thread/presentation/widgets/thread_detail_theme.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_poll_option_image.dart';
+import 'package:y300/shared/widgets/forum_media_loading_style.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 import '../../../../test_support/localized_test_app.dart';
@@ -108,6 +109,7 @@ void main() {
       );
       expect(resolved.decodeDisplaySize, const Size(48, 96));
       expect(resolved.fit, BoxFit.contain);
+      expect(resolved.fadeInDuration, ForumMediaLoadingStyle.fadeInDuration);
       expect(tester.getSize(tile), before);
       expect(find.text('图文选项'), findsOneWidget);
       scroll.jumpTo(5000);
