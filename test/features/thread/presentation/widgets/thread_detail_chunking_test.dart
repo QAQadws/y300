@@ -171,6 +171,164 @@ void main() {
     );
   }
 
+  for (final (reply, canRebase) in [
+    ('<P>first line<BR />second line &lt;3</P>', true),
+    ('<p class="quote">formatted reply</p>', false),
+    ('<details><summary>spoiler</summary>hidden text</details>', false),
+    ('<img alt="image">', false),
+  ]) {
+    testWidgets('return to a chunked post with reply $reply', (tester) async {
+      final host = _Host([
+        _post('long', _html(1200, paragraphs: true), 1),
+        _post('reply', reply, 2),
+        _post('last', 'last plain reply', 3),
+      ], quickScrolling: true);
+      addTearDown(host.dispose);
+      await _mount(tester, host);
+      await _ready(tester, 'unit[0]');
+      await _tail(tester, host, 'last plain reply');
+
+      final position = host.controller.position;
+      host.quickCoordinator.updateUserDirection(ScrollDirection.forward);
+      await _quickNavigate(tester, host, animate: true);
+      await _ready(tester, 'unit[0]');
+      expect(identical(host.controller.position, position), !canRebase);
+      expect(_atFirstFloor(tester, 'long'), isTrue);
+      expect(_visibleMarker(tester, 'long', 0), isTrue);
+      expect(host.confirmedOffsets, hasLength(1));
+      final topPosition = host.controller.position;
+      host.quickCoordinator.updateUserDirection(ScrollDirection.reverse);
+      await _quickNavigate(tester, host, animate: false);
+      expect(identical(host.controller.position, topPosition), !canRebase);
+      expect(_atPaginationEnd(tester), isTrue);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('animated return scrolls only the last half-screen to the top', (
+    tester,
+  ) async {
+    final host = _Host([
+      _post('long', _html(1200, paragraphs: true), 1),
+      _post('last', 'last plain reply', 2),
+    ], quickScrolling: true);
+    addTearDown(host.dispose);
+    await _mount(tester, host);
+    await _ready(tester, 'unit[0]');
+    await _tail(tester, host, 'last plain reply');
+    final halfScreen = host.controller.position.viewportDimension / 2;
+
+    for (final distance in [halfScreen, 48.0]) {
+      if (distance < halfScreen) host.controller.jumpTo(distance);
+      host.quickCoordinator.updateUserDirection(ScrollDirection.forward);
+      final pending = host.quickCoordinator.navigate(animate: true);
+      await tester.pump();
+      final start = host.controller.offset;
+      expect(start, closeTo(distance, 1));
+      final paragraphAtStart = _markerRect(tester, 'long', 0)!;
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 80));
+      expect(host.controller.offset, inExclusiveRange(0, start));
+      expect(
+        _markerRect(tester, 'long', 0)!.top,
+        greaterThan(paragraphAtStart.top),
+      );
+      expect(_units(tester), isNot(contains(600)));
+      await _pumpUntil(tester, () => !host.quickCoordinator.isNavigating);
+      await pending;
+      expect(_atFirstFloor(tester, 'long'), isTrue);
+    }
+
+    host.controller.jumpTo(halfScreen);
+    host.quickCoordinator.updateUserDirection(ScrollDirection.forward);
+    final instant = host.quickCoordinator.navigate(animate: false);
+    await tester.pump();
+    expect(host.controller.offset, closeTo(0, 1));
+    await _pumpUntil(tester, () => !host.quickCoordinator.isNavigating);
+    await instant;
+    expect(host.confirmedOffsets, hasLength(3));
+
+    host.controller.jumpTo(halfScreen);
+    host.quickCoordinator.updateUserDirection(ScrollDirection.forward);
+    final interrupted = host.quickCoordinator.navigate(animate: true);
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    final stop = host.controller.offset;
+    expect(stop, inExclusiveRange(0, halfScreen));
+    host.quickCoordinator.cancelNavigation();
+    await tester.pump(const Duration(milliseconds: 350));
+    await interrupted;
+    expect(host.controller.offset, closeTo(stop, 1));
+    expect(host.confirmedOffsets, hasLength(3));
+  });
+
+  testWidgets(
+    'animated jump down scrolls the last half-screen into the footer',
+    (tester) async {
+      final host = _Host([
+        _post('long', _html(1200, paragraphs: true), 1),
+        _post('last', 'last plain reply', 2),
+      ], quickScrolling: true);
+      addTearDown(host.dispose);
+      await _mount(tester, host);
+      await _ready(tester, 'unit[0]');
+      final halfScreen = host.controller.position.viewportDimension / 2;
+      final pagination = find
+          .byKey(const Key('thread-detail-pagination'), skipOffstage: false)
+          .first;
+      for (final distance in [halfScreen, 48.0]) {
+        if (distance < halfScreen) {
+          host.controller.jumpTo(
+            host.controller.position.maxScrollExtent - distance,
+          );
+        }
+        host.quickCoordinator.updateUserDirection(ScrollDirection.reverse);
+        final pending = host.quickCoordinator.navigate(animate: true);
+        await tester.pump();
+        expect(host.controller.position.extentAfter, closeTo(distance, 1));
+        final start = tester.getRect(pagination).top;
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 80));
+        expect(
+          host.controller.position.extentAfter,
+          inExclusiveRange(0, distance),
+        );
+        expect(tester.getRect(pagination).top, lessThan(start));
+        expect(_units(tester), isNot(contains(600)));
+        await _pumpUntil(tester, () => !host.quickCoordinator.isNavigating);
+        await pending;
+        expect(_atPaginationEnd(tester), isTrue);
+        expect(_bodyText(tester), contains('last plain reply'));
+      }
+
+      host.controller.jumpTo(
+        host.controller.position.maxScrollExtent - halfScreen,
+      );
+      host.quickCoordinator.updateUserDirection(ScrollDirection.reverse);
+      final interrupted = host.quickCoordinator.navigate(animate: true);
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 80));
+      final stop = host.controller.position.extentAfter;
+      expect(stop, inExclusiveRange(0, halfScreen));
+      host.quickCoordinator.cancelNavigation();
+      await tester.pump(const Duration(milliseconds: 350));
+      await interrupted;
+      expect(host.controller.position.extentAfter, closeTo(stop, 1));
+      expect(host.confirmedOffsets, hasLength(2));
+
+      host.quickCoordinator.updateUserDirection(ScrollDirection.reverse);
+      final instant = host.quickCoordinator.navigate(animate: false);
+      await tester.pump();
+      expect(host.controller.position.extentAfter, closeTo(0, 1));
+      await _pumpUntil(tester, () => !host.quickCoordinator.isNavigating);
+      await instant;
+      expect(_atPaginationEnd(tester), isTrue);
+      expect(host.confirmedOffsets, hasLength(3));
+    },
+  );
+
   for (final retirement in [
     'cancel',
     'page',
@@ -652,45 +810,72 @@ void main() {
     },
   );
 
-  testWidgets(
-    'selection copy page keeps all 3000 units outside the lazy host',
-    (tester) async {
-      final post = _post('long', _html(3000, paragraphs: true), 1);
-      final container = ProviderContainer(
-        overrides: [
-          forumHtmlReaderPreferencesControllerProvider.overrideWith(
-            _Preferences.new,
-          ),
-        ],
-      );
-      addTearDown(container.dispose);
-      await tester.binding.setSurfaceSize(const Size(440, 800));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: MaterialApp(
-            locale: const Locale('zh'),
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: ThreadPostHtmlSelectionCopyPage(
-              post: post,
-              threadId: '100',
-              imageReferer: '',
-              onOpenPostLink: (_) {},
-              onOpenPostImage: null,
-              onImageFallback: (_, _) {},
+  for (final sample in ['BR', 'rich BR', 'color BR', 'P']) {
+    testWidgets(
+      'a wrapped $sample post is lazy in the thread and complete on the copy page',
+      (tester) async {
+        var body = _html(3000, paragraphs: sample == 'P');
+        if (sample == 'rich BR') {
+          body = body
+              .replaceFirst(
+                'unit[47]',
+                '<a href="https://example.org/map">unit[47]</a>',
+              )
+              .replaceFirst('unit[48]', '<strong>unit[48]</strong>');
+        } else if (sample == 'color BR') {
+          body = body
+              .replaceFirst('unit[47]', '<font color="#af283d">unit[47]</font>')
+              .replaceFirst(
+                'unit[48]',
+                '<font color="#15639a">unit[48]</font>',
+              );
+        }
+        final post = _post('long', '<div>$body</div>', 1);
+        final host = _Host([post]);
+        addTearDown(host.dispose);
+        await _mount(tester, host);
+        await _ready(tester, 'unit[0]');
+        expect(
+          find.byKey(const Key('thread-post-body-chunk-long-0')),
+          findsOneWidget,
+        );
+        expect(_units(tester), isNot(contains(2999)));
+        final container = ProviderContainer(
+          overrides: [
+            forumHtmlReaderPreferencesControllerProvider.overrideWith(
+              _Preferences.new,
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+        await tester.binding.setSurfaceSize(const Size(440, 800));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(
+              locale: const Locale('zh'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: ThreadPostHtmlSelectionCopyPage(
+                post: post,
+                threadId: '100',
+                imageReferer: '',
+                onOpenPostLink: (_) {},
+                onOpenPostImage: null,
+                onImageFallback: (_, _) {},
+              ),
             ),
           ),
-        ),
-      );
-      await _ready(tester, 'unit[2999]');
-      expect(_renderers(tester, 'long'), hasLength(1));
-      expect(_renderers(tester, 'long').single.html, post.message);
-      expect(_units(tester), hasLength(3000));
-      expect(find.byType(SelectionArea), findsOneWidget);
-    },
-  );
+        );
+        await _ready(tester, 'unit[2999]');
+        expect(_renderers(tester, 'long'), hasLength(1));
+        expect(_renderers(tester, 'long').single.html, post.message);
+        expect(_units(tester), hasLength(3000));
+        expect(find.byType(SelectionArea), findsOneWidget);
+      },
+    );
+  }
 
   testWidgets(
     'source reading coordinator keeps complete bodies before and after tracking admission',

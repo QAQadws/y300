@@ -12,6 +12,41 @@ import 'package:y300/features/thread/presentation/services/thread_body_reading_c
 import '../../../../test_support/localized_test_app.dart';
 
 void main() {
+  testWidgets('only the current chunk plan is offered before the next frame', (
+    tester,
+  ) async {
+    final worker = _Worker();
+    final executor = _executor(worker);
+    final harness = _Harness();
+    final offered = <String>[];
+    final lines = List.filled(
+      1200,
+      '1234567890 正文阅读内容 正文阅读内容 正文阅读内容',
+    ).join('<br>');
+    Widget host(String label) => harness.host(
+      '<div>$label<br>$lines</div>',
+      executor: executor,
+      preparer: const DefaultForumHtmlRenderPreparer(
+        enableSafeDisplayPlanning: true,
+      ),
+      onPreparedBody: (_, request, document) {
+        expect(document.safeDisplayPlan?.isChunked, isTrue);
+        offered.add(request.html);
+        return true;
+      },
+    );
+    await tester.pumpWidget(host('old'));
+    await _frames(tester);
+    await tester.pumpWidget(host('current'));
+    await _frames(tester);
+    worker.complete(0);
+    await tester.idle();
+    expect(offered, isEmpty);
+    worker.complete(1);
+    await tester.idle();
+    expect(offered, ['<div>current<br>$lines</div>']);
+  });
+
   testWidgets(
     'new preparation retires old readiness and reading geometry immediately',
     (tester) async {
@@ -271,6 +306,7 @@ final class _Harness {
     ForumHtmlThemeContext? theme,
     String tid = '100',
     ForumHtmlRenderPreparer preparer = const DefaultForumHtmlRenderPreparer(),
+    ThreadPreparedBodyHandoff? onPreparedBody,
   }) {
     coordinator.bindContent(
       tid: tid,
@@ -308,7 +344,10 @@ final class _Harness {
                       onOpenPostLink: (_) {},
                       onOpenPostImage: null,
                       theme: theme ?? _lightTheme,
-                      readingCoordinator: coordinator,
+                      readingCoordinator: onPreparedBody == null
+                          ? coordinator
+                          : null,
+                      onPreparedBody: onPreparedBody,
                       preparationExecutor: executor,
                       renderPreparer: preparer,
                       fallback: const Text('Empty body fallback'),

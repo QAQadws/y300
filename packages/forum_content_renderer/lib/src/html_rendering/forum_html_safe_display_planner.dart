@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show internal;
 import 'package:html/dom.dart' as dom;
 
 import '../models/forum_html_safe_display_plan.dart';
@@ -32,7 +33,7 @@ final class ForumHtmlSafeDisplayPlanner {
 
   static final _rootWhitespace = RegExp(r'^[\t\n\f\r ]*$');
   static final _unsupportedLeadingRoot = RegExp(
-    r'^[\t\n\f\r ]*<(?:div|font|span)(?=[\t\n\f\r />])',
+    r'^[\t\n\f\r ]*<(?:div[\t\n\f\r ]+[a-z_:]|span(?=[\t\n\f\r />]))',
     caseSensitive: false,
   );
   static const _inlineTags = {
@@ -68,8 +69,24 @@ final class ForumHtmlSafeDisplayPlanner {
     'text-indent',
     'direction',
   };
+  static const _lineLinkAttributes = {
+    'href',
+    'title',
+    'target',
+    'rel',
+    'style',
+  };
 
-  ForumHtmlSafeDisplayPlan plan(ForumHtmlPreparedRenderDocument document) {
+  ForumHtmlSafeDisplayPlan plan(ForumHtmlPreparedRenderDocument document) =>
+      planPrepared(document);
+
+  /// [ownedFragment] is the canonical fragment just serialized by preparation.
+  /// Planning can detach its roots after the complete HTML has been saved.
+  @internal
+  ForumHtmlSafeDisplayPlan planPrepared(
+    ForumHtmlPreparedRenderDocument document, {
+    dom.DocumentFragment? ownedFragment,
+  }) {
     final html = document.preparedHtml;
     if (html.length < minCodeUnits) {
       return _whole(
@@ -94,15 +111,22 @@ final class ForumHtmlSafeDisplayPlanner {
         ForumHtmlSafeDisplayFallbackReason.unsupportedStructure,
       );
     }
-    final fragment = fragmentCodec.parse(html);
-    final nodes = fragment.nodes.toList(growable: false);
-    final onlyLines = nodes.every(
-      (node) => node is dom.Text || node is dom.Comment || _isBareBreak(node),
-    );
+    // A character reference can introduce a literal CR after tokenization.
+    // Reparsing serialized HTML normalizes CR/CRLF, including in attributes.
+    final fragment =
+        ownedFragment != null &&
+            fragmentCodec is HtmlPackageForumHtmlFragmentCodec &&
+            !html.contains('\r')
+        ? ownedFragment
+        : fragmentCodec.parse(html);
+    final wrapper = _soleBareDiv(fragment);
+    final parent = wrapper ?? fragment;
+    final nodes = parent.nodes.toList(growable: false);
     final ForumHtmlSafeDisplayPlanKind kind;
-    if (onlyLines) {
+    if (_areTextLineRoots(nodes)) {
       kind = ForumHtmlSafeDisplayPlanKind.textLines;
-    } else if (_areParagraphRoots(nodes)) {
+    } else if ((wrapper == null || _hasPlainParagraphChildren(wrapper)) &&
+        _areParagraphRoots(nodes)) {
       kind = ForumHtmlSafeDisplayPlanKind.paragraphs;
     } else {
       return _whole(
@@ -113,7 +137,7 @@ final class ForumHtmlSafeDisplayPlanner {
     // html's addAll reparents with List.remove. Removing successive groups from
     // a long sibling list is quadratic even in reverse group order. Detach the
     // owned roots together, leaving each complete root's children untouched.
-    fragment.nodes.clear();
+    parent.nodes.clear();
     final parts = kind == ForumHtmlSafeDisplayPlanKind.textLines
         ? _textLines(nodes)
         : _paragraphs(nodes);
@@ -175,6 +199,84 @@ final class ForumHtmlSafeDisplayPlanner {
   static bool _isBareBreak(dom.Node node) =>
       node is dom.Element && node.localName == 'br' && node.attributes.isEmpty;
 
+  static bool _areTextLineRoots(List<dom.Node> nodes) {
+    late final declarations = CssInlineStyleDeclarationCodec.scoped();
+    // Only direct BRs are boundaries. An inline subtree must fit on one hard
+    // line, so a cut never splits a recognizer or reopens a formatting tag.
+    final pending = <dom.Node>[];
+    for (final root in nodes) {
+      if (root is dom.Text || root is dom.Comment || _isBareBreak(root)) {
+        continue;
+      }
+      pending.add(root);
+      while (pending.isNotEmpty) {
+        final node = pending.removeLast();
+        if (node is dom.Text || node is dom.Comment) continue;
+        if (node is! dom.Element) return false;
+        switch (node.localName) {
+          case 'a':
+            if (!_isWebLink(node) ||
+                !node.attributes.keys.every(_lineLinkAttributes.contains)) {
+              return false;
+            }
+          case 'b':
+          case 'strong':
+            if (node.attributes.keys.any((key) => key != 'style')) return false;
+          case 'font':
+            // Theme adaptation can move color into style or remove it entirely.
+            if (node.attributes.keys.any(
+              (key) => key != 'color' && key != 'style',
+            )) {
+              return false;
+            }
+          default:
+            return false;
+        }
+        // Color alone does not change line metrics.
+        final style = node.attributes['style'];
+        if (style != null && style.isNotEmpty) {
+          final parsed = declarations.tryParse(style);
+          if (parsed == null ||
+              parsed.declarations.any((item) => item.property != 'color')) {
+            return false;
+          }
+        }
+        pending.addAll(node.nodes);
+      }
+    }
+    return true;
+  }
+
+  static bool _isWebLink(dom.Element element) {
+    final uri = Uri.tryParse(element.attributes['href'] ?? '');
+    return uri != null &&
+        (uri.scheme == 'http' || uri.scheme == 'https') &&
+        uri.host.isNotEmpty;
+  }
+
+  static dom.Element? _soleBareDiv(dom.DocumentFragment fragment) {
+    final first = fragment.nodes.whereType<dom.Element>().firstOrNull;
+    if (first == null ||
+        first.localName != 'div' ||
+        first.attributes.isNotEmpty) {
+      return null;
+    }
+    return fragment.nodes.every(
+          (node) =>
+              identical(node, first) ||
+              node is dom.Comment ||
+              node is dom.Text && _rootWhitespace.hasMatch(node.data),
+        )
+        ? first
+        : null;
+  }
+
+  // A DIV can have its own paragraph margin in the host. Only flatten P
+  // children whose default margins match, even if their inline text is styled.
+  static bool _hasPlainParagraphChildren(dom.Element wrapper) =>
+      wrapper.children.length >= 2 &&
+      wrapper.children.every((p) => p.localName == 'p' && p.attributes.isEmpty);
+
   static bool _areParagraphRoots(List<dom.Node> nodes) {
     final declarations = CssInlineStyleDeclarationCodec.scoped();
     return nodes.every((node) => _isParagraphRoot(node, declarations));
@@ -207,14 +309,7 @@ final class ForumHtmlSafeDisplayPlanner {
           !_hasTextAttributes(child, declarations)) {
         return false;
       }
-      if (child.localName == 'a') {
-        final uri = Uri.tryParse(child.attributes['href'] ?? '');
-        if (uri == null ||
-            (uri.scheme != 'http' && uri.scheme != 'https') ||
-            uri.host.isEmpty) {
-          return false;
-        }
-      }
+      if (child.localName == 'a' && !_isWebLink(child)) return false;
       pending.addAll(child.nodes);
     }
     // Empty blocks have margin-collapse behavior across neighboring P roots.
@@ -254,7 +349,7 @@ final class ForumHtmlSafeDisplayPlanner {
 
   List<_DisplayPart> _textLines(List<dom.Node> nodes) {
     final lastText = nodes.lastIndexWhere(
-      (node) => node is dom.Text && node.data.trim().isNotEmpty,
+      (node) => _lineText(node).trim().isNotEmpty,
     );
     final groups = <({List<dom.Node> nodes, int startUnit, int endUnit})>[];
     var pending = <dom.Node>[];
@@ -264,7 +359,8 @@ final class ForumHtmlSafeDisplayPlanner {
     var hasLineText = false;
     for (var index = 0; index < nodes.length; index++) {
       final node = nodes[index];
-      if (_isBareBreak(node) &&
+      final isBreak = _isBareBreak(node);
+      if (isBreak &&
           hasLineText &&
           (targetChunkUnits != null
               ? unit + 1 - startUnit >= targetChunkUnits!
@@ -279,12 +375,13 @@ final class ForumHtmlSafeDisplayPlanner {
         startUnit = unit + 1;
       } else {
         pending.add(node);
-        if (node is dom.Text) {
-          cost += node.data.length;
-          hasLineText = hasLineText || node.data.trim().isNotEmpty;
+        if (!isBreak) {
+          final text = _lineText(node);
+          cost += text.length;
+          hasLineText = hasLineText || text.trim().isNotEmpty;
         }
       }
-      if (_isBareBreak(node)) {
+      if (isBreak) {
         unit++;
         hasLineText = false;
       }
@@ -304,6 +401,12 @@ final class ForumHtmlSafeDisplayPlanner {
         ),
     ];
   }
+
+  static String _lineText(dom.Node node) => switch (node) {
+    dom.Text() => node.data,
+    dom.Element() => node.text,
+    _ => '',
+  };
 
   List<_DisplayPart> _paragraphs(List<dom.Node> nodes) {
     final parts = <_DisplayPart>[];

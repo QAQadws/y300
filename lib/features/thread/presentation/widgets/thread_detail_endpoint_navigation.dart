@@ -1,8 +1,13 @@
 part of 'thread_detail_widgets.dart';
 
 /// Reuses the entry-centered viewport without knowing intervening chunk heights.
-/// Whole HTML keeps its existing mounted state and scrolling path.
 mixin _ThreadDetailEndpointNavigation on ConsumerState<ThreadDetailContent> {
+  static const _maxShortReplyCodeUnits = 1024;
+  static final _nonTextMarkup = RegExp(
+    r'<(?!/?p>|br[ \t\r\n\f]*/?>)',
+    caseSensitive: false,
+  );
+
   ThreadDetailPreparedBodyStore get _preparedBodies;
   ThreadPostViewportAnchorCoordinator get _projectionAnchorCoordinator;
   set _pendingChunkAnchor(ThreadPostViewportAnchorSnapshot? value);
@@ -16,10 +21,12 @@ mixin _ThreadDetailEndpointNavigation on ConsumerState<ThreadDetailContent> {
 
   final _endpointBoundaryKey = GlobalKey(debugLabel: 'thread-page-endpoint');
   ThreadDetailQuickScrollTarget? _endpointTarget;
+  double _endpointArrivalDistance = 0;
   int _endpointGeneration = 0;
   int _endpointViewRevision = 0;
   ({
     bool Function() current,
+    double arrivalDistance,
     ThreadDetailQuickScrollTarget? target,
     int revision,
     GlobalKey center,
@@ -29,7 +36,11 @@ mixin _ThreadDetailEndpointNavigation on ConsumerState<ThreadDetailContent> {
   void _prepareEndpointBuild() {
     final pending = _pendingEndpointBuild;
     _pendingEndpointBuild = null;
-    if (pending == null || pending.current()) return;
+    if (pending == null) return;
+    if (pending.current()) {
+      _endpointArrivalDistance = pending.arrivalDistance;
+      return;
+    }
     // A drag/cancel before the next build must not publish a queued rebase.
     _endpointTarget = pending.target;
     _endpointViewRevision = pending.revision;
@@ -85,20 +96,36 @@ mixin _ThreadDetailEndpointNavigation on ConsumerState<ThreadDetailContent> {
     widget.quickScrollCoordinator?.unbindEndpointNavigator(this);
   }
 
+  bool _canRebaseToEndpoint() {
+    if (!_canChunkBodies) return false;
+    var hasChunkedBody = false;
+    for (final post in _postProjections) {
+      final body = _preparedBodies[post.sourcePost.pid];
+      if (body != null) {
+        if (!_isCurrentPreparedRequest(body.request)) return false;
+        hasChunkedBody = true;
+        continue;
+      }
+      // A short text reply can be remounted at either endpoint. Other whole
+      // renderers may own fold or image state, so keep their existing viewport.
+      final html = post.displayPost.message;
+      if (post.sourcePost.isFirst ||
+          post.sourcePost.attachmentImages.isNotEmpty ||
+          html.length > _maxShortReplyCodeUnits ||
+          _nonTextMarkup.hasMatch(html)) {
+        return false;
+      }
+    }
+    return hasChunkedBody;
+  }
+
   Future<ThreadDetailEndpointNavigationResult> _navigateToEndpoint({
     required ThreadDetailQuickScrollTarget target,
     required bool animate,
     required Duration duration,
     required bool Function() isCurrent,
   }) async {
-    // Reparenting a whole renderer would discard its local folds/image state.
-    // Keep this fast path to pages whose bodies already have pure safe plans.
-    if (!_canChunkBodies ||
-        _postProjections.isEmpty ||
-        _postProjections.any((post) {
-          final body = _preparedBodies[post.sourcePost.pid];
-          return body == null || !_isCurrentPreparedRequest(body.request);
-        })) {
+    if (!_canRebaseToEndpoint()) {
       return ThreadDetailEndpointNavigationResult.unavailable;
     }
     final controller = widget.scrollController;
@@ -116,8 +143,15 @@ mixin _ThreadDetailEndpointNavigation on ConsumerState<ThreadDetailContent> {
         identical(controller, widget.scrollController);
     _projectionAnchorCoordinator.beginExplicitNavigation();
     _pendingChunkAnchor = null;
+    final position = controller.position;
+    final remainingDistance = target == ThreadDetailQuickScrollTarget.top
+        ? position.extentBefore
+        : position.extentAfter;
     _pendingEndpointBuild = (
       current: current,
+      arrivalDistance: animate
+          ? remainingDistance.clamp(0.0, position.viewportDimension / 2)
+          : 0.0,
       target: _endpointTarget,
       revision: _endpointViewRevision,
       center: _targetCenterKey,
@@ -126,7 +160,7 @@ mixin _ThreadDetailEndpointNavigation on ConsumerState<ThreadDetailContent> {
       _endpointTarget = target;
       _endpointViewRevision++;
       // Both the ScrollPosition and sliver layout offsets belong to the old
-      // center. Fresh keys start the new local viewport at zero.
+      // center. A fresh viewport lays out only the destination neighborhood.
       _targetCenterKey = GlobalKey(debugLabel: 'thread-detail-target-center');
     });
     await WidgetsBinding.instance.endOfFrame;
@@ -172,5 +206,49 @@ mixin _ThreadDetailEndpointNavigation on ConsumerState<ThreadDetailContent> {
       controller.jumpTo(destination());
     }
     return ThreadDetailEndpointNavigationResult.retired;
+  }
+}
+
+class _ThreadTargetPadding extends SliverPadding {
+  const _ThreadTargetPadding({
+    super.key,
+    required super.padding,
+    required super.sliver,
+    required this.initialScrollOffset,
+  });
+
+  final double initialScrollOffset;
+
+  @override
+  RenderSliverPadding createRenderObject(BuildContext context) =>
+      _RenderThreadTargetPadding(
+        padding: padding,
+        textDirection: Directionality.of(context),
+        initialScrollOffset: initialScrollOffset,
+      );
+}
+
+class _RenderThreadTargetPadding extends RenderSliverPadding {
+  _RenderThreadTargetPadding({
+    required super.padding,
+    required super.textDirection,
+    required double initialScrollOffset,
+  }) : _initialScrollOffset = initialScrollOffset;
+
+  double _initialScrollOffset;
+
+  @override
+  void performLayout() {
+    // Flutter applies the correction in the sliver's growth direction. This
+    // starts either endpoint animation at its real offset before first paint.
+    if (_initialScrollOffset > 0) {
+      final correction = _initialScrollOffset - constraints.scrollOffset;
+      _initialScrollOffset = 0;
+      if (correction != 0) {
+        geometry = SliverGeometry(scrollOffsetCorrection: correction);
+        return;
+      }
+    }
+    super.performLayout();
   }
 }

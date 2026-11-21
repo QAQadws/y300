@@ -14,6 +14,8 @@ Core renderer 必须显式接收 `preparedDocument`、`options`、`labels` 和 `
 
 `ForumHtmlPreparationPipeline` 使用显式 URL resolver 和同步 image policy。prepared 资源实现须为不可变纯值，可随后台准备结果传递；它不持有服务、Widget、Ref 或闭包。renderer 不重做 Host 转换或图片准备，也不替代小说分页。
 
+帖子宿主可传入 `displayPlanner` 和准备后 HTML 的长度预算。达到分块门槛且预算允许时，默认流水线先保存完整 HTML，再把同一棵 DOM 交给分块器。分块结果只保存字符串和边界。自定义 DOM 处理器、编解码器以及序列化后含字面回车的输入继续按完整 HTML 解析，保持原有显示语义。
+
 ## 长正文与按需布局
 
 行内纯色文字背景经工厂的 `buildText` 扩展绘制逐行圆角：内部 paint plan 只记录当前富文本的 UTF-16 范围，并用透明背景覆盖默认矩形；原有 `RichText` 继续负责 shaping、布局、选择、链接、语义及 inline widget。绘制直接查询该 `RenderParagraph` 的实际选区矩形，不另建 `TextPainter`，不改变 HTML、段落尺寸、分页测量或持久锚点。相接的同色样式片段在同一视觉行合并，空行与 inline widget 留空，不添加布局 padding；圆角最大 4 logical pixels。选区先与段落的有效裁剪范围相交，再根据可见范围形成圆角，避免居中、首尾空格或收缩布局截断圆角；保留 visible 溢出规则，空交集不绘制。坐标在 paint 时读取，以覆盖仅重绘的对齐变化。整块背景继续由 fwfh 的盒装饰处理；作者同色隐藏文字、自定义 span 与非常规 Paint 效果保留原生段落绘制。此扩展仅使用 fwfh 公开入口，不修改或导入其内部实现。

@@ -4,6 +4,7 @@ import 'package:y300/features/content_rendering_shared/application/host/forum_ca
 import 'package:y300/features/content_rendering_shared/domain/models/forum_html_reader_preferences.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:y300/features/content_rendering_shared/presentation/contracts/forum_html_render_preparer.dart';
+
 import 'forum_html_render_preferences_projection.dart';
 
 /// Unknown preparers may consume every preference, including conversion mode.
@@ -86,43 +87,35 @@ class DefaultForumHtmlRenderPreparer implements ForumHtmlRenderPreparer {
     required String? threadId,
     required String? imageCacheOwnerId,
   }) {
-    final document =
-        ForumHtmlPreparationPipeline(
-          imagePolicy:
-              _imagePolicy ??
-              ForumCacheHtmlPreparationImagePolicy(
-                imageRequestResolver: _imageRequestResolver,
-              ),
-          // The legacy default deduplicator has its own site resolver, even when
-          // callers customize the resolver used for document image preparation.
-          imageDeduplicator:
-              _imageDeduplicator ??
-              ForumHtmlImageDeduplicator(
-                resolveUrl: const SiteUrlResolver().resolve,
-              ),
-          fragmentCodec: _fragmentCodec,
-          themeAdapter: _themeAdapter,
-          resolveUrl: _urlResolver.resolve,
-        ).prepare(
-          html: html,
-          options: preferences.renderOptions.copyWith(
-            enablePlainTextLinks: enablePlainTextLinks,
+    return ForumHtmlPreparationPipeline(
+      imagePolicy:
+          _imagePolicy ??
+          ForumCacheHtmlPreparationImagePolicy(
+            imageRequestResolver: _imageRequestResolver,
           ),
-          theme: theme,
-          sourceId: sourceId,
-          threadId: threadId,
-          imageCacheOwnerId: imageCacheOwnerId,
-        );
-    return enableSafeDisplayPlanning &&
-            document.preparedHtml.length >= 32 * 1024 &&
-            (safeDisplayPlanningCodeUnitBudget == null ||
-                document.preparedHtml.length <
-                    safeDisplayPlanningCodeUnitBudget!)
-        ? document.copyWith(
-            safeDisplayPlan: const ForumHtmlSafeDisplayPlanner(
-              targetChunkUnits: 48,
-            ).plan(document),
-          )
-        : document;
+      // The legacy default deduplicator has its own site resolver, even when
+      // callers customize the resolver used for document image preparation.
+      imageDeduplicator:
+          _imageDeduplicator ??
+          ForumHtmlImageDeduplicator(
+            resolveUrl: const SiteUrlResolver().resolve,
+          ),
+      fragmentCodec: _fragmentCodec,
+      themeAdapter: _themeAdapter,
+      resolveUrl: _urlResolver.resolve,
+    ).prepare(
+      html: html,
+      options: preferences.renderOptions.copyWith(
+        enablePlainTextLinks: enablePlainTextLinks,
+      ),
+      theme: theme,
+      sourceId: sourceId,
+      threadId: threadId,
+      imageCacheOwnerId: imageCacheOwnerId,
+      displayPlanner: enableSafeDisplayPlanning
+          ? const ForumHtmlSafeDisplayPlanner(targetChunkUnits: 48)
+          : null,
+      displayPlanningCodeUnitBudget: safeDisplayPlanningCodeUnitBudget,
+    );
   }
 }

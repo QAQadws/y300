@@ -4,6 +4,9 @@ import 'package:y300/app/content_rendering/native_forum_html_render_theme_factor
 import 'package:y300/core/media/device_memory_profile.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart' show SchedulerPhase;
+import 'package:flutter/rendering.dart'
+    show RenderSliverPadding, SliverGeometry;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
@@ -403,13 +406,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
     );
     _imageAspectRatioTracker.resetFor(_imageAspectRatioSignature());
     if (_endpointTarget != null && entries.isNotEmpty) {
-      return _buildTargetAnchoredList(
-        entries: entries,
-        targetEntryIndex: _endpointTarget == ThreadDetailQuickScrollTarget.top
-            ? 0
-            : entries.length - 1,
-        palette: palette,
-      );
+      return _buildTargetAnchoredList(entries: entries, palette: palette);
     }
     final targetPid = widget.targetPid?.trim();
     final targetEntryIndex = targetPid == null || targetPid.isEmpty
@@ -561,7 +558,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
     }
     final lease = _bodyHandoffs.begin(pid: pid, identity: identity);
     final seedOrdinal = _preparationSeedOrdinal(bodyContext, pid, document);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    void publish() {
       if (!mounted ||
           !bodyContext.mounted ||
           generation != _bodyGeneration ||
@@ -587,7 +584,16 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
         _projectionAnchorCoordinator.restoreAfterFrame(_pendingChunkAnchor);
         _pendingChunkAnchor = null;
       }
-    });
+    }
+
+    // Worker completion can publish between frames. A synchronous result
+    // discovered while building still waits until the layout is finished.
+    final binding = WidgetsBinding.instance;
+    if (binding.schedulerPhase == SchedulerPhase.idle) {
+      publish();
+    } else {
+      binding.addPostFrameCallback((_) => publish());
+    }
     return true;
   }
 
@@ -663,10 +669,11 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
 
   Widget _buildTargetAnchoredList({
     required List<ThreadDetailRenderEntry> entries,
-    required int targetEntryIndex,
+    int targetEntryIndex = 0,
     required ThreadDetailNativePalette palette,
   }) {
     final endpoint = _endpointTarget;
+    final fromBottom = endpoint == ThreadDetailQuickScrollTarget.bottom;
     final atBodyEnd =
         endpoint == null && widget.landing == ThreadPostLanding.bodyEnd;
     if (endpoint == null) _scheduleTargetVisibilityCheck();
@@ -703,7 +710,7 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
                   controller: widget.scrollController,
                   physics: ForumPullToRefresh.scrollPhysics,
                   center: _targetCenterKey,
-                  anchor: endpoint == ThreadDetailQuickScrollTarget.bottom
+                  anchor: fromBottom
                       ? 1
                       : height <= 0
                       ? 0
@@ -711,17 +718,21 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
                   scrollCacheExtent: _imagePreloadPolicy.layoutCacheExtent,
                   semanticChildCount: entries.length,
                   slivers: [
-                    _buildTargetEntrySliver(
-                      entries: entries,
-                      start: 0,
-                      count: targetEntryIndex,
-                      reverse: true,
-                      stabilizeImageLayout: false,
-                      addPageTopPadding: true,
-                      palette: palette,
-                    ),
-                    SliverPadding(
-                      key: _targetCenterKey,
+                    if (targetEntryIndex > 0)
+                      _buildTargetEntrySliver(
+                        entries: entries,
+                        start: 0,
+                        count: targetEntryIndex,
+                        reverse: true,
+                        stabilizeImageLayout: false,
+                        addPageTopPadding: true,
+                        palette: palette,
+                      ),
+                    _ThreadTargetPadding(
+                      key: fromBottom ? null : _targetCenterKey,
+                      initialScrollOffset: endpoint == null
+                          ? 0
+                          : _endpointArrivalDistance,
                       padding: EdgeInsets.only(
                         top: atBodyEnd ? 0 : ForumContentSpacing.listTop,
                         bottom: ForumContentSpacing.listBottom,
@@ -730,12 +741,15 @@ class _ThreadDetailContentState extends ConsumerState<ThreadDetailContent>
                         entries: entries,
                         start: targetEntryIndex,
                         count: entries.length - targetEntryIndex,
-                        reverse: false,
-                        stabilizeImageLayout: true,
+                        reverse: fromBottom,
+                        stabilizeImageLayout: !fromBottom,
                         addPageTopPadding: false,
                         palette: palette,
                       ),
                     ),
+                    // Put zero at the page's trailing edge. The list then lays
+                    // out backwards from the pagination row by actual height.
+                    if (fromBottom) SliverToBoxAdapter(key: _targetCenterKey),
                   ],
                 ),
               ),

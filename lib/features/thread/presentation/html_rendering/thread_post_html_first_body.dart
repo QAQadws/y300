@@ -114,6 +114,7 @@ class _ThreadPostHtmlFirstBodyState
   ThreadBodyReadingImageTracker? _readingImages;
   ForumHtmlImageHost? _readingImageHost;
   Object? _readingIdentity;
+  ForumHtmlPreparationRequest? _awaitingHandoff;
   bool _readingReady = false;
   int _readingRevision = 0;
   final _bodyLayoutConsumer = Object();
@@ -121,7 +122,21 @@ class _ThreadPostHtmlFirstBodyState
   ThreadBodyLayoutPhase _bodyLayoutPhase = ThreadBodyLayoutPhase.preparing;
 
   void _onPreparationChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    final request = _awaitingHandoff;
+    _awaitingHandoff = null;
+    if (request != null &&
+        request.identity == _preparation.identity &&
+        !_preparation.hasError &&
+        ref.read(forumHtmlReaderFontBindingProvider).isReady) {
+      // The worker has already completed this request. Offer the result before
+      // another frame builds a placeholder just to request a parent rebuild.
+      final document = _preparation.resolve(request);
+      if (document != null && document.safeDisplayPlan?.isChunked == true) {
+        widget.onPreparedBody?.call(context, request, document);
+      }
+    }
+    setState(() {});
   }
 
   @override
@@ -326,6 +341,10 @@ class _ThreadPostHtmlFirstBodyState
         _clearReading();
       }
       final preparedDocument = _preparation.resolve(request);
+      _awaitingHandoff =
+          preparedDocument == null && fontReady && widget.onPreparedBody != null
+          ? request
+          : null;
       if (preparedDocument == null || !fontReady) {
         _bodyLayoutPhase = ThreadBodyLayoutPhase.preparing;
         return const ForumHtmlPreparationPlaceholder();

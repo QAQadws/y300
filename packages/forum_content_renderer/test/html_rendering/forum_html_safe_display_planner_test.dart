@@ -16,9 +16,100 @@ void main() {
     maxChunkCodeUnits: 1024,
   );
 
+  test('canonical planning takes ownership of the existing roots', () {
+    final document = prepareRenderTestDocument('<p>first</p><p>second</p>');
+    final fragment = parser.parseFragment(document.preparedHtml);
+    const planner = ForumHtmlSafeDisplayPlanner(
+      minCodeUnits: 0,
+      targetChunkUnits: 1,
+    );
+    final plan = planner.planPrepared(document, ownedFragment: fragment);
+    expect(fragment.nodes, isEmpty);
+    expect(plan.chunks.map((c) => c.html), ['<p>first</p>', '<p>second</p>']);
+  });
+
+  test('preparation preserves the serialized planner output byte for byte', () {
+    const planner = ForumHtmlSafeDisplayPlanner(
+      minCodeUnits: 0,
+      targetChunkUnits: 2,
+    );
+    for (final html in [
+      '字&amp;🙂<br><br> &lt; <br><!-- 注 -->末行<br>',
+      '<p style="color:#ddd">https://example.org/a?q=1&amp;b=2</p>'
+          '<p>繁體 <em>🙂</em></p>\n<p>段落 &nbsp; 三</p>',
+      '<p title="A&#13;B">前&#13;&#10;后</p><p>二</p><p>三</p>',
+      '前&#13;后<br>二<br>三',
+      '<div>首&amp;行<br><!--空行--><br>二<br>三<br></div>',
+      '<div><strong>首行</strong><br>https://example.org/map<br><b>末行</b></div>',
+      '<p>未闭合<b>加粗<p>乙</b><p>丙',
+      '\n<!--head--><div><p>甲</p><p>乙<br>续</p><p>丙</p></div>\n',
+      '<div style="padding:12px"><p>一</p><p>二</p><p>三</p></div>',
+      '<p>甲</p><img id="aimg_7" src="page.jpg"><p>乙</p>',
+    ]) {
+      final options = renderTestOptions.copyWith(enablePlainTextLinks: true);
+      final original = prepareRenderTestDocument(html, options: options);
+      final expected = planner.plan(original);
+      final prepared = prepareRenderTestDocument(
+        html,
+        options: options,
+        displayPlanner: planner,
+      );
+      final actual = prepared.safeDisplayPlan!;
+      expect(prepared.preparedHtml, original.preparedHtml);
+      expect(actual.sourceHtml, same(prepared.preparedHtml));
+      expect(actual.kind, expected.kind);
+      expect(actual.fallbackReason, expected.fallbackReason);
+      expect(
+        actual.chunks.map(
+          (c) => (c.html, c.startUnit, c.endUnit, c.hasTrailingContent),
+        ),
+        expected.chunks.map(
+          (c) => (c.html, c.startUnit, c.endUnit, c.hasTrailingContent),
+        ),
+      );
+    }
+  });
+
+  test(
+    'planning leaves a custom preparation codec’s retained roots intact',
+    () {
+      final fragment = parser.parseFragment('<p>first</p><p>second</p>');
+      final prepared = prepareRenderTestDocument(
+        'source',
+        fragmentCodec: _OwnedFragmentCodec(fragment),
+        displayPlanner: const ForumHtmlSafeDisplayPlanner(
+          minCodeUnits: 0,
+          targetChunkUnits: 1,
+        ),
+      );
+      expect(fragment.children, hasLength(2));
+      expect(prepared.safeDisplayPlan!.chunks.map((c) => c.html), [
+        '<p>first</p>',
+        '<p>second</p>',
+      ]);
+    },
+  );
+
+  test('an injected planner codec still parses the serialized document', () {
+    final codec = _OwnedFragmentCodec(
+      parser.parseFragment('<p>changed</p><p>tail</p>'),
+    );
+    final prepared = prepareRenderTestDocument(
+      '<p>original</p>',
+      displayPlanner: ForumHtmlSafeDisplayPlanner(
+        minCodeUnits: 0,
+        targetChunkUnits: 1,
+        fragmentCodec: codec,
+      ),
+    );
+    expect(codec.parseCount, 1);
+    expect(prepared.safeDisplayPlan!.chunks.first.html, '<p>changed</p>');
+    expect(prepared.preparedHtml, '<p>original</p>');
+  });
+
   test('large leading wrappers keep the original whole display document', () {
     final body = List.generate(3000, (unit) => 'marker[$unit] 正文<br>').join();
-    for (final tag in ['div', 'font', 'span']) {
+    for (final tag in ['font', 'span']) {
       final document = prepareRenderTestDocument('<$tag>$body</$tag>');
       final plan = const ForumHtmlSafeDisplayPlanner().plan(document);
       expect(plan.isChunked, isFalse);
@@ -48,6 +139,137 @@ void main() {
     expect(plan.isChunked, isTrue);
     expect(plan.unitCount, 2);
   });
+
+  test('only one bare DIV containing ordinary paragraphs can be split', () {
+    const planner = ForumHtmlSafeDisplayPlanner(
+      minCodeUnits: 0,
+      targetChunkUnits: 1,
+    );
+    const ps = '<p>one</p><p>two</p>';
+    for (final html in [
+      '<div dir="rtl">$ps</div>',
+      '<div style="padding:12px">$ps</div>',
+      '<div>$ps</div><p>outside</p>',
+      'before<div>$ps</div>',
+      '<div><div>$ps</div></div>',
+      '<div>mixed$ps</div>',
+      '<div><p style="margin:0">one</p><p>two</p></div>',
+      '<div><p><img src="x.png"></p>$ps</div>',
+      '<div><p></p>$ps</div>',
+      '<div class="quote">one<br>two<br>three</div>',
+      '<div>one<br id="anchor">two<br>three</div>',
+      '<div>one<br><b id="anchor">two</b><br>three</div>',
+      '<div>one<br>two</div><div>three<br>four</div>',
+      'outside<div>one<br>two<br>three</div>',
+    ]) {
+      final doc = prepareRenderTestDocument(html);
+      expect(
+        planner.plan(doc).chunks.single.html,
+        same(doc.preparedHtml),
+        reason: html,
+      );
+    }
+  });
+
+  test(
+    'BR chunks retain complete inline links, styles and a link-only tail',
+    () {
+      const planner = ForumHtmlSafeDisplayPlanner(
+        minCodeUnits: 0,
+        targetChunkCodeUnits: 3,
+      );
+      const head = '<b><strong>一二三</strong></b>';
+      const tail =
+          '<a target="_blank" rel="nofollow" href="https://example.org/map">'
+          '<b>末行</b></a>';
+      for (final wrapped in [false, true]) {
+        const body = '$head<br><br>$tail<br>';
+        final doc = prepareRenderTestDocument(
+          wrapped ? '<div>$body</div>' : body,
+        );
+        final plan = planner.plan(doc);
+        expect(
+          plan.kind,
+          ForumHtmlSafeDisplayPlanKind.textLines,
+          reason: '${plan.fallbackReason}: ${doc.preparedHtml}',
+        );
+        expect(plan.chunks.map((c) => (c.startUnit, c.endUnit)), [
+          (0, 1),
+          (1, 4),
+        ]);
+        expect(plan.chunks.first.html, contains(head));
+        final preparedLink = parser
+            .parseFragment(doc.preparedHtml)
+            .querySelector('a')!;
+        expect(
+          plan.chunks.last.html,
+          contains('<br>${preparedLink.outerHtml}<br>'),
+        );
+      }
+    },
+  );
+
+  test(
+    'BR chunks preserve prepared inline colors at the beginning and end',
+    () {
+      const planner = ForumHtmlSafeDisplayPlanner(
+        minCodeUnits: 0,
+        targetChunkUnits: 1,
+      );
+      const body =
+          '<font color="#af283d">红</font>普通字<br><br>'
+          '<b><font style="color:#15639a">蓝</font></b><br>';
+      for (final wrapped in [false, true]) {
+        final doc = prepareRenderTestDocument(
+          wrapped ? '<div>$body</div>' : body,
+          displayPlanner: planner,
+        );
+        final plan = doc.safeDisplayPlan!;
+        final source = parser.parseFragment(doc.preparedHtml);
+        expect(plan.kind, ForumHtmlSafeDisplayPlanKind.textLines);
+        expect(plan.chunks.map((c) => (c.startUnit, c.endUnit)), [
+          (0, 1),
+          (1, 4),
+        ]);
+        expect(
+          plan.chunks.first.html,
+          contains('${source.querySelector('font')!.outerHtml}普通字'),
+        );
+        expect(
+          plan.chunks.last.html,
+          contains('<br>${source.querySelector('b')!.outerHtml}<br>'),
+        );
+      }
+    },
+  );
+
+  test(
+    'BR planner keeps spanning formatting, local anchors and styled layout whole',
+    () {
+      const planner = ForumHtmlSafeDisplayPlanner(
+        minCodeUnits: 0,
+        targetChunkUnits: 1,
+      );
+      for (final inline in [
+        '<b>跨<br>行</b>',
+        '<font color="red">跨<br>行</font>',
+        '<font color="red" size="5">大字</font>',
+        '<font color="red" id="anchor">锚点</font>',
+        '<font style="color:red;display:block">块</font>',
+        '<a href="https://example.org/map">跨<br>行</a>',
+        '<a href="#jump">跳转</a>',
+        '<a href="https://example.org/map" style="display:block">块</a>',
+        '<strong><img src="map.png"></strong>',
+      ]) {
+        final doc = prepareRenderTestDocument('甲<br>$inline<br>乙');
+        expect(
+          planner.plan(doc).chunks.single.html,
+          same(doc.preparedHtml),
+          reason: inline,
+        );
+      }
+    },
+  );
 
   test('complete paragraph inline wrappers still undergo DOM admission', () {
     final document = prepareRenderTestDocument(
@@ -456,6 +678,84 @@ void main() {
   }
 
   for (final layout in ForumHtmlContentLayout.values) {
+    testWidgets(
+      'wrapped BR lines retain blank lines and document edges in $layout',
+      (tester) async {
+        const planner = ForumHtmlSafeDisplayPlanner(
+          minCodeUnits: 0,
+          targetChunkUnits: 3,
+        );
+        final doc = prepareRenderTestDocument(
+          ' <!--outside--><div><br>marker-0 正文🙂<br>marker-1 甲<br><!-- seam --><br><br>marker-2 乙<br>marker-3 丙<br><br>marker-4 丁<br><br></div>\n',
+        );
+        final plan = planner.plan(doc);
+        expect(plan.kind, ForumHtmlSafeDisplayPlanKind.textLines);
+        expect(plan.chunks.map((c) => (c.startUnit, c.endUnit)), [
+          (0, 3),
+          (3, 6),
+          (6, 11),
+        ]);
+        expect(plan.sourceHtml, same(doc.preparedHtml));
+        await tester.pumpWidget(_scene(doc, plan, layout: layout));
+        await tester.pumpAndSettle();
+        _expectGeometry(tester, [for (var i = 0; i < 5; i++) 'marker-$i']);
+      },
+    );
+    testWidgets('inline links and bold retain BR geometry in $layout', (
+      tester,
+    ) async {
+      const planner = ForumHtmlSafeDisplayPlanner(
+        minCodeUnits: 0,
+        targetChunkUnits: 2,
+      );
+      final doc = prepareRenderTestDocument(
+        '<div>marker-0 正文<br><a href="https://example.org/a"><b>marker-1 地图</b></a>'
+        '<br><br><strong>marker-2 周末开放</strong><br>marker-3 https://example.org/b'
+        '<br><b>marker-4 末行</b><br></div>',
+        options: renderTestOptions.copyWith(enablePlainTextLinks: true),
+      );
+      final plan = planner.plan(doc);
+      expect(
+        plan.kind,
+        ForumHtmlSafeDisplayPlanKind.textLines,
+        reason: '${plan.fallbackReason}: ${doc.preparedHtml}',
+      );
+      expect(plan.chunks.map((c) => (c.startUnit, c.endUnit)), [
+        (0, 2),
+        (2, 4),
+        (4, 7),
+      ]);
+      await tester.pumpWidget(_scene(doc, plan, layout: layout));
+      await tester.pumpAndSettle();
+      _expectGeometry(tester, [for (var i = 0; i < 5; i++) 'marker-$i']);
+    });
+
+    testWidgets(
+      'bare outer DIV preserves paragraph geometry across seams in $layout',
+      (tester) async {
+        final body = List.generate(
+          9,
+          (i) => '<p>marker-$i <b>粗体</b> 段落🙂</p>',
+        ).join('\n');
+        final document = prepareRenderTestDocument(
+          '\n<!--head--><div>\n$body\n</div>\n',
+        );
+        const planner = ForumHtmlSafeDisplayPlanner(
+          minCodeUnits: 0,
+          targetChunkUnits: 3,
+        );
+        final plan = planner.plan(document);
+        expect(plan.chunks.map((c) => (c.startUnit, c.endUnit)), [
+          (0, 3),
+          (3, 6),
+          (6, 9),
+        ]);
+        expect(plan.sourceHtml, same(document.preparedHtml));
+        await tester.pumpWidget(_scene(document, plan, layout: layout));
+        await tester.pumpAndSettle();
+        _expectGeometry(tester, [for (var i = 0; i < 9; i++) 'marker-$i']);
+      },
+    );
     testWidgets(
       'paragraphs retain edges and author inline typography in $layout',
       (tester) async {

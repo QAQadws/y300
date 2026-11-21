@@ -22,11 +22,15 @@ ForumHtmlPreparedRenderDocument prepareRenderTestDocument(
   String sourceId = 'render-test',
   ForumHtmlRenderOptions options = renderTestOptions,
   ForumHtmlThemeAdapter themeAdapter = const DefaultForumHtmlThemeAdapter(),
+  ForumHtmlFragmentCodec fragmentCodec =
+      const HtmlPackageForumHtmlFragmentCodec(),
+  ForumHtmlSafeDisplayPlanner? displayPlanner,
 }) =>
     ForumHtmlPreparationPipeline(
       imagePolicy: const _RenderTestImagePolicy(),
       resolveUrl: _resolveRenderTestUrl,
       themeAdapter: themeAdapter,
+      fragmentCodec: fragmentCodec,
     ).prepare(
       html: html,
       options: options,
@@ -34,6 +38,7 @@ ForumHtmlPreparedRenderDocument prepareRenderTestDocument(
       sourceId: sourceId,
       threadId: '100',
       imageCacheOwnerId: '100',
+      displayPlanner: displayPlanner,
     );
 
 String? _resolveRenderTestUrl(String rawUrl) {

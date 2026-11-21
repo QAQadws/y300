@@ -5,6 +5,7 @@ import 'forum_html_fragment_codec.dart';
 import 'forum_html_image_deduplicator.dart';
 import 'forum_html_plain_text_linkifier.dart';
 import 'forum_html_prepared_render_document.dart';
+import 'forum_html_safe_display_planner.dart';
 import '../models/forum_html_render_options.dart';
 import 'forum_html_render_style_policy.dart';
 import 'theme/forum_html_theme_adapter.dart';
@@ -33,6 +34,8 @@ class ForumHtmlPreparationPipeline {
   final String? Function(String) _resolveUrl;
   final ForumHtmlPreparationImagePolicy _imagePolicy;
 
+  /// An optional [displayPlanner] runs after serialization, once the prepared
+  /// length meets its minimum and is below [displayPlanningCodeUnitBudget].
   ForumHtmlPreparedRenderDocument prepare({
     required String html,
     required ForumHtmlRenderOptions options,
@@ -40,6 +43,8 @@ class ForumHtmlPreparationPipeline {
     required String sourceId,
     required String? threadId,
     required String? imageCacheOwnerId,
+    ForumHtmlSafeDisplayPlanner? displayPlanner,
+    int? displayPlanningCodeUnitBudget,
   }) {
     final stylePolicy = ForumHtmlRenderStylePolicy(
       options,
@@ -147,7 +152,7 @@ class ForumHtmlPreparationPipeline {
       );
     }
 
-    return ForumHtmlPreparedRenderDocument(
+    final document = ForumHtmlPreparedRenderDocument(
       preparedHtml: _fragmentCodec.serialize(fragment),
       sequence: ForumHtmlReadableImageSequence(
         sourceId: sourceId,
@@ -161,6 +166,25 @@ class ForumHtmlPreparationPipeline {
       attachmentTaggedCount: attachmentTaggedCount,
       themeSignature: theme.signature,
       themeAdaptationStats: themeAdaptationStats,
+    );
+    final length = document.preparedHtml.length;
+    if (displayPlanner == null ||
+        length < displayPlanner.minCodeUnits ||
+        (displayPlanningCodeUnitBudget != null &&
+            length >= displayPlanningCodeUnitBudget)) {
+      return document;
+    }
+    // Injected DOM hooks may retain the tree or serialize a different document.
+    final ownsCanonicalFragment =
+        _fragmentCodec is HtmlPackageForumHtmlFragmentCodec &&
+        identical(_themeAdapter, const DefaultForumHtmlThemeAdapter()) &&
+        (_imageDeduplicator == null ||
+            _imageDeduplicator.runtimeType == ForumHtmlImageDeduplicator);
+    return document.copyWith(
+      safeDisplayPlan: displayPlanner.planPrepared(
+        document,
+        ownedFragment: ownsCanonicalFragment ? fragment : null,
+      ),
     );
   }
 
