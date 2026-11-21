@@ -40,6 +40,7 @@ class CachedLibraryImage extends ConsumerStatefulWidget {
     this.loadingIndicatorDelay = const Duration(milliseconds: 300),
     this.loadingIndicatorColor,
     this.fadeInDuration = Duration.zero,
+    this.fadeInOnCacheHit = false,
     this.remoteDisplayPolicy = CachedImageRemoteDisplayPolicy.eager,
     this.retryToken = 0,
     this.resourceHandoff,
@@ -77,6 +78,9 @@ class CachedLibraryImage extends ConsumerStatefulWidget {
   /// Optional first-frame transition. It remains disabled by default so each
   /// business surface can opt in without changing shared image behavior.
   final Duration fadeInDuration;
+
+  /// Allows an already decoded frame to use the first-frame transition.
+  final bool fadeInOnCacheHit;
 
   /// Controls whether a cache miss may display a direct network image while
   /// the persistent cache write is still running.
@@ -191,6 +195,7 @@ class _CachedLibraryImageState extends ConsumerState<CachedLibraryImage> {
               placeholder: widget.placeholder,
               errorPlaceholder: widget.errorPlaceholder,
               fadeInDuration: widget.fadeInDuration,
+              fadeInOnCacheHit: widget.fadeInOnCacheHit,
               retryToken: widget.retryToken,
               onFirstFrameRendered: (source) =>
                   _handleFirstFrameRendered(request, source, generation),

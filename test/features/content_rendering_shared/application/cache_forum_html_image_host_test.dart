@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
 import 'package:y300/features/cache/data/services/image_cache_resource_handoff.dart';
 import 'package:y300/features/cache/domain/models/forum_image_dimensions.dart';
 import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
@@ -9,14 +11,82 @@ import 'package:y300/features/cache/domain/models/image_cache_models.dart';
 import 'package:y300/features/cache/domain/services/forum_image_dimension_index.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
+import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
+import 'package:y300/features/cache/presentation/widgets/library_cached_image.dart';
 import 'package:y300/features/content_rendering_shared/application/host/cache_forum_html_image_host.dart';
 import 'package:y300/features/content_rendering_shared/content_rendering.dart';
+import 'package:y300/shared/widgets/forum_media_loading_style.dart';
 
 import '../../../test_support/localized_test_app.dart';
 import '../../thread/presentation/html_rendering/forum_html_test_theme.dart';
 
 void main() {
+  testWidgets('the block fade survives rebuilds and is skipped on remount', (
+    tester,
+  ) async {
+    final base = CacheForumHtmlImageHost(dimensionIndex: _NoDimensions());
+    final fade = ForumHtmlImageFadeState();
+    final host = base.forContent(threadId: '100', imageFade: fade);
+    final image = host.resolveImage(
+      url: _source,
+      imageIndex: 0,
+      isSticker: false,
+    )!;
+    final repeatedImage = host.resolveImage(
+      url: _source,
+      imageIndex: 1,
+      isSticker: false,
+    )!;
+    final sticker = host.resolveImage(
+      url: Uri.parse(
+        'https://bbs.yamibo.com/static/image/smiley/default/smile.gif',
+      ),
+      imageIndex: null,
+      isSticker: true,
+    )!;
+
+    Widget display(ForumHtmlDisplayImage source, {int retry = 0}) =>
+        host.buildImage(
+          image: source,
+          fit: BoxFit.fitWidth,
+          placeholder: const SizedBox(),
+          waitForCacheWrite: true,
+          retryToken: retry,
+        );
+    Future<void> pump(Widget child) => tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          imageCacheServiceProvider.overrideWithValue(_UnavailableImageCache()),
+        ],
+        child: LocalizedTestApp(home: child),
+      ),
+    );
+    CachedLibraryImage current() =>
+        tester.widget<CachedLibraryImage>(find.byType(CachedLibraryImage));
+
+    await pump(display(image));
+    expect(current().fadeInDuration, ForumMediaLoadingStyle.fadeInDuration);
+    expect(current().fadeInOnCacheHit, isTrue);
+
+    await pump(display(image, retry: 1));
+    expect(current().fadeInDuration, ForumMediaLoadingStyle.fadeInDuration);
+    current().onFirstFrameRendered!(LibraryImageFrameSource.localFile);
+    await pump(display(image, retry: 1));
+    expect(current().fadeInDuration, ForumMediaLoadingStyle.fadeInDuration);
+
+    await pump(const SizedBox());
+    await pump(display(image));
+    expect(current().fadeInDuration, Duration.zero);
+    expect(current().fadeInOnCacheHit, isFalse);
+    await pump(display(repeatedImage));
+    expect(current().fadeInDuration, ForumMediaLoadingStyle.fadeInDuration);
+    expect(current().fadeInOnCacheHit, isTrue);
+    await pump(display(sticker));
+    expect(current().fadeInDuration, Duration.zero);
+    expect(current().fadeInOnCacheHit, isFalse);
+  });
+
   for (final mode in ['decoded', 'cancelled', 'diskOnly']) {
     testWidgets('resource handoff stays with its active Host: $mode', (
       tester,
@@ -460,6 +530,18 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+}
+
+class _UnavailableImageCache extends ImageCacheService {
+  @override
+  Future<CachedImageResult?> getCached(String cacheKey) async => null;
+
+  @override
+  Future<CachedImageResult> ensureCached(ImageCacheRequest request) async =>
+      CachedImageResult.failed;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 final _source = Uri.parse(

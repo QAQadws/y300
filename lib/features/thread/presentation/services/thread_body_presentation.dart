@@ -41,6 +41,7 @@ final class ThreadBodyPresentation {
   ThreadBodyPresentation._(this.html);
 
   final String html;
+  final imageFade = ForumHtmlImageFadeState();
   ForumHtmlBodyPresentation _rendering = ForumHtmlBodyPresentation();
   Object? _layoutIdentity;
   Object? _consumer;
@@ -98,6 +99,7 @@ final class ThreadBodyLayoutLease {
 
   final ThreadBodyPresentation _body;
   final ForumHtmlBodyPresentation rendering;
+  ForumHtmlImageFadeState get imageFade => _body.imageFade;
 
   bool get isCurrent => _body._isCurrent(this);
   double? get height => isCurrent ? _body._height : null;

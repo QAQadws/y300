@@ -46,6 +46,7 @@ class ForumHtmlWidgetPostRenderer extends StatefulWidget {
     this.imageAnchorController,
     this.imagePrecacheService,
     this.imageHost,
+    this.imageFade,
     this.preparedDocument,
     this.preparationExecutor,
     this.contentImageKind = ForumImageKind.threadInline,
@@ -94,6 +95,7 @@ class ForumHtmlWidgetPostRenderer extends StatefulWidget {
 
   /// Explicit display port; default cache configuration stays in the App facade.
   final ForumHtmlImageHost? imageHost;
+  final ForumHtmlImageFadeState? imageFade;
   final ForumHtmlPreparedRenderDocument? preparedDocument;
   final ForumHtmlPreparationExecutor? preparationExecutor;
   final ForumImageKind contentImageKind;
@@ -170,6 +172,7 @@ class _ForumHtmlWidgetPostRendererState
                 onBlockImageResolved: (spec, request, size) =>
                     widget.onBlockImageResolved?.call(spec, request, size),
                 imagePrecacheService: widget.imagePrecacheService,
+                imageFade: widget.imageFade,
               )
             : null);
     return ForumHtmlRenderer(
@@ -195,6 +198,7 @@ class _ForumHtmlWidgetPostRendererState
             widget.imageRequestResolver,
             widget.imageDimensionIndex,
             widget.imagePrecacheService,
+            widget.imageFade,
           ),
       imageViewportCoordinator: widget.imageViewportCoordinator,
       imageAnchorController: widget.imageAnchorController,

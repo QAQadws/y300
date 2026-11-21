@@ -287,6 +287,54 @@ void main() {
     expect(find.byType(RawImage), findsOneWidget);
   });
 
+  testWidgets('can fade an already decoded first frame exactly once', (
+    tester,
+  ) async {
+    final image = (await tester.runAsync(
+      () => createTestImage(width: 3, height: 5, cache: false),
+    ))!;
+    addTearDown(image.dispose);
+    final provider = _SynchronousImageProvider(image);
+    const placeholder = Key('cached-frame-placeholder');
+    const duration = Duration(milliseconds: 300);
+    Widget body() => LocalizedTestApp(
+      home: Center(
+        child: LibraryCachedImage(
+          imageProviderOverride: provider,
+          fit: BoxFit.cover,
+          width: 60,
+          height: 100,
+          placeholder: const SizedBox.expand(key: placeholder),
+          fadeInDuration: duration,
+          fadeInOnCacheHit: true,
+        ),
+      ),
+    );
+    final imageOpacity = find.ancestor(
+      of: find.byType(RawImage),
+      matching: find.byType(Opacity),
+    );
+    double opacity() => tester.widget<Opacity>(imageOpacity.first).opacity;
+
+    await tester.pumpWidget(body());
+    final rect = tester.getRect(find.byType(RawImage));
+    expect(find.byKey(placeholder), findsOneWidget);
+    expect(opacity(), 0);
+
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(opacity(), inExclusiveRange(0, 1));
+    expect(tester.getRect(find.byType(RawImage)), rect);
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(opacity(), 1);
+    expect(find.byKey(placeholder), findsNothing);
+
+    await tester.pumpWidget(body());
+    expect(opacity(), 1);
+    expect(tester.getRect(find.byType(RawImage)), rect);
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(opacity(), 1);
+  });
+
   testWidgets('disables the first-frame fade when animations are disabled', (
     tester,
   ) async {
@@ -306,6 +354,7 @@ void main() {
             fit: BoxFit.cover,
             placeholder: const SizedBox(key: Key('placeholder')),
             fadeInDuration: const Duration(milliseconds: 120),
+            fadeInOnCacheHit: true,
           ),
         ),
       ),

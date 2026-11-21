@@ -9,11 +9,32 @@ Widget buildImageFirstFrameTransition(
   required bool wasSynchronouslyLoaded,
   required Duration duration,
   required Object identity,
+  bool fadeInOnCacheHit = false,
 }) {
   final visibleChild = isResolved ? child : placeholder;
-  if (wasSynchronouslyLoaded ||
-      duration <= Duration.zero ||
-      MediaQuery.disableAnimationsOf(context)) {
+  if (duration <= Duration.zero || MediaQuery.disableAnimationsOf(context)) {
+    return visibleChild;
+  }
+  if (fadeInOnCacheHit) {
+    if (!isResolved) return placeholder;
+    // An already decoded image may be ready on the first build, when an
+    // AnimatedSwitcher would have no outgoing child to animate from.
+    return TweenAnimationBuilder<double>(
+      key: ValueKey(identity),
+      tween: Tween(begin: 0, end: 1),
+      duration: duration,
+      curve: Curves.easeOutCubic,
+      builder: (context, opacity, image) => Stack(
+        fit: StackFit.passthrough,
+        children: [
+          if (opacity < 1) Positioned.fill(child: placeholder),
+          Opacity(opacity: opacity, child: image),
+        ],
+      ),
+      child: child,
+    );
+  }
+  if (wasSynchronouslyLoaded) {
     return visibleChild;
   }
   return AnimatedSwitcher(

@@ -110,6 +110,7 @@ class _ThreadPostHtmlFirstBodyState
         ..addListener(_onPreparationChanged);
   final _readingKey = GlobalKey();
   final _readingExpansion = <String, bool>{};
+  late var _imageFade = ForumHtmlImageFadeState();
   ThreadBodyReadingImageTracker? _readingImages;
   ForumHtmlImageHost? _readingImageHost;
   Object? _readingIdentity;
@@ -131,6 +132,12 @@ class _ThreadPostHtmlFirstBodyState
       _preparation = _createPreparation();
     }
     if (_preparation.hasError) _preparation.reset();
+    if (widget.threadId != oldWidget.threadId ||
+        widget.post.pid != oldWidget.post.pid ||
+        widget.post.message != oldWidget.post.message ||
+        widget.imageReferer != oldWidget.imageReferer) {
+      _imageFade = ForumHtmlImageFadeState();
+    }
     if (!identical(oldWidget.readingCoordinator, widget.readingCoordinator)) {
       oldWidget.readingCoordinator?.unregister(this);
       _clearReading();
@@ -333,6 +340,7 @@ class _ThreadPostHtmlFirstBodyState
       final coordinator = widget.readingCoordinator;
       final tracked =
           coordinator?.tracks(widget.threadId, sourcePost.pid) == true;
+      final imageFade = bodyLayout?.imageFade ?? _imageFade;
       final readingIdentity = (
         identity,
         // Preparation reuse does not remove reading layout/ready invalidation.
@@ -342,6 +350,7 @@ class _ThreadPostHtmlFirstBodyState
         sourcePost.message,
         widget.imageReferer,
         widget.imagePrecacheService,
+        imageFade,
       );
       if (tracked && _readingIdentity != readingIdentity) {
         // A font or image-host change retires layout readiness, while folds
@@ -359,6 +368,7 @@ class _ThreadPostHtmlFirstBodyState
                 fallbackAspectRatioFor: widget.imageFallbackAspectRatioFor,
                 onBlockImageResolved: widget.onBlockImageResolved,
                 imagePrecacheService: widget.imagePrecacheService,
+                imageFade: imageFade,
               );
           _readingImageHost = ThreadBodyReadingImageHost(
             delegate: delegate,
@@ -418,6 +428,7 @@ class _ThreadPostHtmlFirstBodyState
               : (bodyLayout?.rendering ?? widget.bodyPresentation)
                     ?.collapseExpansion,
           imageHost: tracked ? _readingImageHost : null,
+          imageFade: imageFade,
           onBodyBuilt: !tracked && bodyLayout == null
               ? null
               : () {

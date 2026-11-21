@@ -10,8 +10,14 @@ import 'package:y300/features/cache/presentation/widgets/cached_library_image.da
 import 'package:y300/features/cache/presentation/widgets/image_retry_placeholder.dart';
 import 'package:y300/features/content_rendering_shared/application/host/cache_forum_html_display_image.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
+import 'package:y300/shared/widgets/forum_media_loading_style.dart';
 
 import 'forum_html_image_resource_handoffs.dart';
+
+/// Remembers display identities for one body without retaining decoded pixels.
+final class ForumHtmlImageFadeState {
+  final _presented = <Object>{};
+}
 
 final class CacheForumHtmlImageHost
     implements
@@ -38,6 +44,7 @@ final class CacheForumHtmlImageHost
     this.imageReferer,
     this.imagePrecacheService,
     this.fallbackAspectRatioFor,
+    ForumHtmlImageFadeState? imageFade,
     ForumHtmlImageResourceHandoffs? handoffs,
     void Function(
       ForumImageLoadSpec spec,
@@ -48,10 +55,12 @@ final class CacheForumHtmlImageHost
   }) : _dimensionIndex = dimensionIndex,
        _dimensionIndexFor = dimensionIndexFor,
        _handoffs = handoffs,
+       _imageFade = imageFade,
        _onBlockImageResolved = onBlockImageResolved;
 
   final ForumImageDimensionIndex? _dimensionIndex;
   final ForumHtmlImageResourceHandoffs? _handoffs;
+  final ForumHtmlImageFadeState? _imageFade;
   final ForumImageDimensionIndex Function()? _dimensionIndexFor;
   ForumImageDimensionIndex get dimensionIndex =>
       _dimensionIndex ?? _dimensionIndexFor!();
@@ -89,6 +98,7 @@ final class CacheForumHtmlImageHost
     onBlockImageResolved,
     ForumImagePrecacheService? imagePrecacheService,
     String? imageReferer,
+    ForumHtmlImageFadeState? imageFade,
   }) => CacheForumHtmlImageHost._(
     dimensionIndex: imageDimensionIndex ?? _dimensionIndex,
     dimensionIndexFor: _dimensionIndexFor,
@@ -103,6 +113,7 @@ final class CacheForumHtmlImageHost
     onBlockImageResolved: onBlockImageResolved,
     imagePrecacheService: imagePrecacheService,
     imageReferer: imageReferer,
+    imageFade: imageFade,
     handoffs: ForumHtmlImageResourceHandoffs(),
   );
 
@@ -278,38 +289,58 @@ final class CacheForumHtmlImageHost
     bool showDelayedLoadingIndicator = false,
     bool waitForCacheWrite = false,
     int retryToken = 0,
-  }) => CachedLibraryImage(
-    request: (image as CacheForumHtmlDisplayImage).request,
-    resourceHandoff: retryToken == 0 ? _handoffs?.take(image.identity) : null,
-    fit: fit,
-    // Keep the readable top anchored while intrinsic height is recovered.
-    // Centering also exposes subpixel gaps from integer downsample dimensions.
-    alignment: !image.isSticker && fit == BoxFit.fitWidth
-        ? Alignment.topCenter
-        : Alignment.center,
-    placeholder: placeholder,
-    width: width,
-    height: height,
-    errorPlaceholder:
-        errorPlaceholder ??
-        (onRetry == null
-            ? null
-            : _ForumHtmlImageErrorPlaceholder(
-                cacheKey: image.cacheKey,
-                onRetry: onRetry,
-              )),
-    referer: imageReferer,
-    onImageResolved: onImageResolved,
-    onImageFailed: onImageFailed,
-    onFirstFrameRendered: onFirstFrameRendered == null
-        ? null
-        : (_) => onFirstFrameRendered(),
-    showDelayedLoadingIndicator: showDelayedLoadingIndicator,
-    remoteDisplayPolicy: waitForCacheWrite
-        ? CachedImageRemoteDisplayPolicy.afterCacheWrite
-        : CachedImageRemoteDisplayPolicy.eager,
-    retryToken: retryToken,
-  );
+  }) {
+    final display = image as CacheForumHtmlDisplayImage;
+    final handoff = retryToken == 0 ? _handoffs?.take(image.identity) : null;
+    Widget build(Duration duration, VoidCallback? ready) => CachedLibraryImage(
+      request: display.request,
+      resourceHandoff: handoff,
+      fit: fit,
+      // Keep the readable top anchored while intrinsic height is recovered.
+      // Centering also exposes subpixel gaps from integer downsample dimensions.
+      alignment: !image.isSticker && fit == BoxFit.fitWidth
+          ? Alignment.topCenter
+          : Alignment.center,
+      placeholder: placeholder,
+      width: width,
+      height: height,
+      errorPlaceholder:
+          errorPlaceholder ??
+          (onRetry == null
+              ? null
+              : _ForumHtmlImageErrorPlaceholder(
+                  cacheKey: image.cacheKey,
+                  onRetry: onRetry,
+                )),
+      referer: imageReferer,
+      onImageResolved: onImageResolved,
+      onImageFailed: onImageFailed,
+      onFirstFrameRendered: ready == null ? null : (_) => ready(),
+      showDelayedLoadingIndicator: showDelayedLoadingIndicator,
+      remoteDisplayPolicy: waitForCacheWrite
+          ? CachedImageRemoteDisplayPolicy.afterCacheWrite
+          : CachedImageRemoteDisplayPolicy.eager,
+      retryToken: retryToken,
+      fadeInDuration: duration,
+      fadeInOnCacheHit: duration > Duration.zero,
+    );
+    final fade = _imageFade;
+    if (fade == null || image.isSticker) {
+      return build(Duration.zero, onFirstFrameRendered);
+    }
+    // A URL can appear at multiple positions in the same post.
+    final occurrence = (image.identity, display.spec.imageIndex);
+    return _FirstFrameFadeImage(
+      key: ValueKey((fade, occurrence)),
+      fade: fade,
+      identity: occurrence,
+      retryToken: retryToken,
+      builder: (duration, remember) => build(duration, () {
+        remember();
+        onFirstFrameRendered?.call();
+      }),
+    );
+  }
 
   String _cacheOwnerId() {
     final owner = imageCacheOwnerId?.trim();
@@ -317,6 +348,47 @@ final class CacheForumHtmlImageHost
     final tid = threadId.trim();
     return tid.isEmpty ? 'unknown' : tid;
   }
+}
+
+class _FirstFrameFadeImage extends StatefulWidget {
+  const _FirstFrameFadeImage({
+    super.key,
+    required this.fade,
+    required this.identity,
+    required this.retryToken,
+    required this.builder,
+  });
+
+  final ForumHtmlImageFadeState fade;
+  final Object identity;
+  final int retryToken;
+  final Widget Function(Duration duration, VoidCallback remember) builder;
+
+  @override
+  State<_FirstFrameFadeImage> createState() => _FirstFrameFadeImageState();
+}
+
+class _FirstFrameFadeImageState extends State<_FirstFrameFadeImage> {
+  late Duration _duration = _durationForSource();
+
+  Duration _durationForSource() =>
+      widget.fade._presented.contains(widget.identity)
+      ? Duration.zero
+      : ForumMediaLoadingStyle.fadeInDuration;
+
+  @override
+  void didUpdateWidget(covariant _FirstFrameFadeImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.retryToken != oldWidget.retryToken) {
+      _duration = _durationForSource();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(_duration, () {
+    // Keep the current fade running through layout and dimension rebuilds.
+    widget.fade._presented.add(widget.identity);
+  });
 }
 
 final class _CacheImageWorkScope implements ForumImageWorkScope {

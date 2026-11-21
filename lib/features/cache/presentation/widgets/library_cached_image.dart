@@ -44,6 +44,7 @@ class LibraryCachedImage extends ConsumerStatefulWidget {
     this.onLocalImageDecodeFailed,
     this.onLocalFileMissing,
     this.fadeInDuration = Duration.zero,
+    this.fadeInOnCacheHit = false,
     this.retryToken = 0,
   });
 
@@ -71,9 +72,11 @@ class LibraryCachedImage extends ConsumerStatefulWidget {
   onLocalImageDecodeFailed;
   final VoidCallback? onLocalFileMissing;
 
-  /// Duration used to cross-fade the placeholder into an asynchronously
-  /// decoded first frame. Synchronous image-cache hits remain immediate.
+  /// Duration used when the first decoded frame replaces the placeholder.
   final Duration fadeInDuration;
+
+  /// Synchronous image-cache hits fade only when explicitly enabled.
+  final bool fadeInOnCacheHit;
 
   /// 重试代次。调用方自增即可让本控件重新解码一次同一来源。
   ///
@@ -410,6 +413,7 @@ class _LibraryCachedImageState extends ConsumerState<LibraryCachedImage> {
     wasSynchronouslyLoaded: wasSynchronouslyLoaded,
     duration: widget.fadeInDuration,
     identity: identity,
+    fadeInOnCacheHit: widget.fadeInOnCacheHit,
   );
 
   /// 失败即从 Flutter 图片缓存驱逐，否则重试可能拿回同一个已失败的 completer。
