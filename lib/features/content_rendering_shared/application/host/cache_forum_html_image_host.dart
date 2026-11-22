@@ -8,16 +8,12 @@ import 'package:y300/features/cache/domain/services/forum_image_precache_service
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/cache/presentation/widgets/image_retry_placeholder.dart';
+import 'package:y300/features/content_rendering_shared/application/forum_html_image_fade_state.dart';
 import 'package:y300/features/content_rendering_shared/application/host/cache_forum_html_display_image.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
 import 'package:y300/shared/widgets/forum_media_loading_style.dart';
 
 import 'forum_html_image_resource_handoffs.dart';
-
-/// Remembers display identities for one body without retaining decoded pixels.
-final class ForumHtmlImageFadeState {
-  final _presented = <Object>{};
-}
 
 final class CacheForumHtmlImageHost
     implements
@@ -392,8 +388,7 @@ class _FirstFrameFadeImage extends StatefulWidget {
 class _FirstFrameFadeImageState extends State<_FirstFrameFadeImage> {
   late Duration _duration = _durationForSource();
 
-  Duration _durationForSource() =>
-      widget.fade._presented.contains(widget.identity)
+  Duration _durationForSource() => widget.fade.hasPresented(widget.identity)
       ? Duration.zero
       : ForumMediaLoadingStyle.fadeInDuration;
 
@@ -408,7 +403,7 @@ class _FirstFrameFadeImageState extends State<_FirstFrameFadeImage> {
   @override
   Widget build(BuildContext context) => widget.builder(_duration, () {
     // Keep the current fade running through layout and dimension rebuilds.
-    widget.fade._presented.add(widget.identity);
+    widget.fade.markPresented(widget.identity);
   });
 }
 

@@ -76,47 +76,58 @@ void main() {
     'App indexed prefix cannot starve bounded unindexed count and age cleanup',
     () async {
       final now = DateTime.now();
-      final indexed = <File>[];
-      for (var index = 0; index < 510; index++) {
-        indexed.add(
-          await _seedFile(
-            manager,
-            imageRepository,
-            fileAccess: fileAccess,
-            key: 'indexed-$index',
-            touched: now.subtract(const Duration(days: 60)),
+      final config = (manager as CacheManager).config;
+      // Seed an existing cache directly so publishing hundreds of files does
+      // not start the cache store's automatic cleanup timer during setup.
+      Future<File> seedExisting(
+        String key,
+        DateTime touched, {
+        ImageRetentionClass? retention,
+      }) async {
+        final relativePath = '$key.png';
+        final file = await config.fileSystem.createFile(relativePath);
+        await file.writeAsBytes(const [1, 2, 3]);
+        await config.repo.insert(
+          CacheObject(
+            'https://example.invalid/$relativePath',
+            key: key,
+            relativePath: relativePath,
+            validTill: now.add(const Duration(days: 30)),
+            touched: touched,
+            length: 3,
+          ),
+          setTouchedToNow: false,
+        );
+        if (retention != null) {
+          await imageRepository.upsert(
+            _record(key: key, file: file, retention: retention),
+          );
+        }
+        return file;
+      }
+
+      final indexed = await Future.wait([
+        for (var index = 0; index < 510; index++)
+          seedExisting(
+            'indexed-$index',
+            now.subtract(const Duration(days: 60)),
             retention: index.isEven
                 ? ImageRetentionClass.ephemeral
                 : ImageRetentionClass.sticky,
           ),
-        );
-      }
-      final unowned = <File>[];
-      for (var index = 0; index < 205; index++) {
-        unowned.add(
-          await _seedFile(
-            manager,
-            imageRepository,
-            fileAccess: fileAccess,
-            key: 'unowned-$index',
-            touched: now.subtract(Duration(days: 2, seconds: index)),
+      ]);
+      final unowned = await Future.wait([
+        for (var index = 0; index < 205; index++)
+          seedExisting(
+            'unowned-$index',
+            now.subtract(Duration(days: 2, seconds: index)),
           ),
-        );
-      }
-      final expired = await _seedFile(
-        manager,
-        imageRepository,
-        fileAccess: fileAccess,
-        key: 'expired',
-        touched: now.subtract(const Duration(days: 45)),
+      ]);
+      final expired = await seedExisting(
+        'expired',
+        now.subtract(const Duration(days: 45)),
       );
-      final fresh = await _seedFile(
-        manager,
-        imageRepository,
-        fileAccess: fileAccess,
-        key: 'fresh',
-        touched: now,
-      );
+      final fresh = await seedExisting('fresh', now);
       await _runAutomaticCleanup(manager);
 
       expect(indexed.every((file) => file.existsSync()), isTrue);
@@ -125,10 +136,7 @@ void main() {
       expect(await expired.exists(), isFalse);
       expect(await fresh.exists(), isTrue);
       expect(unowned.where((file) => file.existsSync()), hasLength(199));
-      expect(
-        await (manager as CacheManager).config.repo.getAllObjects(),
-        hasLength(710),
-      );
+      expect(await config.repo.getAllObjects(), hasLength(710));
     },
   );
 
@@ -161,9 +169,8 @@ void main() {
         directoryResolver: const ImageCacheDirectoryResolver(),
         fileAccess: fileAccess,
       );
-      final result = await CacheBudgetCoordinator(
-        participants: [service],
-      ).pruneToLimit(maxBytes: 0);
+      final result = await CacheBudgetCoordinator(participants: [service])
+          .pruneToLimit(maxBytes: 0);
 
       expect(result.deletedEntries, 1);
       expect(await regular.exists(), isFalse);

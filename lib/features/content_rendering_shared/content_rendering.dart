@@ -14,9 +14,8 @@ export 'package:forum_content_renderer/forum_content_renderer.dart';
 
 export 'domain/repositories/forum_html_reader_preferences_repository.dart';
 export 'domain/services/forum_html_reader_preference_policy.dart';
+export 'application/forum_html_image_fade_state.dart';
 export 'application/forum_html_image_host_provider.dart';
-export 'application/host/cache_forum_html_image_host.dart'
-    show ForumHtmlImageFadeState;
 export 'presentation/contracts/forum_html_render_preparer.dart';
 export 'presentation/html_rendering/forum_html_content_view.dart';
 export 'presentation/html_rendering/forum_html_reader_text_style.dart';

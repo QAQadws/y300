@@ -9,6 +9,7 @@ import 'package:y300/features/cache/domain/services/forum_image_dimension_index.
 import 'package:y300/features/cache/domain/services/forum_image_request_resolver.dart';
 import 'package:y300/features/cache/domain/services/forum_image_precache_service.dart';
 import 'package:forum_content_renderer/forum_content_renderer.dart';
+import 'package:y300/features/content_rendering_shared/application/forum_html_image_fade_state.dart';
 import 'package:y300/features/content_rendering_shared/application/forum_html_image_host_provider.dart';
 import 'package:y300/features/content_rendering_shared/application/host/cache_forum_html_image_host.dart';
 import 'package:y300/features/content_rendering_shared/domain/models/forum_html_reader_preferences.dart';
