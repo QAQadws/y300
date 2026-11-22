@@ -2,9 +2,10 @@ part of 'thread_detail_widgets.dart';
 
 /// Reuses the entry-centered viewport without knowing intervening chunk heights.
 mixin _ThreadDetailEndpointNavigation on ConsumerState<ThreadDetailContent> {
-  static const _maxShortReplyCodeUnits = 1024;
-  static final _nonTextMarkup = RegExp(
-    r'<(?!/?p>|br[ \t\r\n\f]*/?>)',
+  // These fwfh/platform controls still own widget-local state. Forum folds,
+  // inline images and ordinary typography use the page presentation store.
+  static final _widgetLocalMarkup = RegExp(
+    r'<(?:details|audio|video|iframe|input|select|textarea|form|object|embed)(?=[\s/>])',
     caseSensitive: false,
   );
 
@@ -97,26 +98,19 @@ mixin _ThreadDetailEndpointNavigation on ConsumerState<ThreadDetailContent> {
   }
 
   bool _canRebaseToEndpoint() {
-    if (!_canChunkBodies) return false;
-    var hasChunkedBody = false;
+    if (!_canChunkBodies || _postProjections.isEmpty) return false;
     for (final post in _postProjections) {
+      if (_widgetLocalMarkup.hasMatch(post.displayPost.message)) return false;
       final body = _preparedBodies[post.sourcePost.pid];
-      if (body != null) {
-        if (!_isCurrentPreparedRequest(body.request)) return false;
-        hasChunkedBody = true;
-        continue;
-      }
-      // A short text reply can be remounted at either endpoint. Other whole
-      // renderers may own fold or image state, so keep their existing viewport.
-      final html = post.displayPost.message;
-      if (post.sourcePost.isFirst ||
-          post.sourcePost.attachmentImages.isNotEmpty ||
-          html.length > _maxShortReplyCodeUnits ||
-          _nonTextMarkup.hasMatch(html)) {
+      if (body != null && !_isCurrentPreparedRequest(body.request)) {
         return false;
       }
     }
-    return hasChunkedBody;
+    // Whole bodies now retain folds, image geometry/fades and measured height
+    // in the page-owned presentation store. Rebase their entries just like
+    // chunks; requiring every intervening body to be splittable forces a full
+    // distance scroll through unrelated complex replies.
+    return true;
   }
 
   Future<ThreadDetailEndpointNavigationResult> _navigateToEndpoint({

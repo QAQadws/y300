@@ -22,6 +22,224 @@ import 'package:y300/l10n/app_localizations.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 void main() {
+  testWidgets(
+    'endpoint does not lay out a distant whole body for cache alone',
+    (tester) async {
+      final host = _Host([
+        _post('cache-head', '<div style="padding:4px">${_html(900)}</div>', 1),
+        _post('cold-middle', '<div style="padding:4px">${_html(900)}</div>', 2),
+        _post('cache-tail', _html(40), 3),
+      ], quickScrolling: true);
+      addTearDown(host.dispose);
+      try {
+        await _mount(tester, host);
+        await _pumpUntil(
+          tester,
+          () => _bodyText(tester, 'cache-head').contains('unit[0]'),
+        );
+        final navigation = host.quickCoordinator.navigate(animate: false);
+        await tester.pump();
+        final mounted = <String>{};
+        await _pumpUntil(tester, () {
+          mounted.addAll(_renderers(tester).map((r) => r.sourceId!));
+          return !host.quickCoordinator.isNavigating &&
+              _bodyText(tester, 'cache-tail').contains('unit[39]');
+        });
+        await navigation;
+        expect(_atPaginationEnd(tester), true);
+        final viewportHeight = tester
+            .getSize(find.byKey(const Key('thread-detail-list')))
+            .height;
+        final tail = tester
+            .getSize(
+              find.byKey(const Key('thread-post-html-first-body-cache-tail')),
+            )
+            .height;
+        expect(tail, inExclusiveRange(viewportHeight * 2, viewportHeight * 4));
+        expect(mounted, isNot(contains('cold-middle')));
+        expect(tester.takeException(), isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await _drainPreparation(tester);
+      }
+    },
+  );
+
+  for (final change in ['cancel', 'page', 'content', 'theme', 'fontScale']) {
+    testWidgets('whole endpoint retires after $change', (tester) async {
+      final host = _Host(
+        [
+          _post(
+            'whole',
+            '<div style="padding:4px">${_html(300, paragraphs: true)}</div>',
+            1,
+          ),
+          _post('last', '<p>last reply</p>', 2),
+        ],
+        quickScrolling: true,
+        themeAnimationDuration: Duration.zero,
+      );
+      addTearDown(host.dispose);
+      try {
+        await _mount(tester, host);
+        await _pumpUntil(
+          tester,
+          () => _bodyText(tester, 'whole').contains('unit[0]'),
+        );
+        host.quickCoordinator.updateUserDirection(ScrollDirection.reverse);
+        final navigation = host.quickCoordinator.navigate(animate: true);
+        switch (change) {
+          case 'cancel':
+            host.quickCoordinator.cancelNavigation();
+          case 'page':
+            host.changePage(2);
+          case 'content':
+            host.replace([_post('whole', '<p>replacement body</p>', 1)]);
+          case 'theme':
+            host.changeTheme(ThemeData.dark());
+          case 'fontScale':
+            final preferences = ForumHtmlReaderPreferences.defaults();
+            (host.container.read(
+              forumHtmlReaderPreferencesControllerProvider.notifier,
+            ) as _Preferences).replace(
+              preferences.copyWith(
+                typography: preferences.typography.copyWith(fontScale: 1.5),
+              ),
+            );
+        }
+        await tester.pump();
+        await _pumpUntil(tester, () => !host.quickCoordinator.isNavigating);
+        await navigation;
+        for (var frame = 0; frame < 20; frame++) {
+          await tester.pump(const Duration(milliseconds: 16));
+        }
+        expect(host.confirmedOffsets, isEmpty);
+        expect(host.controller.position.minScrollExtent, 0);
+        if (change == 'content') {
+          await _ready(tester, 'replacement body');
+        } else {
+          await _pumpUntil(
+            tester,
+            () => _bodyText(tester, 'whole').contains('unit[0]'),
+          );
+          expect(_atFirstFloor(tester, 'whole'), true);
+        }
+        expect(tester.takeException(), isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await _drainPreparation(tester);
+      }
+    });
+  }
+
+  for (final animate in [false, true]) {
+    testWidgets(
+      'whole complex endpoints preserve state and skip middle, animate=$animate',
+      (tester) async {
+        final headHtml =
+            '<div style="padding:4px;border:1px solid">'
+            '<p><ruby>字<rt>zi</rt></ruby></p>'
+            '<div class="showcollapse_box" id="endpoint-fold">'
+            '<div class="showcollapse_title">fold</div>'
+            '<div class="showcollapse_content">expanded endpoint content</div></div>'
+            '${_html(900, paragraphs: true)}</div>';
+        final host = _Host([
+          _post('whole-head', headHtml, 1),
+          for (var i = 0; i < 24; i++)
+            _post(
+              'middle-$i',
+              '<table><tr><td>${_html(200)}</td></tr></table>',
+              i + 2,
+            ),
+          _post('whole-tail', '<p>whole tail</p>', 26),
+        ], quickScrolling: true);
+        addTearDown(host.dispose);
+        try {
+          await _mount(tester, host);
+          await _pumpUntil(
+            tester,
+            () => _bodyText(tester, 'whole-head').contains('unit[0]'),
+          );
+          expect(
+            _renderers(
+              tester,
+              'whole-head',
+            ).single.preparedDocument!.safeDisplayPlan!.isChunked,
+            false,
+          );
+          await tester.tap(
+            find.byKey(
+              const Key('forum-html-collapse-toggle-whole-head-endpoint-fold'),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final presentation = _renderers(
+            tester,
+            'whole-head',
+          ).single.bodyPresentation;
+          expect(presentation, isNotNull);
+          expect(
+            find.text('expanded endpoint content', findRichText: true),
+            findsOneWidget,
+          );
+          final originalPosition = host.controller.position;
+          host.quickCoordinator.updateUserDirection(ScrollDirection.reverse);
+          final down = host.quickCoordinator.navigate(animate: animate);
+          await tester.pump();
+          expect(host.controller.position, isNot(same(originalPosition)));
+          if (animate) {
+            expect(
+              host.controller.position.extentAfter,
+              closeTo(host.controller.position.viewportDimension / 2, 1),
+            );
+          }
+          final seen = <String>{};
+          void capture() =>
+              seen.addAll(_renderers(tester).map((r) => r.sourceId!));
+          capture();
+          await _pumpUntil(tester, () {
+            capture();
+            return !host.quickCoordinator.isNavigating;
+          });
+          await down;
+          expect(_atPaginationEnd(tester), true);
+          expect(seen, isNot(contains('middle-12')));
+          expect(_bodyText(tester, 'whole-tail'), contains('whole tail'));
+          host.quickCoordinator.updateUserDirection(ScrollDirection.forward);
+          final up = host.quickCoordinator.navigate(animate: animate);
+          await tester.pump();
+          if (animate) {
+            expect(
+              host.controller.position.extentBefore,
+              closeTo(host.controller.position.viewportDimension / 2, 1),
+            );
+          }
+          await _pumpUntil(tester, () {
+            capture();
+            return !host.quickCoordinator.isNavigating &&
+                _bodyText(tester, 'whole-head').contains('unit[0]');
+          });
+          await up;
+          expect(_atFirstFloor(tester, 'whole-head'), true);
+          expect(seen, isNot(contains('middle-12')));
+          expect(
+            _renderers(tester, 'whole-head').single.bodyPresentation,
+            same(presentation),
+          );
+          expect(
+            find.text('expanded endpoint content', findRichText: true),
+            findsOneWidget,
+          );
+          expect(host.confirmedOffsets, hasLength(2));
+          expect(tester.takeException(), isNull);
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await _drainPreparation(tester);
+        }
+      },
+    );
+  }
+
   for (final chunked in [true, false]) {
     testWidgets('entry reveals actual body geometry, chunked=$chunked', (
       tester,
@@ -220,9 +438,9 @@ void main() {
 
   for (final (reply, canRebase) in [
     ('<P>first line<BR />second line &lt;3</P>', true),
-    ('<p class="quote">formatted reply</p>', false),
+    ('<p class="quote">formatted reply</p>', true),
     ('<details><summary>spoiler</summary>hidden text</details>', false),
-    ('<img alt="image">', false),
+    ('<img alt="image">', true),
   ]) {
     testWidgets('return to a chunked post with reply $reply', (tester) async {
       final host = _Host([
