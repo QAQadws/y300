@@ -1775,14 +1775,18 @@ void main() {
     expect(repository.upsertPreferencesCallCount, 1);
   });
 
-  testWidgets('NovelReaderPage display sheet exposes paged modes', (
+  testWidgets('NovelReaderPage display sheet uses equal height choices', (
     tester,
   ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(360, 780);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final repository = _FakeNovelRepository();
     await tester.pumpWidget(_buildReaderApp(repository: repository));
     await tester.pumpAndSettle();
 
-    await _showReaderMenu(tester);
+    await _showReaderMenu(tester, tapPosition: const Offset(180, 300));
     await tester.tap(
       find.byKey(const Key('shared-reader-bottom-action-display')),
     );
@@ -1813,11 +1817,30 @@ void main() {
     expect(optionIndices.every((index) => index >= 0), isTrue);
     expect(optionIndices, orderedEquals(optionIndices.toList()..sort()));
     for (final key in themeKeys) {
-      final chip = tester.widget<ChoiceChip>(
-        find.descendant(of: find.byKey(key), matching: find.byType(ChoiceChip)),
+      final option = tester.widget<Semantics>(
+        find.descendant(
+          of: find.byKey(key),
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is Semantics && widget.properties.selected != null,
+          ),
+        ),
       );
-      expect(chip.selected, key == const Key('novel-theme-follow-app'));
+      expect(
+        option.properties.selected,
+        key == const Key('novel-theme-follow-app'),
+      );
     }
+    final buttons = find.descendant(
+      of: find.byKey(const Key('novel-reader-display-settings-sheet')),
+      matching: find.byType(OutlinedButton),
+    );
+    expect(buttons, findsNWidgets(10));
+    final heights = [
+      for (final element in buttons.evaluate())
+        tester.getSize(find.byWidget(element.widget)).height,
+    ];
+    expect(heights.toSet(), hasLength(1));
     expect(find.text('分页 LTR'), findsOneWidget);
     expect(find.text('分页 RTL'), findsOneWidget);
     expect(find.byKey(const Key('novel-reader-paged-page-view')), findsNothing);
@@ -2984,7 +3007,7 @@ void main() {
     ).pop();
     await tester.pumpAndSettle();
 
-    expect(find.byKey(buttonKey), findsNothing);
+    expect(find.byKey(buttonKey).hitTestable(), findsNothing);
     expect(
       tester.element(find.byKey(const Key('novel-reader-paged-page-session'))),
       same(page),
@@ -3062,7 +3085,7 @@ void main() {
   });
 
   testWidgets(
-    'vertical dock appears only within three quarters of a viewport',
+    'vertical dock tolerates small reversals near the chapter end',
     (tester) async {
       await tester.pumpWidget(
         _buildReaderApp(
@@ -3077,18 +3100,30 @@ void main() {
         matching: find.byType(Scrollable),
       );
       final position = tester.state<ScrollableState>(scrollable).position;
-      const buttonKey = Key('novel-reader-chapter-interactions-button');
-      expect(find.byKey(buttonKey), findsNothing);
-      position.jumpTo(
-        position.maxScrollExtent - position.viewportDimension * 0.8,
+      final action = find.byKey(
+        const Key('novel-reader-chapter-interactions-button'),
       );
+      expect(action.hitTestable(), findsNothing);
+      for (final (distance, visible) in [
+        (0.8, false),
+        (0.7, true),
+        (0.77, true),
+        (0.73, true),
+        (0.8, true),
+        (0.9, false),
+        (0.8, false),
+      ]) {
+        // Lazy slivers may refine their estimated maximum while scrolling.
+        final target =
+            position.maxScrollExtent - position.viewportDimension * distance;
+        position.jumpTo(target);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(action.hitTestable(), visible ? findsOneWidget : findsNothing);
+        expect(position.pixels, closeTo(target, 0.01));
+        expect(tester.takeException(), isNull);
+      }
       await tester.pumpAndSettle();
-      expect(find.byKey(buttonKey), findsNothing);
-      position.jumpTo(
-        position.maxScrollExtent - position.viewportDimension * 0.7,
-      );
-      await tester.pumpAndSettle();
-      expect(find.byKey(buttonKey), findsOneWidget);
     },
   );
 
@@ -3191,7 +3226,9 @@ void main() {
     await tester.pumpWidget(_buildReaderApp(repository: repository));
     await tester.pumpAndSettle();
     expect(
-      find.byKey(const Key('novel-reader-chapter-interactions-button')),
+      find
+          .byKey(const Key('novel-reader-chapter-interactions-button'))
+          .hitTestable(),
       findsNothing,
     );
     await _showReaderMenu(tester);
@@ -3900,8 +3937,11 @@ void _expectPagedCachesClosed(NovelReaderHtmlPagedSurface surface) {
   ], everyElement(0));
 }
 
-Future<void> _showReaderMenu(WidgetTester tester) async {
-  await tester.tapAt(const Offset(400, 300));
+Future<void> _showReaderMenu(
+  WidgetTester tester, {
+  Offset tapPosition = const Offset(400, 300),
+}) async {
+  await tester.tapAt(tapPosition);
   await tester.pump(const Duration(milliseconds: 330));
   await tester.pump(const Duration(milliseconds: 260));
   await tester.pump();

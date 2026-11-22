@@ -1274,11 +1274,16 @@ class _NovelReaderPageState extends ConsumerState<NovelReaderPage>
           _hasRestoredOffset &&
           _scrollController.hasClients &&
           _scrollController.position.hasContentDimensions;
+      final wasNearEnd =
+          _verticalDockIdentity == requested && _verticalDockVisible.value;
       _verticalDockIdentity = valid ? requested : null;
       final metrics = valid ? _scrollController.position : null;
+      // Keep a small band between enter and exit so tiny movements around
+      // the chapter-end boundary do not repeatedly reverse the dock fade.
+      final viewportThreshold = wasNearEnd ? 0.85 : 0.75;
       final nearEnd =
           metrics != null &&
-          metrics.extentAfter <= metrics.viewportDimension * 0.75;
+          metrics.extentAfter <= metrics.viewportDimension * viewportThreshold;
       if (_verticalDockVisible.value != nearEnd) {
         _verticalDockVisible.value = nearEnd;
       }

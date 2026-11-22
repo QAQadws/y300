@@ -8,7 +8,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:y300/features/cache/data/providers/image_cache_providers.dart';
+import 'package:y300/features/cache/domain/models/forum_image_dimensions.dart';
+import 'package:y300/features/cache/domain/models/forum_image_load_spec.dart';
 import 'package:y300/features/cache/domain/models/image_cache_models.dart';
+import 'package:y300/features/cache/domain/services/forum_image_dimension_index.dart';
 import 'package:y300/features/cache/domain/services/image_cache_service.dart';
 import 'package:y300/features/cache/presentation/widgets/cached_library_image.dart';
 import 'package:y300/features/novel/data/models/novel_models.dart';
@@ -442,6 +445,69 @@ void main() {
     );
   });
 
+  testWidgets('retains image height when a chapter sliver mounts it again', (
+    tester,
+  ) async {
+    final scroll = ScrollController();
+    addTearDown(scroll.dispose);
+    final dimensions = _RemountImageDimensions();
+    final paragraphs = List.generate(
+      80,
+      (index) => '<p>Chapter paragraph $index</p>',
+    ).join();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          imageCacheServiceProvider.overrideWithValue(_NoopImageCacheService()),
+          forumImageDimensionIndexProvider.overrideWithValue(dimensions),
+        ],
+        child: LocalizedTestApp(
+          home: Scaffold(
+            body: CustomScrollView(
+              controller: scroll,
+              slivers: [
+                NovelReaderHtmlDocumentView(
+                  asSliver: true,
+                  rawHtml:
+                      '<p>Before image</p>'
+                      '<img src="data/attachment/forum/chapter-image.jpg">'
+                      '$paragraphs',
+                  episode: _episode,
+                  preferences: NovelReaderPreferences.defaults(),
+                  typography: _typography,
+                  theme: _lightTheme,
+                  imageReferer: 'https://bbs.yamibo.com/',
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final image = find.byType(CachedLibraryImage);
+    final firstSize = tester.getSize(image);
+    expect(firstSize.aspectRatio, closeTo(3, 0.01));
+
+    scroll.jumpTo(1600);
+    await tester.pump();
+    expect(image, findsNothing);
+    final pendingDimensions = Completer<ForumImageDimensions?>();
+    dimensions.pending = pendingDimensions.future;
+
+    // Approach the evicted row from below while its new metadata read waits.
+    for (var target = 1520.0; target >= 0; target -= 80) {
+      scroll.jumpTo(target);
+      await tester.pump();
+      if (image.evaluate().isNotEmpty) break;
+    }
+    expect(tester.getSize(image), firstSize);
+    expect(dimensions.lookups, greaterThan(1));
+    pendingDimensions.complete(null);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('clips inline media on the first HTML reader frame', (
     tester,
   ) async {
@@ -630,6 +696,33 @@ final class _DeferredPrepareCall {
   final String themeSignature;
   final Completer<NovelHtmlPreparedChapter> completer =
       Completer<NovelHtmlPreparedChapter>();
+}
+
+class _RemountImageDimensions implements ForumImageDimensionIndex {
+  Future<ForumImageDimensions?>? pending;
+  int lookups = 0;
+
+  @override
+  Future<ForumImageDimensions?> getBySpec(ForumImageLoadSpec spec) async {
+    lookups++;
+    final future = pending;
+    if (future != null) return future;
+    return const ForumImageDimensions(
+      width: 900,
+      height: 300,
+      source: ForumImageDimensionSource.cacheMetadata,
+    );
+  }
+
+  @override
+  Future<ForumImageDimensions?> getLastKnownBySpec(ForumImageLoadSpec spec) =>
+      getBySpec(spec);
+
+  @override
+  Future<void> recordDecodedDimensions({
+    required ForumImageLoadSpec spec,
+    required Size size,
+  }) async {}
 }
 
 class _NoopImageCacheService implements ImageCacheService {

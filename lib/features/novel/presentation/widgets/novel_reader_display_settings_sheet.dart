@@ -70,7 +70,6 @@ class _NovelReaderDisplaySettingsSheetState
             children: [
               ReaderSheetTitle(title: l10n.novelDisplaySettings),
               _SettingsSection(
-                title: l10n.novelTypography,
                 children: [
                   ListTile(
                     key: const Key('novel-reader-font-selector'),
@@ -122,66 +121,26 @@ class _NovelReaderDisplaySettingsSheetState
               _SettingsSection(
                 title: l10n.novelTheme,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        _ThemeChip(
-                          key: const Key('novel-theme-follow-app'),
-                          label: l10n.novelThemeFollowApp,
-                          selected:
-                              _draft.themePreset ==
-                              NovelReaderThemePreset.followApp,
-                          onSelected: () => _applyPreferences(
-                            _draft.copyWith(
-                              themePreset: NovelReaderThemePreset.followApp,
-                            ),
-                          ),
-                        ),
-                        _ThemeChip(
-                          key: const Key('novel-theme-light'),
-                          label: l10n.novelThemeLight,
-                          selected:
-                              _draft.themePreset ==
-                              NovelReaderThemePreset.light,
-                          onSelected: () => _applyPreferences(
-                            _draft.copyWith(
-                              themePreset: NovelReaderThemePreset.light,
-                            ),
-                          ),
-                        ),
-                        _ThemeChip(
-                          key: const Key('novel-theme-sepia'),
-                          label: l10n.novelThemeSepia,
-                          selected:
-                              _draft.themePreset ==
-                              NovelReaderThemePreset.sepia,
-                          onSelected: () => _applyPreferences(
-                            _draft.copyWith(
-                              themePreset: NovelReaderThemePreset.sepia,
-                            ),
-                          ),
-                        ),
-                        _ThemeChip(
-                          key: const Key('novel-theme-dark'),
-                          label: l10n.novelThemeDark,
-                          selected:
-                              _draft.themePreset == NovelReaderThemePreset.dark,
-                          onSelected: () => _applyPreferences(
-                            _draft.copyWith(
-                              themePreset: NovelReaderThemePreset.dark,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                  ReaderSegmentControl<NovelReaderThemePreset>(
+                    value: _draft.themePreset,
+                    values: NovelReaderThemePreset.values,
+                    labelBuilder: (value) => switch (value) {
+                      NovelReaderThemePreset.followApp =>
+                        l10n.novelThemeFollowApp,
+                      NovelReaderThemePreset.light => l10n.novelThemeLight,
+                      NovelReaderThemePreset.sepia => l10n.novelThemeSepia,
+                      NovelReaderThemePreset.dark => l10n.novelThemeDark,
+                    },
+                    optionKeyBuilder: (value) =>
+                        value == NovelReaderThemePreset.followApp
+                        ? const Key('novel-theme-follow-app')
+                        : ValueKey('novel-theme-${value.name}'),
+                    onChanged: (value) =>
+                        _applyPreferences(_draft.copyWith(themePreset: value)),
                   ),
                 ],
               ),
               _SettingsSection(
-                title: l10n.novelReading,
                 children: [
                   ReaderSegmentControl<NovelReaderFlowMode>(
                     key: const Key('novel-reader-flow-mode-control'),
@@ -329,22 +288,27 @@ class _NovelReaderDisplaySettingsSheetState
 }
 
 class _SettingsSection extends StatelessWidget {
-  const _SettingsSection({required this.title, required this.children});
+  const _SettingsSection({this.title, required this.children});
 
-  final String title;
+  final String? title;
   final List<Widget> children;
 
   @override
   Widget build(BuildContext context) {
+    final sectionTitle = title;
     return Padding(
       padding: const EdgeInsets.only(top: 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Text(title, style: Theme.of(context).textTheme.titleSmall),
-          ),
+          if (sectionTitle != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Text(
+                sectionTitle,
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+            ),
           ...children,
         ],
       ),
@@ -395,29 +359,6 @@ class _SettingsSlider extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _ThemeChip extends StatelessWidget {
-  const _ThemeChip({
-    super.key,
-    required this.label,
-    required this.selected,
-    required this.onSelected,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return ChoiceChip(
-      label: Text(label),
-      selected: selected,
-      showCheckmark: false,
-      onSelected: (_) => onSelected(),
     );
   }
 }

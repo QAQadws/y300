@@ -72,20 +72,23 @@ class ReaderSheetTitle extends StatelessWidget {
 class ReaderSegmentControl<T extends Object> extends StatelessWidget {
   const ReaderSegmentControl({
     super.key,
-    required this.label,
+    this.label,
     required this.value,
     required this.values,
     required this.labelBuilder,
     required this.onChanged,
+    this.optionKeyBuilder,
     this.enabled = true,
     this.scrollable = false,
   });
 
-  final String label;
+  /// Omit when the section already labels the group.
+  final String? label;
   final T value;
   final List<T> values;
   final String Function(T value) labelBuilder;
   final ValueChanged<T> onChanged;
+  final Key Function(T value)? optionKeyBuilder;
   final bool enabled;
 
   /// Keeps the choices on one horizontally scrollable line.
@@ -101,7 +104,9 @@ class ReaderSegmentControl<T extends Object> extends StatelessWidget {
           final buttons = [
             for (final item in values)
               _ReaderChoiceButton(
-                key: ValueKey<String>('reader-segment-${labelBuilder(item)}'),
+                key:
+                    optionKeyBuilder?.call(item) ??
+                    ValueKey<String>('reader-segment-${labelBuilder(item)}'),
                 label: labelBuilder(item),
                 selected: item == value,
                 enabled: enabled,
@@ -115,6 +120,8 @@ class ReaderSegmentControl<T extends Object> extends StatelessWidget {
                   child: Row(spacing: 8, children: buttons),
                 )
               : Wrap(spacing: 8, runSpacing: 8, children: buttons);
+          final label = this.label;
+          if (label == null) return control;
           if (constraints.maxWidth < 360) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
