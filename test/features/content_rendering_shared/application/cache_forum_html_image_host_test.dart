@@ -22,6 +22,46 @@ import '../../../test_support/localized_test_app.dart';
 import '../../thread/presentation/html_rendering/forum_html_test_theme.dart';
 
 void main() {
+  test('the scoped host reuses confirmed block proportions', () {
+    final base = CacheForumHtmlImageHost(dimensionIndex: _NoDimensions());
+    final host = base.forContent(
+      threadId: '100',
+      fallbackAspectRatioFor: (_, _) => 1.25,
+    );
+    ForumHtmlDisplayImage resolve(
+      CacheForumHtmlImageHost owner, {
+      Uri? url,
+      Size? htmlSize,
+    }) => owner.resolveImage(
+      url: url ?? _source,
+      imageIndex: 0,
+      isSticker: false,
+      htmlSize: htmlSize,
+    )!;
+
+    final image = resolve(host);
+    expect(image.initialLayout.aspectRatio, 1.25);
+    host.onBlockImageResolved(image, const Size(900, 300));
+    host.onBlockImageResolved(image, Size.zero);
+
+    expect(resolve(host).initialLayout.aspectRatio, 3);
+    expect(
+      resolve(host, htmlSize: const Size(600, 300)).initialLayout.aspectRatio,
+      2,
+    );
+    expect(
+      resolve(
+        host,
+        url: _source.replace(path: '/another.png'),
+      ).initialLayout.aspectRatio,
+      1.25,
+    );
+    expect(
+      resolve(base.forContent(threadId: '100')).initialLayout.aspectRatio,
+      0.7,
+    );
+  });
+
   testWidgets('the block fade survives rebuilds and is skipped on remount', (
     tester,
   ) async {

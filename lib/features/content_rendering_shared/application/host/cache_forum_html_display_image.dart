@@ -34,7 +34,12 @@ final class CacheForumHtmlDisplayImage implements ForumHtmlDisplayImage {
   String get cacheKey => request.cacheKey;
 
   @override
-  Object get identity => (request.cacheKey, request.sourceUrl, spec.sourceUrl);
+  Object get identity => identityFor(spec, request);
+
+  static Object identityFor(
+    ForumImageLoadSpec spec,
+    ImageCacheRequest request,
+  ) => (request.cacheKey, request.sourceUrl, spec.sourceUrl);
 
   @override
   Size? get htmlSize => ForumImageDimensions.fromHtmlSpec(spec)?.size;

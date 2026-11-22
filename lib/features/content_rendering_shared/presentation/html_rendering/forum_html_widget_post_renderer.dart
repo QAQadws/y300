@@ -191,6 +191,8 @@ class _ForumHtmlWidgetPostRendererState
       imageHostRevision:
           widget.imageHost ??
           (
+            document.sequence.sourceId,
+            widget.html,
             widget.threadId,
             widget.imageReferer,
             widget.imageCacheOwnerId,

@@ -136,7 +136,16 @@ class _NovelReaderHtmlDocumentViewState
             }
             final signature = _layoutIdentity;
             if (prepared.renderDocument.sequence.entries.isNotEmpty) {
-              _imageHost ??= _createImageHost();
+              _imageHost ??= NovelReadingImageHost(
+                delegate: ref
+                    .read(forumHtmlImageHostProvider)
+                    .forContent(
+                      threadId: widget.episode.sourceTid,
+                      imageReferer: widget.imageReferer,
+                      imageCacheOwnerId: widget.episode.sourceTid,
+                    ),
+                tracker: _imageTracker,
+              );
             }
             final fragments = widget.asSliver ? prepared.scrollFragments : null;
             Widget render(String? fragment) => ForumHtmlWidgetPostRenderer(
@@ -194,39 +203,6 @@ class _NovelReaderHtmlDocumentViewState
           },
         ),
       ),
-    );
-  }
-
-  NovelReadingImageHost _createImageHost() {
-    // Sliver children can remount before their async dimensions lookup ends.
-    // Keep the learned ratios with this chapter's host across those remounts.
-    final aspectRatios = <(String, String, String), double>{};
-    return NovelReadingImageHost(
-      delegate: ref
-          .read(forumHtmlImageHostProvider)
-          .forContent(
-            threadId: widget.episode.sourceTid,
-            imageReferer: widget.imageReferer,
-            imageCacheOwnerId: widget.episode.sourceTid,
-            fallbackAspectRatioFor: (spec, request) =>
-                aspectRatios[(
-                  request.cacheKey,
-                  request.sourceUrl,
-                  spec.sourceUrl,
-                )],
-            onBlockImageResolved: (spec, request, size) {
-              if (size.isEmpty) return;
-              final ratio = size.aspectRatio;
-              if (!ratio.isFinite || ratio <= 0) return;
-              aspectRatios[(
-                    request.cacheKey,
-                    request.sourceUrl,
-                    spec.sourceUrl,
-                  )] =
-                  ratio;
-            },
-          ),
-      tracker: _imageTracker,
     );
   }
 

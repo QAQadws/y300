@@ -43,7 +43,9 @@ final class CacheForumHtmlImageHost
     this.layoutHintResolver = const ForumImageLayoutHintResolver(),
     this.imageReferer,
     this.imagePrecacheService,
-    this.fallbackAspectRatioFor,
+    double? Function(ForumImageLoadSpec spec, ImageCacheRequest request)?
+    fallbackAspectRatioFor,
+    Map<Object, double>? blockAspectRatios,
     ForumHtmlImageFadeState? imageFade,
     ForumHtmlImageResourceHandoffs? handoffs,
     void Function(
@@ -54,6 +56,8 @@ final class CacheForumHtmlImageHost
     onBlockImageResolved,
   }) : _dimensionIndex = dimensionIndex,
        _dimensionIndexFor = dimensionIndexFor,
+       _fallbackAspectRatioFor = fallbackAspectRatioFor,
+       _blockAspectRatios = blockAspectRatios,
        _handoffs = handoffs,
        _imageFade = imageFade,
        _onBlockImageResolved = onBlockImageResolved;
@@ -61,6 +65,7 @@ final class CacheForumHtmlImageHost
   final ForumImageDimensionIndex? _dimensionIndex;
   final ForumHtmlImageResourceHandoffs? _handoffs;
   final ForumHtmlImageFadeState? _imageFade;
+  final Map<Object, double>? _blockAspectRatios;
   final ForumImageDimensionIndex Function()? _dimensionIndexFor;
   ForumImageDimensionIndex get dimensionIndex =>
       _dimensionIndex ?? _dimensionIndexFor!();
@@ -72,7 +77,7 @@ final class CacheForumHtmlImageHost
   final String? imageReferer;
   final ForumImagePrecacheService? imagePrecacheService;
   final double? Function(ForumImageLoadSpec spec, ImageCacheRequest request)?
-  fallbackAspectRatioFor;
+  _fallbackAspectRatioFor;
   final void Function(
     ForumImageLoadSpec spec,
     ImageCacheRequest request,
@@ -80,7 +85,8 @@ final class CacheForumHtmlImageHost
   )?
   _onBlockImageResolved;
 
-  /// Keeps App cache configuration outside the renderer's display contract.
+  /// Creates a body-scoped host that keeps confirmed image geometry across
+  /// child remounts. The provider's unscoped host holds no layout memory.
   CacheForumHtmlImageHost forContent({
     required String threadId,
     String? imageCacheOwnerId,
@@ -110,6 +116,7 @@ final class CacheForumHtmlImageHost
     layoutHintResolver:
         layoutHintResolver ?? const ForumImageLayoutHintResolver(),
     fallbackAspectRatioFor: fallbackAspectRatioFor,
+    blockAspectRatios: <Object, double>{},
     onBlockImageResolved: onBlockImageResolved,
     imagePrecacheService: imagePrecacheService,
     imageReferer: imageReferer,
@@ -135,8 +142,18 @@ final class CacheForumHtmlImageHost
     isSticker: isSticker,
     imageRequestResolver: imageRequestResolver,
     layoutHintResolver: layoutHintResolver,
-    fallbackAspectRatioFor: fallbackAspectRatioFor,
+    fallbackAspectRatioFor: _initialAspectRatioFor,
   );
+
+  double? _initialAspectRatioFor(
+    ForumImageLoadSpec spec,
+    ImageCacheRequest request,
+  ) =>
+      _blockAspectRatios?[CacheForumHtmlDisplayImage.identityFor(
+        spec,
+        request,
+      )] ??
+      _fallbackAspectRatioFor?.call(spec, request);
 
   @override
   Future<({Size size, ForumHtmlImageLayout layout})?> loadDimensions(
@@ -179,6 +196,10 @@ final class CacheForumHtmlImageHost
   void onBlockImageResolved(ForumHtmlDisplayImage image, Size size) {
     final cachedImage = image as CacheForumHtmlDisplayImage;
     if (cachedImage.isSticker) return;
+    final ratio = size.aspectRatio;
+    if (!size.isEmpty && ratio.isFinite && ratio > 0) {
+      _blockAspectRatios?[cachedImage.identity] = ratio;
+    }
     _onBlockImageResolved?.call(cachedImage.spec, cachedImage.request, size);
   }
 
