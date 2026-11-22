@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
 import '../../../test_support/localized_test_app.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' as riverpod_misc;
 import 'package:flutter/services.dart';
@@ -33,6 +35,7 @@ import 'package:y300/features/tags/domain/forum_tag_lookup.dart';
 import 'package:y300/features/tags/domain/forum_tag_models.dart';
 import 'package:y300/features/thread/data/providers/thread_repository_providers.dart';
 import 'package:y300/features/thread/presentation/thread_detail_page.dart';
+import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/shared/widgets/forum_cached_avatar.dart';
 import 'package:y300/shared/widgets/forum_default_avatar.dart';
 import 'package:y300/shared/widgets/forum_native_surface.dart';
@@ -126,6 +129,141 @@ void main() {
       await tester.pump(const Duration(milliseconds: 200));
       expect(tester.takeException(), isNull);
     });
+
+    testWidgets('statistics keep their height and fade in as a single row', (
+      tester,
+    ) async {
+      final response = Completer<ApiResult<ForumDisplayData>>();
+      await tester.pumpWidget(
+        _buildTestApp(
+          _FakeForumDisplayRepository((_, _, _) => response.future),
+        ),
+      );
+      await tester.pump();
+      final stats = find.byKey(const Key('forum-display-appbar-stats'));
+      final title = find.descendant(
+        of: find.byType(AppBar),
+        matching: find.text('公告区'),
+      );
+      final initialHeight = tester.getSize(stats).height;
+      final initialTitle = tester.getRect(title);
+      expect(initialHeight, greaterThan(0));
+      expect(_statisticsOpacity(tester), 0);
+
+      response.complete(
+        ApiSuccess(
+          _displayData(
+            page: 1,
+            total: 55511,
+            todayPosts: 68,
+            rank: 2,
+            threads: const [],
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(tester.getSize(stats).height, initialHeight);
+      expect(tester.getRect(title), initialTitle);
+      expect(_statisticsOpacity(tester), 0);
+      await tester.pump(const Duration(milliseconds: 75));
+      expect(_statisticsOpacity(tester), greaterThan(0));
+      expect(_statisticsOpacity(tester), lessThan(1));
+      await tester.pump(const Duration(milliseconds: 75));
+      expect(_statisticsOpacity(tester), 1);
+      expect(tester.getRect(title), initialTitle);
+      expect(tester.takeException(), isNull);
+    });
+
+    for (final succeeds in [false, true]) {
+      testWidgets(
+        'statistics ${succeeds ? 'display genuine zeros' : 'stay hidden after an initial failure'}',
+        (tester) async {
+          final semantics = tester.ensureSemantics();
+          try {
+            await tester.pumpWidget(
+              _buildTestApp(
+                _FakeForumDisplayRepository((_, _, _) async {
+                  return succeeds
+                      ? ApiSuccess(
+                          _displayData(
+                            page: 1,
+                            total: 0,
+                            todayPosts: 0,
+                            rank: 0,
+                            threads: const [],
+                          ),
+                        )
+                      : const ApiFailure(
+                          ApiError(
+                            type: ApiErrorType.network,
+                            message: 'fixture',
+                          ),
+                        );
+                }),
+              ),
+            );
+            await tester.pumpAndSettle();
+            final l10n = AppLocalizations.of(
+              tester.element(find.byType(ForumDisplayPage)),
+            );
+            expect(_statisticsOpacity(tester), succeeds ? 1 : 0);
+            for (final label in [
+              l10n.forumDisplayToday,
+              l10n.forumDisplayThreads,
+              l10n.forumDisplayRank,
+            ]) {
+              expect(
+                find.bySemanticsLabel(RegExp(RegExp.escape('$label 0'))),
+                succeeds ? findsWidgets : findsNothing,
+              );
+            }
+            expect(tester.takeException(), isNull);
+          } finally {
+            semantics.dispose();
+          }
+        },
+      );
+    }
+
+    testWidgets(
+      'refresh updates a visible statistics row without another fade',
+      (tester) async {
+        final refresh = Completer<ApiResult<ForumDisplayData>>();
+        var reads = 0;
+        await tester.pumpWidget(
+          _buildTestApp(
+            _FakeForumDisplayRepository((_, _, _) async {
+              if (++reads > 1) return refresh.future;
+              return ApiSuccess(
+                _displayData(page: 1, total: 10, threads: const []),
+              );
+            }),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final l10n = AppLocalizations.of(
+          tester.element(find.byType(ForumDisplayPage)),
+        );
+        expect(_statisticsOpacity(tester), 1);
+        await tester.tap(find.byKey(const Key('forum-display-more-button')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('forum-display-refresh-action')));
+        await tester.pump();
+        expect(_statisticsOpacity(tester), 1);
+        expect(find.text('${l10n.forumDisplayThreads} 10'), findsOneWidget);
+
+        refresh.complete(
+          ApiSuccess(_displayData(page: 1, total: 11, threads: const [])),
+        );
+        await tester.pump();
+        await tester.pump();
+        expect(find.text('${l10n.forumDisplayThreads} 11'), findsOneWidget);
+        expect(_statisticsOpacity(tester), 1);
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+      },
+    );
 
     testWidgets('server tag names do not wait for the local tag catalog', (
       tester,
@@ -744,8 +882,7 @@ void main() {
                 replies: 1,
                 views: 5,
                 dateline: 'today',
-                avatarUrl:
-                    'https://bbs.yamibo.com/uc_server/data/avatar/000/00/00/42_avatar_middle.jpg',
+                avatarUrl: 'https://bbs.yamibo.com/uc_server/data/avatar/000/00/00/42_avatar_middle.jpg',
               ),
             ],
           ),
@@ -932,8 +1069,7 @@ void main() {
                 replies: 0,
                 views: 1,
                 dateline: 'today',
-                threadUrl:
-                    'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=572604&mobile=2',
+                threadUrl: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=572604&mobile=2',
               ),
             ],
           ),
@@ -1053,8 +1189,7 @@ void main() {
                 views: 1,
                 dateline: 'today',
                 sourceTagName: '長篇連載',
-                sourceTagUrl:
-                    'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=2&filter=typeid&typeid=69&mobile=2',
+                sourceTagUrl: 'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=2&filter=typeid&typeid=69&mobile=2',
               ),
             ],
           ),
@@ -1120,8 +1255,7 @@ void main() {
               page: page,
               total: 24,
               lastPage: 8,
-              headImageUrl:
-                  'https://bbs.yamibo.com/data/attachment/album/202603/02/head.png',
+              headImageUrl: 'https://bbs.yamibo.com/data/attachment/album/202603/02/head.png',
               threads: _manyThreads(
                 suffix: suffix,
                 count: 12,
@@ -1219,8 +1353,7 @@ void main() {
             topEntries: const <ForumDisplayTopEntry>[
               ForumDisplayTopEntry(
                 title: '置顶跳转',
-                url:
-                    'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=535389&mobile=2',
+                url: 'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=535389&mobile=2',
                 tid: '535389',
                 badgeLabel: '置顶',
               ),
@@ -1349,8 +1482,7 @@ void main() {
           _displayData(
             page: page,
             total: 52718,
-            headImageUrl:
-                'https://bbs.yamibo.com/data/attachment/album/202603/02/head.png',
+            headImageUrl: 'https://bbs.yamibo.com/data/attachment/album/202603/02/head.png',
             threads: [
               ForumThreadSummary(
                 tid: '572604',
@@ -1661,10 +1793,8 @@ void main() {
               ForumDisplaySubForum(
                 fid: '52',
                 title: '百合会最萌世界杯专版！',
-                url:
-                    'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=52&mobile=2',
-                iconUrl:
-                    'https://bbs.yamibo.com/data/attachment/common/9a/common_52_icon.gif',
+                url: 'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=52&mobile=2',
+                iconUrl: 'https://bbs.yamibo.com/data/attachment/common/9a/common_52_icon.gif',
               ),
             ],
             threads: const <ForumThreadSummary>[],
@@ -1698,17 +1828,13 @@ void main() {
       expect(repository.lastQuery?.fid, '52');
     });
 
-    testWidgets('opens search with non-30 forum fid', (tester) async {
-      final repository = _FakeForumDisplayRepository((fid, page, query) async {
-        return ApiSuccess(
-          _displayData(
-            fid: fid,
-            page: 1,
-            total: 1,
-            threads: const <ForumThreadSummary>[],
-          ),
-        );
-      });
+    testWidgets('opens search with the current fid before the list loads', (
+      tester,
+    ) async {
+      final response = Completer<ApiResult<ForumDisplayData>>();
+      final repository = _FakeForumDisplayRepository(
+        (_, _, _) => response.future,
+      );
 
       await tester.pumpWidget(
         ProviderScope(
@@ -1720,10 +1846,11 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump();
 
       final searchButton = find.byKey(const Key('forum-display-search-button'));
       expect(searchButton, findsOneWidget);
+      expect(tester.widget<IconButton>(searchButton).onPressed, isNotNull);
       await tester.tap(searchButton);
       await tester.pumpAndSettle();
 
@@ -1732,6 +1859,93 @@ void main() {
       );
       expect(searchPage.scope, ForumSearchScope.currentForum);
       expect(searchPage.forumId, '33');
+      response.complete(
+        ApiSuccess(
+          _displayData(fid: '33', page: 1, total: 0, threads: const []),
+        ),
+      );
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('search remains available after the list fails to load', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestApp(
+          _FakeForumDisplayRepository(
+            (_, _, _) async => const ApiFailure(
+              ApiError(type: ApiErrorType.network, message: 'fixture'),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final searchButton = find.byKey(const Key('forum-display-search-button'));
+      expect(searchButton, findsOneWidget);
+      expect(tester.widget<IconButton>(searchButton).onPressed, isNotNull);
+    });
+
+    for (final support in [
+      DataCapabilitySupport.unsupported,
+      DataCapabilitySupport.unknown,
+    ]) {
+      testWidgets('hides search when source support is ${support.name}', (
+        tester,
+      ) async {
+        final response = Completer<ApiResult<ForumDisplayData>>();
+        await tester.pumpWidget(
+          _buildTestApp(
+            _FakeForumDisplayRepository(
+              (_, _, _) => response.future,
+              sourceCapabilities: ForumDisplaySourceCapabilities(
+                values: ForumDisplaySourceCapabilities.full.values.withSupport(
+                  ForumDisplayCapability.searchEntry,
+                  support,
+                ),
+                paginationPrecision: PaginationPrecision.exact,
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        final searchButton = find.byKey(
+          const Key('forum-display-search-button'),
+        );
+        expect(searchButton, findsNothing);
+        response.complete(
+          ApiSuccess(_displayData(page: 1, total: 0, threads: const [])),
+        );
+        await tester.pumpAndSettle();
+        expect(searchButton, findsNothing);
+      });
+    }
+
+    testWidgets('a completed read can explicitly disable the search entry', (
+      tester,
+    ) async {
+      final response = Completer<ApiResult<ForumDisplayData>>();
+      await tester.pumpWidget(
+        _buildTestApp(
+          _FakeForumDisplayRepository(
+            (_, _, _) => response.future,
+            readCapabilities: ForumDisplayReadCapabilities(
+              values: ForumDisplaySourceCapabilities.full.values.withSupport(
+                ForumDisplayCapability.searchEntry,
+                DataCapabilitySupport.unsupported,
+              ),
+              paginationPrecision: PaginationPrecision.exact,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      final searchButton = find.byKey(const Key('forum-display-search-button'));
+      expect(searchButton, findsOneWidget);
+      response.complete(
+        ApiSuccess(_displayData(page: 1, total: 0, threads: const [])),
+      );
+      await tester.pumpAndSettle();
+      expect(searchButton, findsNothing);
     });
 
     testWidgets('hides search action when forum fid is empty', (tester) async {
@@ -1795,6 +2009,16 @@ Widget _buildTestApp(
     child: LocalizedTestApp(home: home),
   );
 }
+
+double _statisticsOpacity(WidgetTester tester) => tester
+    .widget<FadeTransition>(
+      find.descendant(
+        of: find.byKey(const Key('forum-display-appbar-stats-fade')),
+        matching: find.byType(FadeTransition),
+      ),
+    )
+    .opacity
+    .value;
 
 void _expectCardFullyVisible(WidgetTester tester, String tid) {
   final card = find.byKey(Key('forum-thread-$tid'));
@@ -1860,15 +2084,13 @@ ForumDisplayData _displayData({
       ),
       ForumDisplayFilterItem(
         label: '最新',
-        url:
-            'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=2&filter=lastpost&mobile=2',
+        url: 'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=2&filter=lastpost&mobile=2',
       ),
     ],
     typeFilters: const <ForumDisplayFilterItem>[
       ForumDisplayFilterItem(
         label: '公告',
-        url:
-            'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=2&filter=typeid&typeid=65&mobile=2',
+        url: 'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=2&filter=typeid&typeid=65&mobile=2',
         typeid: '65',
       ),
     ],
@@ -1972,7 +2194,14 @@ BoxDecoration _threadCardShadowDecoration(WidgetTester tester, String tid) {
 }
 
 class _FakeForumDisplayRepository implements ForumDisplayRepository {
-  _FakeForumDisplayRepository(this._loader);
+  _FakeForumDisplayRepository(
+    this._loader, {
+    this.sourceCapabilities,
+    this.readCapabilities,
+  });
+
+  final ForumDisplaySourceCapabilities? sourceCapabilities;
+  final ForumDisplayReadCapabilities? readCapabilities;
 
   final Future<ApiResult<ForumDisplayData>> Function(
     String fid,
@@ -1985,7 +2214,7 @@ class _FakeForumDisplayRepository implements ForumDisplayRepository {
 
   @override
   ForumDisplaySourceCapabilities get capabilities =>
-      ForumDisplaySourceCapabilities.full;
+      sourceCapabilities ?? ForumDisplaySourceCapabilities.full;
 
   @override
   Future<DataReadResult<ForumDisplayData, ForumDisplayReadCapabilities>>
@@ -1997,7 +2226,7 @@ class _FakeForumDisplayRepository implements ForumDisplayRepository {
     cachePolicies.add(cachePolicy);
     return dataReadResultFromApiResult(
       await _loader(query.fid, query.page, query),
-      capabilities: capabilities.toReadCapabilities(),
+      capabilities: readCapabilities ?? capabilities.toReadCapabilities(),
     );
   }
 }

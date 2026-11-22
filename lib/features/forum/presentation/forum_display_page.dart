@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widget_previews.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:y300/core/network/yamibo_forum_source.dart';
 import 'package:y300/features/composer_shared/presentation/services/read_access_feedback.dart';
 import 'package:y300/app/theme/app_theme.dart';
 import 'package:y300/app/localization/app_server_content_conversion_provider.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 import 'package:y300/features/forum/data/services/forum_favorite_action_service.dart';
+import 'package:y300/features/forum/data/providers/forum_display_repository_providers.dart';
 import 'package:y300/features/forum/presentation/forum_content_projection_providers.dart';
 import 'package:y300/features/forum/presentation/forum_display_content_projection.dart';
 import 'package:y300/features/forum/presentation/forum_display_content_projector.dart';
@@ -84,7 +86,14 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
     }
     final theme = Theme.of(context);
     final palette = ForumDisplayThemePalette.resolve(theme);
-    final searchFid = state.supports(ForumDisplayCapability.searchEntry)
+    // Source support is known before the list loads; later reads may narrow it.
+    final sourceCapabilities = ref
+        .watch(forumDisplayRepositoryProvider)
+        .capabilities;
+    final searchFid =
+        sourceCapabilities.supports(ForumDisplayCapability.searchEntry) &&
+            (state.capabilities?.supports(ForumDisplayCapability.searchEntry) ??
+                true)
         ? _searchFidFor(state)
         : null;
     final mode = ref.watch(appServerContentConversionModeProvider);
@@ -105,7 +114,19 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
           padding: const EdgeInsetsDirectional.only(
             start: NavigationToolbar.kMiddleSpacing,
           ),
-          child: _ForumDisplayAppBarTitle(projection: projection),
+          child: _ForumDisplayAppBarTitle(
+            key: ValueKey((
+              ref.watch(yamiboForumSourceScopeProvider),
+              widget.fid,
+            )),
+            projection: projection,
+            statisticsReady:
+                !asyncState.isLoading &&
+                !asyncState.hasError &&
+                asyncState.hasValue &&
+                state.failure == null &&
+                state.errorMessage == null,
+          ),
         ),
         actions: [
           if (searchFid != null)
@@ -492,17 +513,52 @@ class _ForumDisplayPageState extends ConsumerState<ForumDisplayPage> {
       result!.readAccess,
     );
     if (feedback != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(feedback)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(feedback)));
     }
   }
 }
 
-class _ForumDisplayAppBarTitle extends StatelessWidget {
-  const _ForumDisplayAppBarTitle({required this.projection});
+class _ForumDisplayAppBarTitle extends StatefulWidget {
+  const _ForumDisplayAppBarTitle({
+    required this.projection,
+    required this.statisticsReady,
+    super.key,
+  });
 
   final ForumDisplayContentProjection projection;
+  final bool statisticsReady;
+
+  @override
+  State<_ForumDisplayAppBarTitle> createState() =>
+      _ForumDisplayAppBarTitleState();
+}
+
+class _ForumDisplayAppBarTitleState extends State<_ForumDisplayAppBarTitle> {
+  ({int todayPosts, int totalThreads, int rank})? _statistics;
+
+  @override
+  void initState() {
+    super.initState();
+    _updateStatistics();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ForumDisplayAppBarTitle oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _updateStatistics();
+  }
+
+  void _updateStatistics() {
+    if (!widget.statisticsReady) return;
+    final state = widget.projection.sourceState;
+    // Retain this row during same-page refreshes so only its first reveal fades.
+    _statistics = (
+      todayPosts: state.todayPosts,
+      totalThreads: state.totalThreads,
+      rank: state.rank,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -513,34 +569,49 @@ class _ForumDisplayAppBarTitle extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          ForumTextResolver.forumDisplayTitle(l10n, projection.displayTitle),
+          ForumTextResolver.forumDisplayTitle(
+            l10n,
+            widget.projection.displayTitle,
+          ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
         const SizedBox(height: 1),
         DefaultTextStyle.merge(
           style: textStyle.copyWith(fontSize: 11, fontWeight: FontWeight.w600),
-          child: Row(
-            key: const Key('forum-display-appbar-stats'),
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _AppBarStatText(
-                label: l10n.forumDisplayToday,
-                value: projection.sourceState.todayPosts,
+          // Opacity keeps the single-line subtitle height in the initial layout.
+          child: ExcludeSemantics(
+            excluding: _statistics == null,
+            child: AnimatedOpacity(
+              key: const Key('forum-display-appbar-stats-fade'),
+              opacity: _statistics == null ? 0 : 1,
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 150),
+              curve: Curves.easeOutCubic,
+              child: Row(
+                key: const Key('forum-display-appbar-stats'),
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _AppBarStatText(
+                    label: l10n.forumDisplayToday,
+                    value: _statistics?.todayPosts ?? 0,
+                  ),
+                  const SizedBox(width: 10),
+                  Flexible(
+                    child: _AppBarStatText(
+                      label: l10n.forumDisplayThreads,
+                      value: _statistics?.totalThreads ?? 0,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  _AppBarStatText(
+                    label: l10n.forumDisplayRank,
+                    value: _statistics?.rank ?? 0,
+                  ),
+                ],
               ),
-              const SizedBox(width: 10),
-              Flexible(
-                child: _AppBarStatText(
-                  label: l10n.forumDisplayThreads,
-                  value: projection.sourceState.totalThreads,
-                ),
-              ),
-              const SizedBox(width: 10),
-              _AppBarStatText(
-                label: l10n.forumDisplayRank,
-                value: projection.sourceState.rank,
-              ),
-            ],
+            ),
           ),
         ),
       ],
@@ -617,8 +688,7 @@ final ForumThreadSummary _forumDisplayPreviewThread = ForumThreadSummary(
   views: 4096,
   dateline: '2026-06-23 12:48',
   uid: '278948',
-  avatarUrl:
-      'https://bbs.yamibo.com/uc_server/data/avatar/000/27/89/48_avatar_small.jpg',
+  avatarUrl: 'https://bbs.yamibo.com/uc_server/data/avatar/000/27/89/48_avatar_small.jpg',
   authorUrl: 'https://bbs.yamibo.com/home.php?mod=space&uid=278948',
   threadUrl: 'https://bbs.yamibo.com/thread-preview-1-1.html',
   excerpt: '那篇很好啊我很喜欢，角色之间的互动很轻盈，读起来像是在夏天的海边慢慢展开的一封信。',
