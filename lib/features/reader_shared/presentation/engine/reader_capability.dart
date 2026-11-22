@@ -220,6 +220,8 @@ abstract class ReaderCapability {
   /// The shared reader schedules the returned specs through its existing
   /// session preload coordinator. A capability may do asynchronous repository
   /// work here, but it must not mutate reader position or download state.
+  /// The engine isolates failures from the current reader/tail and records
+  /// diagnostics without retrying the same owner/tail automatically.
   Future<ReaderAdjacentPreloadPlan?> buildAdjacentPreloadPlan() async => null;
 
   /// 内容区顶部提示条（漫画：离线/错误提示；帖子图片：null）。

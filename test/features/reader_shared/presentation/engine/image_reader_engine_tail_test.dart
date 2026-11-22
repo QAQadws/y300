@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+
 import '../../../../test_support/localized_test_app.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,6 +15,123 @@ import 'package:y300/features/reader_shared/domain/continuous_image/continuous_i
 import 'package:y300/features/reader_shared/presentation/engine/engine.dart';
 
 void main() {
+  for (final mode in ['ltr', 'rtl']) {
+    testWidgets('$mode adjacent metadata failure leaves comments usable', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({'reader_pref_mode': mode});
+      final tail = _RecordingTailSurface()..adjacentReady = true;
+      final recorder = _DiagnosticRecorder();
+      final service = _RecordingForumImagePrecacheService();
+      var attempts = 0;
+      await tester.pumpWidget(
+        _host(
+          tail,
+          precacheService: service,
+          diagnosticRecorder: recorder,
+          adjacentBuilder: () {
+            attempts++;
+            if (mode == 'ltr') {
+              return Future<ReaderAdjacentPreloadPlan?>.error(
+                StateError('private response payload'),
+              );
+            }
+            throw StateError('private response payload');
+          },
+        ),
+      );
+      await tester.pump();
+      final page = find.byKey(const Key('tail-test-page'));
+      final forward = Offset(mode == 'ltr' ? -700 : 700, 0);
+      await tester.drag(page, forward);
+      await tester.pumpAndSettle();
+      await tester.drag(page, forward);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('reader-tail-tail')), findsOneWidget);
+      expect(tail.advanceCount, 0);
+      expect(tester.takeException(), isNull);
+      expect(attempts, 1);
+      expect(
+        service.allSpecs.where((s) => s.episodeId == 'next-episode'),
+        isEmpty,
+      );
+      final failures = recorder.events
+          .where((e) => e.status == 'adjacentPlanFailed')
+          .toList();
+      expect(failures, hasLength(1));
+      expect(failures.single.result, 'StateError');
+      expect(failures.single.applied, false);
+      expect(
+        recorder.events
+            .map((e) => '${e.result} ${e.message} ${e.status}')
+            .join(),
+        isNot(contains('private response payload')),
+      );
+      await tester.drag(page, -forward);
+      await tester.pumpAndSettle();
+      await tester.drag(page, forward);
+      await tester.pumpAndSettle();
+      expect(attempts, 1);
+      await tester.drag(page, forward);
+      await tester.pumpAndSettle();
+      expect(tail.advanceCount, 1);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
+  for (final retire in ['owner', 'dispose']) {
+    testWidgets('late adjacent failure after $retire stays isolated', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({'reader_pref_mode': 'ltr'});
+      final result = Completer<ReaderAdjacentPreloadPlan?>();
+      final recorder = _DiagnosticRecorder();
+      var attempts = 0;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            forumImagePrecacheServiceProvider.overrideWithValue(
+              _NoopForumImagePrecacheService(),
+            ),
+          ],
+          child: LocalizedTestApp(
+            home: _OwnerSwitchHarness(
+              adjacentBuilder: () {
+                attempts++;
+                return result.future;
+              },
+              diagnosticRecorder: recorder,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      final page = find.byKey(const Key('owner-switch-page'));
+      await tester.drag(page, const Offset(-700, 0));
+      await tester.pumpAndSettle();
+      await tester.drag(page, const Offset(-700, 0));
+      await tester.pumpAndSettle();
+      expect(attempts, 1);
+      if (retire == 'dispose') {
+        await tester.pumpWidget(const SizedBox.shrink());
+      } else {
+        await tester.drag(page, const Offset(-700, 0));
+        await tester.pumpAndSettle();
+        expect(find.text('chapter-2:0'), findsOneWidget);
+      }
+      result.completeError(StateError('late private payload'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(
+        recorder.events.where((e) => e.status == 'adjacentPlanFailed'),
+        isEmpty,
+      );
+      if (retire == 'owner') expect(find.text('chapter-2:0'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
   testWidgets(
     'page highlight updates locally, dims after 900ms and resets when hidden',
     (tester) async {
@@ -316,6 +437,8 @@ Widget _host(
   _RecordingTailSurface tail, {
   ForumImagePrecacheService? precacheService,
   ReaderAdjacentPreloadPlan? adjacentPlan,
+  Future<ReaderAdjacentPreloadPlan?> Function()? adjacentBuilder,
+  ContinuousImageDiagnosticRecorder? diagnosticRecorder,
 }) {
   return ProviderScope(
     overrides: [
@@ -328,7 +451,12 @@ Widget _host(
         key: const Key('tail-test-engine'),
         pageKey: const Key('tail-test-page'),
         listKey: const Key('tail-test-list'),
-        capability: _TailCapability(tail, adjacentPlan: adjacentPlan),
+        capability: _TailCapability(
+          tail,
+          adjacentPlan: adjacentPlan,
+          adjacentBuilder: adjacentBuilder,
+          recorder: diagnosticRecorder,
+        ),
       ),
     ),
   );
@@ -338,20 +466,29 @@ class _TailCapability extends ReaderCapability {
   _TailCapability(
     this._tail, {
     this.adjacentPlan,
+    this.adjacentBuilder,
+    this.recorder,
     this.ownerId = 'tail-owner',
     this.imageCount = 2,
   });
 
   final _RecordingTailSurface _tail;
   final ReaderAdjacentPreloadPlan? adjacentPlan;
+  final Future<ReaderAdjacentPreloadPlan?> Function()? adjacentBuilder;
+  final ContinuousImageDiagnosticRecorder? recorder;
   final String ownerId;
   final int imageCount;
   final List<int> visibleIndexes = <int>[];
 
   @override
-  Future<ReaderAdjacentPreloadPlan?> buildAdjacentPreloadPlan() async {
-    return adjacentPlan;
+  Future<ReaderAdjacentPreloadPlan?> buildAdjacentPreloadPlan() {
+    if (adjacentBuilder != null) return adjacentBuilder!();
+    return Future.value(adjacentPlan);
   }
+
+  @override
+  ContinuousImageDiagnosticRecorder get diagnosticRecorder =>
+      recorder ?? const NoopContinuousImageDiagnosticRecorder();
 
   @override
   ReaderContent get content => ReaderContent(
@@ -510,7 +647,10 @@ class _ActionTail extends _RecordingTailSurface
 }
 
 class _OwnerSwitchHarness extends StatefulWidget {
-  const _OwnerSwitchHarness();
+  const _OwnerSwitchHarness({this.adjacentBuilder, this.diagnosticRecorder});
+
+  final Future<ReaderAdjacentPreloadPlan?> Function()? adjacentBuilder;
+  final ContinuousImageDiagnosticRecorder? diagnosticRecorder;
 
   @override
   State<_OwnerSwitchHarness> createState() => _OwnerSwitchHarnessState();
@@ -529,7 +669,7 @@ class _OwnerSwitchHarnessState extends State<_OwnerSwitchHarness> {
           setState(() => _ownerId = 'chapter-2');
         }
       },
-    );
+    )..adjacentReady = widget.adjacentBuilder != null;
   }
 
   @override
@@ -538,7 +678,12 @@ class _OwnerSwitchHarnessState extends State<_OwnerSwitchHarness> {
       key: const Key('owner-switch-engine'),
       pageKey: const Key('owner-switch-page'),
       listKey: const Key('owner-switch-list'),
-      capability: _TailCapability(_tail, ownerId: _ownerId),
+      capability: _TailCapability(
+        _tail,
+        ownerId: _ownerId,
+        adjacentBuilder: widget.adjacentBuilder,
+        recorder: widget.diagnosticRecorder,
+      ),
     );
   }
 }
@@ -559,6 +704,17 @@ class _NoopForumImagePrecacheService implements ForumImagePrecacheService {
   }) async {
     return const ForumImagePrecacheResult(success: true, decoded: true);
   }
+}
+
+class _DiagnosticRecorder implements ContinuousImageDiagnosticRecorder {
+  final events = <ContinuousImageDiagnosticEvent>[];
+
+  @override
+  bool get enabled => true;
+
+  @override
+  void recordContinuousImage(ContinuousImageDiagnosticEvent event) =>
+      events.add(event);
 }
 
 ReaderAdjacentPreloadPlan _adjacentPlan() {

@@ -839,23 +839,40 @@ class _ImageReaderEngineState extends ConsumerState<ImageReaderEngine>
     ReaderTailSurface tail,
     String key,
   ) async {
-    final plan = await _capability.buildAdjacentPreloadPlan();
-    if (!mounted || !_isCurrentTail(tail)) {
-      return;
+    try {
+      final plan = await _capability.buildAdjacentPreloadPlan();
+      if (!mounted || !_isCurrentTail(tail)) {
+        return;
+      }
+      final ownerId = _lastOwnerId;
+      if (ownerId == null || !_reportedAdjacentPreloadKeys.contains(key)) {
+        return;
+      }
+      if (plan == null || plan.images.isEmpty) {
+        return;
+      }
+      _sessionPreloadCoordinator.submitAdjacentWindow(
+        context: context,
+        plan: plan,
+        precacheService: ref.read(forumImagePrecacheServiceProvider),
+        expectedDisplaySize: _expectedPreloadDisplaySize(),
+      );
+    } catch (error) {
+      // Lookahead is optional: metadata failure must not escape this unawaited
+      // task or turn the current image/comment surface into a chapter error.
+      // Keep the reported key so rebuilds do not repeatedly retry the request.
+      if (!_isCurrentTail(tail) ||
+          !_reportedAdjacentPreloadKeys.contains(key)) {
+        return;
+      }
+      _recordReaderDiagnostic(
+        type: ContinuousImageDiagnosticEventType.prefetchCompleted,
+        status: 'adjacentPlanFailed',
+        result: error.runtimeType.toString(),
+        preloadKind: 'adjacent',
+        applied: false,
+      );
     }
-    final ownerId = _lastOwnerId;
-    if (ownerId == null || !_reportedAdjacentPreloadKeys.contains(key)) {
-      return;
-    }
-    if (plan == null || plan.images.isEmpty) {
-      return;
-    }
-    _sessionPreloadCoordinator.submitAdjacentWindow(
-      context: context,
-      plan: plan,
-      precacheService: ref.read(forumImagePrecacheServiceProvider),
-      expectedDisplaySize: _expectedPreloadDisplaySize(),
-    );
   }
 
   void _invokeTailCallback(
