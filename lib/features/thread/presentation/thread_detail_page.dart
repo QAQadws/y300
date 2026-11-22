@@ -1,6 +1,7 @@
 import 'package:y300/features/thread/presentation/services/thread_post_navigation.dart';
 import 'package:y300/features/thread/presentation/services/thread_image_reader_return_coordinator.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_actions.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -37,6 +38,7 @@ import 'package:y300/features/thread/presentation/mappers/thread_history_visit_m
 import 'package:y300/features/thread/presentation/services/thread_history_commit_guard.dart';
 import 'package:y300/features/thread/presentation/services/thread_detail_quick_scroll_coordinator.dart';
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
+import 'package:y300/features/thread/presentation/widgets/thread_detail_entry_reveal.dart';
 import 'package:y300/features/thread/presentation/thread_text_resolver.dart';
 import 'package:y300/features/thread/domain/models/thread_quick_scroll_dock_side.dart';
 import 'package:y300/features/thread/presentation/thread_quick_scroll_preferences_controller.dart';
@@ -90,6 +92,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage>
   bool _targetHighlightStarted = false;
   String? _latestImageReferer;
   bool _quickScrollMetricsSyncScheduled = false;
+  bool _entryContentReady = false;
 
   final ThreadHistoryCommitGuard _historyCommitGuard =
       ThreadHistoryCommitGuard();
@@ -271,6 +274,7 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage>
         oldWidget.initialPage != widget.initialPage ||
         !identical(oldWidget.initialHandoff, widget.initialHandoff) ||
         oldWidget.landing != widget.landing) {
+      _entryContentReady = false;
       _postRouteSession.invalidate();
     }
     if (oldWidget.tid != widget.tid ||
@@ -312,6 +316,12 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage>
       initialHandoff: widget.initialHandoff,
     );
     final asyncState = ref.watch(threadDetailControllerProvider(args));
+    // Reading-source and explicit floor entries retain their existing restore
+    // lifecycle; this reveal only coordinates the ordinary list-to-thread entry.
+    final deferEntry =
+        widget.bodyReadingObserver == null &&
+        widget.targetPid == null &&
+        widget.landing == ThreadPostLanding.top;
     final controller = ref.read(threadDetailControllerProvider(args).notifier);
     final state =
         asyncState.value ??
@@ -463,113 +473,129 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage>
           child: Column(
             children: [
               Expanded(
-                child: (asyncState.isLoading && state.posts.isEmpty)
-                    ? ThreadDetailLoading(
-                        key: ValueKey(args),
-                        subject: projection.displaySubject,
-                      )
-                    : (asyncState.hasError || state.errorMessage != null) &&
-                          state.posts.isEmpty
-                    ? _ThreadErrorView(
-                        subject: projection.displaySubject,
-                        message: state.loadFailure == null
-                            ? ThreadTextResolver.loadFailure(
-                                l10n,
-                                ThreadUiErrorCode.loadFailed,
-                                state.errorMessage,
-                              )
-                            : ThreadTextResolver.loadFailure(
-                                l10n,
-                                state.loadFailure!.code,
-                                state.loadFailure!.detail,
-                              ),
-                        onRetry: controller.refresh,
-                        onOpenHome: widget.targetPid == null
-                            ? null
-                            : () {
-                                Navigator.of(context).pushReplacement(
-                                  MaterialPageRoute<void>(
-                                    builder: (_) => ThreadDetailPage(
-                                      tid: widget.tid,
-                                      subject: widget.subject,
+                child: ThreadDetailEntryReveal(
+                  key: ValueKey(args),
+                  enabled: deferEntry,
+                  loading: asyncState.isLoading && state.posts.isEmpty,
+                  failed:
+                      (asyncState.hasError || state.errorMessage != null) &&
+                      state.posts.isEmpty,
+                  keepTitle: state.posts.isEmpty || state.posts.first.isFirst,
+                  loadingBuilder: (context, opacity) => ThreadDetailLoading(
+                    subject: projection.displaySubject,
+                    statusOpacity: opacity,
+                  ),
+                  onRevealed: () {
+                    if (mounted && !_entryContentReady) {
+                      setState(() => _entryContentReady = true);
+                    }
+                  },
+                  child: (asyncState.isLoading && state.posts.isEmpty)
+                      ? const SizedBox.expand()
+                      : (asyncState.hasError || state.errorMessage != null) &&
+                            state.posts.isEmpty
+                      ? _ThreadErrorView(
+                          subject: projection.displaySubject,
+                          message: state.loadFailure == null
+                              ? ThreadTextResolver.loadFailure(
+                                  l10n,
+                                  ThreadUiErrorCode.loadFailed,
+                                  state.errorMessage,
+                                )
+                              : ThreadTextResolver.loadFailure(
+                                  l10n,
+                                  state.loadFailure!.code,
+                                  state.loadFailure!.detail,
+                                ),
+                          onRetry: controller.refresh,
+                          onOpenHome: widget.targetPid == null
+                              ? null
+                              : () {
+                                  Navigator.of(context).pushReplacement(
+                                    MaterialPageRoute<void>(
+                                      builder: (_) => ThreadDetailPage(
+                                        tid: widget.tid,
+                                        subject: widget.subject,
+                                      ),
                                     ),
-                                  ),
-                                );
-                              },
-                      )
-                    : ForumPullToRefresh(
-                        onRefresh: () => _runReadingViewAction(
-                          () => controller.refresh(forceNetwork: true),
-                        ),
-                        child: ThreadDetailContent(
-                          quickScrollCoordinator: _quickScrollCoordinator,
-                          imageReaderReturnCoordinator:
-                              _imageReaderReturnCoordinator,
-                          bodyReadingCoordinator: _bodyReadingCoordinator,
-                          state: state,
-                          projection: projection,
-                          displayExtraCommentsByPostId: extraComments,
-                          scrollController: _scrollController,
-                          highlightPostPid: _highlightPostPid,
-                          targetPid: widget.targetPid,
-                          landing: widget.landing,
-                          onTargetVisible: _onTargetVisible,
-                          imageReferer: _imageRefererFor(state),
-                          onLoadPreviousPage: () {
-                            unawaited(
-                              _runPageActionAndScrollTop(
-                                controller.loadPreviousPage,
-                              ),
-                            );
-                          },
-                          onLoadNextPage: () {
-                            unawaited(
-                              _runPageActionAndScrollTop(
-                                controller.loadNextPage,
-                              ),
-                            );
-                          },
-                          onLoadPageNumber: (page) {
-                            unawaited(
-                              _runPageActionAndScrollTop(
-                                () => controller.loadPage(page),
-                              ),
-                            );
-                          },
-                          onOpenAuthorProfile: _openAuthorProfile,
-                          onOpenCommentAuthorProfile: _openCommentAuthorProfile,
-                          onCopyActionUrl: _copyActionUrl,
-                          onOpenPostLink: _openForumLink,
-                          onOpenPostImages: _openPostImages,
-                          onOpenPostActions: (post) {
-                            final postProjection = projection.findByPid(
-                              post.pid,
-                            );
-                            _openPostActions(
-                              args,
-                              state,
-                              controller,
-                              post,
-                              postProjection?.displayPost ?? post,
-                            );
-                          },
-                          htmlImagePrecacheService: htmlFirstPrecacheService,
-                          onOpenPollOptionActions: (post, option) =>
+                                  );
+                                },
+                        )
+                      : ForumPullToRefresh(
+                          onRefresh: () => _runReadingViewAction(
+                            () => controller.refresh(forceNetwork: true),
+                          ),
+                          child: ThreadDetailContent(
+                            quickScrollCoordinator: _quickScrollCoordinator,
+                            imageReaderReturnCoordinator:
+                                _imageReaderReturnCoordinator,
+                            bodyReadingCoordinator: _bodyReadingCoordinator,
+                            state: state,
+                            projection: projection,
+                            displayExtraCommentsByPostId: extraComments,
+                            scrollController: _scrollController,
+                            highlightPostPid: _highlightPostPid,
+                            targetPid: widget.targetPid,
+                            landing: widget.landing,
+                            onTargetVisible: _onTargetVisible,
+                            imageReferer: _imageRefererFor(state),
+                            onLoadPreviousPage: () {
+                              unawaited(
+                                _runPageActionAndScrollTop(
+                                  controller.loadPreviousPage,
+                                ),
+                              );
+                            },
+                            onLoadNextPage: () {
+                              unawaited(
+                                _runPageActionAndScrollTop(
+                                  controller.loadNextPage,
+                                ),
+                              );
+                            },
+                            onLoadPageNumber: (page) {
+                              unawaited(
+                                _runPageActionAndScrollTop(
+                                  () => controller.loadPage(page),
+                                ),
+                              );
+                            },
+                            onOpenAuthorProfile: _openAuthorProfile,
+                            onOpenCommentAuthorProfile:
+                                _openCommentAuthorProfile,
+                            onCopyActionUrl: _copyActionUrl,
+                            onOpenPostLink: _openForumLink,
+                            onOpenPostImages: _openPostImages,
+                            onOpenPostActions: (post) {
+                              final postProjection = projection.findByPid(
+                                post.pid,
+                              );
                               _openPostActions(
                                 args,
                                 state,
                                 controller,
                                 post,
-                                projection.findByPid(post.pid)?.displayPost ??
-                                    post,
-                                pollOption: option,
-                              ),
-                          onTogglePollOption: controller.togglePollOption,
-                          onSubmitPollVote: controller.submitPollVote,
-                          onLoadAllRatings: controller.loadAllRatings,
-                          onLoadMoreComments: controller.loadMoreComments,
+                                postProjection?.displayPost ?? post,
+                              );
+                            },
+                            htmlImagePrecacheService: htmlFirstPrecacheService,
+                            onOpenPollOptionActions: (post, option) =>
+                                _openPostActions(
+                                  args,
+                                  state,
+                                  controller,
+                                  post,
+                                  projection.findByPid(post.pid)?.displayPost ??
+                                      post,
+                                  pollOption: option,
+                                ),
+                            onTogglePollOption: controller.togglePollOption,
+                            onSubmitPollVote: controller.submitPollVote,
+                            onLoadAllRatings: controller.loadAllRatings,
+                            onLoadMoreComments: controller.loadMoreComments,
+                          ),
                         ),
-                      ),
+                ),
               ),
             ],
           ),
@@ -579,7 +605,8 @@ class _ThreadDetailPageState extends ConsumerState<ThreadDetailPage>
         padding: const EdgeInsets.only(bottom: 12),
         child: ThreadDetailQuickScrollDock(
           coordinator: _quickScrollCoordinator,
-          hasContent: state.posts.isNotEmpty,
+          hasContent:
+              state.posts.isNotEmpty && (!deferEntry || _entryContentReady),
           backgroundColor: palette.cardElevated,
           foregroundColor: palette.title,
         ),
@@ -1125,9 +1152,8 @@ Widget threadDetailPreviewShell(Widget child) {
       home: Scaffold(
         body: SafeArea(
           child: ColoredBox(
-            color: ThreadDetailNativePalette.resolve(
-              AppTheme.light(),
-            ).background,
+            color: ThreadDetailNativePalette.resolve(AppTheme.light())
+                .background,
             child: child,
           ),
         ),
@@ -1179,14 +1205,10 @@ final ThreadPost _threadDetailPreviewPost = ThreadPost(
   number: 12,
   isFirst: false,
   dateline: '2026-06-23 12:48',
-  avatarUrl:
-      'https://bbs.yamibo.com/uc_server/data/avatar/000/27/89/48_avatar_small.jpg',
-  replyUrl:
-      'https://bbs.yamibo.com/forum.php?mod=post&action=reply&fid=33&tid=572529&repquote=preview-post',
-  rateUrl:
-      'https://bbs.yamibo.com/forum.php?mod=misc&action=rate&tid=572529&pid=preview-post',
-  commentUrl:
-      'https://bbs.yamibo.com/forum.php?mod=misc&action=comment&tid=572529&pid=preview-post',
+  avatarUrl: 'https://bbs.yamibo.com/uc_server/data/avatar/000/27/89/48_avatar_small.jpg',
+  replyUrl: 'https://bbs.yamibo.com/forum.php?mod=post&action=reply&fid=33&tid=572529&repquote=preview-post',
+  rateUrl: 'https://bbs.yamibo.com/forum.php?mod=misc&action=rate&tid=572529&pid=preview-post',
+  commentUrl: 'https://bbs.yamibo.com/forum.php?mod=misc&action=comment&tid=572529&pid=preview-post',
   message:
       '<div class="quote"><blockquote><b>hsyhlj</b>: 后面楼主参加活动的应该就是梅小雪那篇武侠了吧。</blockquote></div>'
       '<p>那篇很好啊我很喜欢 <img src="static/image/smiley/comcom/2.gif" class="vm"> '
@@ -1207,16 +1229,14 @@ final ThreadPost _threadDetailPreviewPost = ThreadPost(
     ThreadPostCommentEntry(
       author: '花実',
       authorId: '231169',
-      avatarUrl:
-          'https://bbs.yamibo.com/uc_server/data/avatar/000/23/11/69_avatar_small.jpg',
+      avatarUrl: 'https://bbs.yamibo.com/uc_server/data/avatar/000/23/11/69_avatar_small.jpg',
       message: '这一段点评会展示在正文下面，头像、名称、内容和时间都保留下来。',
       dateline: '2026-06-23 13:12',
     ),
     ThreadPostCommentEntry(
       author: 'tagami',
       authorId: '14577',
-      avatarUrl:
-          'https://bbs.yamibo.com/uc_server/data/avatar/000/01/45/77_avatar_small.jpg',
+      avatarUrl: 'https://bbs.yamibo.com/uc_server/data/avatar/000/01/45/77_avatar_small.jpg',
       message: '短点评也应该保持轻量，不抢正文和评分的视觉层级。',
       dateline: '2026-06-23 13:18',
     ),

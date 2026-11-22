@@ -12,6 +12,7 @@ import 'package:y300/l10n/app_localizations.dart';
 import 'package:y300/features/thread/presentation/services/thread_body_reading_coordinator.dart';
 import 'package:y300/features/thread/presentation/services/thread_body_reading_image_host.dart';
 import 'package:y300/features/thread/presentation/services/thread_body_presentation.dart';
+import 'package:y300/features/thread/presentation/widgets/thread_detail_entry_reveal.dart';
 
 typedef ThreadPostHtmlFirstImageFallback = void Function(
   ThreadPost post,
@@ -120,6 +121,8 @@ class _ThreadPostHtmlFirstBodyState
   final _bodyLayoutConsumer = Object();
   ThreadBodyLayoutLease? _bodyLayoutLease;
   ThreadBodyLayoutPhase _bodyLayoutPhase = ThreadBodyLayoutPhase.preparing;
+  Object? _entryBodyIdentity;
+  bool _entryBodyReady = false;
 
   void _onPreparationChanged() {
     if (!mounted) return;
@@ -192,10 +195,14 @@ class _ThreadPostHtmlFirstBodyState
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      ThreadEntryBody(ready: () => _entryBodyReady, child: _buildBody(context));
+
+  Widget _buildBody(BuildContext context) {
     final html = widget.post.message.trim();
     final sourcePost = widget.sourcePost ?? widget.post;
     if (html.isEmpty) {
+      _entryBodyReady = true;
       _releaseBodyLayout();
       _preparation.reset();
       widget.readingCoordinator?.unregister(this);
@@ -251,6 +258,7 @@ class _ThreadPostHtmlFirstBodyState
     try {
       request = _requestForBody(html, preferences);
     } catch (error, stackTrace) {
+      _entryBodyReady = true;
       _releaseBodyLayout();
       _logRenderFailure(
         htmlLength: html.length,
@@ -335,6 +343,16 @@ class _ThreadPostHtmlFirstBodyState
           : sourcePost.pid.trim();
       final request = preparationRequest ?? _requestForBody(html, preferences);
       final identity = request.identity;
+      final entryIdentity = (
+        identity,
+        fontIdentity,
+        textStyle,
+        preferences.renderOptions,
+      );
+      if (_entryBodyIdentity != entryIdentity) {
+        _entryBodyIdentity = entryIdentity;
+        _entryBodyReady = false;
+      }
       if (_preparation.identity != identity) {
         // Retire the previous reading handle before a new asynchronous wait.
         widget.readingCoordinator?.unregister(this);
@@ -346,11 +364,13 @@ class _ThreadPostHtmlFirstBodyState
           ? request
           : null;
       if (preparedDocument == null || !fontReady) {
+        _entryBodyReady = false;
         _bodyLayoutPhase = ThreadBodyLayoutPhase.preparing;
         return const ForumHtmlPreparationPlaceholder();
       }
       if (widget.onPreparedBody?.call(context, request, preparedDocument) ==
           true) {
+        _entryBodyReady = false;
         _bodyLayoutPhase = ThreadBodyLayoutPhase.preparing;
         widget.readingCoordinator?.unregister(this);
         _clearReading();
@@ -448,22 +468,23 @@ class _ThreadPostHtmlFirstBodyState
                     ?.collapseExpansion,
           imageHost: tracked ? _readingImageHost : null,
           imageFade: imageFade,
-          onBodyBuilt: !tracked && bodyLayout == null
-              ? null
-              : () {
-                  if (tracked &&
-                      mounted &&
-                      readingRevision == _readingRevision) {
-                    _readingReady = true;
-                    coordinator!.schedule();
-                  }
-                  if (mounted &&
-                      identical(_bodyLayoutLease, bodyLayout) &&
-                      _preparation.identity == identity &&
-                      bodyLayout?.isCurrent == true) {
-                    _bodyLayoutPhase = ThreadBodyLayoutPhase.built;
-                  }
-                },
+          onBodyBuilt: () {
+            if (mounted &&
+                _preparation.identity == identity &&
+                _entryBodyIdentity == entryIdentity) {
+              _entryBodyReady = true;
+            }
+            if (tracked && mounted && readingRevision == _readingRevision) {
+              _readingReady = true;
+              coordinator!.schedule();
+            }
+            if (mounted &&
+                identical(_bodyLayoutLease, bodyLayout) &&
+                _preparation.identity == identity &&
+                bodyLayout?.isCurrent == true) {
+              _bodyLayoutPhase = ThreadBodyLayoutPhase.built;
+            }
+          },
           imagePrecacheService: widget.imagePrecacheService,
           preferences: preferences,
           callbacks: ForumHtmlRenderCallbacks(
@@ -492,6 +513,7 @@ class _ThreadPostHtmlFirstBodyState
               child: body,
             );
     } catch (error, stackTrace) {
+      _entryBodyReady = true;
       _bodyLayoutPhase = ThreadBodyLayoutPhase.failed;
       _logRenderFailure(
         htmlLength: html.length,

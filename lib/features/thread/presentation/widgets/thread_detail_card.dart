@@ -184,10 +184,8 @@ class _ThreadPostCardBodyEntry extends StatelessWidget {
           position: _ThreadPostCardSegmentPosition.middle,
         ),
         child: DefaultTextStyle.merge(
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: palette.bodyText,
-            height: 1.5,
-          ),
+          style: Theme.of(context).textTheme.bodyMedium
+              ?.copyWith(color: palette.bodyText, height: 1.5),
           child: bodyManifest != null
               ? LayoutBuilder(
                   builder: (context, constraints) => _ThreadPostChunkBody(
@@ -868,10 +866,8 @@ class ThreadPostCard extends StatelessWidget {
           if (showBody) ...[
             const SizedBox(height: 8),
             DefaultTextStyle.merge(
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: palette.bodyText,
-                height: 1.5,
-              ),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: palette.bodyText, height: 1.5),
               child: ThreadPostHtmlBody(
                 key: Key('thread-post-${post.pid}'),
                 post: post,
@@ -990,19 +986,21 @@ class _FirstPostThreadSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final textTheme = Theme.of(context).textTheme;
-    return Column(
-      key: const Key('thread-detail-first-post-summary'),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          subject.isNotEmpty ? subject : l10n.threadDetailTitle,
-          style: textTheme.titleMedium?.copyWith(
-            color: palette.title,
-            fontWeight: FontWeight.w800,
-            height: 1.24,
+    return ThreadEntryTitle(
+      child: Column(
+        key: const Key('thread-detail-first-post-summary'),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            subject.isNotEmpty ? subject : l10n.threadDetailTitle,
+            style: textTheme.titleMedium?.copyWith(
+              color: palette.title,
+              fontWeight: FontWeight.w800,
+              height: 1.24,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

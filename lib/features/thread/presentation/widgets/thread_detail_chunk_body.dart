@@ -64,6 +64,7 @@ class _ThreadPostChunkBodyState extends ConsumerState<_ThreadPostChunkBody> {
   Object? _chunkIdentity;
   double? _lastActualHeight;
   bool _bodyHasBuilt = false;
+  bool _entryFailed = false;
 
   @override
   void initState() {
@@ -105,7 +106,13 @@ class _ThreadPostChunkBodyState extends ConsumerState<_ThreadPostChunkBody> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ThreadEntryBody(
+    ready: () => _bodyHasBuilt || _entryFailed,
+    child: _buildChunk(context),
+  );
+
+  Widget _buildChunk(BuildContext context) {
+    _entryFailed = false;
     final fontBinding = ref.watch(forumHtmlReaderFontBindingProvider);
     if (!fontBinding.isReady) {
       _bodyHasBuilt = false;
@@ -180,6 +187,7 @@ class _ThreadPostChunkBodyState extends ConsumerState<_ThreadPostChunkBody> {
         );
       }
     } catch (_) {
+      _entryFailed = true;
       return ConstrainedBox(
         constraints: BoxConstraints(minHeight: pendingHeight),
         child: Column(

@@ -17,10 +17,57 @@ import 'package:y300/features/thread/presentation/html_rendering/thread_post_htm
 import 'package:y300/features/thread/presentation/thread_detail_state.dart';
 import 'package:y300/features/thread/presentation/thread_detail_content_projection.dart';
 import 'package:y300/features/thread/presentation/widgets/thread_detail_widgets.dart';
+import 'package:y300/features/thread/presentation/widgets/thread_detail_entry_reveal.dart';
 import 'package:y300/l10n/app_localizations.dart';
 import 'package:yamibo_forum_client/yamibo_forum_client_contracts.dart';
 
 void main() {
+  for (final chunked in [true, false]) {
+    testWidgets('entry reveals actual body geometry, chunked=$chunked', (
+      tester,
+    ) async {
+      final html = chunked
+          ? _html(3000)
+          : '<table><tr><td>${_html(500)}</td></tr></table>';
+      final host = _Host([
+        _post('entry-long', html, 1),
+        _post('entry-second', '<p>second floor</p>', 2),
+      ], entryReveal: true);
+      addTearDown(host.dispose);
+      try {
+        await _mount(tester, host);
+        double opacity() => tester
+            .widget<Opacity>(
+              find.byKey(const Key('thread-detail-entry-content')),
+            )
+            .opacity;
+        expect(opacity(), 0);
+        expect(
+          find.text('second floor', findRichText: true).hitTestable(),
+          findsNothing,
+        );
+        await _pumpUntil(tester, () => opacity() == 1);
+        expect(_bodyText(tester, 'entry-long'), contains('unit[0]'));
+        expect(find.byType(ThreadDetailLoading), findsNothing);
+        expect(
+          find.text('second floor', findRichText: true).hitTestable(),
+          findsNothing,
+        );
+        expect(host.controller.offset, 0);
+        if (chunked) {
+          expect(
+            _renderers(tester, 'entry-long').first.html.length,
+            lessThan(html.length),
+          );
+        }
+        expect(tester.takeException(), isNull);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await _drainPreparation(tester);
+      }
+    });
+  }
+
   testWidgets(
     'mounted chunks use the shared font without preparing HTML again',
     (tester) async {
@@ -1016,6 +1063,7 @@ class _Host {
     this.landing = ThreadPostLanding.top,
     this.useProjection = false,
     this.quickScrolling = false,
+    this.entryReveal = false,
     this.themeAnimationDuration = const Duration(milliseconds: 200),
     ThreadBodyReadingObserver? observer,
     FontLibraryService? fonts,
@@ -1048,6 +1096,7 @@ class _Host {
     );
   }
   final ProviderContainer container;
+  final bool entryReveal;
   final controller = ScrollController();
   final key = GlobalKey<_PageState>();
   List<ThreadPost> posts;
@@ -1209,29 +1258,37 @@ class _PageState extends State<_Page> {
                 }
                 return false;
               },
-              child: ThreadDetailContent(
-                enableBodyChunking: true,
-                state: _state(),
-                projection: _projection(),
-                targetPid: widget.host.target,
-                landing: widget.host.landing,
-                scrollController: widget.host.controller,
-                bodyReadingCoordinator: widget.host.readingCoordinator,
-                quickScrollCoordinator: widget.host.quickScrolling
-                    ? widget.host.quickCoordinator
-                    : null,
-                onTargetVisible: widget.host.visibleTargets.add,
-                imageReferer: '',
-                onLoadPreviousPage: () {},
-                onLoadNextPage: () {},
-                onLoadPageNumber: (_) {},
-                onOpenAuthorProfile: (_) {},
-                onOpenCommentAuthorProfile: (_) {},
-                onCopyActionUrl: (_, _) {},
-                onOpenPostLink: (_) {},
-                onOpenPostActions: (_) {},
-                onTogglePollOption: (_, _) {},
-                onSubmitPollVote: (_) {},
+              child: ThreadDetailEntryReveal(
+                enabled: widget.host.entryReveal,
+                loading: false,
+                failed: false,
+                keepTitle: false,
+                loadingBuilder: (context, opacity) =>
+                    ThreadDetailLoading(subject: '', statusOpacity: opacity),
+                child: ThreadDetailContent(
+                  enableBodyChunking: true,
+                  state: _state(),
+                  projection: _projection(),
+                  targetPid: widget.host.target,
+                  landing: widget.host.landing,
+                  scrollController: widget.host.controller,
+                  bodyReadingCoordinator: widget.host.readingCoordinator,
+                  quickScrollCoordinator: widget.host.quickScrolling
+                      ? widget.host.quickCoordinator
+                      : null,
+                  onTargetVisible: widget.host.visibleTargets.add,
+                  imageReferer: '',
+                  onLoadPreviousPage: () {},
+                  onLoadNextPage: () {},
+                  onLoadPageNumber: (_) {},
+                  onOpenAuthorProfile: (_) {},
+                  onOpenCommentAuthorProfile: (_) {},
+                  onCopyActionUrl: (_, _) {},
+                  onOpenPostLink: (_) {},
+                  onOpenPostActions: (_) {},
+                  onTogglePollOption: (_, _) {},
+                  onSubmitPollVote: (_) {},
+                ),
               ),
             ),
           ),

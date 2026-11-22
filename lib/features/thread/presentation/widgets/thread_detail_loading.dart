@@ -40,9 +40,14 @@ class ThreadDetailEntrySurface extends StatelessWidget {
 /// A quiet first-load surface using the title already supplied by the route.
 /// It never loads media or delays ready content to finish an animation.
 class ThreadDetailLoading extends StatefulWidget {
-  const ThreadDetailLoading({super.key, required this.subject});
+  const ThreadDetailLoading({
+    super.key,
+    required this.subject,
+    this.statusOpacity = 1,
+  });
 
   final String subject;
+  final double statusOpacity;
 
   @override
   State<ThreadDetailLoading> createState() => _ThreadDetailLoadingState();
@@ -77,44 +82,47 @@ class _ThreadDetailLoadingState extends State<ThreadDetailLoading> {
     return ThreadDetailEntrySurface(
       key: const Key('thread-detail-loading'),
       subject: widget.subject,
-      child: Semantics(
-        container: true,
-        liveRegion: true,
-        label: _showIndicator ? loadingLabel : null,
-        child: ExcludeSemantics(
-          child: ConstrainedBox(
-            // Reserve only the status, including its scaled text height.
-            constraints: const BoxConstraints(minHeight: 24),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (!reduceMotion) ...[
-                  SizedBox(
-                    width: 32,
-                    child: !_showIndicator
-                        ? null
-                        : LinearProgressIndicator(
-                            key: const Key('thread-detail-loading-progress'),
-                            minHeight: 2,
-                            color: palette.accent,
-                            backgroundColor: palette.outlineSoft,
-                          ),
-                  ),
-                  const SizedBox(width: 10),
-                ],
-                Flexible(
-                  child: Text(
-                    loadingLabel,
-                    key: const Key('thread-detail-loading-label'),
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: _showIndicator
-                          ? palette.muted
-                          : Colors.transparent,
+      child: Opacity(
+        opacity: widget.statusOpacity,
+        child: Semantics(
+          container: true,
+          liveRegion: true,
+          label: _showIndicator ? loadingLabel : null,
+          child: ExcludeSemantics(
+            child: ConstrainedBox(
+              // Reserve only the status, including its scaled text height.
+              constraints: const BoxConstraints(minHeight: 24),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (!reduceMotion) ...[
+                    SizedBox(
+                      width: 32,
+                      child: !_showIndicator
+                          ? null
+                          : LinearProgressIndicator(
+                              key: const Key('thread-detail-loading-progress'),
+                              minHeight: 2,
+                              color: palette.accent,
+                              backgroundColor: palette.outlineSoft,
+                            ),
+                    ),
+                    const SizedBox(width: 10),
+                  ],
+                  Flexible(
+                    child: Text(
+                      loadingLabel,
+                      key: const Key('thread-detail-loading-label'),
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: _showIndicator
+                            ? palette.muted
+                            : Colors.transparent,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
