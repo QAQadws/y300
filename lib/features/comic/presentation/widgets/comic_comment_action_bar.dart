@@ -20,6 +20,14 @@ class ComicCommentActionBar extends ConsumerWidget {
     listenable: controller,
     builder: (context, _) {
       final l10n = AppLocalizations.of(context);
+      final theme = Theme.of(context);
+      final palette = ThreadDetailNativePalette.resolve(theme);
+      final secondaryStyle = TextButton.styleFrom(
+        minimumSize: const Size(48, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 7),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        tapTargetSize: MaterialTapTargetSize.padded,
+      );
       final data = controller.context;
       final busy =
           controller.isLoading ||
@@ -33,12 +41,12 @@ class ComicCommentActionBar extends ConsumerWidget {
       ];
       return Material(
         key: const Key('comic-comment-action-bar'),
-        color: ThreadDetailNativePalette.resolve(Theme.of(context)).card,
-        elevation: 6,
+        color: palette.card,
+        shape: Border(top: BorderSide(color: palette.border)),
         child: SafeArea(
           top: false,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -50,7 +58,7 @@ class ComicCommentActionBar extends ConsumerWidget {
                           session.state.refreshFailed
                               ? l10n.comicCommentRefreshFailed
                               : l10n.comicInteractionLoadFailed,
-                          style: Theme.of(context).textTheme.bodySmall,
+                          style: theme.textTheme.bodySmall,
                         ),
                       ),
                       TextButton(
@@ -66,69 +74,68 @@ class ComicCommentActionBar extends ConsumerWidget {
                     padding: const EdgeInsets.only(bottom: 6),
                     child: Text(
                       unavailable.join(' · '),
-                      style: Theme.of(context).textTheme.bodySmall,
+                      style: theme.textTheme.bodySmall,
                     ),
                   ),
                 if (session.state.isRefreshing)
                   const LinearProgressIndicator(
                     key: Key('comic-comment-refresh-progress'),
                   ),
-                Row(
+                OverflowBar(
+                  alignment: MainAxisAlignment.spaceBetween,
+                  spacing: 8,
+                  overflowAlignment: OverflowBarAlignment.end,
+                  overflowSpacing: 4,
                   children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        key: const Key('comic-comment-rate-button'),
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size(0, 48),
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                    Wrap(
+                      spacing: 4,
+                      children: [
+                        TextButton.icon(
+                          key: const Key('comic-comment-rate-button'),
+                          style: secondaryStyle,
+                          onPressed: busy || data?.canRate != true
+                              ? null
+                              : () =>
+                                    _perform(context, ref, _CommentAction.rate),
+                          icon: _icon(
+                            controller.isLoading,
+                            Icons.favorite_border,
+                          ),
+                          label: Text(l10n.threadRatingTitle),
                         ),
-                        onPressed: busy || data?.canRate != true
-                            ? null
-                            : () => _perform(context, ref, _CommentAction.rate),
-                        icon: _icon(
-                          controller.isLoading,
-                          Icons.favorite_border,
+                        TextButton.icon(
+                          key: const Key('comic-comment-comment-button'),
+                          style: secondaryStyle,
+                          onPressed: busy || data?.canComment != true
+                              ? null
+                              : () => _perform(
+                                  context,
+                                  ref,
+                                  _CommentAction.comment,
+                                ),
+                          icon: _icon(
+                            controller.isLoading,
+                            Icons.chat_bubble_outline,
+                          ),
+                          label: Text(l10n.threadCommentTitle),
                         ),
-                        label: Text(l10n.threadRatingTitle),
-                      ),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        key: const Key('comic-comment-comment-button'),
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size(0, 48),
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                    FilledButton.icon(
+                      key: const Key('comic-comment-reply-button'),
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(96, 44),
+                        padding: const EdgeInsets.symmetric(horizontal: 11),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
                         ),
-                        onPressed: busy || data?.canComment != true
-                            ? null
-                            : () => _perform(
-                                context,
-                                ref,
-                                _CommentAction.comment,
-                              ),
-                        icon: _icon(
-                          controller.isLoading,
-                          Icons.chat_bubble_outline,
-                        ),
-                        label: Text(l10n.threadCommentTitle),
+                        tapTargetSize: MaterialTapTargetSize.padded,
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: FilledButton.icon(
-                        key: const Key('comic-comment-reply-button'),
-                        style: FilledButton.styleFrom(
-                          minimumSize: const Size(0, 48),
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                        ),
-                        onPressed: busy || data?.canReply != true
-                            ? null
-                            : () =>
-                                  _perform(context, ref, _CommentAction.reply),
-                        icon: _icon(controller.isLoading, Icons.reply_outlined),
-                        label: Text(l10n.threadDetailReply),
-                      ),
+                      onPressed: busy || data?.canReply != true
+                          ? null
+                          : () => _perform(context, ref, _CommentAction.reply),
+                      icon: _icon(controller.isLoading, Icons.reply_outlined),
+                      label: Text(l10n.threadDetailReply),
                     ),
                   ],
                 ),
@@ -144,7 +151,7 @@ class ComicCommentActionBar extends ConsumerWidget {
           dimension: 18,
           child: CircularProgressIndicator(strokeWidth: 2),
         )
-      : Icon(icon, size: 20);
+      : Icon(icon, size: 18);
   Future<void> _perform(
     BuildContext context,
     WidgetRef ref,

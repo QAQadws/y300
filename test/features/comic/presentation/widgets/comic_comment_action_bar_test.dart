@@ -1,5 +1,7 @@
 import 'package:y300/features/thread/presentation/services/thread_post_comment_service.dart';
+
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,6 +19,7 @@ import 'package:y300/features/reply/presentation/reply_composer_page.dart';
 import 'package:y300/features/reply/presentation/reply_composer_state.dart';
 import 'package:y300/features/thread/presentation/services/thread_post_rating_service.dart';
 import 'package:y300/l10n/app_localizations.dart';
+
 import '../../../../test_support/localized_test_app.dart';
 import '../../data/comic_interaction_fixtures.dart';
 
@@ -150,7 +153,7 @@ void main() {
       await tester.pump();
       expect(
         tester
-            .widget<OutlinedButton>(
+            .widget<TextButton>(
               find.byKey(const Key('comic-comment-rate-button')),
             )
             .onPressed,
@@ -170,6 +173,29 @@ void main() {
             .height,
         greaterThanOrEqualTo(48),
       );
+      expect(tester.takeException(), isNull);
+
+      await tester.pumpWidget(fixture.host(locale: const Locale('zh', 'TW')));
+      await tester.pumpAndSettle();
+      final rate = tester.getRect(
+        find.byKey(const Key('comic-comment-rate-button')),
+      );
+      final comment = tester.getRect(
+        find.byKey(const Key('comic-comment-comment-button')),
+      );
+      final reply = tester.getRect(
+        find.byKey(const Key('comic-comment-reply-button')),
+      );
+      final bar = tester.getRect(
+        find.byKey(const Key('comic-comment-action-bar')),
+      );
+      expect(rate.center.dy, comment.center.dy);
+      expect(comment.center.dy, reply.center.dy);
+      expect(comment.left - rate.right, lessThan(reply.left - comment.right));
+      expect(bar.right - reply.right, closeTo(12, 0.5));
+      for (final button in [rate, comment, reply]) {
+        expect(button.shortestSide, greaterThanOrEqualTo(48));
+      }
       expect(tester.takeException(), isNull);
     },
   );
@@ -216,9 +242,8 @@ class _Fixture {
       locale: locale,
       theme: dark ? ThemeData.dark() : ThemeData.light(),
       builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(
-          context,
-        ).copyWith(textScaler: TextScaler.linear(scale)),
+        data: MediaQuery.of(context)
+            .copyWith(textScaler: TextScaler.linear(scale)),
         child: child!,
       ),
       home: Scaffold(
