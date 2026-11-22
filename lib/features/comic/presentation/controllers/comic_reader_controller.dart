@@ -180,6 +180,7 @@ class ComicReaderViewState {
     this.isSwitchingEpisode = false,
     this.isRefreshingEpisode = false,
     this.imageSessionRevision = 0,
+    this.openAtChapterEnd = false,
     this.noticeCode,
   });
 
@@ -201,6 +202,7 @@ class ComicReaderViewState {
   final bool isSwitchingEpisode;
   final bool isRefreshingEpisode;
   final int imageSessionRevision;
+  final bool openAtChapterEnd;
   final ComicReaderNoticeCode? noticeCode;
 
   ComicReaderChapterEntry? get nextChapter {
@@ -232,6 +234,7 @@ class ComicReaderViewState {
     bool? isSwitchingEpisode,
     bool? isRefreshingEpisode,
     int? imageSessionRevision,
+    bool? openAtChapterEnd,
     ComicReaderNoticeCode? noticeCode,
     bool clearNotice = false,
   }) {
@@ -254,6 +257,7 @@ class ComicReaderViewState {
       isSwitchingEpisode: isSwitchingEpisode ?? this.isSwitchingEpisode,
       isRefreshingEpisode: isRefreshingEpisode ?? this.isRefreshingEpisode,
       imageSessionRevision: imageSessionRevision ?? this.imageSessionRevision,
+      openAtChapterEnd: openAtChapterEnd ?? this.openAtChapterEnd,
       noticeCode: clearNotice ? null : (noticeCode ?? this.noticeCode),
     );
   }
@@ -505,6 +509,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       current.copyWith(
         currentImageIndex: currentIndex,
         lastScrollOffset: scrollOffset,
+        openAtChapterEnd: false,
       ),
     );
   }
@@ -545,6 +550,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       current.copyWith(
         currentImageIndex: clampedIndex,
         lastScrollOffset: nextOffset,
+        openAtChapterEnd: false,
       ),
     );
     await _markEpisodeCompletedIfNeeded(
@@ -731,6 +737,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
           cacheSummary: _buildCacheSummary(imageStates),
           isRefreshingEpisode: false,
           imageSessionRevision: latest.imageSessionRevision + 1,
+          openAtChapterEnd: false,
           clearNotice: true,
         ),
       );
@@ -785,7 +792,9 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     return _openEpisodeTransaction(
       sourceEpisodeId: sourceEpisodeId,
       direction: direction,
-      policy: ComicEpisodeOpenPolicy.startAtBeginning,
+      policy: direction == ComicEpisodeDirection.previous
+          ? ComicEpisodeOpenPolicy.startAtEnd
+          : ComicEpisodeOpenPolicy.startAtBeginning,
     );
   }
 
@@ -932,7 +941,12 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
     );
     final latest = state.value;
     if (latest != null && latest.episodeId == current.episodeId) {
-      state = AsyncData(latest.copyWith(currentImageIndex: clampedIndex));
+      state = AsyncData(
+        latest.copyWith(
+          currentImageIndex: clampedIndex,
+          openAtChapterEnd: false,
+        ),
+      );
     }
     await _markEpisodeCompletedIfNeeded(
       currentIndex: clampedIndex,
@@ -1433,11 +1447,11 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
             episodeId: episodeId,
           )
         : null;
-    final currentImageIndex = progress == null
-        ? 0
-        : progress.imageIndex
-              .clamp(0, images.isEmpty ? 0 : images.length - 1)
-              .toInt();
+    final lastImageIndex = images.isEmpty ? 0 : images.length - 1;
+    final openAtChapterEnd = policy == ComicEpisodeOpenPolicy.startAtEnd;
+    final currentImageIndex = openAtChapterEnd
+        ? lastImageIndex
+        : (progress?.imageIndex ?? 0).clamp(0, lastImageIndex).toInt();
     final scrollOffset = progress?.scrollOffset ?? 0.0;
     if (isRead) {
       _completedEpisodeIds.add(episodeId);
@@ -1477,6 +1491,7 @@ class ComicReaderController extends AsyncNotifier<ComicReaderViewState> {
       hasNextEpisode: episodeIndex < episodes.length - 1,
       isCurrentEpisodeRead: isRead,
       isBookmarked: isBookmarked,
+      openAtChapterEnd: openAtChapterEnd,
       failedImageCount: _countFailedImages(imageStates),
       cacheSummary: _buildCacheSummary(imageStates),
     );

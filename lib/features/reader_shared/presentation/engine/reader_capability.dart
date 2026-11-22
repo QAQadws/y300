@@ -19,6 +19,7 @@ class ReaderContent {
     required this.ownerId,
     required this.items,
     this.initialIndex = 0,
+    this.initialPagedTail = false,
     this.sessionRevision = 0,
   });
 
@@ -26,6 +27,11 @@ class ReaderContent {
   final String ownerId;
   final List<ContinuousImageItem> items;
   final int initialIndex;
+
+  /// Open on the tail when paging and a tail exists. The logical image index
+  /// still comes from [initialIndex], which is also used in continuous mode.
+  final bool initialPagedTail;
+
   final int sessionRevision;
 
   bool get isEmpty => items.isEmpty;
@@ -40,7 +46,7 @@ class ReaderTitleSpec {
   final String subtitle;
 }
 
-/// 进度条两端的"翻章"能力。
+/// 进度条两端的翻章能力。章首继续向前翻时复用上一章动作。
 ///
 /// 漫画提供上一话/下一话；帖子图片返回 null（引擎据此隐藏翻章按钮）。
 class ReaderChapterNavSpec {

@@ -161,6 +161,7 @@ void main() {
     WidgetTester tester,
     _ReaderFakeRepository repository, {
     ComicCommentLoadStatus? commentStatus,
+    String episodeId = 'yamibo:100:101',
   }) async {
     await prepareLargeViewport(tester);
     await tester.pumpWidget(
@@ -182,15 +183,12 @@ void main() {
             _RecordingForumImagePrecacheService(),
           ),
         ],
-        child: const LocalizedTestApp(
-          home: ComicReaderPage(
-            comicId: 'yamibo:100',
-            episodeId: 'yamibo:100:101',
-          ),
+        child: LocalizedTestApp(
+          home: ComicReaderPage(comicId: 'yamibo:100', episodeId: episodeId),
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await pumpSwitchUi(tester);
   }
 
   for (final entry in ['card', 'menu', 'catalog']) {
@@ -276,7 +274,7 @@ void main() {
           );
 
           if (entry == 'menu') {
-            // Previous chapter uses the same explicit-navigation policy.
+            // Returning to the previous chapter opens its final image.
             readerScroll(tester).jumpTo(1000);
             await pumpSwitchUi(tester);
             await openReaderMenu(tester);
@@ -284,7 +282,15 @@ void main() {
               find.byKey(const Key('shared-reader-prev-button')),
             );
             await pumpSwitchUi(tester);
-            expect(readerScroll(tester).offset, 0);
+            expect(readerScroll(tester).offset, greaterThan(0));
+            expect(
+              tester
+                  .getTopLeft(
+                    find.byKey(const Key('comic-reader-image-slot-1')),
+                  )
+                  .dy,
+              closeTo(0, 1),
+            );
             expect(
               tester
                   .widget<ContinuousImageReaderView>(
@@ -301,6 +307,149 @@ void main() {
       );
     }
   }
+
+  for (final mode in ['ltr', 'rtl']) {
+    for (final entry in ['tap', 'swipe', 'fitHeight']) {
+      testWidgets('$mode $entry at chapter start opens previous comments', (
+        tester,
+      ) async {
+        SharedPreferences.setMockInitialValues({
+          'reader_pref_mode': mode,
+          'reader_pref_page_fit': entry == 'fitHeight'
+              ? 'fitHeight'
+              : 'fitWidth',
+        });
+        final repository = _ReaderFakeRepository(
+          includeNextEpisode: true,
+          progress: ComicReadingProgress(
+            comicId: 'yamibo:100',
+            episodeId: 'yamibo:100:101',
+            imageIndex: 0,
+            scrollOffset: 120,
+            updatedAt: DateTime(2026),
+          ),
+        );
+        if (entry == 'fitHeight') {
+          repository._episodeImages['yamibo:100:102'] = const [
+            ComicEpisodeImageItem(
+              episodeId: 'yamibo:100:102',
+              imageUrl: 'https://img.test/wide.jpg',
+              imageIndex: 0,
+              cacheStatus: 'none',
+              width: 1200,
+              height: 800,
+            ),
+          ];
+        }
+        await pumpSwitchReader(
+          tester,
+          repository,
+          episodeId: 'yamibo:100:102',
+          commentStatus: ComicCommentLoadStatus.success,
+        );
+        final pageView = find.byKey(const Key('comic-reader-page-view'));
+        final previousTapZone = find.byKey(
+          Key('shared-reader-${mode == 'rtl' ? 'right' : 'left'}-tap-zone'),
+        );
+        PageController pages() => tester.widget<PageView>(pageView).controller!;
+        String owner() => tester
+            .widget<ContinuousImageReaderView>(
+              find.byType(ContinuousImageReaderView),
+            )
+            .items
+            .first
+            .ownerId;
+        final direction = mode == 'rtl' ? -1.0 : 1.0;
+
+        if (entry == 'swipe') {
+          pages().jumpToPage(1);
+          await pumpSwitchUi(tester);
+          await tester.drag(pageView, Offset(direction * 1450, 0));
+          await pumpSwitchUi(tester);
+          expect(owner(), 'yamibo:100:102');
+          expect(pages().page, 0);
+          await tester.drag(pageView, Offset(direction * 28, 0));
+          await pumpSwitchUi(tester);
+          expect(owner(), 'yamibo:100:102');
+        }
+        if (entry == 'tap') {
+          await tester.tapAt(tester.getCenter(previousTapZone));
+        } else {
+          await tester.drag(pageView, Offset(direction * 360, 0));
+        }
+        await pumpSwitchUi(tester);
+
+        expect(owner(), 'yamibo:100:101');
+        expect(pages().page, 2);
+        expect(
+          find.byKey(const Key('comic-comment-action-bar')).hitTestable(),
+          findsOneWidget,
+        );
+        expect(find.byKey(const Key('comic-comment-list')), findsOneWidget);
+
+        await tester.tapAt(tester.getCenter(previousTapZone));
+        await pumpSwitchUi(tester);
+        expect(pages().page, 1);
+        expect(owner(), 'yamibo:100:101');
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
+  testWidgets(
+    'pulling from a short vertical chapter opens the previous final image',
+    (tester) async {
+      final repository = _ReaderFakeRepository(includeNextEpisode: true);
+      for (final tid in ['101', '102']) {
+        repository._episodeImages['yamibo:100:$tid'] = List.generate(
+          tid == '101' ? 2 : 1,
+          (index) => ComicEpisodeImageItem(
+            episodeId: 'yamibo:100:$tid',
+            imageUrl: 'https://img.test/$tid-$index.jpg',
+            imageIndex: index,
+            cacheStatus: 'none',
+            width: 600,
+            height: tid == '101' ? 2400 : 500,
+          ),
+        );
+      }
+      await pumpSwitchReader(tester, repository, episodeId: 'yamibo:100:102');
+      String owner() => tester
+          .widget<ContinuousImageReaderView>(
+            find.byType(ContinuousImageReaderView),
+          )
+          .items
+          .first
+          .ownerId;
+      expect(readerScroll(tester).position.maxScrollExtent, 0);
+      final pull = await tester.startGesture(
+        tester.getCenter(find.byKey(const Key('comic-reader-image-list'))),
+      );
+      await pull.moveBy(const Offset(0, 30));
+      await tester.pump(const Duration(milliseconds: 16));
+      await pull.moveBy(const Offset(0, 160));
+      await tester.pump(const Duration(milliseconds: 16));
+      await pull.moveBy(const Offset(0, 170));
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(owner(), 'yamibo:100:102');
+      await pull.up();
+      await pumpSwitchUi(tester);
+
+      expect(owner(), 'yamibo:100:101');
+      expect(readerScroll(tester).offset, greaterThan(0));
+      expect(
+        tester
+            .getTopLeft(find.byKey(const Key('comic-reader-image-slot-1')))
+            .dy,
+        closeTo(0, 1),
+      );
+      expect(tester.takeException(), isNull);
+    },
+    variant: const TargetPlatformVariant({
+      TargetPlatform.android,
+      TargetPlatform.iOS,
+    }),
+  );
 
   for (final (status, hasNext) in [
     (null, true),

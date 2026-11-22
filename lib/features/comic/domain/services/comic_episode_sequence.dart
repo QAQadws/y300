@@ -3,7 +3,7 @@ import 'package:y300/features/library_shared/domain/services/library_source_id_c
 
 enum ComicEpisodeDirection { previous, next }
 
-enum ComicEpisodeOpenPolicy { resumeIfUnread, startAtBeginning }
+enum ComicEpisodeOpenPolicy { resumeIfUnread, startAtBeginning, startAtEnd }
 
 /// Owns the canonical order used by comic navigation and lookahead.
 ///

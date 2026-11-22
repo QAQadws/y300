@@ -85,6 +85,7 @@ class ComicReaderCapability extends ReaderCapability {
     return ReaderContent(
       ownerId: viewState.episodeId,
       initialIndex: viewState.currentImageIndex,
+      initialPagedTail: viewState.openAtChapterEnd,
       sessionRevision: viewState.imageSessionRevision,
       items: _adapter.mapImages(
         episodeId: viewState.episodeId,

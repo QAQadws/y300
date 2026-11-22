@@ -1021,99 +1021,117 @@ void main() {
     );
   });
 
-  test(
-    'comment tail opens the validated TID successor at its first image',
-    () async {
-      final repository = _ReaderRepoForControllerTest(
-        episodes: const <ComicEpisodeItem>[
-          ComicEpisodeItem(
-            episodeId: 'yamibo:100:120',
-            comicId: 'yamibo:100',
-            episodeTitle: '第120话',
-            sourceTid: '120',
-            sourceUrl: 'thread-120-1-1.html',
-            orderIndex: 0,
-            publishTimeText: null,
-          ),
-          ComicEpisodeItem(
-            episodeId: 'yamibo:100:90',
-            comicId: 'yamibo:100',
-            episodeTitle: '第90话',
-            sourceTid: '90',
-            sourceUrl: 'thread-90-1-1.html',
-            orderIndex: 1,
-            publishTimeText: null,
-          ),
-          ComicEpisodeItem(
-            episodeId: 'yamibo:100:105',
-            comicId: 'yamibo:100',
-            episodeTitle: '第105话',
-            sourceTid: '105',
-            sourceUrl: 'thread-105-1-1.html',
-            orderIndex: 2,
-            publishTimeText: null,
-          ),
-        ],
-        readingProgresses: <ComicReadingProgress>[
-          ComicReadingProgress(
-            comicId: 'yamibo:100',
-            episodeId: 'yamibo:100:105',
-            imageIndex: 3,
-            scrollOffset: 240,
-            updatedAt: DateTime(2026, 7, 20),
-          ),
-        ],
-      );
-      final container = ProviderContainer(
-        overrides: [
-          comicRepositoryProvider.overrideWithValue(repository),
-          comicReadingStateWriterProvider.overrideWithValue(
-            _ReadingStateWriterSpy(repository),
-          ),
-          comicReaderServiceProvider.overrideWith(
-            (ref) async => _ReaderServiceSpy(),
-          ),
-          comicDownloadServiceProvider.overrideWithValue(
-            _NoopComicDownloadService(),
-          ),
-          imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
-        ],
-      );
-      addTearDown(container.dispose);
-
-      const args = ComicReaderArgs(
-        comicId: 'yamibo:100',
-        episodeId: 'yamibo:100:90',
-      );
-      await container.read(comicReaderControllerProvider(args).future);
-      final controller = container.read(
-        comicReaderControllerProvider(args).notifier,
-      );
-
-      expect(
-        await controller.openAdjacentEpisode(
-          sourceEpisodeId: 'yamibo:100:90',
-          direction: ComicEpisodeDirection.next,
+  test('adjacent navigation opens the TID successor at the start and predecessor at the end', () async {
+    final repository = _ReaderRepoForControllerTest(
+      episodes: const <ComicEpisodeItem>[
+        ComicEpisodeItem(
+          episodeId: 'yamibo:100:120',
+          comicId: 'yamibo:100',
+          episodeTitle: '第120话',
+          sourceTid: '120',
+          sourceUrl: 'thread-120-1-1.html',
+          orderIndex: 0,
+          publishTimeText: null,
         ),
-        isTrue,
-      );
-
-      final state = container.read(comicReaderControllerProvider(args)).value!;
-      expect(state.episodeId, 'yamibo:100:105');
-      expect(state.currentImageIndex, 0);
-      expect(state.lastScrollOffset, 0);
-
-      // A late callback from the old chapter cannot navigate again after the
-      // controller has committed the new owner.
-      expect(
-        await controller.openAdjacentEpisode(
-          sourceEpisodeId: 'yamibo:100:90',
-          direction: ComicEpisodeDirection.next,
+        ComicEpisodeItem(
+          episodeId: 'yamibo:100:90',
+          comicId: 'yamibo:100',
+          episodeTitle: '第90话',
+          sourceTid: '90',
+          sourceUrl: 'thread-90-1-1.html',
+          orderIndex: 1,
+          publishTimeText: null,
         ),
-        isFalse,
-      );
-    },
-  );
+        ComicEpisodeItem(
+          episodeId: 'yamibo:100:105',
+          comicId: 'yamibo:100',
+          episodeTitle: '第105话',
+          sourceTid: '105',
+          sourceUrl: 'thread-105-1-1.html',
+          orderIndex: 2,
+          publishTimeText: null,
+        ),
+      ],
+      readingProgresses: <ComicReadingProgress>[
+        ComicReadingProgress(
+          comicId: 'yamibo:100',
+          episodeId: 'yamibo:100:90',
+          imageIndex: 1,
+          scrollOffset: 120,
+          updatedAt: DateTime(2026, 7, 20),
+        ),
+        ComicReadingProgress(
+          comicId: 'yamibo:100',
+          episodeId: 'yamibo:100:105',
+          imageIndex: 3,
+          scrollOffset: 240,
+          updatedAt: DateTime(2026, 7, 20),
+        ),
+      ],
+    );
+    final container = ProviderContainer(
+      overrides: [
+        comicRepositoryProvider.overrideWithValue(repository),
+        comicReadingStateWriterProvider.overrideWithValue(
+          _ReadingStateWriterSpy(repository),
+        ),
+        comicReaderServiceProvider.overrideWith(
+          (ref) async => _ReaderServiceSpy(),
+        ),
+        comicDownloadServiceProvider.overrideWithValue(
+          _NoopComicDownloadService(),
+        ),
+        imageCacheServiceProvider.overrideWithValue(_FakeImageCacheService()),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    const args = ComicReaderArgs(
+      comicId: 'yamibo:100',
+      episodeId: 'yamibo:100:90',
+    );
+    await container.read(comicReaderControllerProvider(args).future);
+    final controller = container.read(
+      comicReaderControllerProvider(args).notifier,
+    );
+
+    expect(
+      await controller.openAdjacentEpisode(
+        sourceEpisodeId: 'yamibo:100:90',
+        direction: ComicEpisodeDirection.next,
+      ),
+      isTrue,
+    );
+
+    final state = container.read(comicReaderControllerProvider(args)).value!;
+    expect(state.episodeId, 'yamibo:100:105');
+    expect(state.currentImageIndex, 0);
+    expect(state.lastScrollOffset, 0);
+    expect(state.openAtChapterEnd, isFalse);
+
+    // A late callback from the old chapter cannot navigate again after the
+    // controller has committed the new owner.
+    expect(
+      await controller.openAdjacentEpisode(
+        sourceEpisodeId: 'yamibo:100:90',
+        direction: ComicEpisodeDirection.next,
+      ),
+      isFalse,
+    );
+
+    expect(
+      await controller.openAdjacentEpisode(
+        sourceEpisodeId: 'yamibo:100:105',
+        direction: ComicEpisodeDirection.previous,
+      ),
+      isTrue,
+    );
+    final previous = container.read(comicReaderControllerProvider(args)).value!;
+    expect(previous.episodeId, 'yamibo:100:90');
+    expect(previous.currentImageIndex, previous.images.length - 1);
+    expect(previous.lastScrollOffset, 0);
+    expect(previous.openAtChapterEnd, isTrue);
+  });
 
   test(
     'stale reader progress callbacks cannot update the new episode',
